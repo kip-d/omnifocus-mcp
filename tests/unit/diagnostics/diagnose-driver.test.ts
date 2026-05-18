@@ -262,6 +262,54 @@ it('partial filer failure: still ledgers the success, appends a FILE_FAILED tria
   expect(dataSection, `expected a FILE_FAILED row in the data section of:\n${md}`).toContain('FILE_FAILED');
 });
 
+it('warns (does not silently drop) when filer returns a created id for an unknown fingerprint', async () => {
+  // Invariant violation: filer reports creating an issue for a fingerprint that has NO ledger
+  // entry. Cannot happen via the single in-repo call site, but the injected linearFiler seam
+  // makes a rogue/future filer able to reach it. runDiagnosis must surface it loudly, not drop it.
+  //
+  // NON-VACUOUS: the orphan fingerprint 'ghost-fp-not-a-cluster' is deliberately NOT among the
+  // input clusters, so it will never be a ledger key. The assertion requires console.warn to
+  // have been called with a message containing that exact orphan fingerprint — if the `else`
+  // branch were removed (silent drop), warn is never called and the test fails.
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-orphan-')), 'ledger.json');
+  const sink = vi.fn();
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+  const filer = vi.fn().mockResolvedValue({
+    created: [{ fingerprint: 'ghost-fp-not-a-cluster', id: 'OMN-999' }],
+    failed: [],
+    capGuardTripped: false,
+  });
+
+  try {
+    await expect(
+      runDiagnosis({
+        records: makeRecords('omnifocus_sd', 'Required field mode is missing'),
+        registry: [SCHEMA_DRIFT_ENTRY],
+        ledgerPath,
+        now: new Date('2026-05-18T12:00:00Z'),
+        thresholds: { minOccurrences: 3, minSpanDays: 2 },
+        writeTriageDoc: sink,
+        linearFiler: filer,
+        createIssues: true,
+      }),
+    ).resolves.toBeUndefined(); // still resolves — the anomaly does not abort the run
+
+    // The orphan id was NOT recorded against any ledger entry
+    const ledger = loadLedger(ledgerPath);
+    const orphan = Object.values(ledger.entries).find((e) => e.linearIssueId === 'OMN-999');
+    expect(orphan, 'orphan issue id must NOT be associated to any ledger entry').toBeUndefined();
+
+    // ...but it was surfaced loudly with the orphan fingerprint (and id) in the message
+    expect(warnSpy).toHaveBeenCalled();
+    const warnMsg = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warnMsg).toContain('ghost-fp-not-a-cluster');
+    expect(warnMsg).toContain('OMN-999');
+  } finally {
+    warnSpy.mockRestore();
+  }
+});
+
 it('appends CAP_GUARD_TRIPPED row to triage doc when filer returns capGuardTripped', async () => {
   // NON-VACUOUS analysis:
   // The static legend in renderTriageDoc already contains a "| CAP_GUARD_TRIPPED | ..." line, so

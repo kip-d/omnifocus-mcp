@@ -31,14 +31,24 @@ export function isKnown(ledger: Ledger, fingerprint: string): boolean {
   return fingerprint in ledger.entries;
 }
 
+/**
+ * Upsert a diagnosed-pattern entry.
+ *
+ * `diagnosedAt` semantics: it records when the pattern was FIRST diagnosed and must remain
+ * stable across later updates (e.g. attaching a linearIssueId after auto-filing). So if the
+ * incoming entry already carries a `diagnosedAt` (the caller is updating a known entry, typically
+ * by spreading the existing entry), that original timestamp is preserved; only a first write
+ * (no incoming `diagnosedAt`) is stamped with `now`.
+ */
 export function recordDiagnosis(
   ledger: Ledger,
   path: string,
-  e: Omit<LedgerEntry, 'diagnosedAt'>,
+  e: Omit<LedgerEntry, 'diagnosedAt'> & { diagnosedAt?: string },
   now: Date = new Date(),
 ): Ledger {
+  const diagnosedAt = e.diagnosedAt ?? now.toISOString();
   const next: Ledger = {
-    entries: { ...ledger.entries, [e.fingerprint]: { ...e, diagnosedAt: now.toISOString() } },
+    entries: { ...ledger.entries, [e.fingerprint]: { ...e, diagnosedAt } },
   };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(next, null, 2));

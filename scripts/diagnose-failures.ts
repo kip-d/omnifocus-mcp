@@ -194,10 +194,22 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
 
     // Ledger every successfully-created issue's id — UNCONDITIONALLY, even when some clusters
     // failed (filerResult.failed non-empty). Partial failure must not lose the successes.
+    // `recordDiagnosis` preserves the spread `existing.diagnosedAt` (first-diagnosis time);
+    // only linearIssueId is updated here.
     for (const { fingerprint, id } of filerResult.created) {
       const existing = ledger.entries[fingerprint];
       if (existing) {
         ledger = recordDiagnosis(ledger, ledgerPath, { ...existing, linearIssueId: id }, now);
+      } else {
+        // Invariant violation: the filer reported creating a Linear issue for a fingerprint
+        // that has no ledger entry. Cannot happen via the single in-repo call site, but the
+        // injected linearFiler seam makes a future/rogue filer able to reach here. Surface it
+        // loudly (consistent with the feature's explicit-failure philosophy) rather than
+        // silently discarding the issue id.
+        console.warn(
+          `[diagnose-failures] Filed Linear issue ${id} for fingerprint ${fingerprint}, but no ` +
+            'ledger entry exists for it — issue id NOT recorded (invariant violation; manual reconciliation needed).',
+        );
       }
     }
 
