@@ -75,7 +75,17 @@ currently live only in agent memory, invisible to a fresh session.
 
 A vitest unit test that:
 
-**Input set.** `CLAUDE.md` plus glob `docs/dev/*.md`, read from the repo root.
+**Input set.** `CLAUDE.md` only, read from the repo root.
+
+> **Scope decision (2026-05-18, supersedes the original design choice).** The guard was
+> originally scoped to `CLAUDE.md` + `docs/dev/*.md`. Running the matcher against the live
+> repo during plan review surfaced ~36 pre-existing rotted/non-literal references across 15+
+> `docs/dev` files (historical session logs, benchmark snapshots, intentional line-range and
+> glob references) — only 3 failures were in `CLAUDE.md`. Folding a 36-reference cleanup of
+> point-in-time historical docs into this ticket would be scope creep and partly wrong
+> (session logs are records, not living docs). User decision: **guard covers `CLAUDE.md`
+> only**; `docs/dev` rot is a separate optional follow-up. This also makes line-range
+> (`:NN-MM`) and glob (`src/**/*.ts`) token handling moot — `CLAUDE.md` contains neither.
 
 **Extraction surface (exact).** Scan only two Markdown constructs, never bare prose:
 
@@ -137,9 +147,14 @@ pointed at the real docs.
 - The guard validates **resolution only**, not anchor *quality* — a test cannot
   mechanically distinguish a good anchor from a bad one. Style is enforced by the written
   principle (§2) + code review, not the test.
-- `docs/superpowers/specs` excluded from the guard: spec docs legitimately reference
-  planned/future paths and would produce false positives.
+- Guard covers `CLAUDE.md` only (see §4 scope decision). `docs/dev/*.md` and
+  `docs/superpowers/specs` are **not** scanned: the former carries a large pre-existing
+  backlog of intentional/historical non-literal refs (separate optional follow-up ticket);
+  the latter legitimately references planned/future paths. Both would be false-positive heavy.
 - Out of scope: the user's global `~/.claude/CLAUDE.md` (separate concern, not project-owned).
+- Follow-up (not this ticket): a `docs/dev/*.md` rot audit, if desired, is its own scoped
+  effort — ~36 refs across 15+ files, several being point-in-time session logs that should
+  arguably not be "fixed" at all.
 
 ## Deliverables
 
