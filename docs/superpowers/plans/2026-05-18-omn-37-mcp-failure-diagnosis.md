@@ -1300,7 +1300,10 @@ wrapper. Test:
 
 ```typescript
 // tests/unit/diagnostics/diagnose-driver.test.ts
-import { describe, it, expect, vi } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { runDiagnosis } from '../../../scripts/diagnose-failures.js';
 import { z } from 'zod';
 
@@ -1308,9 +1311,27 @@ it('deterministically classifies a coercion-gap cluster without invoking the age
   const agentRunner = vi.fn();
   const sink = vi.fn();
   await runDiagnosis({
-    records: [
-      /* 3x omnifocus_x failures whose inputShape includes a numeric field the Zod rejects as string */
-    ],
+    // NON-VACUOUS: 3 real records (spanning the minSpanDays window) for a single
+    // omnifocus_x cluster whose inputArgs send limit:'5' (a string). The advertised
+    // schema says limit:number but Zod (z.number()) rejects '5' → COERCION_GAP →
+    // deterministic COERCION_MISSING, so the agent is bypassed *because it was resolved*,
+    // not because there was nothing to dispatch. Do NOT leave this as an empty array /
+    // placeholder comment — that makes the agent-not-called + COERCION assertions
+    // vacuously true off the static legend (TDD red flag: green before implementation).
+    records: (() => {
+      const base = {
+        tool: 'omnifocus_x',
+        errorType: 'VALIDATION_ERROR',
+        errorMessage: 'Expected number, received string',
+        inputArgs: { limit: '5' },
+        schemaDescription: 'test',
+      };
+      return [
+        { ...base, timestamp: '2026-05-16T10:00:00.000Z' },
+        { ...base, timestamp: '2026-05-17T10:00:00.000Z' },
+        { ...base, timestamp: '2026-05-18T10:00:00.000Z' },
+      ];
+    })(),
     registry: [
       {
         name: 'omnifocus_x',
@@ -1318,7 +1339,7 @@ it('deterministically classifies a coercion-gap cluster without invoking the age
         zodSchema: z.object({ limit: z.number() }),
       },
     ],
-    ledgerPath: '/tmp/omn37-test-ledger.json',
+    ledgerPath: join(mkdtempSync(join(tmpdir(), 'omn37-drv-')), 'ledger.json'),
     now: new Date('2026-05-18T12:00:00Z'),
     thresholds: { minOccurrences: 3, minSpanDays: 2 },
     writeTriageDoc: sink,
@@ -1327,7 +1348,13 @@ it('deterministically classifies a coercion-gap cluster without invoking the age
   expect(agentRunner).not.toHaveBeenCalled(); // deterministic class → no LLM
   expect(sink).toHaveBeenCalledOnce();
   const md = sink.mock.calls[0][0] as string;
-  expect(md).toContain('COERCION');
+  // Assert the actual classified table row — NOT the static legend (the legend line
+  // for COERCION_MISSING does not carry the tool name, so a line with BOTH is the data row).
+  const classifiedRow = md
+    .split('\n')
+    .find((line) => line.includes('omnifocus_x') && line.includes('COERCION_MISSING'));
+  expect(classifiedRow).toBeDefined();
+  expect(classifiedRow).toMatch(/^\|.*\|.*\|/);
 });
 ```
 
