@@ -255,7 +255,7 @@ npm run typecheck
 npx eslint tests/unit/docs/claude-md-paths.test.ts --ext .ts
 npx vitest tests/unit/docs --run
 ```
-Expected: all green. (Note: `npm run lint` only scans `src/`, so the test file is lint-checked explicitly here. If eslint flat-config ignores `tests/**`, eslint exits 0 with no output — acceptable; `tsc --noEmit` still type-checks the file.)
+Expected: all green. (Note: `npm run lint` only scans `src/`, so the test file is lint-checked explicitly here. `eslint.config.js` includes `tests/**/*.ts`, so this genuinely lints the file; `tsc --noEmit` additionally type-checks it.)
 
 - [ ] **Step 4: Commit**
 
