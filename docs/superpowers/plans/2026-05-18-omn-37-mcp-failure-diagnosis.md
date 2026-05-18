@@ -147,7 +147,9 @@ export interface FailureCategorization {
 export interface FailureRecord {
   timestamp: string;
   tool: string;
-  errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR';
+  // Usually 'VALIDATION_ERROR' | 'EXECUTION_ERROR', but base.ts:303/639 can also write a raw
+  // ScriptErrorType string. Keep it `string`; classification keys off `categorization.errorType`.
+  errorType: string;
   errorMessage: string;
   validationErrors?: Array<{ path?: (string | number)[]; message?: string }>;
   inputArgs: unknown; // already redacted upstream by redactArgs()
@@ -610,7 +612,7 @@ import { describe, it, expect } from 'vitest';
 import { canonicalizeInputSchema } from '../../../src/diagnostics/schema-drift.js';
 
 describe('canonicalizeInputSchema', () => {
-  it('flattens advertised JSON schema to { field: { type, required, enum } }', () => {
+  it('flattens a flat advertised JSON schema (system tool — no wrapper)', () => {
     const adv = {
       type: 'object',
       properties: {
@@ -619,9 +621,28 @@ describe('canonicalizeInputSchema', () => {
       },
       required: ['operation'],
     };
-    const c = canonicalizeInputSchema(adv);
+    const c = canonicalizeInputSchema(adv); // wrapperKey omitted
     expect(c.operation).toEqual({ type: 'string', required: true, enum: ['version', 'cache'] });
     expect(c.limit).toEqual({ type: 'number', required: false, enum: undefined });
+  });
+
+  it('descends into a single wrapper key (read/write/analyze nest real fields under query/mutation/analysis)', () => {
+    // Mirrors OmniFocusReadTool.inputSchema: { properties: { query: { properties: {...}, required: ['type'] } } }
+    const adv = {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'object',
+          properties: { type: { type: 'string', enum: ['tasks', 'projects'] }, limit: { type: 'number' } },
+          required: ['type'],
+        },
+      },
+      required: ['query'],
+    };
+    const c = canonicalizeInputSchema(adv, 'query');
+    expect(c.type).toEqual({ type: 'string', required: true, enum: ['tasks', 'projects'] });
+    expect(c.limit).toEqual({ type: 'number', required: false, enum: undefined });
+    expect(c.query).toBeUndefined(); // the wrapper itself is not a field
   });
 });
 ```
@@ -641,9 +662,29 @@ export interface CanonicalField {
 }
 export type CanonicalSchema = Record<string, CanonicalField>;
 
-export function canonicalizeInputSchema(advertised: Record<string, unknown>): CanonicalSchema {
-  const props = (advertised.properties ?? {}) as Record<string, { type?: string; enum?: (string | number)[] }>;
-  const required = new Set((advertised.required as string[] | undefined) ?? []);
+type JsonSchemaNode = {
+  type?: string;
+  enum?: (string | number)[];
+  properties?: Record<string, JsonSchemaNode>;
+  required?: string[];
+};
+
+/**
+ * Canonicalize the advertised JSON schema.
+ * @param wrapperKey  For read/write/analyze the real fields are nested one level under a single
+ *                     wrapper property ('query' | 'mutation' | 'analysis'). Pass it to descend.
+ *                     Omit for flat schemas (the `system` tool).
+ */
+export function canonicalizeInputSchema(advertised: Record<string, unknown>, wrapperKey?: string): CanonicalSchema {
+  let node = advertised as JsonSchemaNode;
+  if (wrapperKey) {
+    const wrapped = node.properties?.[wrapperKey];
+    if (!wrapped)
+      throw new Error(`canonicalizeInputSchema: wrapper key '${wrapperKey}' not found in advertised schema`);
+    node = wrapped;
+  }
+  const props = node.properties ?? {};
+  const required = new Set(node.required ?? []);
   const out: CanonicalSchema = {};
   for (const [name, def] of Object.entries(props)) {
     out[name] = { type: def.type ?? 'unknown', required: required.has(name), enum: def.enum };
@@ -689,6 +730,27 @@ describe('canonicalizeZodSchema', () => {
     expect(c.mode.enum).toEqual(['x', 'y']);
     expect(c.note.required).toBe(false);
   });
+
+  it('descends a single wrapper key whose inner is z.preprocess(...) over a discriminatedUnion (the real read/write/analyze shape)', () => {
+    // Mirrors ReadSchema = z.object({ query: coerceObject(QuerySchema) }),
+    // QuerySchema = z.discriminatedUnion('type', [...]). coerceObject = z.preprocess(fn, inner).
+    const coerceObject = <T extends z.ZodTypeAny>(s: T) => z.preprocess((v) => v, s);
+    const QuerySchema = z.discriminatedUnion('type', [
+      z.object({ type: z.literal('tasks'), limit: z.coerce.number().optional(), flagged: z.boolean().optional() }),
+      z.object({ type: z.literal('projects'), limit: z.coerce.number().optional() }),
+    ]);
+    const ReadSchema = z.object({ query: coerceObject(QuerySchema) });
+
+    const c = canonicalizeZodSchema(ReadSchema, 'query');
+    // Discriminator: union of member literal values.
+    expect(c.type.enum?.sort()).toEqual(['projects', 'tasks']);
+    expect(c.type.required).toBe(true); // required in every member
+    // limit present in all members -> required iff required in all (it's optional -> not required), and coercible.
+    expect(c.limit.coercible).toBe(true);
+    expect(c.limit.required).toBe(false);
+    // flagged present in only ONE member -> not required (absent from a member counts as not-required).
+    expect(c.flagged.required).toBe(false);
+  });
 });
 ```
 
@@ -700,52 +762,113 @@ describe('canonicalizeZodSchema', () => {
 ```typescript
 import { z } from 'zod';
 
+type ZDef = {
+  typeName?: string;
+  schema?: z.ZodTypeAny; // ZodEffects (z.preprocess / z.transform)
+  innerType?: z.ZodTypeAny; // ZodOptional / ZodDefault / ZodNullable
+  values?: unknown[]; // ZodEnum
+  value?: unknown; // ZodLiteral
+  discriminator?: string; // ZodDiscriminatedUnion
+  options?: Map<unknown, z.ZodTypeAny> | z.ZodTypeAny[]; // ZodDiscriminatedUnion members
+};
+const defOf = (s: z.ZodTypeAny): ZDef => (s as unknown as { _def: ZDef })._def;
+
+/** Peel ZodEffects (preprocess/transform — this is what coerceObject is), Optional, Default, Nullable. */
+function unwrap(s: z.ZodTypeAny): z.ZodTypeAny {
+  let cur = s;
+  for (;;) {
+    const d = defOf(cur);
+    if (d.typeName === 'ZodEffects' && d.schema) cur = d.schema;
+    else if (
+      (d.typeName === 'ZodOptional' || d.typeName === 'ZodDefault' || d.typeName === 'ZodNullable') &&
+      d.innerType
+    )
+      cur = d.innerType;
+    else return cur;
+  }
+}
+
 function isCoercibleNumber(field: z.ZodTypeAny): boolean {
-  // Behavioral: a number field is "coercible" iff a stringified number survives validation.
-  // Catches z.coerce.number(), z.preprocess(...), z.union([z.number(), z.string().transform()]) alike.
+  // Behavioral probe — NEVER pattern-match source. A number field is "coercible" iff a stringified
+  // number survives validation. Catches z.coerce.number(), z.preprocess(...), z.union([...]) alike.
   return field.safeParse('5').success;
 }
 
-function zodTypeName(field: z.ZodTypeAny): { type: string; enum?: (string | number)[] } {
-  const def = (field as { _def?: { typeName?: string; values?: unknown[] } })._def;
-  const tn = def?.typeName ?? '';
-  if (tn === 'ZodEnum') return { type: 'string', enum: def?.values as (string | number)[] };
-  if (tn === 'ZodNumber' || tn === 'ZodNumber') return { type: 'number' };
-  if (tn === 'ZodBoolean') return { type: 'boolean' };
-  if (tn === 'ZodString') return { type: 'string' };
+function fieldType(field: z.ZodTypeAny): { type: string; enum?: (string | number)[] } {
+  const inner = unwrap(field);
+  const d = defOf(inner);
+  if (d.typeName === 'ZodEnum') return { type: 'string', enum: d.values as (string | number)[] };
+  if (d.typeName === 'ZodLiteral')
+    return { type: typeof d.value === 'number' ? 'number' : 'string', enum: [d.value as string | number] };
+  if (d.typeName === 'ZodNumber') return { type: 'number' };
+  if (d.typeName === 'ZodBoolean') return { type: 'boolean' };
+  if (d.typeName === 'ZodString') return { type: 'string' };
   return { type: 'object' };
 }
 
-export function canonicalizeZodSchema(schema: z.ZodTypeAny): CanonicalSchema {
-  // Unwrap effects/optional/default wrappers to reach the object shape.
-  let obj = schema;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const d = (obj as { _def?: { typeName?: string; schema?: z.ZodTypeAny; innerType?: z.ZodTypeAny } })._def;
-    if (d?.typeName === 'ZodEffects' && d.schema) obj = d.schema;
-    else if ((d?.typeName === 'ZodOptional' || d?.typeName === 'ZodDefault') && d.innerType) obj = d.innerType;
-    else break;
-  }
-  const shape = (obj as z.ZodObject<z.ZodRawShape>).shape ?? {};
+function membersOf(du: z.ZodTypeAny): z.ZodTypeAny[] {
+  const opts = defOf(du).options;
+  if (!opts) return [];
+  return Array.isArray(opts) ? opts : [...opts.values()];
+}
+
+/** Merge object/discriminated-union members into one CanonicalSchema.
+ *  required(field) := present AND required in EVERY member (absence in any member ⇒ not required).
+ *  enum/coercible := unioned across members (discriminator literal values collapse to one enum). */
+function mergeShapes(members: z.ZodTypeAny[]): CanonicalSchema {
   const out: CanonicalSchema = {};
-  for (const [name, raw] of Object.entries(shape)) {
-    const field = raw as z.ZodTypeAny;
-    const isOptional = field.isOptional?.() ?? false;
-    const probeNumber = isCoercibleNumber(field);
-    const { type, enum: en } = zodTypeName(field);
-    out[name] = {
-      type: type === 'number' || probeNumber ? (type === 'object' ? 'number' : type) : type,
-      required: !isOptional,
-      enum: en,
-      coercible: probeNumber,
-    };
+  const presentCount: Record<string, number> = {};
+  for (const m of members) {
+    const shape = (unwrap(m) as z.ZodObject<z.ZodRawShape>).shape ?? {};
+    for (const [name, raw] of Object.entries(shape)) {
+      const field = raw as z.ZodTypeAny;
+      presentCount[name] = (presentCount[name] ?? 0) + 1;
+      const required = !(field.isOptional?.() ?? false);
+      const probe = isCoercibleNumber(field);
+      const { type, enum: en } = fieldType(field);
+      const prev = out[name];
+      const mergedEnum = [...new Set([...(prev?.enum ?? []), ...(en ?? [])])];
+      out[name] = {
+        type: prev?.type ?? type,
+        required: prev ? prev.required && required : required,
+        enum: mergedEnum.length ? mergedEnum : undefined,
+        coercible: (prev?.coercible ?? false) || probe,
+      };
+    }
+  }
+  // A field absent from any member cannot be globally required.
+  for (const [name, f] of Object.entries(out)) {
+    if (presentCount[name] !== members.length) f.required = false;
   }
   return out;
 }
+
+/**
+ * Canonicalize a tool's Zod schema.
+ * @param wrapperKey  read/write/analyze wrap the real schema under one key
+ *                     ('query'|'mutation'|'analysis') via coerceObject (= z.preprocess) over a
+ *                     z.discriminatedUnion. Pass it to descend. Omit for the flat `system` schema.
+ */
+export function canonicalizeZodSchema(schema: z.ZodTypeAny, wrapperKey?: string): CanonicalSchema {
+  const top = unwrap(schema) as z.ZodObject<z.ZodRawShape>;
+  let target: z.ZodTypeAny = top;
+  if (wrapperKey) {
+    const wrapped = top.shape?.[wrapperKey];
+    if (!wrapped) throw new Error(`canonicalizeZodSchema: wrapper key '${wrapperKey}' not found`);
+    target = unwrap(wrapped); // peels coerceObject's z.preprocess → inner discriminatedUnion/object
+  }
+  const td = defOf(target);
+  if (td.typeName === 'ZodDiscriminatedUnion' || td.typeName === 'ZodUnion') {
+    return mergeShapes(membersOf(target));
+  }
+  // Plain object (system tool, or a non-union wrapper).
+  return mergeShapes([target]);
+}
 ```
 
-- [ ] **Step 4: Run, verify pass.** Expected: PASS. If `zodTypeName` mis-detects on the real schemas, adjust unwrap
-      order — the behavioral probe (`isCoercibleNumber`) is the load-bearing part and must stay a `safeParse` call.
+- [ ] **Step 4: Run, verify pass.** Expected: PASS (both tests, incl. the discriminated-union case). If `fieldType`
+      mis-detects on the real schemas, fix the `_def.typeName` mapping — but the behavioral probe (`isCoercibleNumber`)
+      and the unwrap/merge structure are load-bearing and must not be replaced by source pattern-matching.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -879,13 +1002,13 @@ describe('inputSchema <-> Zod drift gate (fails CI on drift)', () => {
   for (const entry of TOOL_SCHEMA_REGISTRY) {
     it(`${entry.name}: advertised schema matches Zod validation`, () => {
       const findings = diffSchemas(
-        canonicalizeInputSchema(entry.getInputSchema()),
-        canonicalizeZodSchema(entry.zodSchema),
+        canonicalizeInputSchema(entry.getInputSchema(), entry.wrapperKey),
+        canonicalizeZodSchema(entry.zodSchema, entry.wrapperKey),
       );
       // Some advertised-vs-validated asymmetry is intentional (compact advertised schema).
       // The gate fails ONLY on the high-signal kinds: enum/required/coercion drift.
       const blocking = findings.filter((f) => f.kind !== 'FIELD_MISSING');
-      expect(blocking, JSON.stringify(findings, null, 2)).toEqual([]);
+      expect(blocking, `${entry.name} drift: ${JSON.stringify(findings, null, 2)}`).toEqual([]);
     });
   }
 });
@@ -900,44 +1023,58 @@ describe('inputSchema <-> Zod drift gate (fails CI on drift)', () => {
 import type { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { SystemTool } from '../tools/system/SystemTool.js';
-import { SystemToolSchema } from '../tools/schemas/system-schemas.js';
 import { OmniFocusReadTool } from '../tools/unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from '../tools/unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from '../tools/unified/OmniFocusAnalyzeTool.js';
-import { ReadToolSchema } from '../tools/unified/schemas/read-schema.js';
-import { WriteToolSchema } from '../tools/unified/schemas/write-schema.js';
-import { AnalyzeToolSchema } from '../tools/unified/schemas/analyze-schema.js';
 
 export interface ToolSchemaEntry {
   name: string;
+  /** Single nesting key for read/write/analyze; undefined for the flat `system` schema. */
+  wrapperKey?: 'query' | 'mutation' | 'analysis';
   getInputSchema: () => Record<string, unknown>;
   zodSchema: z.ZodTypeAny;
 }
 
+// Every BaseTool subclass exposes its Zod schema as a public instance property `schema`
+// (SystemTool.ts:93 `schema = SystemToolSchema`; OmniFocusReadTool.ts:205 `schema = ReadSchema`;
+// Write:164 `schema = WriteSchema`; Analyze:300 `schema = AnalyzeSchema`). Reading the instance
+// property avoids importing non-exported symbols (SystemToolSchema is a non-exported const) and
+// needs zero source edits.
 const cache = new CacheManager();
+const sys = new SystemTool(cache);
+const read = new OmniFocusReadTool(cache);
+const write = new OmniFocusWriteTool(cache);
+const analyze = new OmniFocusAnalyzeTool(cache);
+
 export const TOOL_SCHEMA_REGISTRY: ToolSchemaEntry[] = [
-  { name: 'system', getInputSchema: () => new SystemTool(cache).inputSchema, zodSchema: SystemToolSchema },
-  { name: 'omnifocus_read', getInputSchema: () => new OmniFocusReadTool(cache).inputSchema, zodSchema: ReadToolSchema },
-  {
-    name: 'omnifocus_write',
-    getInputSchema: () => new OmniFocusWriteTool(cache).inputSchema,
-    zodSchema: WriteToolSchema,
-  },
+  { name: 'system', getInputSchema: () => sys.inputSchema, zodSchema: sys.schema },
+  { name: 'omnifocus_read', wrapperKey: 'query', getInputSchema: () => read.inputSchema, zodSchema: read.schema },
+  { name: 'omnifocus_write', wrapperKey: 'mutation', getInputSchema: () => write.inputSchema, zodSchema: write.schema },
   {
     name: 'omnifocus_analyze',
-    getInputSchema: () => new OmniFocusAnalyzeTool(cache).inputSchema,
-    zodSchema: AnalyzeToolSchema,
+    wrapperKey: 'analysis',
+    getInputSchema: () => analyze.inputSchema,
+    zodSchema: analyze.schema,
   },
 ];
 ```
 
-> **Implementer note:** verify the exact exported Zod schema symbol + path for each tool
-> (`grep -rn "export const .*Schema" src/tools/unified/schemas/ src/tools/schemas/`). The symbols above are the expected
-> names; correct them to the actual exports. If a tool's top-level Zod schema is a `discriminatedUnion` (write/analyze
-> use operation discriminators), `canonicalizeZodSchema` must fall back gracefully — extend the unwrap in Task 7 to take
-> the **common base fields** across union members, or scope the gate to `system` + `omnifocus_read` (object schemas) for
-> v1 and file a follow-up for the discriminated tools. Decide based on actual schema shapes; document the decision in
-> the commit message.
+> **Implementer note (verified on `2ce9255`):** the four schemas have two distinct shapes, both handled by Tasks 6–7:
+>
+> | Tool                | Zod schema (instance `.schema`)                                                                                                 | Advertised `inputSchema`                                                     | `wrapperKey` |
+> | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------ |
+> | `system`            | `SystemToolSchema` — flat `z.object({...})`                                                                                     | flat `properties`                                                            | — (none)     |
+> | `omnifocus_read`    | `ReadSchema = z.object({ query: coerceObject(QuerySchema) })`, `QuerySchema = z.discriminatedUnion('type', […])`                | fields nested under `properties.query.properties`, inner `required:['type']` | `'query'`    |
+> | `omnifocus_write`   | `WriteSchema = z.object({ mutation: coerceObject(MutationSchema) })`, `MutationSchema = z.discriminatedUnion('operation', […])` | nested under `properties.mutation`                                           | `'mutation'` |
+> | `omnifocus_analyze` | `AnalyzeSchema = z.object({ analysis: coerceObject(AnalysisSchema) })`, `AnalysisSchema = z.discriminatedUnion('type', […])`    | nested under `properties.analysis`                                           | `'analysis'` |
+>
+> `coerceObject(x)` is `z.preprocess(fn, x)` (`src/tools/schemas/coercion-helpers.ts:35`) → a `ZodEffects`, which
+> `unwrap()` (Task 7) peels to reach the inner `z.discriminatedUnion`. `mergeShapes` then unions the
+> per-`operation`/`type` member shapes, collapsing each discriminator's literals into one enum and treating a field as
+> required only if required in **every** member. This is NOT a `discriminatedUnion`-at-top-level case and there is NO
+> viable "scope to system + read" shortcut — read/write/analyze are all the same wrapped-DU shape; the merge is
+> mandatory for Phase 2 to deliver any value (do not let the gate pass vacuously — see the session "vacuous-green"
+> lesson, OMN-65).
 
 - [ ] **Step 4: Run, verify pass** (or surface real drift)
 
