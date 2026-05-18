@@ -41,4 +41,12 @@ describe('clusterFailures', () => {
     const [c] = clusterFailures([rec({}), rec({})], { minOccurrences: 3, minSpanDays: 2 });
     expect(c.escalated).toBe(false);
   });
+
+  it('treats unparseable timestamps as span=0 (no NaN misfire, falls back to count rule)', () => {
+    const [c] = clusterFailures([rec({ timestamp: '' }), rec({ timestamp: '' })], {
+      minOccurrences: 3,
+      minSpanDays: 2,
+    });
+    expect(c.escalated).toBe(false);
+  });
 });

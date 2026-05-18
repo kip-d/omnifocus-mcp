@@ -44,4 +44,14 @@ describe('classifyCluster', () => {
     });
     expect(classifyCluster(c)).toBe('DATA_ERROR');
   });
+  it('classifies a non-ignored execution cluster as EXECUTION', () => {
+    // No categorization at all.
+    const noCat = cluster({ example: { ...cluster({}).example, errorType: 'EXECUTION_ERROR' } });
+    expect(classifyCluster(noCat)).toBe('EXECUTION');
+    // Categorization present but errorType NOT in the ignore-set.
+    const nonIgnoredCat = cluster({
+      example: { ...cluster({}).example, errorType: 'EXECUTION_ERROR', categorization: { errorType: 'UNKNOWN_ERROR' } },
+    });
+    expect(classifyCluster(nonIgnoredCat)).toBe('EXECUTION');
+  });
 });

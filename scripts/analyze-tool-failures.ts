@@ -8,18 +8,8 @@
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { parseFailureLog } from '../src/diagnostics/failure-log.js';
+import { parseFailureLog, type FailureRecord } from '../src/diagnostics/failure-log.js';
 import { normalizeErrorMessage } from '../src/diagnostics/normalize.js';
-
-interface FailureLog {
-  timestamp: string;
-  tool: string;
-  errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR';
-  errorMessage: string;
-  validationErrors?: any[];
-  inputArgs: any;
-  schemaDescription: string;
-}
 
 interface FailureStats {
   tool: string;
@@ -28,7 +18,7 @@ interface FailureStats {
   executionErrors: number;
   commonErrors: Map<string, number>;
   commonFields: Map<string, number>;
-  examples: FailureLog[];
+  examples: FailureRecord[];
 }
 
 function analyzeFailures(days: number = 7, specificTool?: string): void {
@@ -58,13 +48,13 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
   }
 
   // Parse all failures
-  const failures: FailureLog[] = [];
+  const failures: FailureRecord[] = [];
   for (const file of logFiles) {
     const filePath = join(logsDir, file);
     const content = readFileSync(filePath, 'utf-8');
     for (const entry of parseFailureLog(content)) {
       if (!specificTool || entry.tool === specificTool) {
-        failures.push(entry as FailureLog);
+        failures.push(entry);
       }
     }
   }

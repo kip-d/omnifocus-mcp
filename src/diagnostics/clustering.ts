@@ -51,7 +51,11 @@ export function clusterFailures(records: FailureRecord[], opts: ClusterOptions):
   }
   const DAY = 86_400_000;
   for (const c of map.values()) {
-    const spanDays = (Date.parse(c.lastSeen) - Date.parse(c.firstSeen)) / DAY;
+    const first = Date.parse(c.firstSeen);
+    const last = Date.parse(c.lastSeen);
+    // Unparseable timestamps ⇒ span = 0 so escalation falls back cleanly to the count rule
+    // (NaN >= minSpanDays silently yields false, breaking the "never misfires" contract).
+    const spanDays = Number.isNaN(first) || Number.isNaN(last) ? 0 : (last - first) / DAY;
     c.escalated = c.count >= opts.minOccurrences || spanDays >= opts.minSpanDays;
   }
   return [...map.values()];
