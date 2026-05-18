@@ -118,6 +118,19 @@ structural channels for any current/future interpolation — and the description
 escaping. `buildFilteredFoldersScript`'s `:1731` `filterDescription` is built through
 `sanitizeForScriptComment(search)` likewise.
 
+**Per-builder description-source notes (the comment-channel function differs by builder):**
+
+- `buildExportTasksScript`, `buildTaskCountScript` → `describeFilterForScript` (`script-builder.ts:990`).
+- `buildFilteredProjectsScript` → **`describeProjectFilter`** (`filter-generator.ts:330`), *not*
+  `describeFilterForScript` — same raw-user-text hazard (`filter.text`, `filter.folderName`); wrap its
+  `// Filter:` interpolation with `sanitizeForScriptComment` the same way.
+- `buildFilteredFoldersScript` → the inline `:1731` `search: "${search}"` description.
+- `buildProjectByIdScript` → its `filterDescription` (`id = ${projectId}`) lives **only in the
+  returned `GeneratedScript` metadata, NOT embedded in the script body** → **no comment-channel
+  hazard** here. Its only in-body hazard is the predicate channel via the user-derived `projectId`
+  (`${JSON.stringify(projectId)}`); the whole-source `escapeTemplateString` wrap still applies and is
+  still necessary, but the `sanitizeForScriptComment` step is N/A for this builder.
+
 Mechanical, pattern-driven (each builder converges on the single correct shape). It is a real
 structural change to 5 builders, not a one-line addition — sized accordingly in the plan.
 
@@ -133,6 +146,10 @@ structural change to 5 builders, not a one-line addition — sized accordingly i
   payload is present only in escaped form (not as raw unbalanced backtick / live `${}`). Include the
   benign-identity regression (generated script for benign input is unchanged vs. pre-fix modulo the
   escape no-op). This is the unconfounded proof shape from the brainstorm probe.
+  Per-builder hostile vector: `buildFilteredProjectsScript`/`buildExportTasksScript`/
+  `buildTaskCountScript` via `text`/tag; `buildFilteredFoldersScript` via folder `search`;
+  **`buildProjectByIdScript` via the `projectId` argument** (its hazard is predicate-only — no
+  comment channel — so the hostile payload must go through `projectId`, not a description).
 
 ## Verification
 
