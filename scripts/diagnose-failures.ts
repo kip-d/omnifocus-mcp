@@ -76,8 +76,35 @@ export interface RunDiagnosisOpts {
 // Deterministic classification helpers
 // ---------------------------------------------------------------------------
 
-/** Map a COERCION_GAP drift finding to the fine classification COERCION_MISSING,
- *  other non-FIELD_MISSING findings to SCHEMA_DRIFT. */
+/**
+ * Map drift findings to a deterministic fine classification, or null if none applies
+ * (null → residual path: LLM agent, else NEEDS_LLM).
+ *
+ * DELIBERATE v1 DEVIATION (documented in PR #24's deviation section, alongside the
+ * --create-issues runtime-boundary one): `FIELD_MISSING` is EXCLUDED from the
+ * deterministic — and therefore the auto-file — path on purpose. The spec (§2) lists
+ * FIELD_MISSING as a first-class DriftKind and (§3/§4) treats deterministic
+ * SCHEMA_DRIFT as the auto-fileable class, so a literal reading would auto-file
+ * FIELD_MISSING. We don't, because FIELD_MISSING is BIDIRECTIONAL and, in this
+ * dual-schema codebase, dominated by INTENTIONAL asymmetry: CLAUDE.md mandates
+ * hand-crafted compact `inputSchema` overrides that deliberately omit recursive Zod
+ * internals, so "validated by Zod but never advertised" fires on by-design structure,
+ * not drift. Auto-filing it would manufacture false-positive Linear issues against the
+ * workspace-wide 250-issue cap — exactly the §4 risk the guardrails exist to contain.
+ * FIELD_MISSING-only clusters therefore fall through to the LLM agent for a judgement
+ * call instead of being deterministically classified and auto-filed.
+ *
+ * Known accepted cost (safer-than-spec): this also defers the genuinely-actionable
+ * "advertised to LLM but not validated by Zod" direction to the agent rather than
+ * catching it inline. The open question — split FIELD_MISSING by direction so the
+ * advertised-but-unvalidated half classifies deterministically — is tracked, not done.
+ *
+ * Behaviour pinned by tests/unit/diagnostics/diagnose-driver.test.ts
+ * ("FIELD_MISSING-only cluster is NOT deterministically classified ...").
+ *
+ * Mapping: COERCION_GAP → COERCION_MISSING; any other blocking
+ * (non-FIELD_MISSING) finding → SCHEMA_DRIFT.
+ */
 function deterministicClassification(findings: DriftFinding[]): string | null {
   const blocking = findings.filter((f) => f.kind !== 'FIELD_MISSING');
   if (blocking.length === 0) return null; // no deterministic classification

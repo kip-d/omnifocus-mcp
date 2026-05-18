@@ -353,3 +353,78 @@ it('appends CAP_GUARD_TRIPPED row to triage doc when filer returns capGuardTripp
     'CAP_GUARD_TRIPPED',
   );
 });
+
+// ---------------------------------------------------------------------------
+// FIELD_MISSING deviation — pins the deliberate v1 carve-out documented in PR #24
+// (deterministicClassification filters `f.kind !== 'FIELD_MISSING'`, so a
+// FIELD_MISSING-only cluster is NOT classified inline / NOT auto-filed; it goes
+// to the LLM agent, falling back to NEEDS_LLM when no agent is configured).
+// ---------------------------------------------------------------------------
+
+/** Registry entry that yields FIELD_MISSING ONLY: advertised exposes a field Zod never
+ *  validates → diffSchemas emits exactly one FIELD_MISSING finding, no ENUM/REQUIRED/
+ *  COERCION. With FIELD_MISSING excluded from the deterministic path this cluster has
+ *  NO deterministic classification. */
+const FIELD_MISSING_ENTRY = {
+  name: 'omnifocus_fm',
+  getInputSchema: () => ({ type: 'object', properties: { phantom: { type: 'string' } } }),
+  zodSchema: z.object({}),
+};
+
+it('FIELD_MISSING-only cluster is NOT deterministically classified — routes to the LLM agent', async () => {
+  // NON-VACUOUS: if the `f.kind !== 'FIELD_MISSING'` filter were removed from
+  // deterministicClassification (i.e. FIELD_MISSING treated as a blocking finding),
+  // this cluster would resolve INLINE as SCHEMA_DRIFT and the agent would be bypassed —
+  // so `expect(agentRunner).toHaveBeenCalledOnce()` would fail. The agent being invoked
+  // is therefore proof the FIELD_MISSING carve-out is in effect, not that nothing classified.
+  const agentRunner = vi.fn().mockResolvedValue({
+    classification: 'DESCRIPTION_GAP',
+    suggestedFix: 'agent judgement',
+  });
+  const sink = vi.fn();
+
+  await runDiagnosis({
+    records: makeRecords('omnifocus_fm', 'unexpected field phantom'),
+    registry: [FIELD_MISSING_ENTRY],
+    ledgerPath: join(mkdtempSync(join(tmpdir(), 'omn37-fm-a-')), 'ledger.json'),
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    agentRunner,
+  });
+
+  expect(agentRunner).toHaveBeenCalledOnce();
+  expect(sink).toHaveBeenCalledOnce();
+  const md = sink.mock.calls[0][0] as string;
+  // The data row carries BOTH the tool name and the agent's classification — a legend
+  // line never contains the tool name, so this can only be the classified table row.
+  const row = md.split('\n').find((l) => l.includes('omnifocus_fm') && l.includes('DESCRIPTION_GAP'));
+  expect(row, `expected an agent-classified row for omnifocus_fm\n${md}`).toBeDefined();
+});
+
+it('FIELD_MISSING-only cluster falls back to NEEDS_LLM when no agent is configured (never SCHEMA_DRIFT)', async () => {
+  // NON-VACUOUS: with FIELD_MISSING excluded from the deterministic path AND no
+  // agentRunner injected, the only correct classification is NEEDS_LLM. If the
+  // FIELD_MISSING carve-out were dropped, this same cluster would instead surface
+  // as a deterministic SCHEMA_DRIFT row (and become auto-fileable) — so the
+  // assertions below (NEEDS_LLM present, SCHEMA_DRIFT absent for this tool) would fail.
+  const sink = vi.fn();
+
+  await runDiagnosis({
+    records: makeRecords('omnifocus_fm', 'unexpected field phantom'),
+    registry: [FIELD_MISSING_ENTRY],
+    ledgerPath: join(mkdtempSync(join(tmpdir(), 'omn37-fm-b-')), 'ledger.json'),
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    // agentRunner intentionally omitted — exercises the no-agent fallback branch
+  });
+
+  expect(sink).toHaveBeenCalledOnce();
+  const md = sink.mock.calls[0][0] as string;
+  const needsLlmRow = md.split('\n').find((l) => l.includes('omnifocus_fm') && l.includes('NEEDS_LLM'));
+  expect(needsLlmRow, `expected a NEEDS_LLM row for omnifocus_fm\n${md}`).toBeDefined();
+  // And it must NOT have been deterministically classified as fileable SCHEMA_DRIFT.
+  const driftRow = md.split('\n').find((l) => l.includes('omnifocus_fm') && l.includes('SCHEMA_DRIFT'));
+  expect(driftRow, `omnifocus_fm must NOT be classified SCHEMA_DRIFT (FIELD_MISSING carve-out)\n${md}`).toBeUndefined();
+});
