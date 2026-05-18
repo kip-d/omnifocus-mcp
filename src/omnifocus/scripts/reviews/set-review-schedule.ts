@@ -102,6 +102,7 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
             try {
               const changes = [];
 
+              // SETTER-PATTERNS row 1 (Project.reviewInterval — OmniJS read-modify-reassign).
               // Set review interval. Project.reviewInterval is a strictly-typed
               // Project.ReviewInterval — assigning a plain object, Number, or
               // freshly-constructed instance is rejected by OmniJS (OMN-58).

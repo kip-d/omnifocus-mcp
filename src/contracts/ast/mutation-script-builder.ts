@@ -781,6 +781,7 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
             // catchUpAutomatically defaults to true
             const catchUp = rule.catchUpAutomatically !== false;
 
+            // SETTER-PATTERNS row 2 (Task.repetitionRule — OmniJS, new Task.RepetitionRule).
             // Use modern API: pass null for deprecated method parameter
             task.repetitionRule = new Task.RepetitionRule(
               rrule,
@@ -940,6 +941,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       }
     } catch (e) {}
 
+    // SETTER-PATTERNS row 3 (Project.status — OmniJS, direct assign of enum constant).
     // Set status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
     if (projectData.status && projectData.status !== 'active') {
       try {
@@ -965,6 +967,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       } catch (e) {}
     }
 
+    // SETTER-PATTERNS row 1 (Project.reviewInterval — OmniJS read-modify-reassign).
     // Set reviewInterval via OmniJS bridge — strictly typechecked.
     // The class is non-constructible from user code (zero-arg construction
     // fails with a CallbackObject error). Plain objects and Numbers are also
@@ -1469,6 +1472,7 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           // catchUpAutomatically defaults to true
           const catchUp = rule.catchUpAutomatically !== false;
 
+          // SETTER-PATTERNS row 2 (Task.repetitionRule — OmniJS, new Task.RepetitionRule).
           // Use modern API: pass null for deprecated method parameter
           task.repetitionRule = new Task.RepetitionRule(
             rrule,
@@ -1560,6 +1564,7 @@ export async function buildUpdateProjectScript(
         if (changes.flagged !== undefined) project.flagged = changes.flagged;
         if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
+        // SETTER-PATTERNS row 1 (Project.reviewInterval — OmniJS read-modify-reassign).
         // Set reviewInterval — strictly typechecked by OmniJS.
         // Plain objects, Numbers, and zero-arg construction all fail.
         // The class is non-constructible from user code (CallbackObject error).
@@ -1612,6 +1617,7 @@ export async function buildUpdateProjectScript(
     const updateResult = JSON.parse(app.evaluateJavascript(updateScript));
     if (updateResult.error) return JSON.stringify(updateResult);
 
+    // SETTER-PATTERNS row 3 (Project.status — OmniJS, direct assign of enum constant).
     // Handle status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
     if (changes.status) {
       try {
