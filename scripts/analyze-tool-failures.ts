@@ -8,16 +8,8 @@
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-
-interface FailureLog {
-  timestamp: string;
-  tool: string;
-  errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR';
-  errorMessage: string;
-  validationErrors?: any[];
-  inputArgs: any;
-  schemaDescription: string;
-}
+import { parseFailureLog, type FailureRecord } from '../src/diagnostics/failure-log.js';
+import { normalizeErrorMessage } from '../src/diagnostics/normalize.js';
 
 interface FailureStats {
   tool: string;
@@ -26,7 +18,7 @@ interface FailureStats {
   executionErrors: number;
   commonErrors: Map<string, number>;
   commonFields: Map<string, number>;
-  examples: FailureLog[];
+  examples: FailureRecord[];
 }
 
 function analyzeFailures(days: number = 7, specificTool?: string): void {
@@ -56,22 +48,13 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
   }
 
   // Parse all failures
-  const failures: FailureLog[] = [];
+  const failures: FailureRecord[] = [];
   for (const file of logFiles) {
     const filePath = join(logsDir, file);
     const content = readFileSync(filePath, 'utf-8');
-    const lines = content.trim().split('\n');
-
-    for (const line of lines) {
-      if (line) {
-        try {
-          const entry = JSON.parse(line);
-          if (!specificTool || entry.tool === specificTool) {
-            failures.push(entry);
-          }
-        } catch (e) {
-          console.error('Failed to parse log line:', line);
-        }
+    for (const entry of parseFailureLog(content)) {
+      if (!specificTool || entry.tool === specificTool) {
+        failures.push(entry);
       }
     }
   }
@@ -116,10 +99,7 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
     }
 
     // Track common error messages (simplified)
-    const simpleError = failure.errorMessage
-      .replace(/[0-9a-f]{8,}/gi, 'ID') // Replace IDs with placeholder
-      .replace(/\d{4}-\d{2}-\d{2}/g, 'DATE') // Replace dates
-      .substring(0, 100); // Truncate for grouping
+    const simpleError = normalizeErrorMessage(failure.errorMessage);
 
     stats.commonErrors.set(simpleError, (stats.commonErrors.get(simpleError) || 0) + 1);
 
