@@ -143,6 +143,17 @@ JXA `task.tags = …` and `task.addTags()` silently no-op. Assign tags via OmniJ
   Historical references like "introduced in v3.0.0" are fine — descriptive labels like "(current v4.1.0)" go stale on
   every release.
 
+## Referencing code in this doc
+
+Cite **stable anchors**, never volatile specifics — this is the version-pin rule generalized:
+
+- ✅ directories (`src/contracts/ast/`), grep targets ("grep for `bridgeSetTags`"), command invocations
+  (`npm run test:unit`)
+- ❌ `file.ts:NN` line numbers, hardcoded version strings, hardcoded test/size counts
+
+Volatile references rot silently; `tests/unit/docs/claude-md-paths.test.ts` fails CI when a path reference stops
+resolving, but it cannot catch a stale line number or count — those must not be written in the first place.
+
 ## 🚨 MCP Bridge Type Coercion
 
 Claude Desktop converts ALL parameters to strings. Handle both:
@@ -218,6 +229,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
 multiple machines or sessions).
+
+## Workflow norms
+
+- PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
+- Run a code-review subagent before merge; gate the merge on a Safe/Approved verdict.
+- Merge via `gh pr merge --squash --auto` — never `--admin`.
+- `git pull --rebase` before `git push` (work spans multiple machines/sessions).
 
 ## Debugging & Investigation
 
