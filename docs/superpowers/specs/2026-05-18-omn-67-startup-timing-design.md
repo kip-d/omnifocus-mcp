@@ -5,7 +5,7 @@ Date: 2026-05-18 Linear: OMN-67 Status: Design approved (2026-05-18), pending sp
 ## Problem
 
 The MCP server blocks its transport behind an awaited `cacheWarmer.warmCache()`: in `src/index.ts`,
-`await cacheWarmer.warmCache()` (≈:117) runs in `main()` **before** the mode branch
+`await cacheWarmer.warmCache()` (≈:117) runs in `runServer()` **before** the mode branch
 (`if (cliConfig.httpMode) runHttpServer else runStdioServer`, ≈:127–132) and therefore before the stdio transport
 `connect()` (≈:218) or the HTTP listener start. On a cold start this exceeds the client's fixed 30s connect window, so
 the first `/mcp` reconnect times out and only the second works (root cause diagnosed and empirically verified
@@ -27,13 +27,20 @@ purely about **decomposition and turnkey visibility**, not about producing a num
 ## Key facts (reuse, don't reinvent)
 
 - **`load` is derivable for free.** `performance.now()` is measured relative to `performance.timeOrigin` (≈ process
-  init). ESM hoists all `import` statements above any executable code, so by the time `main()` runs the entire
+  init). ESM hoists all `import` statements above any executable code, so by the time `runServer()` runs the entire
   dependency graph is already loaded. Therefore the value of `performance.now()` at the **first executable statement of
   the entrypoint** _is_ the `load` duration (Node bootstrap + full import graph). No separate first-imported timing
-  module is required.
-- **The expensive phases are pre-branch and shared.** `load`, `init`, `perms`, `warm` are all captured in `main()`
-  _before_ the stdio/HTTP split. Only the final `ready` boundary differs by mode. Instrumenting both modes is one extra
-  emit call reusing identical timestamps — excluding HTTP would add a conditional, not remove code.
+  module is required. Placement note: `src/index.ts` has a few module-top-level statements (`createLogger`,
+  `parseCLIArgs`) that run before `runServer()` is invoked. The `StartupTimer` must therefore be instantiated /
+  first-marked at **module top level** (as early as possible), not at the top of `runServer()`, so the `load` value is
+  not undercounted by the top-level CLI parse. The plan must pin this placement.
+- **The expensive phases are pre-branch and shared.** `load`, `init`, `perms`, `warm` are all captured in `runServer()`
+  _before_ the stdio/HTTP split. Only the final `ready` boundary differs by mode, and `register` is **stdio-only**:
+  `runHttpServer` never calls `registerTools`/`registerPrompts` — HTTP registers tools lazily per-session inside
+  `SessionManager` (`session-manager.ts`), after the listener is already up (i.e. after `ready`). In HTTP mode
+  `register` therefore renders `0`, exactly the way `warm` renders `0` when warming is disabled. Instrumenting both
+  modes is one extra emit call reusing the shared pre-branch timestamps — excluding HTTP would add a conditional, not
+  remove code.
 - **The warm phase already has drill-down.** `CacheWarmer` logs its per-category durations on the line immediately
   preceding where the summary will emit. The summary carries the six top-level phases; the warmer's existing line
   remains the drill-down for the dominant phase. No nesting/coupling needed.
@@ -42,11 +49,11 @@ purely about **decomposition and turnkey visibility**, not about producing a num
 ## Decision
 
 Add a small `StartupTimer` (`mark(name)` capturing `performance.now()`; a **pure** `formatStartupSummary(marks, mode)`),
-place `mark()` calls at six boundaries in `main()` and each mode function, and emit one `STARTUP COMPLETE` INFO line in
-**both** stdio and HTTP modes, **always-on** (even when warming is disabled — the `warm` slice then shows `0`). The
-cache warmer's existing per-category line is the drill-down for the dominant phase.
+place `mark()` calls at six boundaries in `runServer()` and each mode function, and emit one `STARTUP COMPLETE` INFO
+line in **both** stdio and HTTP modes, **always-on** (even when warming is disabled — the `warm` slice then shows `0`).
+The cache warmer's existing per-category line is the drill-down for the dominant phase.
 
-## Phases (derived from `src/index.ts` `main()`)
+## Phases (derived from `src/index.ts` `runServer()`)
 
 | Phase      | Boundary                                                    | A spike here means                                                           |
 | ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -54,7 +61,7 @@ cache warmer's existing per-category line is the drill-down for the dominant pha
 | `init`     | entry → `CacheManager` + `PermissionChecker` constructed    | Usually ≈0; flags a config/env surprise                                      |
 | `perms`    | `checkPermissions()` start→end                              | macOS Automation/Apple-Events TCC re-eval after file changes                 |
 | `warm`     | `cacheWarmer.warmCache()` start→end                         | Dominant cost; scales with DB size (drill-down already logged by the warmer) |
-| `register` | `registerTools` + prompt registration start→end             | Tool/prompt registration (~113ms observed)                                   |
+| `register` | `registerTools` + prompt registration start→end             | Tool/prompt registration (~113ms; stdio-only — renders `0` in HTTP)          |
 | `ready`    | transport `connect()` (stdio) / HTTP listener up (HTTP)     | Final handshake readiness                                                    |
 
 **Output (one INFO line, both modes):**
@@ -77,8 +84,9 @@ In scope:
 - **Wiring in `src/index.ts`**: instantiate the timer at the top of the entrypoint; `mark()` at the six boundaries; emit
   the formatted line via the existing `logger` (`server` channel, INFO) after the final `ready` mark in **both**
   `runStdioServer` and `runHttpServer`.
-- Correct the now-stale `// (non-blocking)` comment at `src/index.ts:78` as an in-region drive-by (the warm is
-  awaited/blocking; this is documentation accuracy, no behavior change).
+- Correct the now-stale `// (non-blocking)` comments in this region as an in-region drive-by: the one at
+  `src/index.ts:78` (the awaited/blocking cache warm) and the analogous one at `src/index.ts:62` (the awaited permission
+  check) — both are documentation-accuracy only, no behavior change.
 
 Out of scope:
 
@@ -105,8 +113,8 @@ Out of scope:
 ## Risks / non-goals
 
 - **Risk:** a `mark()` placed on the wrong side of a boundary mis-attributes time. Mitigation: phases sum-to-total
-  assertion in unit tests catches gross misattribution; boundary placement is reviewed against the `main()` control flow
-  in the plan/code-review gates.
+  assertion in unit tests catches gross misattribution; boundary placement is reviewed against the `runServer()` control
+  flow in the plan/code-review gates.
 - **Risk:** `performance.timeOrigin` semantics differ from expectation, skewing `load`. Mitigation: `load` is defined
   operationally as "first `mark()`'s `performance.now()`"; the integration test asserts it is present and non-zero
   (sanity), not an exact value.
@@ -116,7 +124,8 @@ Out of scope:
 ## Acceptance
 
 - One `STARTUP COMPLETE` line per process start in both stdio and HTTP modes, always-on.
-- Six phases present; values sum to `total` within rounding; correct mode tag.
+- Six phases present; values sum to `total` within rounding; correct mode tag. In HTTP mode `register` is expected to
+  render `0` (lazy per-session registration occurs after `ready`); the sum-to-total contract still holds.
 - `load` slice demonstrably non-zero and reflects bootstrap (sanity-checked in integration; larger immediately after
   `npm ci` in the field, not asserted in CI).
 - `~/bin/of-mcp-redeploy` already greps for `STARTUP COMPLETE`; it lights up automatically once this lands (no script
