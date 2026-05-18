@@ -725,6 +725,9 @@ describe('canonicalizeZodSchema', () => {
       note: z.string().optional(),
     });
     const c = canonicalizeZodSchema(schema);
+    // NOTE: `coercible` is only meaningful for NUMERIC fields. A non-numeric optional like
+    // `note` also probes coercible=true (z.string().optional().safeParse('5') succeeds); that
+    // is harmless because diffSchemas only consults `coercible` when advertised type==='number'.
     expect(c.a.coercible).toBe(true); // z.coerce.number().safeParse('5') succeeds
     expect(c.b.coercible).toBe(false); // z.number().safeParse('5') fails
     expect(c.mode.enum).toEqual(['x', 'y']);
@@ -1075,6 +1078,12 @@ export const TOOL_SCHEMA_REGISTRY: ToolSchemaEntry[] = [
 > viable "scope to system + read" shortcut — read/write/analyze are all the same wrapped-DU shape; the merge is
 > mandatory for Phase 2 to deliver any value (do not let the gate pass vacuously — see the session "vacuous-green"
 > lesson, OMN-65).
+>
+> **Scope boundary (intentional, not a bug):** this static gate canonicalizes only the depth-1 field shape of each tool.
+> Deeper nested sub-schemas — e.g. the per-item `operation` inside `WriteSchema`'s batch array, or nested object filters
+> — are deliberately out of scope; both canonicalizers read one level so they stay symmetric and the gate confirms 0
+> drift. A future maintainer should not "fix" the depth-1 limitation: deeper drift detection is a separate, larger
+> effort (candidate follow-up), not an omission in this task.
 
 - [ ] **Step 4: Run, verify pass** (or surface real drift)
 
