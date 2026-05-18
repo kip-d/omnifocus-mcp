@@ -16,9 +16,14 @@ describe('formatStartupSummary', () => {
       'STARTUP COMPLETE 31280ms  load 8210 · init 4 · perms 140 · warm 22600 · register 113 · ready 213  [stdio]',
     );
     // sum-to-total invariant (rounded parts within phase-count ms of total)
-    const nums = [...line.matchAll(/(?:load|init|perms|warm|register|ready) (\d+)/g)].map((m) => Number(m[1]));
-    const total = Number(line.match(/COMPLETE (\d+)ms/)![1]);
-    expect(Math.abs(nums.reduce((a, b) => a + b, 0) - total)).toBeLessThanOrEqual(6);
+    const pattern = /(?:load|init|perms|warm|register|ready) (\d+)/g;
+    const nums: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(line)) !== null) {
+      nums.push(Number(m[1]));
+    }
+    const total = Number(/COMPLETE (\d+)ms/.exec(line)![1]);
+    expect(Math.abs(nums.reduce((a, b) => a + b, 0) - total)).toBeLessThanOrEqual(3);
   });
 
   it('treats missing registerEnd as register 0 (http path) and still sums', () => {
