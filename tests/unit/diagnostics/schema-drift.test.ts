@@ -1,7 +1,7 @@
 // tests/unit/diagnostics/schema-drift.test.ts
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { canonicalizeInputSchema, canonicalizeZodSchema } from '../../../src/diagnostics/schema-drift.js';
+import { canonicalizeInputSchema, canonicalizeZodSchema, diffSchemas } from '../../../src/diagnostics/schema-drift.js';
 
 describe('canonicalizeInputSchema', () => {
   it('flattens a flat advertised JSON schema (system tool — no wrapper)', () => {
@@ -75,5 +75,38 @@ describe('canonicalizeZodSchema', () => {
     expect(c.limit.required).toBe(false);
     // flagged present in only ONE member -> not required (absent from a member counts as not-required).
     expect(c.flagged.required).toBe(false);
+  });
+});
+
+describe('diffSchemas', () => {
+  it('reports FIELD_MISSING, ENUM_MISMATCH, REQUIRED_MISMATCH, COERCION_GAP', () => {
+    const advertised = canonicalizeInputSchema({
+      type: 'object',
+      properties: { mode: { type: 'string', enum: ['a', 'b'] }, limit: { type: 'number' }, ghost: { type: 'string' } },
+      required: ['mode'],
+    });
+    const zod = canonicalizeZodSchema(
+      z.object({
+        mode: z.enum(['a']), // ENUM_MISMATCH (b advertised, not validated)
+        limit: z.number(), // COERCION_GAP (advertised numeric, not coercible)
+        extra: z.string(), // advertised-missing (validated field never advertised)
+      }),
+    );
+    const findings = diffSchemas(advertised, zod);
+    const kinds = findings.map((f) => f.kind).sort();
+    expect(kinds).toContain('FIELD_MISSING'); // ghost advertised, not validated
+    expect(kinds).toContain('FIELD_MISSING'); // extra validated, not advertised
+    expect(kinds).toContain('ENUM_MISMATCH');
+    expect(kinds).toContain('COERCION_GAP');
+  });
+
+  it('returns [] for an aligned schema (no false positives on coerced numerics)', () => {
+    const advertised = canonicalizeInputSchema({
+      type: 'object',
+      properties: { limit: { type: 'number' } },
+      required: [],
+    });
+    const zod = canonicalizeZodSchema(z.object({ limit: z.coerce.number().optional() }));
+    expect(diffSchemas(advertised, zod)).toEqual([]);
   });
 });

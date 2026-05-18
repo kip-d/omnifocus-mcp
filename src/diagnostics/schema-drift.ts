@@ -140,3 +140,46 @@ export function canonicalizeZodSchema(schema: z.ZodTypeAny, wrapperKey?: string)
   // Plain object (system tool, or a non-union wrapper).
   return mergeShapes([target]);
 }
+
+export type DriftKind = 'FIELD_MISSING' | 'ENUM_MISMATCH' | 'REQUIRED_MISMATCH' | 'COERCION_GAP';
+export interface DriftFinding {
+  kind: DriftKind;
+  field: string;
+  detail: string;
+}
+
+export function diffSchemas(advertised: CanonicalSchema, zod: CanonicalSchema): DriftFinding[] {
+  const findings: DriftFinding[] = [];
+  const fields = new Set([...Object.keys(advertised), ...Object.keys(zod)]);
+  for (const f of fields) {
+    const a = advertised[f];
+    const z = zod[f];
+    if (a && !z) {
+      findings.push({ kind: 'FIELD_MISSING', field: f, detail: 'advertised to LLM but not validated by Zod' });
+      continue;
+    }
+    if (!a && z) {
+      findings.push({ kind: 'FIELD_MISSING', field: f, detail: 'validated by Zod but never advertised to LLM' });
+      continue;
+    }
+    if (!a || !z) continue;
+    if (a.enum && z.enum && JSON.stringify([...a.enum].sort()) !== JSON.stringify([...z.enum].sort())) {
+      findings.push({ kind: 'ENUM_MISMATCH', field: f, detail: `advertised [${a.enum}] vs validated [${z.enum}]` });
+    }
+    if (a.required !== z.required) {
+      findings.push({
+        kind: 'REQUIRED_MISMATCH',
+        field: f,
+        detail: `advertised required=${a.required} vs validated required=${z.required}`,
+      });
+    }
+    if (a.type === 'number' && z.coercible === false) {
+      findings.push({
+        kind: 'COERCION_GAP',
+        field: f,
+        detail: 'advertised numeric but Zod rejects stringified input (Claude Desktop stringifies all params)',
+      });
+    }
+  }
+  return findings;
+}
