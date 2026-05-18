@@ -55,9 +55,13 @@ In scope:
   (single source of truth); add `sanitizeForScriptComment`. Update `list-tasks-ast.ts` to import
   `escapeTemplateString` from it (delete its private copy) — **no behavior change** to that path.
 - **5 `script-builder.ts` builders** — refactor each so its OmniJS source is assembled as a
-  standalone TS string then embedded via `escapeTemplateString`, and sanitize the description:
-  `buildFilteredProjectsScript` (~1173), `buildProjectByIdScript` (~1330), `buildExportTasksScript`
-  (~1520), `buildFilteredFoldersScript` (~1738), `buildTaskCountScript` (~1965).
+  standalone TS string then embedded via `escapeTemplateString`; **additionally** apply
+  `sanitizeForScriptComment` to the in-body `// Filter:` description for the **3 comment-channel
+  builders only** (`buildExportTasksScript`, `buildTaskCountScript`, `buildFilteredProjectsScript`).
+  `buildProjectByIdScript` and `buildFilteredFoldersScript` are predicate-only (escape-only, no
+  sanitize). Builders: `buildFilteredProjectsScript` (~1173), `buildProjectByIdScript` (~1330),
+  `buildExportTasksScript` (~1520), `buildFilteredFoldersScript` (~1738), `buildTaskCountScript`
+  (~1965). (Line numbers approximate — trust `grep -n "evaluateJavascript(omniJsScript)"`.)
 - Tests: unit-test both helpers; builder-level "generated script parses as valid JS for hostile +
   benign vectors" across the builders.
 
@@ -114,9 +118,8 @@ shape:
    then `app.evaluateJavascript(omniJsScript)` (unchanged).
 
 This applies the escape **once to the whole OmniJS source** per builder — covering predicate +
-structural channels for any current/future interpolation — and the description is newline-safe before
-escaping. `buildFilteredFoldersScript`'s `:1731` `filterDescription` is built through
-`sanitizeForScriptComment(search)` likewise.
+structural channels for any current/future interpolation — and (for the comment-channel builders) the
+description is newline-safe before escaping.
 
 **Per-builder description-source notes (the comment-channel function differs by builder):**
 
@@ -124,7 +127,11 @@ escaping. `buildFilteredFoldersScript`'s `:1731` `filterDescription` is built th
 - `buildFilteredProjectsScript` → **`describeProjectFilter`** (`filter-generator.ts:330`), *not*
   `describeFilterForScript` — same raw-user-text hazard (`filter.text`, `filter.folderName`); wrap its
   `// Filter:` interpolation with `sanitizeForScriptComment` the same way.
-- `buildFilteredFoldersScript` → the inline `:1731` `search: "${search}"` description.
+- `buildFilteredFoldersScript` → **predicate-only**. The `:1731` `search: "${search}"`
+  `filterDescription` lives **only in the returned `GeneratedScript` metadata, NOT interpolated into
+  the OmniJS body** (the body gets `search` solely via `${JSON.stringify(search)}`). No comment-channel
+  hazard; **no `sanitizeForScriptComment` step** — the whole-source `escapeTemplateString` wrap is the
+  entire fix here (same category as `buildProjectByIdScript`).
 - `buildProjectByIdScript` → its `filterDescription` (`id = ${projectId}`) lives **only in the
   returned `GeneratedScript` metadata, NOT embedded in the script body** → **no comment-channel
   hazard** here. Its only in-body hazard is the predicate channel via the user-derived `projectId`
