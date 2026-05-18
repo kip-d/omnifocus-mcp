@@ -48,6 +48,7 @@ export function renderTriageDoc(rows: TriageRow[], now: Date): string {
 | DATA_ERROR | no-op: bad caller data; not a schema issue |
 | NEEDS_LLM | agent not configured or unavailable — manual investigation required |
 | CAP_GUARD_TRIPPED | auto-Linear filing skipped because open issue count >= cap threshold |
+| FILE_FAILED | one or more SCHEMA_DRIFT clusters could not be filed to Linear (createIssue rejected); successes were still ledgered |
 `;
 
   return `# MCP Failure Triage

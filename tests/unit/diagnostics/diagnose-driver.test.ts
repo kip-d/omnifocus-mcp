@@ -98,7 +98,7 @@ it('does NOT invoke linearFiler when createIssues is false (default)', async () 
   // NON-VACUOUS: the cluster would be SCHEMA_DRIFT-classified (the filer should handle it if wired),
   // but createIssues is not set, so the filer must never be called. Removing the createIssues
   // guard from runDiagnosis would cause this test to FAIL (filer would be called once).
-  const filer = vi.fn().mockResolvedValue({ created: [], capGuardTripped: false });
+  const filer = vi.fn().mockResolvedValue({ created: [], failed: [], capGuardTripped: false });
   const sink = vi.fn();
   const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15a-')), 'ledger.json');
 
@@ -171,6 +171,7 @@ it('passes ONLY SCHEMA_DRIFT clusters to filer, writes returned issue ID to ledg
         .filter((c) => c.classification === 'SCHEMA_DRIFT')
         .slice(0, 1)
         .map((c) => ({ fingerprint: c.fingerprint, id: 'OMN-42' })),
+      failed: [],
       capGuardTripped: false,
     }),
   );
@@ -208,6 +209,59 @@ it('passes ONLY SCHEMA_DRIFT clusters to filer, writes returned issue ID to ledg
   expect(sdEntry?.linearIssueId).toBe('OMN-42');
 });
 
+it('partial filer failure: still ledgers the success, appends a FILE_FAILED triage row', async () => {
+  // Two distinct SCHEMA_DRIFT clusters. The filer "creates" the first and "fails" the second.
+  //
+  // NON-VACUOUS: the filer returns BOTH created:[1 entry] AND failed:[1 entry]. If runDiagnosis
+  // skipped the ledger update whenever failed[] is non-empty (the silent-divergence bug this fix
+  // prevents), the ledger assertion would find no linearIssueId → fail. If the FILE_FAILED append
+  // were missing, the triage-doc assertion (data section, before the legend) would fail. The
+  // success-fingerprint is taken from the clusters runDiagnosis actually passes, so it is a real
+  // ledger key, not a hardcoded guess.
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15e-')), 'ledger.json');
+  const sink = vi.fn();
+
+  const SECOND_SD_ENTRY = {
+    name: 'omnifocus_sd2',
+    getInputSchema: () => ({ type: 'object', required: ['mode'], properties: { mode: { type: 'string' } } }),
+    zodSchema: z.object({ mode: z.string().optional() }),
+  };
+
+  const filer = vi.fn().mockImplementation((clusters: Array<{ fingerprint: string; classification: string }>) => {
+    const sd = clusters.filter((c) => c.classification === 'SCHEMA_DRIFT');
+    return Promise.resolve({
+      created: sd.slice(0, 1).map((c) => ({ fingerprint: c.fingerprint, id: 'OMN-77' })),
+      failed: sd.slice(1, 2).map((c) => ({ fingerprint: c.fingerprint, error: 'Linear 503 unavailable' })),
+      capGuardTripped: false,
+    });
+  });
+
+  await runDiagnosis({
+    records: [
+      ...makeRecords('omnifocus_sd', 'Required field mode is missing'),
+      ...makeRecords('omnifocus_sd2', 'Required field mode is missing'),
+    ],
+    registry: [SCHEMA_DRIFT_ENTRY, SECOND_SD_ENTRY],
+    ledgerPath,
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    linearFiler: filer,
+    createIssues: true,
+  });
+
+  // The successfully-created issue id IS in the ledger despite a sibling failure
+  const ledger = loadLedger(ledgerPath);
+  const success = Object.values(ledger.entries).find((e) => e.linearIssueId === 'OMN-77');
+  expect(success, 'success must be ledgered even when another cluster failed to file').toBeDefined();
+
+  // A FILE_FAILED row is present in the data section (before the legend — not the legend entry)
+  expect(sink).toHaveBeenCalledOnce();
+  const md = sink.mock.calls[0][0] as string;
+  const dataSection = md.slice(0, md.indexOf('## Legend') >= 0 ? md.indexOf('## Legend') : md.length);
+  expect(dataSection, `expected a FILE_FAILED row in the data section of:\n${md}`).toContain('FILE_FAILED');
+});
+
 it('appends CAP_GUARD_TRIPPED row to triage doc when filer returns capGuardTripped', async () => {
   // NON-VACUOUS analysis:
   // The static legend in renderTriageDoc already contains a "| CAP_GUARD_TRIPPED | ..." line, so
@@ -224,7 +278,7 @@ it('appends CAP_GUARD_TRIPPED row to triage doc when filer returns capGuardTripp
   const sink = vi.fn();
   const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15c-')), 'ledger.json');
 
-  const filer = vi.fn().mockResolvedValue({ created: [], capGuardTripped: true });
+  const filer = vi.fn().mockResolvedValue({ created: [], failed: [], capGuardTripped: true });
 
   await runDiagnosis({
     records: makeRecords('omnifocus_sd', 'Required field mode is missing'),

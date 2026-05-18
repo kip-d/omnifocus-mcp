@@ -192,12 +192,27 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
       });
     }
 
-    // Update ledger entries with the returned issue IDs
+    // Ledger every successfully-created issue's id — UNCONDITIONALLY, even when some clusters
+    // failed (filerResult.failed non-empty). Partial failure must not lose the successes.
     for (const { fingerprint, id } of filerResult.created) {
       const existing = ledger.entries[fingerprint];
       if (existing) {
         ledger = recordDiagnosis(ledger, ledgerPath, { ...existing, linearIssueId: id }, now);
       }
+    }
+
+    if (filerResult.failed.length > 0) {
+      // Operator-visible FILE_FAILED marker: N clusters could not be filed (createIssue rejected).
+      // Successes above were still ledgered; these need manual filing from the triage doc.
+      triageRows.push({
+        fingerprint: 'FILE_FAILED',
+        tool: '—',
+        classification: 'FILE_FAILED',
+        suggestedFix: `${filerResult.failed.length} cluster(s) failed to file to Linear (createIssue rejected) — file manually; e.g. ${filerResult.failed[0].fingerprint}: ${filerResult.failed[0].error}`,
+        firstSeen: '—',
+        lastSeen: now.toISOString().slice(0, 10),
+        count: filerResult.failed.length,
+      });
     }
   }
 
