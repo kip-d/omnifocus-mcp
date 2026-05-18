@@ -56,3 +56,25 @@ export function clusterFailures(records: FailureRecord[], opts: ClusterOptions):
   }
   return [...map.values()];
 }
+
+const IGNORE_SET = new Set([
+  'INVALID_ID',
+  'NULL_RESULT',
+  'OMNIFOCUS_NOT_RUNNING',
+  'SCRIPT_TIMEOUT',
+  'CONNECTION_TIMEOUT',
+]);
+
+export function isIgnored(c: FailureCluster): boolean {
+  const cat = c.example.categorization?.errorType;
+  return cat !== undefined && IGNORE_SET.has(cat);
+}
+
+export type CoarseClass = 'VALIDATION' | 'EXECUTION' | 'DATA_ERROR';
+
+/** Coarse pre-classification. The fine SCHEMA_DRIFT/COERCION/DESCRIPTION split happens in the driver
+ *  (deterministic via schema-drift) or the LLM agent (residual). */
+export function classifyCluster(c: FailureCluster): CoarseClass {
+  if (isIgnored(c)) return 'DATA_ERROR';
+  return c.example.errorType === 'VALIDATION_ERROR' ? 'VALIDATION' : 'EXECUTION';
+}
