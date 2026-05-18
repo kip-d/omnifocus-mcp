@@ -2,11 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix CLAUDE.md's factual rot at the root cause and add a vitest guard that fails when any `src/`/`docs/` reference in `CLAUDE.md` or `docs/dev/*.md` no longer resolves on disk.
+**Goal:** Fix CLAUDE.md's factual rot at the root cause and add a vitest guard that fails when any `src/`/`docs/` reference in `CLAUDE.md` no longer resolves on disk.
 
-**Architecture:** One self-contained vitest test file holds both the pure extraction/normalization helpers (fixture-tested, TDD) and the real-docs assertion. CLAUDE.md content fixes are surgical edits, no restructuring. The guard's correctness is proven against fixtures *before* it is pointed at the real (post-fix) docs, satisfying both TDD and the spec's ordering constraint.
+> **Scope note (2026-05-18):** Guard covers `CLAUDE.md` only. The original `docs/dev/*.md` coverage was dropped during plan review — it surfaced ~36 pre-existing rotted/non-literal refs across 15+ historical docs (only 3 in CLAUDE.md); that is a separate optional follow-up. See the spec's §4 scope decision.
 
-**Tech Stack:** TypeScript, vitest, Node `fs`/`path`. No new dependencies (uses `node:fs` `readdirSync`/`existsSync`/`statSync`). Spec: `docs/superpowers/specs/2026-05-18-claudemd-stable-anchors-design.md`.
+**Architecture:** One self-contained vitest test file holds both the pure extraction/normalization helpers (fixture-tested, TDD) and the real-doc assertion against `CLAUDE.md`. CLAUDE.md content fixes are surgical edits, no restructuring. The guard's correctness is proven against fixtures *before* it is pointed at the real (post-fix) `CLAUDE.md`, satisfying both TDD and the spec's ordering constraint.
+
+**Tech Stack:** TypeScript, vitest, Node `fs`/`path`. No new dependencies (uses `node:fs` `readFileSync`/`existsSync`/`statSync`). Spec: `docs/superpowers/specs/2026-05-18-claudemd-stable-anchors-design.md`.
 
 ---
 
@@ -32,7 +34,7 @@ Builds and proves the guard's pure logic with in-memory fixture strings. Does **
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ---- Pure helpers (exported for fixture tests) ----
@@ -133,9 +135,9 @@ Run:
 ```bash
 ls src/contracts/ast/tag-mutation-script-builder.ts src/contracts/ast/mutation-script-builder.ts src/omnifocus/scripts/shared/helpers.ts
 grep -n '"@modelcontextprotocol/sdk"' package.json
-grep -rn "protocolVersion\|2025-" src/index.ts | head
+grep -rn "MCP 20\|protocolVersion" src/index.ts | head
 ```
-Expected: the three ast/shared files exist; note the exact SDK version and protocol string for the doc.
+Expected: the three ast/shared files exist. Note: `src/index.ts` does **not** contain a literal `protocolVersion` value — only a `// … MCP <date> metadata` comment; the protocol version is supplied by `@modelcontextprotocol/sdk`. So the doc must **not** claim a value "from src/index.ts"; it points at the SDK (package.json) instead. Record the SDK semver and the MCP-date comment string for use below.
 
 - [ ] **Step 2: Apply the content fixes**
 
@@ -145,8 +147,8 @@ Edits (each a single Edit call against `CLAUDE.md`):
 2. **Tag Operations §** — replace the `bridgeSetTags()` code block with: JXA `task.tags = …` / `task.addTags()` silently no-op; assign tags via OmniJS `addTag()` inside the mutation script (`src/contracts/ast/mutation-script-builder.ts`) or the AST tag builders (`src/contracts/ast/tag-mutation-script-builder.ts`). Remove the `Function: bridgeSetTags() in …:41` line.
 3. **Quick Symptom Index** — change the "Tags not saving/empty" Quick Fix to "Assign via OmniJS `addTag()` — see Tag Operations". Add a row: `Typed-value write returns success but didn't persist` → `Read-back required — see docs/dev/SETTER-PATTERNS.md`.
 4. **Architecture Documentation table** — add row: `/docs/dev/SETTER-PATTERNS.md` | "OmniJS/JXA property setter decision matrix".
-5. **MCP Specification table** — replace the `SDK` row value with "see `package.json` (`@modelcontextprotocol/sdk`)" and the `Protocol Version` row with "see `src/index.ts`"; change the `Spec:` line to the version-agnostic `https://modelcontextprotocol.io/specification/`.
-6. **MCP-test `echo` block** — replace the hardcoded `"protocolVersion":"2025-06-18"` with the value confirmed from `src/index.ts` in Step 1 (single source kept in sync) — or, preferred, add a one-line note "protocolVersion must match `src/index.ts`" and keep an example value.
+5. **MCP Specification table** — replace the `SDK` row value with "see `package.json` → `@modelcontextprotocol/sdk`" and the `Protocol Version` row with "determined by the installed `@modelcontextprotocol/sdk` (see `package.json`)"; change the `Spec:` line to the version-agnostic `https://modelcontextprotocol.io/specification/`. Do **not** substitute a new hardcoded date — that just relocates the rot.
+6. **MCP-test `echo` block** — the `protocolVersion` here is a *client-declared request param* in an example handshake, not a server constant. Keep an example value but add an inline comment after the block: `# protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports`. Do not pin it to a specific date in prose.
 7. **Quick Reference** — drop "~2 seconds, ~1644 tests" and "~2 minutes, 73 tests"; keep the bare commands with "(counts vary; run it)".
 8. **Script Size Limits** — remove the "Current largest script: 31KB (6% of limit)" bullet; keep the JXA/OmniJS limit constants; keep the `SCRIPT_SIZE_LIMITS.md` pointer for the live measurement.
 
@@ -204,40 +206,35 @@ git commit -m "docs(OMN-68): add stable-anchors principle + workflow norms (§2/
 
 ---
 
-## Task 4: Point the guard at the real docs
+## Task 4: Point the guard at the real CLAUDE.md
 
-Now that §1/§2/§3 fixes have landed, add the real-docs assertion. Before the fixes this would have been red (proving the guard works); after them it must be green.
+Now that §1/§2/§3 fixes have landed, add the real-doc assertion. Before the fixes this would have been red (3 known dead refs — proving the guard works); after them it must be green. Scope: `CLAUDE.md` only (per spec §4 scope decision — `docs/dev/*.md` deliberately not scanned).
 
 **Files:**
 - Modify: `tests/unit/docs/claude-md-paths.test.ts`
 
-- [ ] **Step 1: Add the real-docs describe block**
+- [ ] **Step 1: Add the real-doc describe block**
 
-Append to the test file:
+Append to the test file (`readFileSync`, `existsSync`, `statSync`, `join` are already imported in Task 1):
 
 ```typescript
-describe('CLAUDE.md and docs/dev/*.md path references all resolve', () => {
-  const root = process.cwd(); // vitest runs from repo root
-  const files = ['CLAUDE.md', ...readdirSync(join(root, 'docs/dev'))
-    .filter((f) => f.endsWith('.md'))
-    .map((f) => `docs/dev/${f}`)];
+describe('CLAUDE.md path references all resolve', () => {
+  const root = process.cwd(); // vitest runs from repo root (verified: worktree IS the project root)
 
-  it('every src/ and docs/ reference resolves on disk', () => {
+  it('every src/ and docs/ reference in CLAUDE.md resolves on disk', () => {
+    const md = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
     const failures: string[] = [];
-    for (const rel of files) {
-      const md = readFileSyncSafe(join(root, rel));
-      for (const raw of extractRefs(md)) {
-        const norm = normalizeRef(raw);
-        const kind = classifyRef(norm);
-        const abs = join(root, norm);
-        if (kind === 'malformed') {
-          failures.push(`${rel}: malformed reference "${raw}" (no allowed extension, no trailing /)`);
-        } else if (kind === 'dir') {
-          if (!(existsSync(abs) && statSync(abs).isDirectory()))
-            failures.push(`${rel}: directory "${norm}" does not resolve`);
-        } else if (!(existsSync(abs) && statSync(abs).isFile())) {
-          failures.push(`${rel}: file "${norm}" does not resolve`);
-        }
+    for (const raw of extractRefs(md)) {
+      const norm = normalizeRef(raw);
+      const kind = classifyRef(norm);
+      const abs = join(root, norm);
+      if (kind === 'malformed') {
+        failures.push(`CLAUDE.md: malformed reference "${raw}" (no allowed extension, no trailing /)`);
+      } else if (kind === 'dir') {
+        if (!(existsSync(abs) && statSync(abs).isDirectory()))
+          failures.push(`CLAUDE.md: directory "${norm}" does not resolve`);
+      } else if (!(existsSync(abs) && statSync(abs).isFile())) {
+        failures.push(`CLAUDE.md: file "${norm}" does not resolve`);
       }
     }
     expect(failures, `\n${failures.join('\n')}\n`).toEqual([]);
@@ -245,31 +242,26 @@ describe('CLAUDE.md and docs/dev/*.md path references all resolve', () => {
 });
 ```
 
-Add the helper near the imports:
-
-```typescript
-import { readFileSync } from 'node:fs';
-function readFileSyncSafe(p: string): string { return readFileSync(p, 'utf8'); }
-```
-
 - [ ] **Step 2: Run the full guard, verify green**
 
 Run: `npx vitest tests/unit/docs/claude-md-paths.test.ts --run`
-Expected: PASS. If it fails, the message lists each unresolved/malformed ref + source file — fix the offending CLAUDE.md/docs reference (it is genuinely rotted), do not loosen the matcher.
+Expected: PASS (fixtures from Task 1 + this real-doc test). If the real-doc test fails, the message lists each unresolved/malformed ref — fix the offending CLAUDE.md reference (it is genuinely rotted) or, if it is an intentional non-literal anchor, restructure the wording per §2. **Do not loosen the matcher.**
 
-- [ ] **Step 3: Run lint + typecheck + the unit glob**
+- [ ] **Step 3: Typecheck + lint the new file + the unit glob**
 
 Run:
 ```bash
-npm run typecheck && npm run lint && npx vitest tests/unit/docs --run
+npm run typecheck
+npx eslint tests/unit/docs/claude-md-paths.test.ts --ext .ts
+npx vitest tests/unit/docs --run
 ```
-Expected: all green. (`npx eslint` over the new test file must be clean.)
+Expected: all green. (Note: `npm run lint` only scans `src/`, so the test file is lint-checked explicitly here. If eslint flat-config ignores `tests/**`, eslint exits 0 with no output — acceptable; `tsc --noEmit` still type-checks the file.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add tests/unit/docs/claude-md-paths.test.ts
-git commit -m "test(OMN-68): guard now asserts real CLAUDE.md + docs/dev paths resolve"
+git commit -m "test(OMN-68): guard asserts real CLAUDE.md paths resolve"
 ```
 
 ---
@@ -308,7 +300,7 @@ Dispatch a code-review subagent over the diff. Gate merge on a Safe/Approved ver
 
 ## Notes for the implementer
 
-- **Spec ordering is load-bearing:** Task 1 (fixtures) and Task 4 (real docs) are deliberately split so the matcher is proven before it judges the real file, and so §1 fixes precede the real-docs assertion. Do not merge them.
+- **Spec ordering is load-bearing:** Task 1 (fixtures) and Task 4 (real `CLAUDE.md`) are deliberately split so the matcher is proven before it judges the real file, and so §1 fixes precede the real-doc assertion. Do not merge them.
 - **Do not loosen the matcher to make Task 4 pass.** A failure there means a real rotted reference — fix the reference.
 - **No restructuring** of CLAUDE.md sections; conceptual content (JXA/OmniJS rules, date table, dual-schema) is accurate and out of scope.
 - `npx vitest … --run` for single-file runs; `npm run test:unit` for the full gate.
