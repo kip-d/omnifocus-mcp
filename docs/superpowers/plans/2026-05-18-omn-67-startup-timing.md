@@ -342,6 +342,10 @@ startupTimer.mark('ready');
 logger.info(startupTimer.summary('http'));
 ```
 
+Note (cosmetic, expected): this prints `STARTUP COMPLETE … [http]` _before_ the existing
+`logger.info('HTTP server ready and accepting connections')` at line ~287. Intentional — `ready` is marked when the
+listener is up (`start()` resolved), not at the later human-readable banner. No functional impact.
+
 - [ ] **Step 7: Build + run the integration test (now GREEN)**
 
 Run: `npm run build && npx vitest run tests/integration/startup-timing.test.ts` Expected: PASS — exactly one
