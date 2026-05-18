@@ -21,6 +21,7 @@ import {
 import { TOOL_SCHEMA_REGISTRY, type ToolSchemaEntry } from '../src/diagnostics/tool-schema-registry.js';
 import { loadLedger, isKnown, recordDiagnosis, defaultLedgerPath } from '../src/diagnostics/ledger.js';
 import { renderTriageDoc, type TriageRow } from '../src/diagnostics/triage-doc.js';
+import { type FileDriftResult } from '../src/diagnostics/linear-filer.js';
 import type { FailureRecord } from '../src/diagnostics/failure-log.js';
 import type { FailureCluster } from '../src/diagnostics/clustering.js';
 
@@ -58,6 +59,17 @@ export interface RunDiagnosisOpts {
    * OMITTED in tests — deterministic clusters never reach this.
    */
   agentRunner?: AgentRunner;
+  /**
+   * Optional: guardrailed Linear filer (Task 14).
+   * Pre-configured closure: `(clusters) => fileDriftIssues(clusters, { client, perRunLimit, capThreshold })`.
+   * Injected for testing; CLI wires the real graphql-backed client only when --create-issues is passed.
+   */
+  linearFiler?: (clusters: TriageRow[]) => Promise<FileDriftResult>;
+  /**
+   * When true, passes SCHEMA_DRIFT triage rows to linearFiler (if provided).
+   * Default: false — safe to call without --create-issues risk.
+   */
+  createIssues?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +96,8 @@ function suggestedFixFromFindings(findings: DriftFinding[]): string {
 // ---------------------------------------------------------------------------
 
 export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
-  const { records, registry, ledgerPath, now, thresholds, writeTriageDoc, agentRunner } = opts;
+  const { records, registry, ledgerPath, now, thresholds, writeTriageDoc, agentRunner, linearFiler, createIssues } =
+    opts;
 
   // 1. Cluster
   const clusters = clusterFailures(records, thresholds);
@@ -160,7 +173,35 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
     );
   }
 
-  // 5. Render and write triage doc
+  // 5. (Optional) Auto-file SCHEMA_DRIFT clusters to Linear if --create-issues is set
+  if (createIssues && linearFiler) {
+    const driftRows = triageRows.filter((r) => r.classification === 'SCHEMA_DRIFT');
+    const filerResult = await linearFiler(driftRows);
+
+    if (filerResult.capGuardTripped) {
+      // Append a CAP_GUARD_TRIPPED sentinel row to the data section so the triage doc
+      // records that auto-filing was blocked by the workspace issue cap.
+      triageRows.push({
+        fingerprint: 'CAP_GUARD',
+        tool: '—',
+        classification: 'CAP_GUARD_TRIPPED',
+        suggestedFix: 'open issue count >= cap threshold; no issues auto-filed this run',
+        firstSeen: '—',
+        lastSeen: now.toISOString().slice(0, 10),
+        count: 0,
+      });
+    }
+
+    // Update ledger entries with the returned issue IDs
+    for (const { fingerprint, id } of filerResult.created) {
+      const existing = ledger.entries[fingerprint];
+      if (existing) {
+        ledger = recordDiagnosis(ledger, ledgerPath, { ...existing, linearIssueId: id }, now);
+      }
+    }
+  }
+
+  // 6. Render and write triage doc
   writeTriageDoc(renderTriageDoc(triageRows, now));
 }
 

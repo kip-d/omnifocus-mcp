@@ -35,9 +35,14 @@ export interface FileDriftOptions {
   capThreshold: number;
 }
 
+export interface CreatedIssue {
+  fingerprint: string;
+  id: string;
+}
+
 export interface FileDriftResult {
-  /** Identifiers of issues created this run (e.g. ['OMN-42', 'OMN-43']). */
-  created: string[];
+  /** Issues created this run, each carrying the cluster fingerprint so the caller can update the ledger. */
+  created: CreatedIssue[];
   /** True when the cap guard fired — caller should append a CAP_GUARD_TRIPPED triage row. */
   capGuardTripped: boolean;
 }
@@ -70,7 +75,7 @@ export async function fileDriftIssues(clusters: DriftCluster[], opts: FileDriftO
     return { created: [], capGuardTripped: true };
   }
 
-  const created: string[] = [];
+  const created: CreatedIssue[] = [];
 
   for (const cluster of driftOnly) {
     // Guard 4: per-run limit — stop before searching/creating once limit is reached
@@ -96,7 +101,7 @@ export async function fileDriftIssues(clusters: DriftCluster[], opts: FileDriftO
       body,
       label: 'omn-37-auto',
     });
-    created.push(id);
+    created.push({ fingerprint: cluster.fingerprint, id });
   }
 
   return { created, capGuardTripped: false };

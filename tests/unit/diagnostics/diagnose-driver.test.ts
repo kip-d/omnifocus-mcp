@@ -4,6 +4,7 @@ import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { runDiagnosis } from '../../../scripts/diagnose-failures.js';
+import { loadLedger } from '../../../src/diagnostics/ledger.js';
 import { z } from 'zod';
 
 it('deterministically classifies a coercion-gap cluster without invoking the agent', async () => {
@@ -52,4 +53,163 @@ it('deterministically classifies a coercion-gap cluster without invoking the age
     .find((line) => line.includes('omnifocus_x') && line.includes('COERCION_MISSING'));
   expect(classifiedRow, `expected a triage table row classifying omnifocus_x as COERCION_MISSING\n${md}`).toBeDefined();
   expect(classifiedRow).toMatch(/^\|.*\|.*\|/); // it is a markdown table row
+});
+
+// ---------------------------------------------------------------------------
+// Task 15 — --create-issues wiring tests
+// ---------------------------------------------------------------------------
+
+/** Build 3 records spanning >= 2 days for a given tool+error pattern. */
+function makeRecords(tool: string, errorMessage: string) {
+  const base = {
+    tool,
+    errorType: 'VALIDATION_ERROR' as const,
+    errorMessage,
+    inputArgs: {},
+    schemaDescription: 'test',
+  };
+  return [
+    { ...base, timestamp: '2026-05-16T10:00:00.000Z' },
+    { ...base, timestamp: '2026-05-17T10:00:00.000Z' },
+    { ...base, timestamp: '2026-05-18T10:00:00.000Z' },
+  ];
+}
+
+/** Registry entry that yields SCHEMA_DRIFT (REQUIRED_MISMATCH): advertised marks 'mode' required, Zod
+ *  marks it optional → REQUIRED_MISMATCH → deterministicClassification returns SCHEMA_DRIFT. */
+const SCHEMA_DRIFT_ENTRY = {
+  name: 'omnifocus_sd',
+  getInputSchema: () => ({
+    type: 'object',
+    required: ['mode'],
+    properties: { mode: { type: 'string' } },
+  }),
+  zodSchema: z.object({ mode: z.string().optional() }),
+};
+
+/** Registry entry that yields COERCION_MISSING (COERCION_GAP): advertised says number, Zod rejects '5'. */
+const COERCION_MISSING_ENTRY = {
+  name: 'omnifocus_cm',
+  getInputSchema: () => ({ type: 'object', properties: { limit: { type: 'number' } } }),
+  zodSchema: z.object({ limit: z.number() }),
+};
+
+it('does NOT invoke linearFiler when createIssues is false (default)', async () => {
+  // NON-VACUOUS: the cluster would be SCHEMA_DRIFT-classified (the filer should handle it if wired),
+  // but createIssues is not set, so the filer must never be called. Removing the createIssues
+  // guard from runDiagnosis would cause this test to FAIL (filer would be called once).
+  const filer = vi.fn().mockResolvedValue({ created: [], capGuardTripped: false });
+  const sink = vi.fn();
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15a-')), 'ledger.json');
+
+  await runDiagnosis({
+    records: makeRecords('omnifocus_sd', 'Required field mode is missing'),
+    registry: [SCHEMA_DRIFT_ENTRY],
+    ledgerPath,
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    linearFiler: filer,
+    // createIssues deliberately omitted (defaults to false)
+  });
+
+  expect(filer).not.toHaveBeenCalled();
+  expect(sink).toHaveBeenCalledOnce();
+});
+
+it('passes ONLY SCHEMA_DRIFT clusters to filer, writes returned issue ID to ledger', async () => {
+  // NON-VACUOUS proof:
+  // — If the class filter in runDiagnosis were removed, the filer would also receive the
+  //   omnifocus_cm cluster (COERCION_MISSING), making createIssue called 2× instead of 1×.
+  // — If ledger update for linearIssueId were missing, the ledger assertion would fail.
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15b-')), 'ledger.json');
+  const sink = vi.fn();
+
+  // Filer mock: inspect the clusters passed in and return a created entry using the REAL
+  // fingerprint that runDiagnosis computes (so the ledger update can find it by key).
+  const filer = vi.fn().mockImplementation((clusters: Array<{ fingerprint: string; classification: string }>) =>
+    Promise.resolve({
+      created: clusters
+        .filter((c) => c.classification === 'SCHEMA_DRIFT')
+        .slice(0, 1)
+        .map((c) => ({ fingerprint: c.fingerprint, id: 'OMN-42' })),
+      capGuardTripped: false,
+    }),
+  );
+
+  // We need to know what fingerprint runDiagnosis will assign to the omnifocus_sd cluster.
+  // The fingerprint is derived from tool+normalizedError in clustering.ts. To keep the test
+  // stable, we instead verify that the filer was called with exactly one cluster whose
+  // classification is SCHEMA_DRIFT, and that the ledger records a linearIssueId matching
+  // the fingerprint returned in the filer's created array.
+  await runDiagnosis({
+    records: [
+      ...makeRecords('omnifocus_sd', 'Required field mode is missing'),
+      ...makeRecords('omnifocus_cm', 'Expected number, received string'),
+    ],
+    registry: [SCHEMA_DRIFT_ENTRY, COERCION_MISSING_ENTRY],
+    ledgerPath,
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    linearFiler: filer,
+    createIssues: true,
+  });
+
+  // Filer called exactly once
+  expect(filer).toHaveBeenCalledTimes(1);
+  // Only SCHEMA_DRIFT cluster passed to filer (not COERCION_MISSING)
+  const [passedClusters] = filer.mock.calls[0] as [Array<{ classification: string }>];
+  expect(passedClusters).toHaveLength(1);
+  expect(passedClusters[0].classification).toBe('SCHEMA_DRIFT');
+
+  // Ledger entry for the fingerprint returned by filer carries the issue ID
+  const ledger = loadLedger(ledgerPath);
+  const sdEntry = Object.values(ledger.entries).find((e) => e.linearIssueId === 'OMN-42');
+  expect(sdEntry).toBeDefined();
+  expect(sdEntry?.linearIssueId).toBe('OMN-42');
+});
+
+it('appends CAP_GUARD_TRIPPED row to triage doc when filer returns capGuardTripped', async () => {
+  // NON-VACUOUS analysis:
+  // The static legend in renderTriageDoc already contains a "| CAP_GUARD_TRIPPED | ..." line, so
+  // checking for that line alone would be vacuously true even before any Phase-4 wiring.
+  // To make this test bite, we verify:
+  //   (a) the filer is called (fails if createIssues wiring is missing)
+  //   (b) the triage doc data-section (everything before "## Legend") contains a CAP_GUARD_TRIPPED
+  //       occurrence — that occurrence CANNOT come from the legend since we check before it.
+  //
+  // If the CAP_GUARD_TRIPPED-append logic is removed from runDiagnosis:
+  //   — The filer IS still called (a passes), but the data section has no CAP_GUARD_TRIPPED line → (b) fails.
+  // If the createIssues wiring is missing entirely:
+  //   — The filer is never called → (a) fails immediately.
+  const sink = vi.fn();
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15c-')), 'ledger.json');
+
+  const filer = vi.fn().mockResolvedValue({ created: [], capGuardTripped: true });
+
+  await runDiagnosis({
+    records: makeRecords('omnifocus_sd', 'Required field mode is missing'),
+    registry: [SCHEMA_DRIFT_ENTRY],
+    ledgerPath,
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+    linearFiler: filer,
+    createIssues: true,
+  });
+
+  // (a) Filer must have been called — fails if wiring is absent
+  expect(filer).toHaveBeenCalledOnce();
+
+  expect(sink).toHaveBeenCalledOnce();
+  const md = sink.mock.calls[0][0] as string;
+
+  // (b) The data-section (before "## Legend") must contain CAP_GUARD_TRIPPED.
+  //     The legend is AFTER this section, so any match here cannot be the legend.
+  const dataSectionEnd = md.indexOf('## Legend');
+  const dataSection = dataSectionEnd >= 0 ? md.slice(0, dataSectionEnd) : md;
+  expect(dataSection, `expected CAP_GUARD_TRIPPED in the data table (before legend) of:\n${md}`).toContain(
+    'CAP_GUARD_TRIPPED',
+  );
 });
