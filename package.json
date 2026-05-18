@@ -42,6 +42,7 @@
     "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
+    "diagnose-failures": "npx tsx scripts/diagnose-failures.ts",
     "analyze-tokens": "npx tsx scripts/analyze-token-usage.ts",
     "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
     "prompts:list": "npx tsx scripts/list-prompts.ts",
