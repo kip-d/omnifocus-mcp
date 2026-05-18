@@ -98,22 +98,23 @@ on the failure log, agent, or hook.
      C1 — bounded LLM cost).
   4. Write `docs/dev/mcp-failure-triage.md` (committed; tables-over-prose per repo standards): one row per pattern —
      classification, suggested fix, first-seen, last-seen, count, fingerprint.
-- **Seen-patterns ledger** `~/.omnifocus-mcp/diagnosed-patterns.json` (outside the repo; the failure log already lives
-  under `~/.omnifocus-mcp/`). Keyed by `fingerprint`; records classification + any created Linear issue ID. A cluster
-  whose fingerprint is in the ledger is **not** re-diagnosed and **not** re-filed.
+- **Seen-patterns ledger** at the `~/.omnifocus-mcp/` root: `~/.omnifocus-mcp/diagnosed-patterns.json` — a **sibling
+  of** the `~/.omnifocus-mcp/tool-failures/` log directory, not nested inside it. Outside the repo. Keyed by
+  `fingerprint`; records classification + any created Linear issue ID. A cluster whose fingerprint is in the ledger is
+  **not** re-diagnosed and **not** re-filed.
 
 ### §4 — Phase 3b: auto-Linear (cap-risk surface — explicit guardrails)
 
 The 250 non-archived-issue free-tier cap is **workspace-wide across OMN+GATE**. Auto-creation is constrained:
 
-| Guard                | Rule                                                                                                                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Class allowlist      | Create issues **only** for deterministic `SCHEMA_DRIFT`. Never for LLM-judgment classes (`DESCRIPTION_GAP`) or no-op classes.                                                     |
-| Existing-issue dedup | Before creating, Linear-search OMN for the cluster `fingerprint` (embedded verbatim in every auto-issue body). Match → update/skip, never duplicate.                              |
-| Cap-safety guard     | Query open OMN+GATE count (graphql, `state.type nin [completed,canceled]`). If **≥ 230**, skip all creation, write triage rows only, emit a loud `CAP_GUARD_TRIPPED` warning row. |
-| Per-run limit        | Create at most **3** new issues per run.                                                                                                                                          |
-| Traceability         | Every auto-issue carries an `omn-37-auto` label + the fingerprint in the body, so a sweep can find/triage/bulk-archive them.                                                      |
-| Ledger               | Created issue ID written to the seen-patterns ledger → never recreated.                                                                                                           |
+| Guard                | Rule                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Class allowlist      | Create issues **only** for deterministic `SCHEMA_DRIFT`. Never for LLM-judgment classes (`DESCRIPTION_GAP`) or no-op classes.                                                                                                                                                                                                                |
+| Existing-issue dedup | Before creating, dedup via the **`graphql` action** (not the typed `search` action — per project memory that only returns the caller's assigned active issues). Query OMN issues filtered on the `omn-37-auto` label, then string-match the cluster `fingerprint` embedded verbatim in the issue body. Match → update/skip, never duplicate. |
+| Cap-safety guard     | Query open OMN+GATE count (graphql, `state.type nin [completed,canceled]`). If **≥ 230**, skip all creation, write triage rows only, emit a loud `CAP_GUARD_TRIPPED` warning row.                                                                                                                                                            |
+| Per-run limit        | Create at most **3** new issues per run.                                                                                                                                                                                                                                                                                                     |
+| Traceability         | Every auto-issue carries an `omn-37-auto` label + the fingerprint in the body, so a sweep can find/triage/bulk-archive them.                                                                                                                                                                                                                 |
+| Ledger               | Created issue ID written to the seen-patterns ledger → never recreated.                                                                                                                                                                                                                                                                      |
 
 ### §5 — Phases 4+5: Tier-2 hook + scheduling
 
