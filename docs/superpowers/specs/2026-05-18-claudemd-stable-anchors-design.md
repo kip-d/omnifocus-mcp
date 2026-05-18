@@ -95,12 +95,23 @@ A vitest unit test that:
    target string from inside `(...)` *first*, then tokenize/normalize — so the link-syntax
    close paren is never mistaken for path punctuation in normalization step 3.
 
-Within a scanned span, a **candidate** is the first whitespace/backtick-delimited token that,
-after the normalization below, matches `^/?(src|docs)/` and ends in an allowed extension
-**or** a trailing `/` (directory). Tokens not starting `src/` or `docs/` are ignored — this
-deliberately excludes `dist/index.js`, `node …`, and any `http(s)://…` URL (so the
-`modelcontextprotocol.io/...2025-06-18` URL in the MCP-test line is out of scope by
-construction; URLs never start `src/` or `docs/`).
+Within a scanned span, a **candidate** is a token whose `src/` or `docs/` segment sits at a
+**path-token boundary** — i.e. the (optionally single-leading-`/`) `src/`/`docs/` is preceded
+by start-of-span, whitespace, a backtick, `(`, `[`, or `]`. It must, after the normalization
+below, end in an allowed extension **or** a trailing `/` (directory). Tokens not *starting*
+`src/` or `docs/` are ignored — this deliberately excludes `dist/index.js`, `node …`, and any
+`http(s)://…` URL (URLs never start `src/` or `docs/`).
+
+**Boundary-anchored, not substring (load-bearing).** The `src/`/`docs/` must begin the path
+token, not appear mid-path. A reference like `` `tests/unit/docs/claude-md-paths.test.ts` ``
+is a `tests/`-rooted path — **out of the guard's scope** (the guard validates `src/`- and
+`docs/`-rooted references only). A substring matcher would wrongly extract the inner
+`docs/claude-md-paths.test.ts` and false-positive on a perfectly valid reference. The
+regex therefore requires a preceding boundary char (lookbehind), e.g.
+`/(?<=^|[\s\`(\[\]])\/?(?:src|docs)\/[^\s\`)]+/g`. Concretely: `` `/docs/dev/x.md` ``,
+`` `docs/X.md` ``, link target `(docs/X.md)`, and `src/contracts/ast/` after whitespace all
+match; `tests/unit/docs/…`, `foo/src/bar.ts` do **not** (their `docs/`/`src/` is preceded by
+`/`, not a boundary). This must have explicit fixture coverage.
 
 **Allowed extensions (explicit allowlist):** `.ts`, `.js`, `.md`, `.dot`, `.json`. A token
 matching `^/?(src|docs)/` with no allowed extension and no trailing `/` is reported as
