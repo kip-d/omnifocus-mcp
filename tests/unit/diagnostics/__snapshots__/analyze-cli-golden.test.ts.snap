@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`analyze-failures CLI output is behavior-preserving > produces identical output before/after the module refactor (golden) 1`] = `
+"═══════════════════════════════════════════════════════════════
+  TOOL FAILURE ANALYSIS - Last 3650 days
+═══════════════════════════════════════════════════════════════
+
+📊 omnifocus_write
+   Total Failures: 2
+   Validation Errors: 2 (100%)
+   Execution Errors: 0 (0%)
+
+   Most Problematic Fields:
+   - name: 2 failures
+
+   Common Error Patterns:
+   - "name: Required for task ID...": 2 times
+
+   Example Failure:
+   Input: {"flagged":true}
+   Error: name: Required for task a1b2c3d4e5
+
+───────────────────────────────────────────────────────────────
+
+📈 SUMMARY
+   Total Tools with Failures: 1
+   Total Failures: 2
+   Validation Errors: 2 (100%)
+   Execution Errors: 0 (0%)
+
+💡 RECOMMENDATIONS
+   • omnifocus_write: Improve description for field "name" (2 failures)
+
+═══════════════════════════════════════════════════════════════
+"
+`;
