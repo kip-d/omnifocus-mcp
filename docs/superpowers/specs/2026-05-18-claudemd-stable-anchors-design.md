@@ -81,7 +81,9 @@ A vitest unit test that:
 
 1. Inline-code spans (`` `…` ``) and fenced-code-block contents.
 2. Markdown link *targets* — the `(...)` of `[text](target)`. The link *text* is **not**
-   scanned (avoids double-counting `[docs/DOCS_MAP.md](docs/DOCS_MAP.md)`).
+   scanned (avoids double-counting `[docs/DOCS_MAP.md](docs/DOCS_MAP.md)`). Extract the
+   target string from inside `(...)` *first*, then tokenize/normalize — so the link-syntax
+   close paren is never mistaken for path punctuation in normalization step 3.
 
 Within a scanned span, a **candidate** is the first whitespace/backtick-delimited token that,
 after the normalization below, matches `^/?(src|docs)/` and ends in an allowed extension
