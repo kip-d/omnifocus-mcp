@@ -13,6 +13,11 @@ import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
 import { parseCLIArgs, validateCLIConfig, CLIConfig } from './utils/cli.js';
 import { SessionManager } from './session-manager.js';
 import { HttpServerManager } from './http-server.js';
+import { StartupTimer } from './utils/startup-timer.js';
+
+// First executable statement: performance.now() here ≈ Node bootstrap + ESM
+// import-graph load (the cold-`npm ci` FS cost). Must precede parseCLIArgs.
+const startupTimer = new StartupTimer();
 
 const logger = createLogger('server');
 
@@ -59,8 +64,9 @@ export async function runServer() {
     logger.debug('Failed to get version info:', error);
   }
 
-  // Perform initial permission check (non-blocking)
+  // Perform initial permission check (blocking — awaited before the transport connects)
   const permissionChecker = PermissionChecker.getInstance();
+  startupTimer.mark('initEnd');
   try {
     const result = await permissionChecker.checkPermissions();
     if (!result.hasPermission) {
@@ -74,8 +80,9 @@ export async function runServer() {
   } catch (error) {
     logger.error('Failed to check permissions:', error);
   }
+  startupTimer.mark('permsEnd');
 
-  // Warm cache with frequently accessed data (non-blocking)
+  // Warm cache with frequently accessed data (blocking — awaited before the transport connects)
   // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
   // ENABLE_CACHE_WARMING=true overrides test mode (for integration tests that want realistic behavior)
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
@@ -123,6 +130,7 @@ export async function runServer() {
       logger.warn('Cache warming failed:', error);
     }
   }
+  startupTimer.mark('warmEnd');
 
   // Check if we're running in HTTP mode
   if (cliConfig.httpMode) {
@@ -160,6 +168,7 @@ async function runStdioServer(cacheManager: CacheManager) {
   // Register all tools and prompts AFTER server creation but BEFORE connection
   await registerTools(stdioServer, cacheManager, pendingOperations);
   registerPrompts(stdioServer);
+  startupTimer.mark('registerEnd');
 
   const transport = new StdioServerTransport();
 
@@ -216,6 +225,8 @@ async function runStdioServer(cacheManager: CacheManager) {
   });
 
   await stdioServer.connect(transport);
+  startupTimer.mark('ready');
+  logger.info(startupTimer.summary('stdio'));
 }
 
 /**
@@ -255,6 +266,8 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
     });
     process.exit(1);
   }
+  startupTimer.mark('ready');
+  logger.info(startupTimer.summary('http'));
 
   // Handle graceful shutdown for HTTP mode
   const gracefulShutdown = async (signal: string) => {
