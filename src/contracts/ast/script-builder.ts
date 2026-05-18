@@ -22,6 +22,7 @@ import {
   describeProjectFilter,
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
+import { escapeTemplateString, sanitizeForScriptComment } from './bridge-escape.js';
 
 // =============================================================================
 // TYPES
@@ -1165,12 +1166,7 @@ export function buildFilteredProjectsScript(
   // Include task counts only in normal mode
   const includeTaskCounts = performanceMode !== 'lite';
 
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const omniJsScript = \`
+  const omniJsSource = `
       (() => {
         const results = [];
         let count = 0;
@@ -1197,7 +1193,7 @@ export function buildFilteredProjectsScript(
         }
 
         // AST-generated filter predicate
-        // Filter: ${filterDescription}
+        // Filter: ${sanitizeForScriptComment(filterDescription)}
         function matchesFilter(project) {
           return ${filterCode};
         }
@@ -1281,7 +1277,14 @@ export function buildFilteredProjectsScript(
           total_available: flattenedProjects.length
         });
       })()
-    \`;
+    `;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
 
     const resultJson = app.evaluateJavascript(omniJsScript);
     const result = JSON.parse(resultJson);
@@ -1295,7 +1298,7 @@ export function buildFilteredProjectsScript(
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',
-        filter_description: ${JSON.stringify(filterDescription)}
+        filter_description: ${JSON.stringify(filterDescription).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}
       }
     });
 
@@ -1322,12 +1325,7 @@ export function buildFilteredProjectsScript(
 export function buildProjectByIdScript(projectId: string, fields: string[] = []): GeneratedScript {
   const fieldProjection = generateProjectFieldProjection(fields);
 
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const omniJsScript = \`
+  const omniJsSource = `
       (() => {
         const results = [];
         const targetId = ${JSON.stringify(projectId)};
@@ -1365,7 +1363,14 @@ export function buildProjectByIdScript(projectId: string, fields: string[] = [])
           targetId: targetId
         });
       })()
-    \`;
+    `;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
 
     const resultJson = app.evaluateJavascript(omniJsScript);
     return resultJson;
@@ -1506,18 +1511,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
   const fieldProjection = generateExportFieldProjection(fields);
 
   // Build the complete script
-  const script = `
-(() => {
-  const format = ${JSON.stringify(format)};
-  const allFields = ${JSON.stringify(fields)};
-  const maxTasks = ${limit};
-
-  try {
-    const app = Application('OmniFocus');
-    const startTime = Date.now();
-
-    // Use OmniJS bridge for fast bulk property access
-    const omniJsScript = \`
+  const omniJsSource = `
       (() => {
         const tasks = [];
         let totalProcessed = 0;
@@ -1525,7 +1519,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
 
         ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
         // AST-generated filter predicate
-        // Filter: ${filterDescription}
+        // Filter: ${sanitizeForScriptComment(filterDescription)}
         function matchesFilter(task) {
           const taskTags = task.tags ? task.tags.map(t => t.name) : [];
           return ${filterCode.predicate};
@@ -1554,7 +1548,20 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
           tasksCollected: tasks.length
         });
       })();
-    \`;
+    `;
+
+  const script = `
+(() => {
+  const format = ${JSON.stringify(format)};
+  const allFields = ${JSON.stringify(fields)};
+  const maxTasks = ${limit};
+
+  try {
+    const app = Application('OmniFocus');
+    const startTime = Date.now();
+
+    // Use OmniJS bridge for fast bulk property access
+    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
 
     const bridgeResult = app.evaluateJavascript(omniJsScript);
     const parsed = JSON.parse(bridgeResult);
@@ -1661,7 +1668,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
         debug: {
           totalTasksProcessed: parsed.totalProcessed,
           maxTasksAllowed: maxTasks,
-          filterDescription: ${JSON.stringify(filterDescription)},
+          filterDescription: ${JSON.stringify(filterDescription).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')},
           fieldsRequested: allFields,
           optimizationUsed: 'AST filter + OmniJS bridge'
         },
@@ -1730,12 +1737,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
   const hasSearch = search.length > 0;
   const filterDescription = hasSearch ? `search: "${search}"` : 'all folders';
 
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const omniJsScript = \`
+  const omniJsSource = `
       (() => {
         const results = [];
         let count = 0;
@@ -1870,7 +1872,14 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           }
         });
       })()
-    \`;
+    `;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
 
     const result = app.evaluateJavascript(omniJsScript);
     return result;
@@ -1957,12 +1966,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   const needsTags = filterCode.predicate.includes('taskTags');
 
   // Count runs in OmniJS (see JSDoc): one bridge round-trip, no per-task IPC.
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const omniJsScript = \`
+  const omniJsSource = `
 (() => {
   try {
     const startTime = Date.now();
@@ -1973,7 +1977,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     // inbox collection, flattenedTasks the whole-DB flattened collection.
     const tasks = ${checkInbox ? 'inbox' : 'flattenedTasks'};
     const totalTasks = tasks.length;
-    ${filterCode.preamble ? filterCode.preamble + '\n    ' : ''}// Filter: ${filterDescription}
+    ${filterCode.preamble ? filterCode.preamble + '\n    ' : ''}// Filter: ${sanitizeForScriptComment(filterDescription)}
     function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
       return ${filterCode.predicate};
     }
@@ -2009,7 +2013,14 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     return JSON.stringify({ error: true, message: (error && error.message) || String(error), context: 'task_count_omnijs' });
   }
 })()
-    \`;
+`;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
     return app.evaluateJavascript(omniJsScript);
   } catch (e) {
     return JSON.stringify({ error: true, message: e.message || String(e), context: 'task_count_omnijs' });
