@@ -77,12 +77,13 @@ semantics).
 
 ## 📚 Architecture Documentation
 
-| Document                              | Purpose                                  |
-| ------------------------------------- | ---------------------------------------- |
-| `/docs/dev/PATTERNS.md`               | Quick symptom lookup (START HERE)        |
-| `/docs/dev/ARCHITECTURE.md`           | Execution patterns                       |
-| `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` | Syntax differences (source of many bugs) |
-| `/docs/dev/LESSONS_LEARNED.md`        | Hard-won insights                        |
+| Document                              | Purpose                                    |
+| ------------------------------------- | ------------------------------------------ |
+| `/docs/dev/PATTERNS.md`               | Quick symptom lookup (START HERE)          |
+| `/docs/dev/ARCHITECTURE.md`           | Execution patterns                         |
+| `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` | Syntax differences (source of many bugs)   |
+| `/docs/dev/LESSONS_LEARNED.md`        | Hard-won insights                          |
+| `/docs/dev/SETTER-PATTERNS.md`        | OmniJS/JXA property setter decision matrix |
 
 **JXA vs OmniJS Quick Reference:**
 
@@ -92,26 +93,26 @@ semantics).
 
 ## 🔍 Quick Symptom Index
 
-| Symptom                                 | Quick Fix                                                 |
-| --------------------------------------- | --------------------------------------------------------- |
-| Tool returns 0s/empty but has data      | Test MCP integration first! Compare script vs tool output |
-| Test expects data.id but gets undefined | Test MCP response structure first                         |
-| Tags not saving/empty                   | Use `bridgeSetTags()` from `minimal-tag-bridge.ts`        |
-| Script timeout (25+ seconds)            | Never use `.where()/.whose()`                             |
-| Dates wrong time                        | Use `YYYY-MM-DD HH:mm` not ISO+Z                          |
-| Parent/folder returns null              | Use OmniJS bridge: `project.parentFolder`                 |
-| "X is not a function" error             | You're in OmniJS - remove `()`                            |
-| Property returns function not value     | You're in JXA - add `()`                                  |
+| Symptom                                              | Quick Fix                                                 |
+| ---------------------------------------------------- | --------------------------------------------------------- |
+| Tool returns 0s/empty but has data                   | Test MCP integration first! Compare script vs tool output |
+| Test expects data.id but gets undefined              | Test MCP response structure first                         |
+| Tags not saving/empty                                | Assign via OmniJS `addTag()` — see Tag Operations         |
+| Typed-value write returns success but didn't persist | Read-back required — see `docs/dev/SETTER-PATTERNS.md`    |
+| Script timeout (25+ seconds)                         | Never use `.where()/.whose()`                             |
+| Dates wrong time                                     | Use `YYYY-MM-DD HH:mm` not ISO+Z                          |
+| Parent/folder returns null                           | Use OmniJS bridge: `project.parentFolder`                 |
+| "X is not a function" error                          | You're in OmniJS - remove `()`                            |
+| Property returns function not value                  | You're in JXA - add `()`                                  |
 
 **Full symptom guide:** `/docs/dev/PATTERNS.md`
 
 ## Key Files
 
-| File                                                 | Purpose           |
-| ---------------------------------------------------- | ----------------- |
-| `src/omnifocus/scripts/shared/helpers.ts`            | Core utilities    |
-| `src/omnifocus/scripts/shared/bridge-helpers.ts`     | Bridge operations |
-| `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` | Tag operations    |
+| File                                      | Purpose                                        |
+| ----------------------------------------- | ---------------------------------------------- |
+| `src/omnifocus/scripts/shared/helpers.ts` | Core utilities                                 |
+| `src/contracts/ast/`                      | Mutation + tag script builders (setters, tags) |
 
 ## JavaScript Execution
 
@@ -123,16 +124,9 @@ semantics).
 
 ## 🏷️ Tag Operations
 
-```javascript
-// ❌ These fail silently
-task.addTags(tags);
-task.tags = tags;
-
-// ✅ Use bridge for assignment
-const bridgeResult = bridgeSetTags(app, taskId, tagNames);
-```
-
-**Function:** `bridgeSetTags()` in `src/omnifocus/scripts/shared/minimal-tag-bridge.ts:41`
+JXA `task.tags = …` and `task.addTags()` silently no-op. Assign tags via OmniJS `addTag()` inside the mutation script
+(`src/contracts/ast/mutation-script-builder.ts`) or the AST tag builders
+(`src/contracts/ast/tag-mutation-script-builder.ts`).
 
 ## Code & Writing Standards
 
@@ -148,6 +142,17 @@ const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 - **Don't hardcode the current version in prose.** `package.json` and `CHANGELOG.md` are the single source of truth.
   Historical references like "introduced in v3.0.0" are fine — descriptive labels like "(current v4.1.0)" go stale on
   every release.
+
+## Referencing code in this doc
+
+Cite **stable anchors**, never volatile specifics — this is the version-pin rule generalized:
+
+- ✅ directories (`src/contracts/ast/`), grep targets ("grep for `bridgeSetTags`"), command invocations
+  (`npm run test:unit`)
+- ❌ `file.ts:NN` line numbers, hardcoded version strings, hardcoded test/size counts
+
+Volatile references rot silently; `tests/unit/docs/claude-md-paths.test.ts` fails CI when a path reference stops
+resolving, but it cannot catch a stale line number or count — those must not be written in the first place.
 
 ## 🚨 MCP Bridge Type Coercion
 
@@ -175,9 +180,8 @@ Convert natural language ("tomorrow") to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` befo
 
 - **JXA Direct:** 523KB limit
 - **OmniJS Bridge:** 261KB limit
-- **Current largest script:** 31KB (6% of limit)
 
-**See:** `/docs/dev/SCRIPT_SIZE_LIMITS.md`
+**See:** `/docs/dev/SCRIPT_SIZE_LIMITS.md` (live measurement of the largest script)
 
 ## MCP Lifecycle
 
@@ -196,23 +200,24 @@ process.stdin.on('end', async () => {
 ```bash
 # Build & Test
 npm run build                    # Required before running
-npm run test:unit                # ~2 seconds, ~1644 tests
-npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
+npm run test:unit                # (counts vary; run it)
+npm run test:integration         # (counts vary; run it — use npm, not bun)
 
 # MCP Testing
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+# protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports
 ```
 
 ## MCP Specification
 
-**Spec:** https://modelcontextprotocol.io/specification/2025-06-18/
+**Spec:** https://modelcontextprotocol.io/specification/
 
-| Detail           | Value                                                           |
-| ---------------- | --------------------------------------------------------------- |
-| Protocol Version | 2025-06-18                                                      |
-| Transport        | stdio (stdin/stdout)                                            |
-| SDK              | @modelcontextprotocol/sdk@1.17.4                                |
-| Response Format  | `{ content: [{ type: 'text', text: JSON.stringify(result) }] }` |
+| Detail           | Value                                                                        |
+| ---------------- | ---------------------------------------------------------------------------- |
+| Protocol Version | determined by the installed `@modelcontextprotocol/sdk` (see `package.json`) |
+| Transport        | stdio (stdin/stdout)                                                         |
+| SDK              | see `package.json` → `@modelcontextprotocol/sdk`                             |
+| Response Format  | `{ content: [{ type: 'text', text: JSON.stringify(result) }] }`              |
 
 ## Project Structure
 
@@ -224,6 +229,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
 multiple machines or sessions).
+
+## Workflow norms
+
+- PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
+- Run a code-review subagent before merge; gate the merge on a Safe/Approved verdict.
+- Merge via `gh pr merge --squash --auto` — never `--admin`.
+- `git pull --rebase` before `git push` (work spans multiple machines/sessions).
 
 ## Debugging & Investigation
 
