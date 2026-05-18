@@ -214,6 +214,18 @@ async function main(): Promise<void> {
   const daysArg = args.find((a) => a.startsWith('--days='));
   const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 90;
 
+  // --create-issues: recognized here, but the standalone CLI CANNOT auto-file.
+  //
+  // RUNTIME CONSTRAINT (do NOT "complete" this with a LINEAR_API_KEY/HTTP path):
+  // The concrete LinearClient (Task 14 note) is backed by the Linear MCP `graphql`
+  // action, which is ONLY callable from inside an MCP client / Claude's runtime —
+  // NEVER from a plain `npx tsx` Node process like this one. There is therefore no
+  // `linearFiler` to construct here. Auto-filing is intentionally Claude-runtime-only
+  // for v1; introducing a direct Linear HTTP credential would add an un-speced secret
+  // surface and is explicitly out of scope. The flag is still passed through so
+  // runDiagnosis records intent and the operator gets an actionable message below.
+  const createIssues = args.includes('--create-issues');
+
   const logDir = join(homedir(), '.omnifocus-mcp', 'tool-failures');
   const ledgerPath = defaultLedgerPath();
   const triageDocPath = join(process.cwd(), 'docs', 'dev', 'mcp-failure-triage.md');
@@ -257,8 +269,20 @@ async function main(): Promise<void> {
     now: new Date(),
     thresholds: { minOccurrences: 3, minSpanDays: 2 },
     writeTriageDoc,
+    createIssues,
+    // linearFiler intentionally omitted — see RUNTIME CONSTRAINT note at flag parse.
     // agentRunner omitted — Phase 3 does not spawn LLM from CLI yet
   });
+
+  if (createIssues) {
+    console.info(
+      '[diagnose-failures] --create-issues: auto-filing of SCHEMA_DRIFT issues is NOT performed by the ' +
+        'standalone CLI. It requires the Linear MCP `graphql` action, which is only available in the ' +
+        'Claude-driven runtime. SCHEMA_DRIFT rows are in docs/dev/mcp-failure-triage.md for review/filing. ' +
+        'Run the diagnosis under the Claude mcp-failure-diagnoser pipeline (or inject a LinearClient ' +
+        'programmatically) to enable filing.',
+    );
+  }
 }
 
 // Guard: only run main() when this file is the direct entry point, not when imported by tests.

@@ -117,6 +117,44 @@ it('does NOT invoke linearFiler when createIssues is false (default)', async () 
   expect(sink).toHaveBeenCalledOnce();
 });
 
+it('handles createIssues=true with NO linearFiler (the standalone-CLI path) without throwing', async () => {
+  // This is the exact state the standalone CLI puts runDiagnosis in: --create-issues was
+  // passed (createIssues===true) but there is no linearFiler available in a plain Node
+  // process (MCP graphql action is Claude-runtime-only). runDiagnosis MUST treat the
+  // absent filer as a safe no-op: no throw, no filing attempt, triage doc still written.
+  //
+  // NON-VACUOUS: the records produce a real SCHEMA_DRIFT cluster (omnifocus_sd: advertised
+  // 'mode' required vs Zod optional → REQUIRED_MISMATCH → SCHEMA_DRIFT). If runDiagnosis
+  // were changed to assume/require a filer whenever createIssues is true (e.g.
+  // `await linearFiler(...)` guarded only by `if (createIssues)`), this call would throw
+  // "linearFiler is not a function" on that cluster and the assertions below would fail.
+  // The SCHEMA_DRIFT cluster is what makes the filer-would-have-been-invoked path live.
+  const sink = vi.fn();
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn37-t15d-')), 'ledger.json');
+
+  await expect(
+    runDiagnosis({
+      records: makeRecords('omnifocus_sd', 'Required field mode is missing'),
+      registry: [SCHEMA_DRIFT_ENTRY],
+      ledgerPath,
+      now: new Date('2026-05-18T12:00:00Z'),
+      thresholds: { minOccurrences: 3, minSpanDays: 2 },
+      writeTriageDoc: sink,
+      createIssues: true,
+      // linearFiler intentionally undefined — mirrors the standalone CLI runtime
+    }),
+  ).resolves.toBeUndefined();
+
+  // Triage doc still written despite createIssues with no filer
+  expect(sink).toHaveBeenCalledOnce();
+  const md = sink.mock.calls[0][0] as string;
+  // The SCHEMA_DRIFT row is present (proves a fileable cluster existed — non-vacuous),
+  // and NO CAP_GUARD_TRIPPED row was appended (filer never ran, so no cap result).
+  expect(md).toContain('SCHEMA_DRIFT');
+  const dataSection = md.slice(0, md.indexOf('## Legend') >= 0 ? md.indexOf('## Legend') : md.length);
+  expect(dataSection).not.toContain('CAP_GUARD_TRIPPED');
+});
+
 it('passes ONLY SCHEMA_DRIFT clusters to filer, writes returned issue ID to ledger', async () => {
   // NON-VACUOUS proof:
   // — If the class filter in runDiagnosis were removed, the filer would also receive the
