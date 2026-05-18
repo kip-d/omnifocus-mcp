@@ -78,7 +78,7 @@ To activate the hook, add the following to `.claude/settings.local.json` (create
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/mcp-failure-marker.sh \"$TOOL_NAME\""
+            "command": "bash scripts/mcp-failure-marker.sh"
           }
         ]
       }
@@ -86,6 +86,10 @@ To activate the hook, add the following to `.claude/settings.local.json` (create
   }
 }
 ```
+
+> **Do not add a positional `$TOOL_NAME` arg.** Claude Code command-type hooks do NOT export `$TOOL_NAME`; they deliver
+> a JSON payload on **stdin** (with a `tool_name` field). The marker script parses `tool_name` from that stdin JSON via
+> `jq` — see https://code.claude.com/docs/en/hooks.
 
 The marker file (`~/.omnifocus-mcp/fresh-failures.tsv`) is a lightweight complement to the JSONL log. It records every
 tool call (not just failures), enabling faster "did anything unusual happen recently?" queries without parsing JSONL.
@@ -162,6 +166,9 @@ chmod +x ~/bin/of-mcp-diagnose
 ```
 
 ### launchd plist (weekly, Sunday 09:00)
+
+> launchd does NOT expand `$HOME` or `~` in `ProgramArguments` — substitute your own absolute username path (replace
+> `/Users/kip/...` below). The cron alternative further down uses `$HOME` and is fine as-is.
 
 Save as `~/Library/LaunchAgents/com.omnifocus-mcp.diagnose.plist`:
 
