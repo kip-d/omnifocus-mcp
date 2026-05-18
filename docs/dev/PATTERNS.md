@@ -268,10 +268,11 @@ expect(response.data?.task?.taskId).toBeDefined();
 
 ## Documentation Map
 
-| Doc                   | Content                     |
-| --------------------- | --------------------------- |
-| PATTERNS.md           | This file - symptom lookup  |
-| ARCHITECTURE.md       | JXA vs Bridge decisions     |
-| LESSONS_LEARNED.md    | War stories, empirical data |
-| DEBUGGING_WORKFLOW.md | Systematic approach         |
-| PATTERN_INDEX.md      | Pattern search reference    |
+| Doc                      | Content                                     |
+| ------------------------ | ------------------------------------------- |
+| PATTERNS.md              | This file - symptom lookup                  |
+| ARCHITECTURE.md          | JXA vs Bridge decisions                     |
+| LESSONS_LEARNED.md       | War stories, empirical data                 |
+| DEBUGGING_WORKFLOW.md    | Systematic approach                         |
+| PATTERN_INDEX.md         | Pattern search reference                    |
+| mcp-failure-diagnosis.md | MCP failure diagnosis pipeline + scheduling |
