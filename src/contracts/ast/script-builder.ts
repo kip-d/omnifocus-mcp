@@ -22,7 +22,7 @@ import {
   describeProjectFilter,
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
-import { escapeTemplateString, sanitizeForScriptComment } from './bridge-escape.js';
+import { escapeTemplateString, escapeTemplateLiteralHazards, sanitizeForScriptComment } from './bridge-escape.js';
 
 // =============================================================================
 // TYPES
@@ -1298,7 +1298,7 @@ export function buildFilteredProjectsScript(
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',
-        filter_description: ${JSON.stringify(filterDescription).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}
+        filter_description: ${escapeTemplateLiteralHazards(JSON.stringify(filterDescription))}
       }
     });
 
@@ -1668,7 +1668,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
         debug: {
           totalTasksProcessed: parsed.totalProcessed,
           maxTasksAllowed: maxTasks,
-          filterDescription: ${JSON.stringify(filterDescription).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')},
+          filterDescription: ${escapeTemplateLiteralHazards(JSON.stringify(filterDescription))},
           fieldsRequested: allFields,
           optimizationUsed: 'AST filter + OmniJS bridge'
         },

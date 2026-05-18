@@ -1,6 +1,17 @@
+/**
+ * Escape ONLY the JS template-literal hazards (backtick and ${) — NOT
+ * backslash. Use on a value already produced by JSON.stringify (whose
+ * backslashes are final); adding backslash-escaping here would double-escape
+ * and corrupt the literal. For raw (non-JSON-stringified) text use
+ * escapeTemplateString instead.
+ */
+export function escapeTemplateLiteralHazards(s: string): string {
+  return s.replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+}
+
 /** Escape a string for safe embedding inside a JXA backtick template literal. */
 export function escapeTemplateString(str: string): string {
-  return str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+  return escapeTemplateLiteralHazards(str.replace(/\\/g, '\\\\'));
 }
 
 /**

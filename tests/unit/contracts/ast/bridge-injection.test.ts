@@ -8,7 +8,8 @@ import {
 } from '../../../../src/contracts/ast/script-builder.js';
 
 const NL = String.fromCharCode(10); // a real newline
-const HOSTILE = ['a`b', 'a${x}b', 'a' + NL + 'b'];
+const BS = 'a\\b'; // literal single backslash: the 3-char string a \ b
+const HOSTILE = ['a`b', 'a${x}b', 'a' + NL + 'b', BS];
 
 function parses(script: string): boolean {
   try {
@@ -36,6 +37,16 @@ function assertSafe(script: string, v: string) {
   } else if (v.includes(NL)) {
     expect(script.includes('a' + NL + 'b')).toBe(false); // no raw LF-bearing payload
     // (comment channel → sanitized to "a b"; predicate channel → JSON-escaped "a\\nb")
+  } else if (v === BS) {
+    // A literal backslash round-trips through TWO correct escape layers:
+    //   1. JSON.stringify(predicate value)  : a\b   → a\\b   (JSON doubling)
+    //   2. escapeTemplateString(whole src)  : a\\b  → a\\\\b (template doubling)
+    // So quadruple-backslash in the generated TEXT is the CORRECT single-pass
+    // result, not corruption. The double-escape *bug* signature would be a
+    // further doubling to EIGHT backslashes — assert that never appears.
+    // `parses()` above is the load-bearing check: any escape that unbalanced
+    // the outer template literal would have thrown there.
+    expect(script.includes('a\\\\\\\\\\\\\\\\b')).toBe(false); // no 8x (double-escape)
   }
 }
 
