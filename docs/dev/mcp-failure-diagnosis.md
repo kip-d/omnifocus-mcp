@@ -10,7 +10,7 @@ Covers the full failure-diagnosis pipeline: what it does, how to run it, how to 
 MCP tool use
     │
     ▼
-src/omnifocus/logger.ts           ← writes ~/.omnifocus-mcp/tool-failures/failures-YYYY-MM-DD.jsonl
+src/tools/base.ts (logToolFailure) ← writes ~/.omnifocus-mcp/tool-failures/failures-YYYY-MM-DD.jsonl
     │
     ▼
 scripts/analyze-tool-failures.ts  ← npm run analyze-failures   (read-only analysis, stdout)
