@@ -594,4 +594,153 @@ describe('QueryCompiler', () => {
       expect(result.completed).toBeUndefined();
     });
   });
+
+  // OMN-33: characterization tests for QueryCompiler branches previously
+  // exercised only incidentally. Pure-function, no mocks beyond console.warn
+  // spies. Each sub-describe locks in *current* behavior — these are coverage
+  // gaps, not bug fixes.
+  describe('coverage gaps (OMN-33)', () => {
+    describe('deferDate transformation', () => {
+      it('maps deferDate.after to deferAfter (only)', () => {
+        const result = compiler.transformFilters({ deferDate: { after: '2026-01-01' } });
+        expect(result.deferAfter).toBe('2026-01-01');
+        expect(result.deferBefore).toBeUndefined();
+      });
+
+      it('maps deferDate.between to deferAfter + deferBefore with NO operator field', () => {
+        // Intentional asymmetry per QueryCompiler dateFieldDefs: `deferDate` has
+        // no `operatorKey` (unlike dueDate/plannedDate/completionDate/added),
+        // so BETWEEN does NOT set a `deferDateOperator`. The downstream defer
+        // pipeline doesn't consume one. Lock this in.
+        const result = compiler.transformFilters({ deferDate: { between: ['2026-01-01', '2026-12-31'] } });
+        expect(result.deferAfter).toBe('2026-01-01');
+        expect(result.deferBefore).toBe('2026-12-31');
+        expect((result as Record<string, unknown>).deferDateOperator).toBeUndefined();
+      });
+    });
+
+    describe("status: 'on_hold'", () => {
+      it('maps to projectStatus only; leaves completed/dropped untouched', () => {
+        const result = compiler.transformFilters({ status: 'on_hold' });
+        expect(result.projectStatus).toEqual(['onHold']);
+        expect(result.completed).toBeUndefined();
+        expect(result.dropped).toBeUndefined();
+      });
+    });
+
+    describe('status active/completed: projectStatus side-effect', () => {
+      it("status: 'active' sets BOTH completed:false AND projectStatus:['active']", () => {
+        const result = compiler.transformFilters({ status: 'active' });
+        expect(result.completed).toBe(false);
+        expect(result.projectStatus).toEqual(['active']);
+      });
+
+      it("status: 'completed' sets BOTH completed:true AND projectStatus:['done']", () => {
+        const result = compiler.transformFilters({ status: 'completed' });
+        expect(result.completed).toBe(true);
+        expect(result.projectStatus).toEqual(['done']);
+      });
+    });
+
+    describe('NOT operator — non-status branches simplify to {} + warn', () => {
+      it('NOT: { flagged: true } returns {} and warns', () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = compiler.transformFilters({ NOT: { flagged: true } });
+        expect(result).toEqual({});
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
+        warnSpy.mockRestore();
+      });
+
+      it('NOT with a date filter returns {} and warns', () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = compiler.transformFilters({ NOT: { dueDate: { before: '2026-12-31' } } });
+        expect(result).toEqual({});
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
+        warnSpy.mockRestore();
+      });
+
+      it('NOT with a tag filter returns {} and warns', () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = compiler.transformFilters({ NOT: { tags: { any: ['@home'] } } });
+        expect(result).toEqual({});
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
+        warnSpy.mockRestore();
+      });
+
+      it("NOT: { status: 'active' } inverts to completed:true (no warn)", () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = compiler.transformFilters({ NOT: { status: 'active' } });
+        expect(result.completed).toBe(true);
+        expect(warnSpy).not.toHaveBeenCalled();
+        warnSpy.mockRestore();
+      });
+    });
+
+    describe('OR: [] short-circuits to {}', () => {
+      it('returns {} (not { orBranches: [] }) for an empty OR', () => {
+        const result = compiler.transformFilters({ OR: [] });
+        expect(result).toEqual({});
+        expect((result as Record<string, unknown>).orBranches).toBeUndefined();
+      });
+    });
+
+    describe('name filter transformation', () => {
+      it('name.contains routes to result.search', () => {
+        const result = compiler.transformFilters({ name: { contains: 'Quarterly' } });
+        expect(result.search).toBe('Quarterly');
+      });
+
+      it('name.matches also routes to result.search (no separate operator)', () => {
+        const result = compiler.transformFilters({ name: { matches: 'Review.*' } });
+        expect(result.search).toBe('Review.*');
+      });
+    });
+
+    describe('id and folder passthrough', () => {
+      it('input.id is passed through as result.id', () => {
+        const result = compiler.transformFilters({ id: 'task-xyz' });
+        expect(result.id).toBe('task-xyz');
+      });
+
+      it('input.folder is passed through as result.folder', () => {
+        const result = compiler.transformFilters({ folder: 'Work' });
+        expect(result.folder).toBe('Work');
+      });
+    });
+
+    describe('compile() export passthrough', () => {
+      it('echoes exportType / format / outputDirectory / includeCompleted; mode is undefined for non-tasks', () => {
+        const compiled = compiler.compile({
+          query: {
+            type: 'export',
+            exportType: 'tasks',
+            format: 'csv',
+            outputDirectory: './test-export-out',
+            includeCompleted: false,
+          },
+        });
+        expect(compiled.type).toBe('export');
+        expect(compiled.exportType).toBe('tasks');
+        expect(compiled.format).toBe('csv');
+        expect(compiled.outputDirectory).toBe('./test-export-out');
+        expect(compiled.includeCompleted).toBe(false);
+        // mode is task-only (OMN-74); export queries get undefined
+        expect(compiled.mode).toBeUndefined();
+      });
+
+      it('echoes exportFields array', () => {
+        const compiled = compiler.compile({
+          query: { type: 'export', exportType: 'tasks', exportFields: ['id', 'name', 'dueDate'] },
+        });
+        expect(compiled.exportFields).toEqual(['id', 'name', 'dueDate']);
+      });
+
+      it('echoes includeStats for project export', () => {
+        const compiled = compiler.compile({
+          query: { type: 'export', exportType: 'projects', includeStats: true },
+        });
+        expect(compiled.includeStats).toBe(true);
+      });
+    });
+  });
 });
