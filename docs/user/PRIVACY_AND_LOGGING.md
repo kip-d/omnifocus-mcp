@@ -50,7 +50,7 @@ LOG_LEVEL=info   # Normal (default)
 LOG_LEVEL=debug  # User data (redacted)
 ```
 
-## Failure-log isolation under test
+## Failure-Log Isolation Under Test
 
 The server records tool failures to `~/.omnifocus-mcp/tool-failures/failures-<date>.jsonl` for the weekly diagnosis job.
 To keep test runs from polluting that signal, the failure log is suppressed when either:
