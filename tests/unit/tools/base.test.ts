@@ -106,6 +106,27 @@ describe('BaseTool', () => {
   let testTool: TestTool;
   let errorTestTool: ErrorTestTool;
 
+  // --- OMN-77: keep the whole existing suite running with the failure-log gate OFF.
+  //     Vitest sets NODE_ENV=test, which would otherwise suppress writes and
+  //     break the existing fs.writeFileSync/mkdirSync assertions.
+  //     ORDERING CONTRACT: this block MUST stay above the `vi.clearAllMocks()`
+  //     beforeEach below — Vitest runs beforeEach hooks in registration order,
+  //     and neutralization must set env before any test body runs. Do not reorder.
+  let __omn77SavedNodeEnv: string | undefined;
+  let __omn77SavedFlag: string | undefined;
+  beforeEach(() => {
+    __omn77SavedNodeEnv = process.env.NODE_ENV;
+    __omn77SavedFlag = process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG;
+    process.env.NODE_ENV = 'production';
+    delete process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG;
+  });
+  afterEach(() => {
+    if (__omn77SavedNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = __omn77SavedNodeEnv;
+    if (__omn77SavedFlag === undefined) delete process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG;
+    else process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG = __omn77SavedFlag;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -696,6 +717,56 @@ describe('BaseTool', () => {
 
       // Context should be included in the error details (even if empty)
       expect('context' in (result.error?.details || {})).toBe(true);
+    });
+  });
+
+  describe('OMN-77 failure-log gate', () => {
+    it('suppresses the write and emits an info breadcrumb when NODE_ENV=test', async () => {
+      process.env.NODE_ENV = 'test';
+      delete process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG;
+
+      const tool = new ErrorTestTool(mockCache);
+      const infoSpy = vi.spyOn((tool as any).logger, 'info');
+      const writeSpy = vi.mocked(fs.writeFileSync);
+      writeSpy.mockClear();
+
+      await tool.execute({ errorType: 'timeout' });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(fs.mkdirSync).not.toHaveBeenCalled();
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('failure-log suppressed (reason=node-env-test)'));
+    });
+
+    it('suppresses via the explicit disable flag with reason=disabled-flag', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG = '1';
+
+      const tool = new ErrorTestTool(mockCache);
+      const infoSpy = vi.spyOn((tool as any).logger, 'info');
+      const writeSpy = vi.mocked(fs.writeFileSync);
+      writeSpy.mockClear();
+
+      await tool.execute({ errorType: 'timeout' });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('failure-log suppressed (reason=disabled-flag)'));
+    });
+
+    it('still writes the failure log when no suppression signal is set (regression guard)', async () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.OMNIFOCUS_MCP_DISABLE_FAILURE_LOG;
+
+      const tool = new ErrorTestTool(mockCache);
+      const writeSpy = vi.mocked(fs.writeFileSync);
+      writeSpy.mockClear();
+
+      await tool.execute({ errorType: 'timeout' });
+
+      expect(writeSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failures-'),
+        expect.any(String),
+        expect.objectContaining({ flag: 'a' }),
+      );
     });
   });
 

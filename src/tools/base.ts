@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
+import { failureLogSuppression } from '../diagnostics/failure-log-gate.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../utils/response-format.js';
 import {
@@ -306,6 +307,16 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     categorizedError?: CategorizedScriptError,
   ): void {
     try {
+      // OMN-77: never write the failure log under test / when explicitly disabled.
+      // Emit one info breadcrumb so a red integration test never silently eats
+      // a server-side error (visible at the harness's default LOG_LEVEL=info).
+      const suppression = failureLogSuppression();
+      if (suppression.suppressed) {
+        this.logger.info(
+          `failure-log suppressed (reason=${suppression.reason}) tool=${this.name} errorType=${errorType}`,
+        );
+        return;
+      }
       // Create logs directory if it doesn't exist
       const logsDir = join(homedir(), '.omnifocus-mcp', 'tool-failures');
       if (!existsSync(logsDir)) {
