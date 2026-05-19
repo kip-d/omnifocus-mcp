@@ -9,7 +9,6 @@ These prompts are available through the MCP protocol and can be called programma
 - **[Manual Templates](../../prompts/README.md)** - Copy/paste prompts for testing and workflows
 - **[API Documentation](../../docs/)** - Tool references and implementation guides
 - **[Improvement Roadmap](../../docs/IMPROVEMENT_ROADMAP.md)** - Future enhancements including prompt discovery CLI
-- **[Real LLM Testing](../../docs/REAL_LLM_TESTING.md)** - How to test prompts with actual AI models
 
 ## Architecture
 
@@ -39,7 +38,7 @@ These prompts are available through the MCP protocol and can be called programma
 | `eisenhower_matrix_inbox` | Prioritize by urgency/importance | "Use the eisenhower_matrix_inbox prompt" |
 | `quick_reference`         | Essential commands               | "Use the quick_reference prompt"         |
 
-**🎉 Available Now:** [`npm run prompts:list`](../../docs/PROMPT_DISCOVERY.md) CLI command for prompt discovery
+**🎉 Available Now:** `npm run prompts:list` CLI command for prompt discovery
 
 #### GTD Workflow Prompts (`gtd/`)
 
@@ -152,5 +151,5 @@ Potential improvements identified in the **[Improvement Roadmap](../../docs/IMPR
 - **Dynamic prompt composition** - Combine multiple prompts for complex scenarios
 - **Usage analytics** - Track which prompts are most valuable
 
-**✅ Implemented:** The [`npm run prompts:list`](../../docs/PROMPT_DISCOVERY.md) CLI tool bridges the gap between manual
-and programmatic approaches with unified discovery, validation, and multiple output formats.
+**✅ Implemented:** The `npm run prompts:list` CLI tool bridges the gap between manual and programmatic approaches with
+unified discovery, validation, and multiple output formats.

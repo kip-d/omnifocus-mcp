@@ -4,7 +4,7 @@ import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 const QUICK_REFERENCE = `
 # OmniFocus MCP Quick Reference
 
-## Unified API (v3.0.0)
+## Unified API
 
 Four tools: \`omnifocus_read\`, \`omnifocus_write\`, \`omnifocus_analyze\`, \`system\`
 
