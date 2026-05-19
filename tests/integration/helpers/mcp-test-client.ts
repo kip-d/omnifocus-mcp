@@ -67,7 +67,7 @@ export class MCPTestClient {
 
   async startServer(): Promise<void> {
     // Build environment variables
-    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test' };
+    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test', OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1' };
 
     // Enable cache warming for integration tests that want realistic behavior
     if (this.options.enableCacheWarming) {
