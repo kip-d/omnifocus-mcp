@@ -43,6 +43,10 @@ const NumberFilterSchema = z.union([
 const filterFields = {
   id: z.string().optional(), // Exact task ID lookup
   status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
+  // OMN-72: `completed` boolean is the documented GTD idiom in CLAUDE.md/memory
+  // (`completed: false` = only active). Accepted as a direct alias for the
+  // completion dimension of `status`; explicit `completed` overrides `status`.
+  completed: z.boolean().optional(),
   tags: TagFilterSchema.optional(),
   project: z.union([z.string(), z.null()]).optional(),
   // OMN-43: explicit projectId filter for fast, unambiguous project-scoped queries.

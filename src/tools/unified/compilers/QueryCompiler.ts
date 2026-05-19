@@ -99,6 +99,11 @@ export class QueryCompiler {
     if (input.blocked !== undefined) result.blocked = input.blocked;
     if (input.inInbox !== undefined) result.inInbox = input.inInbox;
 
+    // OMN-72: explicit `completed` is a direct alias for the completion
+    // dimension. Applied after transformStatus so it overrides any
+    // status-derived completion (e.g. status:'active' + completed:true).
+    if (input.completed !== undefined) result.completed = input.completed;
+
     // Project transformation
     // OMN-43: explicit `projectId` takes precedence (fast path, unambiguous).
     // `project: null` still maps to inbox; `project: "string"` is treated as

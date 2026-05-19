@@ -743,4 +743,31 @@ describe('WriteSchema', () => {
     const result = WriteSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  // OMN-71: accept `target_id` as an alias for `id` on the delete mutation.
+  // The model consistently pairs target + target_id (12 failure-log hits across
+  // distinct sessions, strongest recurrence). Non-breaking: `id` still works.
+  // This describe block is the regression fixture.
+  describe('delete target_id alias (OMN-71)', () => {
+    it('accepts the model shape: { operation:"delete", target:"task", target_id }', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'delete', target: 'task', target_id: 'abc123' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the legacy shape with `id` (back-compat)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'delete', target: 'project', id: 'proj-1' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a delete with neither id nor target_id', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'delete', target: 'task' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });

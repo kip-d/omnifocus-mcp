@@ -173,11 +173,14 @@ export class MutationCompiler {
           operation: 'delete',
           target: mutation.target,
         };
+        // OMN-71: `target_id` is an accepted alias for `id`. WriteSchema's
+        // superRefine guarantees at least one is present.
+        const deleteId = mutation.id ?? mutation.target_id;
         // Map ID to taskId or projectId based on target
         if (mutation.target === 'task') {
-          result.taskId = mutation.id;
+          result.taskId = deleteId;
         } else {
-          result.projectId = mutation.id;
+          result.projectId = deleteId;
         }
         return result;
       }

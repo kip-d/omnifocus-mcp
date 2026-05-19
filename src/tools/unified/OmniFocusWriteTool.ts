@@ -97,7 +97,7 @@ OPERATIONS:
 - create_folder: New folder (name required, optional parentFolder for nesting)
 - update: Modify existing (provide id + changes)
 - complete: Mark done (provide id)
-- delete: Remove permanently (provide id)
+- delete: Remove permanently (provide id, or its alias target_id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs
 - tag_manage: Manage tag hierarchy (create, rename, delete, merge, nest, unnest, reparent)
@@ -192,6 +192,7 @@ SAFETY:
             data: { type: 'object' },
             changes: { type: 'object' },
             id: { type: 'string' },
+            target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
             minimalResponse: { type: 'boolean' },
 
             // complete

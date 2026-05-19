@@ -73,6 +73,7 @@ describe('Parity: TaskFieldEnum ↔ generateFieldProjection (OMN-45 class)', () 
 const FILTER_SAMPLES: Record<string, unknown> = {
   id: 'sample-id',
   status: 'active',
+  completed: false, // OMN-72
   tags: { any: ['@home'] },
   project: 'sample-project-id',
   projectId: 'sample-project-id',

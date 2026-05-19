@@ -84,4 +84,41 @@ describe('MutationCompiler', () => {
       expect(compiled.data.parentFolder).toBeUndefined();
     }
   });
+
+  // OMN-71: target_id is an accepted alias for id on delete. The compiler
+  // normalizes it so downstream handlers see the same taskId/projectId.
+  describe('delete target_id alias (OMN-71)', () => {
+    it('maps target_id to taskId for a task delete', () => {
+      const input: WriteInput = {
+        mutation: { operation: 'delete', target: 'task', target_id: 'task-abc' },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.operation).toBe('delete');
+      if (compiled.operation === 'delete') {
+        expect(compiled.taskId).toBe('task-abc');
+        expect(compiled.projectId).toBeUndefined();
+      }
+    });
+
+    it('maps target_id to projectId for a project delete', () => {
+      const input: WriteInput = {
+        mutation: { operation: 'delete', target: 'project', target_id: 'proj-xyz' },
+      };
+      const compiled = compiler.compile(input);
+      if (compiled.operation === 'delete') {
+        expect(compiled.projectId).toBe('proj-xyz');
+        expect(compiled.taskId).toBeUndefined();
+      }
+    });
+
+    it('still maps legacy id for back-compat', () => {
+      const input: WriteInput = {
+        mutation: { operation: 'delete', target: 'task', id: 'legacy-id' },
+      };
+      const compiled = compiler.compile(input);
+      if (compiled.operation === 'delete') {
+        expect(compiled.taskId).toBe('legacy-id');
+      }
+    });
+  });
 });

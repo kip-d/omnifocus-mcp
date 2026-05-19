@@ -225,10 +225,15 @@ const MutationSchema = z.discriminatedUnion('operation', [
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Delete operation
+  // OMN-71: the model consistently sends `target_id` (pairs with `target`),
+  // a more consistent shape than `id`. Accept it as a non-breaking alias.
+  // Both are optional here; the WriteSchema superRefine enforces exactly-one-
+  // present so an empty delete still fails with a clear, schema-level error.
   z.object({
     operation: z.literal('delete'),
     target: z.enum(['task', 'project']),
-    id: z.string(),
+    id: z.string().optional(),
+    target_id: z.string().optional(),
   }),
   // Batch operation with options
   z.object({
@@ -261,8 +266,24 @@ const MutationSchema = z.discriminatedUnion('operation', [
 
 // Main write schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
-export const WriteSchema = z.object({
-  mutation: coerceObject(MutationSchema),
-});
+export const WriteSchema = z
+  .object({
+    mutation: coerceObject(MutationSchema),
+  })
+  // OMN-71: delete accepts `id` OR its alias `target_id`. The discriminated-
+  // union member can't carry a refinement (zod requires ZodObject members),
+  // so enforce "exactly one identifier present" at the boundary schema — this
+  // preserves the clear schema-level error a bare `{operation:'delete'}` got
+  // when `id` was required.
+  .superRefine((val, ctx) => {
+    const m = val.mutation;
+    if (m.operation === 'delete' && m.id === undefined && m.target_id === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mutation', 'id'],
+        message: "delete requires 'id' (or its alias 'target_id')",
+      });
+    }
+  });
 
 export type WriteInput = z.infer<typeof WriteSchema>;
