@@ -109,6 +109,9 @@ describe('BaseTool', () => {
   // --- OMN-77: keep the whole existing suite running with the failure-log gate OFF.
   //     Vitest sets NODE_ENV=test, which would otherwise suppress writes and
   //     break the existing fs.writeFileSync/mkdirSync assertions.
+  //     ORDERING CONTRACT: this block MUST stay above the `vi.clearAllMocks()`
+  //     beforeEach below — Vitest runs beforeEach hooks in registration order,
+  //     and neutralization must set env before any test body runs. Do not reorder.
   let __omn77SavedNodeEnv: string | undefined;
   let __omn77SavedFlag: string | undefined;
   beforeEach(() => {
