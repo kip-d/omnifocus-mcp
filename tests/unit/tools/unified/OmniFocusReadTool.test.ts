@@ -1201,4 +1201,228 @@ describe('OmniFocusReadTool', () => {
       expect(result.error.message).toBe('Connection timeout');
     });
   });
+
+  // OMN-35: coverage for previously-untested execute()-path branches. All
+  // characterization tests — same execJsonSpy + mockCache harness used above.
+  // Bug 6 (null→undefined in parseProjects) is split to OMN-80 as a separate
+  // behavior change.
+
+  describe('folder query (OMN-35 gap 1)', () => {
+    it('fresh query: runs script, returns folders, caches, sets total_folders metadata', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: [
+            { id: 'f1', name: 'Work' },
+            { id: 'f2', name: 'Personal' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.folders).toHaveLength(2);
+      expect(result.metadata.total_folders).toBe(2);
+      expect(result.metadata.from_cache).not.toBe(true);
+      expect(mockCache.set).toHaveBeenCalledWith('folders', 'folders_list_basic', { folders: expect.any(Array) });
+    });
+
+    it('cache hit: returns cached folders, does NOT call execJson, from_cache:true', async () => {
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+        folders: [{ id: 'f1', name: 'Cached' }],
+      });
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.folders).toEqual([{ id: 'f1', name: 'Cached' }]);
+      expect(result.metadata.from_cache).toBe(true);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('data.items fallback when no data.folders key (script-shape tolerance)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { items: [{ id: 'f9', name: 'FromItems' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.folders).toEqual([{ id: 'f9', name: 'FromItems' }]);
+    });
+
+    it('script error: returns SCRIPT_ERROR with the script-supplied message', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'JXA folder enumeration failed',
+        details: 'permission denied',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+      expect(result.error.message).toBe('JXA folder enumeration failed');
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('countOnly through execute() (OMN-35 gap 2)', () => {
+    it('returns count + metadata flags + overrides summary.total_count from JXA', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 42, optimization: 'omnijs_count_no_tags', filter_description: 'flagged' },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(42);
+      // Summary total_count must reflect the JXA count, not the 0 from the empty tasks[] array
+      expect(result.summary.total_count).toBe(42);
+      expect(result.metadata.optimization).toBe('omnijs_count_no_tags');
+    });
+
+    it('mode:"inbox" + countOnly auto-injects inInbox into the count filter', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 7 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'inbox', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(7);
+      // The inbox-mode injection lives at handleTaskQuery's executeCountOnly path:
+      // filters_applied echoes the countFilter, which should now carry inInbox:true.
+      expect(result.metadata.filters_applied).toMatchObject({ inInbox: true });
+    });
+
+    it('script error during count: returns SCRIPT_ERROR', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'count script failed',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+  });
+
+  describe('sort with date fields and null values (OMN-35 gap 3)', () => {
+    // Inbox path exercises post-hoc sortTasks (non-inbox sorts are embedded in
+    // OmniJS — sortedInScript:true — and skip post-hoc). Mirrors existing
+    // inbox+name sort test pattern.
+
+    it('dueDate asc: null dueDate sorts LAST regardless of name', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't_null', name: 'Zebra', dueDate: null },
+            { id: 't_late', name: 'Mango', dueDate: '2026-12-01T17:00:00.000Z' },
+            { id: 't_early', name: 'Apple', dueDate: '2026-01-15T17:00:00.000Z' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          filters: { project: null },
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const ids = result.data.tasks.map((t: any) => t.id);
+      expect(ids).toEqual(['t_early', 't_late', 't_null']); // null last
+    });
+
+    it('dueDate desc: null dueDate STILL sorts last (nulls-last regardless of direction)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't_null', name: 'Zebra', dueDate: null },
+            { id: 't_late', name: 'Mango', dueDate: '2026-12-01T17:00:00.000Z' },
+            { id: 't_early', name: 'Apple', dueDate: '2026-01-15T17:00:00.000Z' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          filters: { project: null },
+          sort: [{ field: 'dueDate', direction: 'desc' }],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const ids = result.data.tasks.map((t: any) => t.id);
+      expect(ids).toEqual(['t_late', 't_early', 't_null']); // desc by date, null still last
+    });
+  });
+
+  describe('offset pagination through execute() (OMN-35 gap 4)', () => {
+    it('supplied offset reaches metadata.offset', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'A' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', offset: 50, limit: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.offset).toBe(50);
+    });
+
+    it('defaults metadata.offset to 0 when not supplied', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.offset).toBe(0);
+    });
+  });
+
+  describe('tasks are intentionally NOT cached (OMN-35 gap 5 — regression guard)', () => {
+    // Projects, tags, and folders are cached; tasks deliberately are not (they
+    // change too frequently). This test exists so a future "let's cache tasks
+    // for speed" change has to consciously delete this guard. Comment-linked
+    // to OMN-35.
+    it('two identical task queries both hit execJson; cache.set is never called with "tasks"', async () => {
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'A' }] },
+      } satisfies ScriptResult);
+
+      const query = { type: 'tasks' as const, filters: { flagged: true } };
+      await tool.execute({ query });
+      await tool.execute({ query });
+
+      expect(execJsonSpy).toHaveBeenCalledTimes(2);
+      const setCalls = (mockCache.set as ReturnType<typeof vi.fn>).mock.calls;
+      const tasksCacheCalls = setCalls.filter((args) => args[0] === 'tasks');
+      expect(tasksCacheCalls).toHaveLength(0);
+    });
+  });
 });
