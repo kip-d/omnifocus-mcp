@@ -66,7 +66,10 @@ export class MCPTestClient {
   }
 
   async startServer(): Promise<void> {
-    // Build environment variables
+    // Build environment variables.
+    // OMN-77: OMNIFOCUS_MCP_DISABLE_FAILURE_LOG is intentional belt-and-suspenders, NOT
+    // redundant with NODE_ENV=test — failure-log-gate.ts treats them as two independent
+    // suppression paths. Keep both; do not "clean up" the explicit flag.
     const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test', OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1' };
 
     // Enable cache warming for integration tests that want realistic behavior
