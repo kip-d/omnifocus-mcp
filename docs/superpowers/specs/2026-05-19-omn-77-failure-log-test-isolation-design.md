@@ -21,11 +21,11 @@ developer to remember — while real production failures continue to be logged a
 
 ## Decision Record
 
-| Decision                                        | Choice                                                                           | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Disposition of test failures                    | **Suppress** (do not write), not redirect to a separate log                      | A log has value only if it has a consumer. A separate test log would have no automated consumer _by design_ (the point is to keep test data away from `diagnose-failures`). The developer debugging a red integration test already has a higher-fidelity surface: vitest assertions + the returned MCP error payload. "Zero writes under test" is a one-line verifiable invariant; "writes only to isolated dir X, nothing reads X" is a weaker standing obligation with a re-pollution failure mode. |
-| Losing sight of server errors during a red test | **Observable stderr breadcrumb** at the suppressed-write site                    | Mitigates suppression's only real risk without creating a standing artifact.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Gating signal                                   | **`OMNIFOCUS_MCP_DISABLE_FAILURE_LOG` truthy OR `NODE_ENV==='test'`** (option C) | The dedicated var is the explicit, greppable, intentional switch usable in any context; the `NODE_ENV` clause is automatic defense-in-depth so any test runner spawning the server is covered without remembering anything. Two well-bounded clauses, each independently justified.                                                                                                                                                                                                                   |
+| Decision                                        | Choice                                                                           | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Disposition of test failures                    | **Suppress** (do not write), not redirect to a separate log                      | A log has value only if it has a consumer. A separate test log would have no automated consumer _by design_ (the point is to keep test data away from `diagnose-failures`). The developer debugging a red integration test already has a higher-fidelity surface: vitest assertions + the returned MCP error payload. "Zero writes under test" is a one-line verifiable invariant; "writes only to isolated dir X, nothing reads X" is a weaker standing obligation with a re-pollution failure mode.                                                            |
+| Losing sight of server errors during a red test | **Observable stderr breadcrumb at `info` level** at the suppressed-write site    | Mitigates suppression's only real risk without creating a standing artifact. `info` (not `debug`) because the integration harness runs the server at the default `LOG_LEVEL=info` and does not raise it; a `debug` breadcrumb would be invisible during the exact suite it exists for, leaving suppression effectively silent again. `info` (not `warn`) because a suppressed write under test is an _expected, normal_ condition, not an anomaly — `warn` would cry wolf. The suite is small (6 integration files), so per-failure `info` lines are not spammy. |
+| Gating signal                                   | **`OMNIFOCUS_MCP_DISABLE_FAILURE_LOG` truthy OR `NODE_ENV==='test'`** (option C) | The dedicated var is the explicit, greppable, intentional switch usable in any context; the `NODE_ENV` clause is automatic defense-in-depth so any test runner spawning the server is covered without remembering anything. Two well-bounded clauses, each independently justified.                                                                                                                                                                                                                                                                              |
 
 ## Architecture
 
@@ -70,13 +70,15 @@ Inserted before any filesystem work (currently `src/tools/base.ts:310`):
 ### Breadcrumb
 
 One line via the existing `src/utils/logger.ts` (already writes to **stderr** — required, since stdout is the MCP stdio
-protocol channel) at `debug` level:
+protocol channel) at **`info`** level (`logger.ts:71` defaults `LOG_LEVEL` to `info`; the integration harness does not
+override it, so `info` is visible by default during the suite and `debug` would not be — see Decision Record):
 
 ```
 failure-log suppressed (reason=<reason>) tool=<this.name> errorType=<errorType>
 ```
 
-No args/payload included → no PII surface. Purpose: a red integration test never silently eats a server-side error.
+No args/payload included → no PII surface. Purpose: a red integration test never silently eats a server-side error —
+which only holds if the line is visible at the harness's default log level.
 
 ### Harness wiring
 
@@ -91,7 +93,7 @@ tool throws
   → handleExecuteError / handleErrorV2
     → logToolFailure(args, errorType, …)
       → failureLogSuppression(process.env)
-          suppressed:     logger.debug(breadcrumb); return        (zero filesystem touch)
+          suppressed:     logger.info(breadcrumb); return         (zero filesystem touch)
           not suppressed: existing mkdir + JSONL append            (unchanged)
 ```
 
