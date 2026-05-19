@@ -569,4 +569,29 @@ describe('QueryCompiler', () => {
       expect(result.completionDateOperator).toBe('BETWEEN');
     });
   });
+
+  // OMN-72: direct `completed` boolean passes through to TaskFilter.completed,
+  // the same internal field `status: active|completed` already targets.
+  describe('completed passthrough (OMN-72)', () => {
+    it('passes completed: false through to result.completed', () => {
+      const result = compiler.transformFilters({ completed: false });
+      expect(result.completed).toBe(false);
+    });
+
+    it('passes completed: true through to result.completed', () => {
+      const result = compiler.transformFilters({ completed: true });
+      expect(result.completed).toBe(true);
+    });
+
+    it('explicit completed overrides status-derived completion', () => {
+      // status:'active' would set completed:false; explicit completed:true wins.
+      const result = compiler.transformFilters({ status: 'active', completed: true });
+      expect(result.completed).toBe(true);
+    });
+
+    it('leaves completed undefined when neither completed nor status given', () => {
+      const result = compiler.transformFilters({ flagged: true });
+      expect(result.completed).toBeUndefined();
+    });
+  });
 });

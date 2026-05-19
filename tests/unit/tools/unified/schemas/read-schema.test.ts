@@ -475,4 +475,35 @@ describe('ReadSchema', () => {
       }
     });
   });
+
+  // OMN-72: accept `filters.completed` (boolean). The schema previously rejected
+  // it via .strict(), contradicting the documented GTD idiom in CLAUDE.md/memory
+  // (`completed: false` = "only active"). Real failure-log finding B (3 hits,
+  // distinct sessions). This describe block is the regression fixture.
+  describe('filters.completed (OMN-72)', () => {
+    it('accepts completed: false alongside a text filter (the exact failing payload)', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { text: { matches: 'quarterly review' }, completed: false },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts completed: true', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { completed: true } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still rejects genuinely unknown filter keys (strict mode intact)', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { completed: false, bogusField: true } },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
