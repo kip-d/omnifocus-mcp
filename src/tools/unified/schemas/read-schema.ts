@@ -99,9 +99,15 @@ export interface FilterValue extends FlatFilterValue {
 // FIELD SELECTION ENUMS (type-discriminated)
 // =============================================================================
 
-// Task field enum — matches fields in buildListTasksScriptV4
-// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
-export const TaskFieldEnum = z.enum([
+// OMN-73: the field names are extracted as arrays so each enum can carry a
+// cross-type-aware errorMap. When a model requests a field valid for the
+// *other* query type (e.g. `reviewInterval`, a projects-only concept, on a
+// tasks query), an opaque "Invalid enum value" is replaced with a message
+// that steers it to the right query type. (The 5 fields the failure log
+// flagged — tags/plannedDate/reviewInterval/nextReviewDate/lastReviewDate —
+// are all already backed for their correct type as of OMN-60/62; the residual
+// friction was purely the unhelpful error, hence this scoped fix.)
+const TASK_FIELDS = [
   'id',
   'name',
   'completed',
@@ -124,11 +130,9 @@ export const TaskFieldEnum = z.enum([
   'parentTaskId',
   'parentTaskName',
   'inInbox',
-]);
+] as const;
 
-// Project field enum — matches fields in buildProjectFieldProjections (script-builder.ts:778-824)
-// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
-export const ProjectFieldEnum = z.enum([
+const PROJECT_FIELDS = [
   'id',
   'name',
   'status',
@@ -147,7 +151,39 @@ export const ProjectFieldEnum = z.enum([
   'defaultSingletonActionHolder',
   'tags', // OMN-62: settable via CreateDataSchema, now readable
   'plannedDate', // OMN-62: OF 4.7+ planned date, settable via CreateDataSchema, now readable
-]);
+] as const;
+
+const makeFieldErrorMap = (
+  kind: 'task' | 'project',
+  own: readonly string[],
+  other: readonly string[],
+): z.ZodErrorMap => {
+  const otherType = kind === 'task' ? 'projects' : 'tasks';
+  return (issue, ctx) => {
+    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
+      const got = String(issue.received);
+      if (other.includes(got) && !own.includes(got)) {
+        return {
+          message: `'${got}' is a ${otherType}-only field — query type:"${otherType}" to retrieve it. Valid ${kind} fields: ${own.join(', ')}`,
+        };
+      }
+      return { message: `Unknown ${kind} field '${got}'. Valid ${kind} fields: ${own.join(', ')}` };
+    }
+    return { message: ctx.defaultError };
+  };
+};
+
+// Task field enum — matches fields in buildListTasksScriptV4
+// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
+export const TaskFieldEnum = z.enum(TASK_FIELDS, {
+  errorMap: makeFieldErrorMap('task', TASK_FIELDS, PROJECT_FIELDS),
+});
+
+// Project field enum — matches fields in buildProjectFieldProjections (script-builder.ts:778-824)
+// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
+export const ProjectFieldEnum = z.enum(PROJECT_FIELDS, {
+  errorMap: makeFieldErrorMap('project', PROJECT_FIELDS, TASK_FIELDS),
+});
 
 // Sort field enum for type safety
 // Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
@@ -194,24 +230,27 @@ const BaseQuerySchema = z.object({
 });
 
 // Task queries: fields use TaskFieldEnum, have mode/countOnly/daysAhead/fastSearch/details
+// OMN-74: shared so the projects `mode` field (rejected via superRefine with
+// guidance) has the identical inferred type as tasks — avoids widening the
+// QuerySchema union member to `string`.
+const TaskModeEnum = z.enum([
+  'all',
+  'inbox',
+  'search',
+  'overdue',
+  'today',
+  'upcoming',
+  'available',
+  'blocked',
+  'flagged',
+  'smart_suggest',
+]);
+
 const TaskQuerySchema = BaseQuerySchema.merge(
   z.object({
     type: z.literal('tasks'),
     fields: z.array(TaskFieldEnum).optional(),
-    mode: z
-      .enum([
-        'all',
-        'inbox',
-        'search',
-        'overdue',
-        'today',
-        'upcoming',
-        'available',
-        'blocked',
-        'flagged',
-        'smart_suggest',
-      ])
-      .optional(),
+    mode: TaskModeEnum.optional(),
     details: z.boolean().optional(),
     fastSearch: z.boolean().optional(),
     daysAhead: coerceNumber().min(1).max(30).optional(),
@@ -220,12 +259,18 @@ const TaskQuerySchema = BaseQuerySchema.merge(
 ).strict();
 
 // Project queries: fields use ProjectFieldEnum, have details/includeStats
+// OMN-74: `mode` is a tasks-only view selector by design. It's accepted as an
+// optional key here ONLY so the ReadSchema superRefine can replace the opaque
+// strict "Unrecognized key 'mode'" with guidance to the real projects search
+// interface (filters.name / filters.text). Net behavior unchanged: still
+// rejected — just with a helpful message.
 const ProjectQuerySchema = BaseQuerySchema.merge(
   z.object({
     type: z.literal('projects'),
     fields: z.array(ProjectFieldEnum).optional(),
     details: z.boolean().optional(),
     includeStats: z.boolean().optional(),
+    mode: TaskModeEnum.optional(), // OMN-74: rejected via ReadSchema superRefine with guidance
   }),
 ).strict();
 
@@ -285,8 +330,25 @@ const QuerySchema = z.discriminatedUnion('type', [
 
 // Main read schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
-export const ReadSchema = z.object({
-  query: coerceObject(QuerySchema),
-});
+export const ReadSchema = z
+  .object({
+    query: coerceObject(QuerySchema),
+  })
+  // OMN-74: `mode` is a tasks-only view selector. A projects query that sends
+  // `mode` (the model reaches for mode:"search") is rejected here with a
+  // message pointing at the real projects search interface. The discriminated-
+  // union member can't carry a refinement (zod requires ZodObject members), so
+  // the guard lives on the boundary schema — same pattern as WriteSchema.
+  .superRefine((val, ctx) => {
+    const q = val.query;
+    if (q.type === 'projects' && q.mode !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query', 'mode'],
+        message:
+          '\'mode\' is a tasks-only view selector and is not supported on projects queries. To search projects use filters.name or filters.text, e.g. filters: { name: { contains: "..." } } or filters: { text: { matches: "..." } }.',
+      });
+    }
+  });
 
 export type ReadInput = z.infer<typeof ReadSchema>;

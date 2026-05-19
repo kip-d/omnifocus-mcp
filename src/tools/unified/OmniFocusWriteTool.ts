@@ -95,8 +95,8 @@ export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
 OPERATIONS:
 - create: New task/project with data
 - create_folder: New folder (name required, optional parentFolder for nesting)
-- update: Modify existing (provide id + changes)
-- complete: Mark done (provide id)
+- update: Modify existing (provide id + changes; "data" accepted as an alias for "changes"; target defaults to "task" if omitted)
+- complete: Mark done (provide id; target defaults to "task" if omitted)
 - delete: Remove permanently (provide id, or its alias target_id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs

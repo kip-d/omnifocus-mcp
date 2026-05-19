@@ -209,17 +209,24 @@ const MutationSchema = z.discriminatedUnion('operation', [
     data: FolderCreateDataSchema,
   }),
   // Update operation
+  // OMN-75: create uses `data`, update uses `changes` — the model trips on
+  // the asymmetry and sends `data` on update. Accept `data` as a non-breaking
+  // alias for `changes` (mirrors the OMN-71 target_id precedent); the
+  // WriteSchema superRefine enforces exactly-one-present. `target` defaults to
+  // 'task' (the model frequently omits it on update/complete); non-breaking
+  // since a missing target was previously a hard error.
   z.object({
     operation: z.literal('update'),
-    target: z.enum(['task', 'project']),
+    target: z.enum(['task', 'project']).default('task'),
     id: z.string(),
-    changes: UpdateChangesSchema,
+    changes: UpdateChangesSchema.optional(),
+    data: UpdateChangesSchema.optional(),
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Complete operation
   z.object({
     operation: z.literal('complete'),
-    target: z.enum(['task', 'project']),
+    target: z.enum(['task', 'project']).default('task'), // OMN-75: model often omits target
     id: z.string(),
     completionDate: z.string().optional(), // Bug #20: Allow custom completion date
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
@@ -282,6 +289,17 @@ export const WriteSchema = z
         code: z.ZodIssueCode.custom,
         path: ['mutation', 'id'],
         message: "delete requires 'id' (or its alias 'target_id')",
+      });
+    }
+    // OMN-75: update accepts `changes` OR its alias `data`. Discriminated-
+    // union members can't carry a refinement, so enforce exactly-one-present
+    // here — preserves the clear error a bare update got when `changes` was
+    // required.
+    if (m.operation === 'update' && m.changes === undefined && m.data === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mutation', 'changes'],
+        message: "update requires 'changes' (or its alias 'data')",
       });
     }
   });
