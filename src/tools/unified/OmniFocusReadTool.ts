@@ -163,12 +163,13 @@ COMMON QUERIES:
 - Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
 - Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
 
-MODES (use instead of manual filters when possible):
+MODES (tasks queries ONLY — not valid on type:"projects"):
 - today: Due soon (≤3 days) OR flagged, matching OmniFocus Today perspective
 - overdue: Tasks past their due date
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 14)
 - inbox, available, blocked, search, smart_suggest, all
+- To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
@@ -182,6 +183,7 @@ RESPONSE CONTROL:
 - details: true returns all fields with full notes
 - fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true)
 - ID lookup always returns all fields with full notes
+- fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
 - fields (tasks): id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completedDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]

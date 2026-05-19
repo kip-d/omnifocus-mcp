@@ -770,4 +770,51 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  // OMN-75: create uses `data`, update uses `changes`. The model trips on the
+  // asymmetry and sends `data` on update. Accept `data` as a non-breaking
+  // alias for `changes` on update (mirrors the OMN-71 target_id precedent),
+  // and default `target` to 'task' when omitted on update/complete.
+  describe('update data/changes alias + target default (OMN-75)', () => {
+    it('accepts the model shape: update with `data` instead of `changes`', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 'x', data: { name: 'Renamed' } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the legacy shape with `changes` (back-compat)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 'x', changes: { name: 'Renamed' } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an update with neither changes nor data', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 'x' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('defaults target to "task" when omitted on update', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', id: 'x', changes: { flagged: true } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success && result.data.mutation.operation === 'update') {
+        expect(result.data.mutation.target).toBe('task');
+      }
+    });
+
+    it('defaults target to "task" when omitted on complete', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', id: 'x' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success && result.data.mutation.operation === 'complete') {
+        expect(result.data.mutation.target).toBe('task');
+      }
+    });
+  });
 });

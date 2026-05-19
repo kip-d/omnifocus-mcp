@@ -121,4 +121,46 @@ describe('MutationCompiler', () => {
       }
     });
   });
+
+  // OMN-75: compiler normalizes `data` → `changes` on update so downstream
+  // handlers are unchanged; defaulted target maps to taskId.
+  describe('update data alias (OMN-75)', () => {
+    it('normalizes `data` to changes for a task update', () => {
+      const input: WriteInput = {
+        mutation: { operation: 'update', target: 'task', id: 'task-1', data: { name: 'New' } },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.operation).toBe('update');
+      if (compiled.operation === 'update') {
+        expect(compiled.changes).toEqual({ name: 'New' });
+        expect(compiled.taskId).toBe('task-1');
+      }
+    });
+
+    it('still maps legacy `changes` (back-compat)', () => {
+      const input: WriteInput = {
+        mutation: { operation: 'update', target: 'task', id: 'task-2', changes: { flagged: true } },
+      };
+      const compiled = compiler.compile(input);
+      if (compiled.operation === 'update') {
+        expect(compiled.changes).toEqual({ flagged: true });
+      }
+    });
+
+    it('compiler defends a missing target (unparsed input) → taskId, not projectId', () => {
+      // NOT annotated WriteInput: WriteInput is the post-parse type where the
+      // schema default already filled target='task'. This deliberately
+      // simulates unparsed input reaching compile() directly, exercising the
+      // `mutation.target ?? 'task'` defense (the schema-default path is covered
+      // by write-schema.test.ts at the safeParse boundary).
+      const input = {
+        mutation: { operation: 'update' as const, id: 'task-3', changes: { flagged: false } },
+      };
+      const compiled = compiler.compile(input as unknown as WriteInput);
+      if (compiled.operation === 'update') {
+        expect(compiled.taskId).toBe('task-3');
+        expect(compiled.projectId).toBeUndefined();
+      }
+    });
+  });
 });

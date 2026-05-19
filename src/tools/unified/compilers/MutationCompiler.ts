@@ -137,14 +137,20 @@ export class MutationCompiler {
         };
 
       case 'update': {
+        // OMN-75: target defaults to 'task' (schema applies it post-parse;
+        // also defended here so a missing target never silently routes to
+        // projectId if compile() is handed unparsed input).
+        const updateTarget = mutation.target ?? 'task';
         const result: Extract<CompiledMutation, { operation: 'update' }> = {
           operation: 'update',
-          target: mutation.target,
-          changes: mutation.changes as UpdateChanges,
+          target: updateTarget,
+          // OMN-75: `data` is an accepted alias for `changes`. WriteSchema's
+          // superRefine guarantees at least one is present.
+          changes: (mutation.changes ?? mutation.data) as UpdateChanges,
           minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
-        if (mutation.target === 'task') {
+        if (updateTarget === 'task') {
           result.taskId = mutation.id;
         } else {
           result.projectId = mutation.id;
@@ -153,14 +159,15 @@ export class MutationCompiler {
       }
 
       case 'complete': {
+        const completeTarget = mutation.target ?? 'task'; // OMN-75: see update
         const result: Extract<CompiledMutation, { operation: 'complete' }> = {
           operation: 'complete',
-          target: mutation.target,
+          target: completeTarget,
           completionDate: mutation.completionDate, // Bug #20
           minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
-        if (mutation.target === 'task') {
+        if (completeTarget === 'task') {
           result.taskId = mutation.id;
         } else {
           result.projectId = mutation.id;

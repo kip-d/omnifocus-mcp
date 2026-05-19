@@ -506,4 +506,84 @@ describe('ReadSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  // OMN-73: the 5 requested fields are all already backed for their correct
+  // type (tags/plannedDate on both; review fields are projects-only by design,
+  // resolved by OMN-60/62). Ticket scope reduced to: when a model requests a
+  // cross-type field, the enum error must *steer* it instead of an opaque
+  // "Invalid enum value". This describe block is the regression fixture.
+  describe('cross-type field error guidance (OMN-73)', () => {
+    it('valid task fields still parse (no regression)', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', fields: ['name', 'plannedDate', 'tags'] },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('a projects-only field on a tasks query is rejected with steering guidance', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', fields: ['reviewInterval'] },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toMatch(/projects/i);
+        expect(msg).toContain('reviewInterval');
+      }
+    });
+
+    it('a tasks-only field on a projects query is rejected with steering guidance', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'projects', fields: ['inInbox'] },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toMatch(/task/i);
+        expect(msg).toContain('inInbox');
+      }
+    });
+
+    it('an entirely unknown field still lists valid fields', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', fields: ['totallyBogus'] },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toMatch(/valid task fields/i);
+      }
+    });
+  });
+
+  // OMN-74: `mode` is a tasks-only view selector by design. A projects query
+  // with `mode` must be rejected with guidance to filters.name/filters.text
+  // (the real projects search interface), not an opaque strict "Unrecognized
+  // key" error. Non-breaking: was rejected before, still rejected.
+  describe('mode on projects query — guided rejection (OMN-74)', () => {
+    it('tasks query still accepts mode (no regression)', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', mode: 'search' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('projects query with mode is rejected with guidance to filters.name/text', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'projects', mode: 'search' },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toMatch(/filters\.(name|text)/i);
+      }
+    });
+
+    it('the real projects search interface (filters.name) works', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'projects', filters: { name: { contains: 'Quarterly' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });
