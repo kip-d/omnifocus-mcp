@@ -50,6 +50,18 @@ LOG_LEVEL=info   # Normal (default)
 LOG_LEVEL=debug  # User data (redacted)
 ```
 
+## Failure-log isolation under test
+
+The server records tool failures to `~/.omnifocus-mcp/tool-failures/failures-<date>.jsonl` for the weekly diagnosis job.
+To keep test runs from polluting that signal, the failure log is suppressed when either:
+
+- `OMNIFOCUS_MCP_DISABLE_FAILURE_LOG` is set to a truthy value (anything other than unset, ``, `0`, `false`), or
+- `NODE_ENV=test`.
+
+When suppressed, the server emits one `info`-level stderr line
+(`failure-log suppressed (reason=...) tool=... errorType=...`) instead of writing. `npm run test:integration` sets the
+flag automatically — no action required.
+
 ## Sharing Logs
 
 **Safe:** INFO/ERROR level logs, `[ERROR_METRIC]` lines
