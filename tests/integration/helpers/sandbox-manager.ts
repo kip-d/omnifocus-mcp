@@ -176,69 +176,60 @@ export async function isProjectInSandbox(projectId: string): Promise<boolean> {
   return result.inSandbox;
 }
 
-/**
- * Check if a task is inside the sandbox (via project) or has __TEST__ prefix
- */
-export async function isTaskInSandbox(taskId: string): Promise<boolean> {
-  const script = `
-    const tasks = doc.flattenedTasks();
-    for (let i = 0; i < tasks.length; i++) {
-      try {
-        if (tasks[i].id() === '${taskId}') {
-          const name = tasks[i].name();
-          // Check if name starts with __TEST__ prefix
-          if (name && name.startsWith('${TEST_INBOX_PREFIX}')) {
-            return JSON.stringify({ inSandbox: true });
-          }
-          // Check if task's project is in sandbox
-          const project = tasks[i].containingProject();
-          if (project) {
-            const folder = project.folder();
-            if (folder && folder.name() === '${SANDBOX_FOLDER_NAME}') {
-              return JSON.stringify({ inSandbox: true });
-            }
-          }
-          return JSON.stringify({ inSandbox: false });
-        }
-      } catch (e) {}
-    }
-    return JSON.stringify({ inSandbox: false });
-  `;
-  const result = await executeJXA<{ inSandbox: boolean }>(script);
-  return result.inSandbox;
-}
+// OMN-89: a duplicate `isTaskInSandbox` once lived here as an O(n)
+// flattenedTasks-iterating JXA helper. It had zero external callers — the
+// only production caller lives at `src/contracts/ast/mutation-script-builder.ts`
+// and uses an O(1) `Task.byIdentifier` lookup via the OmniJS bridge. Removed
+// rather than refactored to use OMNIJS_FIXTURE_PREDICATES_SOURCE since dead
+// code is the wrong thing to polish.
 
 // =============================================================================
 // CLEANUP OPERATIONS
 // =============================================================================
 
 /**
- * Delete all tasks with __TEST__ name prefix (inbox tasks only)
- * Uses pure OmniJS for 50x+ faster performance than JXA iteration
- * (JXA iteration: ~48s, OmniJS: <1s for 2000+ task database)
+ * Delete inbox tasks that match the OMN-83 fixture contract
+ * (name starts with `__TEST__` OR carries a tag whose name starts
+ * with `__test-`). Uses pure OmniJS for 50x+ faster performance than
+ * JXA iteration (JXA iteration: ~48s, OmniJS: <1s for 2000+ task
+ * database).
  *
- * Note: We only check the inbox. Tasks with __TEST__ prefix should only
- * be created in inbox during tests, not in projects.
+ * Scope: this sweep only touches the inbox; tasks that drifted out of
+ * the inbox into projects are handled by `deleteTestTasksEverywhere`.
+ * OMN-89: predicate now goes through `OMNIJS_FIXTURE_PREDICATES_SOURCE`
+ * so it matches the broader sweep's contract exactly — strict superset
+ * of the pre-OMN-89 name-prefix-only behavior.
  */
 async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string[] }> {
   // Use pure OmniJS to iterate inbox directly - very fast even with large databases
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
+        ${OMNIJS_FIXTURE_PREDICATES_SOURCE}
+
         let deleted = 0;
         const errors = [];
-        const prefix = '${TEST_INBOX_PREFIX}';
+        const namePrefix = '${TEST_INBOX_PREFIX}';
+        const tagPrefix = '${TEST_TAG_PREFIX}';
 
-        // Iterate inbox directly (OmniJS global) - fast even with large databases
-        // Note: inbox is typically small, so this is O(inbox.length) not O(allTasks)
+        // OMN-89: classify via the shared isFixtureTask predicate (the
+        // single source covered by sandbox-manager-omnijs-predicate-parity).
+        // Iterating \`inbox\` directly (OmniJS global) keeps this O(inbox.length),
+        // not O(flattenedTasks) — inbox tasks rarely carry tags but checking
+        // both legs of the contract costs nothing.
         for (const task of inbox) {
-          if (task.name.startsWith(prefix)) {
-            try {
-              deleteObject(task);
-              deleted++;
-            } catch (e) {
-              errors.push('Task: ' + e.message);
+          try {
+            const name = task.name;
+            const tags = task.tags || [];
+            const tagNames = [];
+            for (let i = 0; i < tags.length; i++) {
+              tagNames.push(tags[i] ? tags[i].name : null);
             }
+            if (!isFixtureTask(name, tagNames, namePrefix, tagPrefix)) continue;
+            deleteObject(task);
+            deleted++;
+          } catch (e) {
+            errors.push('Task: ' + e.message);
           }
         }
 
