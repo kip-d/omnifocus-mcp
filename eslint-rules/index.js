@@ -23,6 +23,10 @@ function enclosingFunction(node) {
 // `StandardResponse` must still match the longer `StandardResponseV2` (no word
 // boundary exists between `...Response` and `V2`); a trailing \b would silently
 // stop enforcing the ~8 methods annotated StandardResponseV2<...> checked today.
+// MONITORS: StandardResponseV2, SystemResponse
+// (The regex matches the `StandardResponse` prefix — by design (see above) —
+// so it covers `StandardResponseV2` too. The MONITORS annotation lists the
+// actual identifiers live in src/, which is what the meta-check verifies.)
 const RESPONSE_CONTRACT_TYPES = /\b(StandardResponse|SystemResponse)/;
 
 const plugin = {
@@ -109,6 +113,9 @@ const plugin = {
         const filename = context.filename;
         if (!filename.includes('/tools/') || !filename.endsWith('Tool.ts')) return {};
 
+        // MONITORS: handleErrorV2, createErrorResponseV2
+        // (`throw` is a JS keyword — always present; not a renamable identifier
+        // and excluded from the meta-check.)
         const VALID_SINK = /\bthis\.handleError(V2)?\b|\bcreateErrorResponse(V2)?\b|\bthrow\b/;
 
         return {
@@ -141,17 +148,19 @@ const plugin = {
         },
       },
       create(context) {
-        // Per-builder metadata-arg index. Signatures are not uniform:
-        //   V1 (legacy, no longer called in src/): metadata is the 3rd arg.
+        // Per-builder metadata-arg index. V1 builders were retired in PR #3
+        // (commit f2d04e8) and have zero non-import occurrences in src/ —
+        // their entries here were dead. Removed so the meta-check
+        // (tests/unit/eslint-rules/monitored-identifiers-live.test.ts) stays
+        // green and so this list reflects what's actually in production.
+        // Signatures are not uniform:
         //   createSuccessResponseV2(op, data, summary?, metadata?)   — 4th arg.
         //   createListResponseV2   (op, items, itemType, metadata?)  — 4th arg.
         //   createErrorResponseV2  (op, code, msg, suggestion?, details?, metadata?) — 6th arg.
         //   createTaskResponseV2   (op, tasks, metadata?)            — 3rd arg.
         //   createAnalyticsResponseV2 (op, data, analysisType, keyFindings, metadata?) — 5th arg.
+        // MONITORS: createSuccessResponseV2, createErrorResponseV2, createListResponseV2, createTaskResponseV2, createAnalyticsResponseV2
         const METADATA_ARG_INDEX = {
-          createSuccessResponse: 2,
-          createErrorResponse: 2,
-          createListResponse: 2,
           createSuccessResponseV2: 3,
           createErrorResponseV2: 5,
           createListResponseV2: 3,
