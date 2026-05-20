@@ -185,7 +185,7 @@ RESPONSE CONTROL:
 - ID lookup always returns all fields with full notes
 - fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
 - fields (tasks): id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
-- fields (projects): id, name, status, flagged, note, dueDate, deferDate, completedDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
+- fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
 - countOnly: true returns only count (33x faster for "how many" questions) — tasks only
@@ -683,11 +683,11 @@ PERFORMANCE:
    * distinguishable from "field not requested" (which the field-projection
    * step strips entirely, producing an absent key). Consumers that
    * truthy-check (`if (proj.dueDate)`) are unaffected — `null` and
-   * `undefined` are both falsy. (parseTasks has the same anti-pattern across
-   * 6 date fields and is tracked as a separate follow-up — OMN-82 — to keep
-   * this PR scoped per the OMN-80 ticket. OMN-81 tracks a separate defect:
-   * `ProjectFieldEnum` advertises `completedDate` while source/parser emit
-   * `completionDate`, so the projection layer strips that field regardless.)
+   * `undefined` are both falsy. (parseTasks had the same anti-pattern across
+   * 6 date fields, fixed in OMN-82. OMN-81 resolved the related
+   * `completedDate`/`completionDate` projection-strip bug by renaming the
+   * enum/script-builder to use `completionDate` consistently; this override
+   * is now the canonical key for that field.)
    */
   private parseProjects(projects: unknown): unknown[] {
     if (!Array.isArray(projects)) return [];
