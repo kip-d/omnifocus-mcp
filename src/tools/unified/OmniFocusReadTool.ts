@@ -148,6 +148,10 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   return { script, filter, mode, scriptFields, limit, sortedInScript: !isInboxPath && !!userSort, fieldsMode };
 }
 
+// OMN-88: date fields parseProjects converts string → Date. Mirrors the
+// TASK_DATE_FIELDS contract in `src/tools/tasks/task-query-pipeline.ts`.
+const PROJECT_DATE_FIELDS = ['dueDate', 'completionDate', 'nextReviewDate', 'lastReviewDate'] as const;
+
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
   description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, folders, or exports.
@@ -678,29 +682,37 @@ PERFORMANCE:
   /**
    * Parse raw project data, converting date strings to Date objects.
    *
-   * OMN-80: collapse missing-or-null to `null`, NOT `undefined`. An explicit
-   * `null` from the OmniJS projection (project.dueDate is null) must remain
-   * distinguishable from "field not requested" (which the field-projection
-   * step strips entirely, producing an absent key). Consumers that
-   * truthy-check (`if (proj.dueDate)`) are unaffected — `null` and
-   * `undefined` are both falsy. (parseTasks had the same anti-pattern across
-   * 6 date fields, fixed in OMN-82. OMN-81 resolved the related
-   * `completedDate`/`completionDate` projection-strip bug by renaming the
-   * enum/script-builder to use `completionDate` consistently; this override
-   * is now the canonical key for that field.)
+   * OMN-80 / OMN-88: date fields come through as `string | null` from the
+   * OmniJS projection. `null` means "explicitly cleared in OmniFocus"; an
+   * absent key means "field not requested by the script." parseProjects
+   * honors all three:
+   *   absent input  → absent output key
+   *   null input    → null output
+   *   string input  → Date object output
+   * Truthy-check consumers (`if (proj.dueDate)`) are unaffected — both
+   * null and absent are falsy. The observable win is that field-projection's
+   * payload reduction is no longer defeated by parseProjects resurrecting
+   * null date keys.
+   *
+   * OMN-81 resolved the related `completedDate`/`completionDate`
+   * projection-strip bug by renaming the enum/script-builder to use
+   * `completionDate` consistently; this override is now the canonical key
+   * for that field.
    */
   private parseProjects(projects: unknown): unknown[] {
     if (!Array.isArray(projects)) return [];
 
     return projects.map((project: unknown) => {
       const projectRecord = project as Record<string, unknown>;
-      return {
-        ...projectRecord,
-        dueDate: projectRecord.dueDate ? new Date(projectRecord.dueDate as string) : null,
-        completionDate: projectRecord.completionDate ? new Date(projectRecord.completionDate as string) : null,
-        nextReviewDate: projectRecord.nextReviewDate ? new Date(projectRecord.nextReviewDate as string) : null,
-        lastReviewDate: projectRecord.lastReviewDate ? new Date(projectRecord.lastReviewDate as string) : null,
-      };
+      const result: Record<string, unknown> = { ...projectRecord };
+      for (const field of PROJECT_DATE_FIELDS) {
+        if (field in projectRecord) {
+          const raw = projectRecord[field];
+          // Strict null/undefined check (see parseTasks for rationale).
+          result[field] = raw === null || raw === undefined ? null : new Date(raw as string);
+        }
+      }
+      return result;
     });
   }
 
