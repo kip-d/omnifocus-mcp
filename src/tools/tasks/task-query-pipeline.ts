@@ -165,13 +165,17 @@ export function parseTasks(tasks: unknown[]): OmniFocusTask[] {
     return [];
   }
   return tasks.map((task) => {
+    // OMN-82: date fields include `null` after this PR — the OmniJS
+    // projection emits null for "explicitly unset" task dates, and
+    // parseTasks now preserves it (was collapsing to undefined). The truthy
+    // guards below narrow it out, so this only documents the input shape.
     const t = task as {
-      dueDate?: string | Date;
-      deferDate?: string | Date;
-      completionDate?: string | Date;
-      added?: string | Date;
-      modified?: string | Date;
-      dropDate?: string | Date;
+      dueDate?: string | Date | null;
+      deferDate?: string | Date | null;
+      completionDate?: string | Date | null;
+      added?: string | Date | null;
+      modified?: string | Date | null;
+      dropDate?: string | Date | null;
       parentTaskId?: string;
       parentTaskName?: string;
       inInbox?: boolean;
@@ -179,12 +183,19 @@ export function parseTasks(tasks: unknown[]): OmniFocusTask[] {
     };
     return {
       ...t,
-      dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
-      deferDate: t.deferDate ? new Date(t.deferDate) : undefined,
-      completionDate: t.completionDate ? new Date(t.completionDate) : undefined,
-      added: t.added ? new Date(t.added) : undefined,
-      modified: t.modified ? new Date(t.modified) : undefined,
-      dropDate: t.dropDate ? new Date(t.dropDate) : undefined,
+      // OMN-82 (symmetric to OMN-80 for parseProjects): collapse missing-or-null
+      // to `null`, NOT `undefined`. Explicit `null` from the OmniJS projection
+      // (e.g. task.dueDate is null) must remain distinguishable from "field
+      // not requested" (which the field-projection step strips entirely,
+      // producing an absent key). Truthy-check consumers (`if (t.dueDate)`)
+      // are unaffected — both null and undefined are falsy. Aligns with the
+      // canonical OmniJS API types which declare these as `Date | null`.
+      dueDate: t.dueDate ? new Date(t.dueDate) : null,
+      deferDate: t.deferDate ? new Date(t.deferDate) : null,
+      completionDate: t.completionDate ? new Date(t.completionDate) : null,
+      added: t.added ? new Date(t.added) : null,
+      modified: t.modified ? new Date(t.modified) : null,
+      dropDate: t.dropDate ? new Date(t.dropDate) : null,
       parentTaskId: t.parentTaskId,
       parentTaskName: t.parentTaskName,
       inInbox: t.inInbox,
