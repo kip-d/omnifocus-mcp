@@ -818,6 +818,64 @@ describe('WriteSchema', () => {
     });
   });
 
+  // OMN-85: NL completionDate ("tomorrow", "in 3 days", etc.) used to bypass
+  // the schema and surface downstream as an uncategorized INTERNAL_ERROR —
+  // unlike NL dueDate/deferDate on create/update, which already returned a
+  // clean Zod schema error via the matching DATE_REGEX. Apply the same regex
+  // on the `complete` operation so the failure shape is symmetric across the
+  // three date-input channels and the diagnose-failures pipeline categorizes
+  // it (VALIDATION_ERROR) instead of dropping it as a server-side crash.
+  describe('completionDate format validation on complete (OMN-85)', () => {
+    it('accepts YYYY-MM-DD completionDate', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', target: 'task', id: 'x', completionDate: '2026-05-20' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts YYYY-MM-DD HH:mm completionDate', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', target: 'task', id: 'x', completionDate: '2026-05-20 14:30' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects natural-language completionDate "tomorrow" as a clean Zod error', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', target: 'task', id: 'x', completionDate: 'tomorrow' },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const completionDateIssue = result.error.issues.find((i) => i.path.includes('completionDate'));
+        expect(completionDateIssue).toBeDefined();
+        expect(completionDateIssue?.message).toMatch(/Date format/i);
+      }
+    });
+
+    it('rejects natural-language completionDate "in 3 days" as a clean Zod error', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', target: 'task', id: 'x', completionDate: 'in 3 days' },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const completionDateIssue = result.error.issues.find((i) => i.path.includes('completionDate'));
+        expect(completionDateIssue).toBeDefined();
+      }
+    });
+
+    it('rejects ISO-8601-with-Z completionDate (matches dueDate/deferDate behavior)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'complete',
+          target: 'task',
+          id: 'x',
+          completionDate: '2026-05-20T14:30:00Z',
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   // OMN-76: create-input must reject unknown fields, matching update's strict
   // behavior. Silently dropping unknown create-input fields is the worst class
   // of bug (silent data loss + invisible to the failure-log diagnose pipeline).

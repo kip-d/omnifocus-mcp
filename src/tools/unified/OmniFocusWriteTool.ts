@@ -198,7 +198,11 @@ SAFETY:
             minimalResponse: { type: 'boolean' },
 
             // complete
-            completionDate: { type: 'string' },
+            // OMN-85: format must match the Zod regex (YYYY-MM-DD optionally
+            // followed by HH:mm or HH:mm:ss). NL strings like "tomorrow" are
+            // now rejected with a clean Zod schema error rather than producing
+            // an uncategorized INTERNAL_ERROR downstream.
+            completionDate: { type: 'string', description: 'YYYY-MM-DD or YYYY-MM-DD HH:mm' },
 
             // batch
             operations: {
@@ -211,7 +215,8 @@ SAFETY:
                   data: { type: 'object' },
                   changes: { type: 'object' },
                   id: { type: 'string' },
-                  completionDate: { type: 'string' },
+                  // OMN-85: same DATE_REGEX rejection as the top-level complete path.
+                  completionDate: { type: 'string', description: 'YYYY-MM-DD or YYYY-MM-DD HH:mm' },
                 },
                 required: ['operation', 'target'],
               },

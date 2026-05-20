@@ -238,7 +238,12 @@ const MutationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']).default('task'), // OMN-75: model often omits target
     id: z.string(),
-    completionDate: z.string().optional(), // Bug #20: Allow custom completion date
+    // Bug #20: allows a custom completion timestamp. OMN-85: the regex
+    // matches the dueDate/deferDate validation elsewhere on the write path
+    // (and the batch-complete sibling at L187) — without it NL input
+    // ("tomorrow") slipped through Zod and surfaced as uncategorized
+    // INTERNAL_ERROR downstream instead of a clean VALIDATION_ERROR.
+    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Delete operation
