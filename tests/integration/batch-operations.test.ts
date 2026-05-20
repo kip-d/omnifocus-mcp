@@ -12,7 +12,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
-import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
+import {
+  ensureSandboxFolder,
+  fullCleanup,
+  SANDBOX_FOLDER_NAME,
+  TEST_INBOX_PREFIX,
+  TEST_TAG_PREFIX,
+} from './helpers/sandbox-manager.js';
 import { expectOk } from './helpers/expect-ok.js';
 
 // Only run on macOS with OmniFocus
@@ -87,7 +93,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj1',
-              name: `TestBatch_Simple_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_Simple_${timestamp}`,
               note: 'Integration test project',
               folder: SANDBOX_FOLDER_NAME,
             },
@@ -121,7 +127,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj2',
-              name: `TestBatch_ProjectWithTasks_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_ProjectWithTasks_${timestamp}`,
               note: 'Has child tasks',
               folder: SANDBOX_FOLDER_NAME,
             },
@@ -131,7 +137,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task1',
-              name: `TestBatch_ChildTask_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_ChildTask_${timestamp}`,
               parentTempId: 'proj2',
               dueDate: '2025-10-15',
             },
@@ -174,7 +180,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj3',
-              name: `TestBatch_NestedTasks_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_NestedTasks_${timestamp}`,
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -183,7 +189,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task2',
-              name: `TestBatch_ParentTask_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_ParentTask_${timestamp}`,
               parentTempId: 'proj3',
             },
           },
@@ -192,7 +198,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task3',
-              name: `TestBatch_Subtask_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_Subtask_${timestamp}`,
               parentTempId: 'task2',
             },
           },
@@ -275,7 +281,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj6',
-              name: `TestBatch_Mapping_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_Mapping_${timestamp}`,
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -304,7 +310,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj7',
-              name: `TestBatch_ValidProject_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_ValidProject_${timestamp}`,
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -313,7 +319,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task4',
-              name: `TestBatch_MissingParent_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_MissingParent_${timestamp}`,
               parentTempId: 'nonexistent',
             },
           },
@@ -322,7 +328,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj8',
-              name: `TestBatch_ShouldNotCreate_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_ShouldNotCreate_${timestamp}`,
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -355,7 +361,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task5',
-              name: `TestBatch_CircularA_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_CircularA_${timestamp}`,
               parentTempId: 'task6',
             },
           },
@@ -364,7 +370,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task6',
-              name: `TestBatch_CircularB_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_CircularB_${timestamp}`,
               parentTempId: 'task5',
             },
           },
@@ -397,7 +403,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj9',
-              name: `TestBatch_Metadata_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_Metadata_${timestamp}`,
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -406,7 +412,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task7',
-              name: `TestBatch_FullMetadata_${timestamp}`,
+              name: `${TEST_INBOX_PREFIX} TestBatch_FullMetadata_${timestamp}`,
               parentTempId: 'proj9',
               dueDate: '2025-10-20 17:00',
               deferDate: '2025-10-10 08:00',
