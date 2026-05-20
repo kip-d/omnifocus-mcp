@@ -260,8 +260,40 @@ describe('OmniFocusReadTool', () => {
       // Dates should be parsed into Date objects
       expect(proj.dueDate).toBeInstanceOf(Date);
       expect(proj.nextReviewDate).toBeInstanceOf(Date);
-      // Null dates remain undefined
+      // NOTE: completionDate is undefined here NOT because of the
+      // null-collapse bug (that's fixed by OMN-80, see next test), but
+      // because of a SEPARATE defect — `projectFieldsOnResult` strips it.
+      // The source field name is `completionDate` (what parseProjects
+      // writes) but ProjectFieldEnum only knows `completedDate` (a stale
+      // name from earlier API revisions). The projection layer filters by
+      // the enum and removes the unrecognized key. Tracked as a follow-up
+      // ticket. Until that's fixed, completionDate cannot survive the
+      // projection layer regardless of source value, so the right
+      // assertion here is "field stripped by projection" = undefined.
       expect(proj.completionDate).toBeUndefined();
+    });
+
+    // OMN-80: regression — null dueDate from the script must NOT be silently
+    // converted to undefined. The pre-fix bug at parseProjects() lines 688-691
+    // (`x ? new Date(x) : undefined`) lost the explicit-null signal; fixed to
+    // preserve it (`x ? new Date(x) : null`).
+    it('OMN-80: explicit null dueDate survives parsing as null (not undefined)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p_nulldue', name: 'No Due Date Project', dueDate: null, lastReviewDate: null }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', details: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      expect(proj.dueDate).toBeNull();
+      expect(proj.lastReviewDate).toBeNull();
     });
   });
 

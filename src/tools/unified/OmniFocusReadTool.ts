@@ -677,6 +677,17 @@ PERFORMANCE:
 
   /**
    * Parse raw project data, converting date strings to Date objects.
+   *
+   * OMN-80: collapse missing-or-null to `null`, NOT `undefined`. An explicit
+   * `null` from the OmniJS projection (project.dueDate is null) must remain
+   * distinguishable from "field not requested" (which the field-projection
+   * step strips entirely, producing an absent key). Consumers that
+   * truthy-check (`if (proj.dueDate)`) are unaffected — `null` and
+   * `undefined` are both falsy. (parseTasks has the same anti-pattern across
+   * 6 date fields and is tracked as a separate follow-up — OMN-82 — to keep
+   * this PR scoped per the OMN-80 ticket. OMN-81 tracks a separate defect:
+   * `ProjectFieldEnum` advertises `completedDate` while source/parser emit
+   * `completionDate`, so the projection layer strips that field regardless.)
    */
   private parseProjects(projects: unknown): unknown[] {
     if (!Array.isArray(projects)) return [];
@@ -685,10 +696,10 @@ PERFORMANCE:
       const projectRecord = project as Record<string, unknown>;
       return {
         ...projectRecord,
-        dueDate: projectRecord.dueDate ? new Date(projectRecord.dueDate as string) : undefined,
-        completionDate: projectRecord.completionDate ? new Date(projectRecord.completionDate as string) : undefined,
-        nextReviewDate: projectRecord.nextReviewDate ? new Date(projectRecord.nextReviewDate as string) : undefined,
-        lastReviewDate: projectRecord.lastReviewDate ? new Date(projectRecord.lastReviewDate as string) : undefined,
+        dueDate: projectRecord.dueDate ? new Date(projectRecord.dueDate as string) : null,
+        completionDate: projectRecord.completionDate ? new Date(projectRecord.completionDate as string) : null,
+        nextReviewDate: projectRecord.nextReviewDate ? new Date(projectRecord.nextReviewDate as string) : null,
+        lastReviewDate: projectRecord.lastReviewDate ? new Date(projectRecord.lastReviewDate as string) : null,
       };
     });
   }
