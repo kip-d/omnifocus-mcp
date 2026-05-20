@@ -209,6 +209,10 @@ describe('server entrypoint', () => {
   });
 
   it('waits for pending operations on stdin close before exiting', async () => {
+    // OMN-46: explicit NODE_ENV='development' (matches the two other tests in this file)
+    // so runServer's startup sandbox-guard assertion is satisfied. Without this the
+    // vitest-inherited NODE_ENV='test' would trip assertSandboxGuardAtStartup().
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
     const deferred = createDeferred<void>();
     registerToolsMock.mockImplementation(async (_server, _cache, pendingOps: Set<Promise<unknown>>) => {
       lastRegisteredPendingOps = pendingOps;
