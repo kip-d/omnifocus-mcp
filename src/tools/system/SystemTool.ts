@@ -11,36 +11,45 @@ import {
 } from '../../utils/response-format.js';
 import { getSystemMetrics, getMetricsSummary } from '../../utils/metrics.js';
 
-// Consolidated schema for all system operations
-const SystemToolSchema = z.object({
-  operation: z
-    .enum(['version', 'diagnostics', 'metrics', 'cache'])
-    .default('version')
-    .describe(
-      'Operation to perform: get version info, run diagnostics, get performance metrics, or get cache statistics',
-    ),
+// Consolidated schema for all system operations.
+//
+// OMN-90: `.strict()` so unknown fields surface as Zod rejects through
+// BaseTool.handleExecuteError → logToolFailure. Without it, an LLM that
+// hallucinates a field like `verbose` or `cacheKey` gets `success:true`
+// with the field silently dropped, and the diagnose-failures pipeline
+// never sees the schema mismatch — the same blind-spot class OMN-76
+// closed for omnifocus_write.
+export const SystemToolSchema = z
+  .object({
+    operation: z
+      .enum(['version', 'diagnostics', 'metrics', 'cache'])
+      .default('version')
+      .describe(
+        'Operation to perform: get version info, run diagnostics, get performance metrics, or get cache statistics',
+      ),
 
-  // Diagnostics operation parameters
-  testScript: z
-    .string()
-    .optional()
-    .default('list_tasks')
-    .describe('Optional custom script to test for diagnostics (defaults to basic list_tasks)'),
+    // Diagnostics operation parameters
+    testScript: z
+      .string()
+      .optional()
+      .default('list_tasks')
+      .describe('Optional custom script to test for diagnostics (defaults to basic list_tasks)'),
 
-  // Metrics operation parameters
-  metricsType: z
-    .enum(['summary', 'detailed'])
-    .optional()
-    .default('summary')
-    .describe('Type of metrics to return: summary for overview, detailed for full metrics'),
+    // Metrics operation parameters
+    metricsType: z
+      .enum(['summary', 'detailed'])
+      .optional()
+      .default('summary')
+      .describe('Type of metrics to return: summary for overview, detailed for full metrics'),
 
-  // Cache operation parameters
-  cacheAction: z
-    .enum(['stats', 'clear'])
-    .optional()
-    .default('stats')
-    .describe('Cache action: stats to get statistics, clear to invalidate all cached data'),
-});
+    // Cache operation parameters
+    cacheAction: z
+      .enum(['stats', 'clear'])
+      .optional()
+      .default('stats')
+      .describe('Cache action: stats to get statistics, clear to invalidate all cached data'),
+  })
+  .strict();
 
 interface VersionInfo {
   name: string;

@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **`omnifocus_analyze` and `system` reject unknown fields** (OMN-90) — Sibling of OMN-76. `AnalyzeSchema` (every
+  discriminated-union member, every nested `params`/`scope`, the shared `AnalysisScopeSchema`, and the wrapper) and
+  `SystemToolSchema` now carry `.strict()` at every depth. Previously, unknown keys passed to `omnifocus_analyze` or
+  `system` were silently dropped, returning `success: true` with the field vanished — invisible to the failure-log /
+  diagnose-failures pipeline. Now they produce a clear Zod validation error that `logToolFailure` records, closing the
+  same blind spot OMN-76 closed for `omnifocus_write`. Surfaced by the 2026-05-20 sibling-search audit after OMN-76 was
+  found to have missed two of the four tool families.
 - **`omnifocus_write` create rejects unknown fields** (OMN-76) — Unknown keys on `operation: create` (e.g. `subtasks`,
   `context`, `priority`, `estimate`) were silently dropped — the call returned `success: true` and the fields vanished,
   invisible to the failure-log/diagnose-failures pipeline. Create now hard-rejects unknown fields with a Zod validation

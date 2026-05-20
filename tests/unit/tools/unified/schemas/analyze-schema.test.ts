@@ -98,4 +98,207 @@ describe('AnalyzeSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // OMN-90: AnalyzeSchema must reject unknown fields, matching OMN-76's
+  // CreateDataSchema/UpdateChangesSchema strict behavior. Without `.strict()`
+  // applied at every depth (wrapper, discriminated-union members, scope,
+  // params, and nested objects inside params), unknown keys vanish silently,
+  // the call returns `success:true`, and the diagnose-failures pipeline
+  // never sees the LLM↔schema mismatch.
+  describe('strictness (OMN-90)', () => {
+    it('rejects unknown top-level field on analysis (wrapper strictness)', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          unknownTopLevel: 'x',
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside scope (shared AnalysisScopeSchema)', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          scope: {
+            dateRange: { start: '2026-01-01', end: '2026-01-31' },
+            unknownScope: 'x',
+          },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside scope.dateRange (nested-object strictness)', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          scope: {
+            dateRange: { start: '2026-01-01', end: '2026-01-31', unknownNested: 'x' },
+          },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside productivity_stats.params', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          params: { groupBy: 'day', unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside task_velocity.params', () => {
+      const input = {
+        analysis: {
+          type: 'task_velocity',
+          params: { groupBy: 'week', unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside overdue_analysis.params (empty params object)', () => {
+      const input = {
+        analysis: {
+          type: 'overdue_analysis',
+          params: { unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside pattern_analysis.params', () => {
+      const input = {
+        analysis: {
+          type: 'pattern_analysis',
+          params: { insights: ['gtd_review'], unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside workflow_analysis.params (empty params object)', () => {
+      const input = {
+        analysis: {
+          type: 'workflow_analysis',
+          params: { unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside recurring_tasks.params', () => {
+      const input = {
+        analysis: {
+          type: 'recurring_tasks',
+          params: { operation: 'analyze', unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside parse_meeting_notes.params', () => {
+      const input = {
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: 'notes here', unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside manage_reviews.params', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'list_for_review', unknownParam: 'x' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field inside manage_reviews.params.reviewInterval (deeply nested)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'abc',
+            reviewInterval: { unit: 'week', steps: 2, unknownNested: 'x' },
+          },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects scope on parse_meeting_notes arm (scope is not declared on this arm — an LLM-plausible confusion)', () => {
+      const input = {
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: 'notes here' },
+          scope: { includeCompleted: true },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown member-level field on a discriminated-union arm', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          unknownMemberField: 'x',
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts the documented analyze surface (no regression — productivity_stats)', () => {
+      const input = {
+        analysis: {
+          type: 'productivity_stats',
+          scope: {
+            dateRange: { start: '2026-01-01', end: '2026-01-31' },
+            tags: ['work'],
+            includeCompleted: true,
+          },
+          params: { groupBy: 'week', metrics: ['completed', 'velocity'] },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the documented analyze surface (no regression — manage_reviews/set_schedule)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'abc',
+            reviewInterval: { unit: 'week', steps: 2 },
+          },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
 });
