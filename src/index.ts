@@ -14,6 +14,7 @@ import { parseCLIArgs, validateCLIConfig, CLIConfig } from './utils/cli.js';
 import { SessionManager } from './session-manager.js';
 import { HttpServerManager } from './http-server.js';
 import { StartupTimer } from './utils/startup-timer.js';
+import { assertSandboxGuardAtStartup } from './utils/sandbox-guard.js';
 
 // First executable statement: performance.now() here ≈ Node bootstrap + ESM
 // import-graph load (the cold-`npm ci` FS cost). Must precede parseCLIArgs.
@@ -50,6 +51,11 @@ const pendingOperations = new Set<Promise<unknown>>();
 
 // Start server
 export async function runServer() {
+  // OMN-46: refuse to start a test-mode server whose sandbox guard is unset
+  // (silent bypass → live-DB writes). Hard-fails before any I/O. Production
+  // (NODE_ENV !== 'test') is unaffected.
+  assertSandboxGuardAtStartup();
+
   // Initialize pending operations tracking
   setPendingOperationsTracker(pendingOperations);
 

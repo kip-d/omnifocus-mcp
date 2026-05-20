@@ -70,7 +70,18 @@ export class MCPTestClient {
     // OMN-77: OMNIFOCUS_MCP_DISABLE_FAILURE_LOG is intentional belt-and-suspenders, NOT
     // redundant with NODE_ENV=test — failure-log-gate.ts treats them as two independent
     // suppression paths. Keep both; do not "clean up" the explicit flag.
-    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test', OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1' };
+    // OMN-46: SANDBOX_GUARD_ENABLED='true' is REQUIRED for the in-server write guards
+    // to fire (mutation-script-builder.ts isTestMode). Previously this was only set as
+    // a side effect of importing sandbox-manager.ts in the parent process; the spawned
+    // server child inherited it by accident if (and only if) the parent had already
+    // imported sandbox-manager before the spawn. Tests that didn't import it could
+    // silently bypass the guard and write to live DB. Explicit-set closes the bypass.
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      NODE_ENV: 'test',
+      OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
+      SANDBOX_GUARD_ENABLED: 'true',
+    };
 
     // Enable cache warming for integration tests that want realistic behavior
     if (this.options.enableCacheWarming) {

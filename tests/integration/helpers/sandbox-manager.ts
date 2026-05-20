@@ -43,6 +43,36 @@ export interface CleanupReport {
   durationMs: number;
 }
 
+/**
+ * OMN-46: read-only inventory of what `fullCleanup()` WOULD delete.
+ *
+ * Used by:
+ *  - `scripts/test-cleanup.ts` `--dry-run` mode (the new default).
+ *  - `tests/support/setup-integration.ts` post-cleanup assertion (fail loud
+ *    if anything remains after teardown).
+ *
+ * Each entry has just enough metadata (`id`, `name`, optional `location`) for
+ * human eyeballing before purge. No deletes, no mutation. Safe to run against
+ * the live OmniFocus database.
+ */
+export interface FixtureScanItem {
+  id: string;
+  name: string;
+  location?: string;
+}
+
+export interface FixtureScanReport {
+  inboxTasks: FixtureScanItem[];
+  orphanTasks: FixtureScanItem[];
+  sandboxProjects: FixtureScanItem[];
+  orphanProjects: FixtureScanItem[];
+  sandboxFolders: FixtureScanItem[];
+  testTags: FixtureScanItem[];
+  total: number;
+  errors: string[];
+  durationMs: number;
+}
+
 export interface SandboxInfo {
   folderId: string | null;
   folderName: string;
@@ -374,9 +404,13 @@ async function deleteTestTasksEverywhere(): Promise<{ deleted: number; errors: s
             const projName = project ? project.name : 'Inbox';
             const tagCount = task.tags.length;
 
+            // OMN-46: prefix-only match (was startsWith || includes). The .includes()
+            // substring match risked nuking real user tasks whose name happened to
+            // contain a test-pattern substring (e.g. "Test fire alarm" would match
+            // "Test " in the pattern list). startsWith is the strict, safe predicate.
             if ((projName === 'Miscellaneous' || projName === 'Inbox') && tagCount === 0) {
               for (const pattern of orphanPatterns) {
-                if (name.startsWith(pattern) || name.includes(pattern)) {
+                if (name.startsWith(pattern)) {
                   toDelete.push(task);
                   break;
                 }
@@ -670,6 +704,163 @@ export async function fullCleanup(): Promise<CleanupReport> {
     report.errors.push(...tagsResult.errors);
   } catch (error) {
     report.errors.push(`Tags: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  report.durationMs = Date.now() - startTime;
+  return report;
+}
+
+/**
+ * OMN-46: read-only inventory of test fixtures currently present in the live
+ * OmniFocus DB. Mirrors fullCleanup's categories without mutating anything.
+ *
+ * Uses prefix-only matching (no .includes() — see the comment at the orphan-
+ * task sweep). Tags are matched by `__test-` prefix; tasks by `__TEST__`
+ * prefix OR by ORPHAN_TASK_PATTERNS prefix in Miscellaneous/Inbox with no
+ * tags (the same predicate the sweep uses post-OMN-46).
+ *
+ * Returns an empty report (`total: 0`) when the DB is clean — that's the
+ * post-cleanup assertion's success signal.
+ */
+export async function scanForFixtures(): Promise<FixtureScanReport> {
+  const startTime = Date.now();
+  const report: FixtureScanReport = {
+    inboxTasks: [],
+    orphanTasks: [],
+    sandboxProjects: [],
+    orphanProjects: [],
+    sandboxFolders: [],
+    testTags: [],
+    total: 0,
+    errors: [],
+    durationMs: 0,
+  };
+
+  const orphanTaskPatternsJson = JSON.stringify(ORPHAN_TASK_PATTERNS);
+  const orphanProjectPatternsJson = JSON.stringify(ORPHAN_PROJECT_PATTERNS);
+
+  const script = `
+    const result = app.evaluateJavascript(\`
+      (() => {
+        const inboxPrefix = '${TEST_INBOX_PREFIX}';
+        const tagPrefix = '${TEST_TAG_PREFIX}';
+        const sandboxName = '${SANDBOX_FOLDER_NAME}';
+        const orphanTaskPatterns = ${orphanTaskPatternsJson};
+        const orphanProjectPatterns = ${orphanProjectPatternsJson};
+
+        const out = {
+          inboxTasks: [],
+          orphanTasks: [],
+          sandboxProjects: [],
+          orphanProjects: [],
+          sandboxFolders: [],
+          testTags: [],
+        };
+
+        // Tasks: __TEST__ prefix (anywhere) OR ORPHAN_TASK_PATTERNS prefix in Misc/Inbox with no tags
+        for (const task of flattenedTasks) {
+          try {
+            const name = task.name;
+            if (!name) continue;
+            if (name.startsWith(inboxPrefix)) {
+              const proj = task.containingProject;
+              const where = proj ? proj.name : 'Inbox';
+              if (where === 'Inbox') {
+                out.inboxTasks.push({ id: task.id.primaryKey, name, location: where });
+              } else {
+                out.orphanTasks.push({ id: task.id.primaryKey, name, location: where });
+              }
+              continue;
+            }
+            const proj2 = task.containingProject;
+            const projName = proj2 ? proj2.name : 'Inbox';
+            if ((projName === 'Miscellaneous' || projName === 'Inbox') && task.tags.length === 0) {
+              for (const pattern of orphanTaskPatterns) {
+                if (name.startsWith(pattern)) {
+                  out.orphanTasks.push({ id: task.id.primaryKey, name, location: projName });
+                  break;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Projects: anything inside sandbox folder OR ORPHAN_PROJECT_PATTERNS prefix outside
+        for (const project of flattenedProjects) {
+          try {
+            const name = project.name;
+            if (!name) continue;
+            const folder = project.parentFolder;
+            const folderName = folder ? folder.name : '(no folder)';
+            if (folder && folder.name === sandboxName) {
+              out.sandboxProjects.push({ id: project.id.primaryKey, name, location: sandboxName });
+            } else {
+              for (const pattern of orphanProjectPatterns) {
+                if (name.startsWith(pattern)) {
+                  out.orphanProjects.push({ id: project.id.primaryKey, name, location: folderName });
+                  break;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Folders: sandbox folder itself + any subfolders of it
+        for (const folder of flattenedFolders) {
+          try {
+            const name = folder.name;
+            if (!name) continue;
+            if (name === sandboxName) {
+              out.sandboxFolders.push({ id: folder.id.primaryKey, name, location: '(root)' });
+            } else {
+              const parent = folder.parent;
+              if (parent && parent.name === sandboxName) {
+                out.sandboxFolders.push({ id: folder.id.primaryKey, name, location: sandboxName });
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Tags: __test- prefix
+        for (const tag of flattenedTags) {
+          try {
+            const name = tag.name;
+            if (name && name.startsWith(tagPrefix)) {
+              out.testTags.push({ id: tag.id.primaryKey, name });
+            }
+          } catch (e) {}
+        }
+
+        return JSON.stringify(out);
+      })()
+    \`);
+    return result;
+  `;
+
+  try {
+    const scanResult = await executeJXA<{
+      inboxTasks: FixtureScanItem[];
+      orphanTasks: FixtureScanItem[];
+      sandboxProjects: FixtureScanItem[];
+      orphanProjects: FixtureScanItem[];
+      sandboxFolders: FixtureScanItem[];
+      testTags: FixtureScanItem[];
+    }>(script);
+    report.inboxTasks = scanResult.inboxTasks ?? [];
+    report.orphanTasks = scanResult.orphanTasks ?? [];
+    report.sandboxProjects = scanResult.sandboxProjects ?? [];
+    report.orphanProjects = scanResult.orphanProjects ?? [];
+    report.sandboxFolders = scanResult.sandboxFolders ?? [];
+    report.testTags = scanResult.testTags ?? [];
+    report.total =
+      report.inboxTasks.length +
+      report.orphanTasks.length +
+      report.sandboxProjects.length +
+      report.orphanProjects.length +
+      report.sandboxFolders.length +
+      report.testTags.length;
+  } catch (error) {
+    report.errors.push(`scanForFixtures: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   report.durationMs = Date.now() - startTime;

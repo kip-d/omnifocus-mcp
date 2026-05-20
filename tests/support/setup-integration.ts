@@ -15,7 +15,7 @@
  */
 
 import { shutdownSharedClient } from '../integration/helpers/shared-server.js';
-import { fullCleanup } from '../integration/helpers/sandbox-manager.js';
+import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
 
 /**
  * Global setup - runs BEFORE all tests
@@ -80,6 +80,46 @@ export async function teardown() {
     }
   } catch (error) {
     console.warn('[Integration Teardown] Final cleanup failed:', error);
+  }
+
+  // OMN-46: post-cleanup fail-loud — scan for any leaked fixtures that
+  // survived cleanup. The previous swallow-everything teardown was how
+  // `__test-update-ops-*` tags accumulated in production for months. If
+  // anything remains, log it loudly AND set a non-zero process exit code so
+  // CI surfaces the regression. Don't abort the suite mid-flight (other
+  // teardown work still to run); set `process.exitCode` so vitest finishes
+  // its own teardown then exits non-zero.
+  try {
+    const scan = await scanForFixtures();
+    if (scan.total > 0) {
+      console.error('');
+      console.error(`[Integration Teardown] FIXTURE LEAK: ${scan.total} item(s) survived cleanup.`);
+      const categories: Array<[string, Array<{ name: string; location?: string; id: string }>]> = [
+        ['Inbox tasks', scan.inboxTasks],
+        ['Orphan tasks', scan.orphanTasks],
+        ['Sandbox projects', scan.sandboxProjects],
+        ['Orphan projects', scan.orphanProjects],
+        ['Sandbox folders', scan.sandboxFolders],
+        ['Test tags', scan.testTags],
+      ];
+      for (const [label, items] of categories) {
+        if (items.length === 0) continue;
+        console.error(`  ${label}: ${items.length}`);
+        for (const item of items) {
+          const loc = item.location ? ` [${item.location}]` : '';
+          console.error(`    - ${item.name}${loc}  (id: ${item.id})`);
+        }
+      }
+      console.error('');
+      console.error('  Run `npm run test:cleanup -- --apply` to purge, then investigate why the in-test teardown left these behind.');
+      console.error('');
+      process.exitCode = 1;
+    }
+    if (scan.errors.length > 0) {
+      console.warn('[Integration Teardown] Post-cleanup scan warnings:', scan.errors);
+    }
+  } catch (error) {
+    console.warn('[Integration Teardown] Post-cleanup scan failed:', error);
   }
 
   // Shutdown shared client
