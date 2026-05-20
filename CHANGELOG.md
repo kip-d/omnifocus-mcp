@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **`omnifocus_write` create rejects unknown fields** (OMN-76) — Unknown keys on `operation: create` (e.g. `subtasks`,
+  `context`, `priority`, `estimate`) were silently dropped — the call returned `success: true` and the fields vanished,
+  invisible to the failure-log/diagnose-failures pipeline. Create now hard-rejects unknown fields with a Zod validation
+  error, matching the existing strict behavior on `operation: update`. Callers that were relying on the silent drop will
+  now get a clear error naming the offending key. Use `estimatedMinutes` instead of `estimate`.
 - **OmniFocus 4.7+ repetition rules** — Reading tasks with repetition rules works again on current OmniFocus versions;
   deprecated fields have been replaced with the modern API. Older tasks missing `catchUpAutomatically` no longer throw.
 - **`reviewInterval` accepts the `{ steps, unit }` object form** (OMN-38), matching what OmniFocus returns when reading
