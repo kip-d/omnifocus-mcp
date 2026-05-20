@@ -42,6 +42,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Developer Notes
 
+- **Dead Zod schemas deleted** (OMN-92) — `src/tools/schemas/consolidated-schemas.ts` (`ManageReviewsSchema`,
+  `BatchTaskOperationsSchema`, a shadow `ReviewIntervalSchema`) and `src/tools/schemas/analytics-schemas-v2.ts`
+  (`ProductivityStatsSchemaV2`, `TaskVelocitySchemaV2`, `OverdueAnalysisSchemaV2`) were defined but never imported.
+  Surfaced by the 2026-05-20 sibling-search audit. The shadow `ReviewIntervalSchema` was the more interesting find — a
+  reader could plausibly have extended the dead copy rather than the live one in `unified/schemas/write-schema.ts` and
+  never seen their change take effect.
 - Tag management migrated from the legacy string template to AST builders; tag mutation builders are now synchronous.
 - Export test output path uses `os.tmpdir()` so the suite runs cleanly on systems without a writable repo root.
 - SonarJS lint plugin adopted with `--max-warnings=0`; cognitive-complexity threshold tightened from 25 to 20.
