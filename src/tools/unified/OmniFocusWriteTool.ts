@@ -172,7 +172,9 @@ SAFETY:
    *
    * This flat schema advertises all operations and fields without branch
    * duplication. Server-side Zod validation (WriteSchema) still enforces
-   * the full discriminated union with strict field types.
+   * the full discriminated union with strict field types — both
+   * CreateDataSchema and UpdateChangesSchema reject unknown fields (OMN-76),
+   * which is what surfaces caller mistakes through the failure-log pipeline.
    */
   override get inputSchema(): Record<string, unknown> {
     return {

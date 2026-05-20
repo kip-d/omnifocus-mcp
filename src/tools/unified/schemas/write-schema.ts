@@ -87,28 +87,38 @@ const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 // Create data schema — single source of truth for task/project creation fields.
 // Both the unified write tool and batch-schemas derive from this.
 // Exported for OMN-61 write-side parity testing (settable field ↔ builder).
-export const CreateDataSchema = z.object({
-  name: z.string().min(1),
-  note: z.string().optional(),
-  project: z.union([z.string(), z.null()]).optional(),
-  parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
-  tags: z.array(z.string()).optional(),
-  dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-  deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-  plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-  flagged: coerceBoolean().optional(),
-  estimatedMinutes: z
-    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-    .pipe(z.number())
-    .optional(),
-  repetitionRule: RepetitionRuleSchema.optional(),
+//
+// OMN-76: `.strict()` parity with UpdateChangesSchema. Without it, unknown
+// fields the caller passes (e.g. `subtasks`, `context`, `priority`, `estimate`)
+// were silently dropped on create — the call returned `success:true`, the
+// fields vanished, and the OMN-37 failure-log/diagnose-failures pipeline never
+// saw them (it only records Zod rejects + execution errors). Strictness turns
+// silent data loss into a loud Zod rejection that `logToolFailure` records,
+// closing the diagnose-pipeline blind spot.
+export const CreateDataSchema = z
+  .object({
+    name: z.string().min(1),
+    note: z.string().optional(),
+    project: z.union([z.string(), z.null()]).optional(),
+    parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
+    tags: z.array(z.string()).optional(),
+    dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    flagged: coerceBoolean().optional(),
+    estimatedMinutes: z
+      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+      .pipe(z.number())
+      .optional(),
+    repetitionRule: RepetitionRuleSchema.optional(),
 
-  // Project-specific
-  folder: z.string().optional(),
-  sequential: coerceBoolean().optional(),
-  status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
-  reviewInterval: ReviewIntervalSchema.optional(),
-});
+    // Project-specific
+    folder: z.string().optional(),
+    sequential: coerceBoolean().optional(),
+    status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
+    reviewInterval: ReviewIntervalSchema.optional(),
+  })
+  .strict();
 
 // Update changes schema
 // Exported for OMN-61 write-side parity testing (settable field ↔ builder).

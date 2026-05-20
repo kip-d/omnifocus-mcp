@@ -817,4 +817,120 @@ describe('WriteSchema', () => {
       }
     });
   });
+
+  // OMN-76: create-input must reject unknown fields, matching update's strict
+  // behavior. Silently dropping unknown create-input fields is the worst class
+  // of bug (silent data loss + invisible to the failure-log diagnose pipeline).
+  // After this fix all four empirically-observed silent-drop fields
+  // (subtasks, context, priority, estimate) become loud Zod rejects, which
+  // the `logToolFailure` ZodError branch already records.
+  describe('create-input strictness (OMN-76)', () => {
+    it('rejects unknown field `subtasks` on create task (was silently dropped)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x', subtasks: [] },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field `context` on create task (was silently dropped — asymmetric vs update which rejected)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x', context: 'home' },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field `priority` on create task (was silently dropped)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x', priority: 1 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field `estimate` on create task (was silently dropped — use `estimatedMinutes`)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x', estimate: 30 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown field on create project', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'p', bogusField: 'x' },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts the documented create surface (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: {
+            name: 'Real task',
+            note: 'desc',
+            tags: ['work'],
+            dueDate: '2026-06-01',
+            deferDate: '2026-05-25',
+            flagged: true,
+            estimatedMinutes: 30,
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the documented batch-create item surface (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [
+            {
+              operation: 'create',
+              target: 'task',
+              data: { name: 'A', tempId: 't1', flagged: true },
+            },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects unknown field nested in a batch-create item (closes the batch back-door)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [
+            {
+              operation: 'create',
+              target: 'task',
+              data: { name: 'A', subtasks: [] },
+            },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
