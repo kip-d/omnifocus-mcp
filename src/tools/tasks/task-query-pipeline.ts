@@ -160,46 +160,38 @@ export function getDefaultSort(mode: TaskQueryMode | undefined): SortOption[] | 
  * Parse raw script output into typed OmniFocusTask objects.
  * Converts date strings to Date objects for date fields.
  */
+// OMN-88: date fields the OmniJS field-projection step emits.
+// Pre-OMN-88 parseTasks spread the input then unconditionally overrode each
+// of these with `t.k ? Date : null`, so ABSENT input keys came back as
+// `null` — defeating field-projection's payload reduction and silently
+// breaking the "absent (not requested) vs null (explicitly cleared)"
+// distinction the OMN-80/-82 comments claimed. We now only set a key when
+// it was present in the input.
+const TASK_DATE_FIELDS = ['dueDate', 'deferDate', 'completionDate', 'added', 'modified', 'dropDate'] as const;
+
 export function parseTasks(tasks: unknown[]): OmniFocusTask[] {
   if (!tasks || !Array.isArray(tasks)) {
     return [];
   }
   return tasks.map((task) => {
-    // OMN-82: date fields include `null` after this PR — the OmniJS
-    // projection emits null for "explicitly unset" task dates, and
-    // parseTasks now preserves it (was collapsing to undefined). The truthy
-    // guards below narrow it out, so this only documents the input shape.
-    const t = task as {
-      dueDate?: string | Date | null;
-      deferDate?: string | Date | null;
-      completionDate?: string | Date | null;
-      added?: string | Date | null;
-      modified?: string | Date | null;
-      dropDate?: string | Date | null;
-      parentTaskId?: string;
-      parentTaskName?: string;
-      inInbox?: boolean;
-      [key: string]: unknown;
-    };
-    return {
-      ...t,
-      // OMN-82 (symmetric to OMN-80 for parseProjects): collapse missing-or-null
-      // to `null`, NOT `undefined`. Explicit `null` from the OmniJS projection
-      // (e.g. task.dueDate is null) must remain distinguishable from "field
-      // not requested" (which the field-projection step strips entirely,
-      // producing an absent key). Truthy-check consumers (`if (t.dueDate)`)
-      // are unaffected — both null and undefined are falsy. Aligns with the
-      // canonical OmniJS API types which declare these as `Date | null`.
-      dueDate: t.dueDate ? new Date(t.dueDate) : null,
-      deferDate: t.deferDate ? new Date(t.deferDate) : null,
-      completionDate: t.completionDate ? new Date(t.completionDate) : null,
-      added: t.added ? new Date(t.added) : null,
-      modified: t.modified ? new Date(t.modified) : null,
-      dropDate: t.dropDate ? new Date(t.dropDate) : null,
-      parentTaskId: t.parentTaskId,
-      parentTaskName: t.parentTaskName,
-      inInbox: t.inInbox,
-    } as unknown as OmniFocusTask;
+    // OMN-82 / OMN-88: date fields come through as `string | null` from the
+    // OmniJS projection. `null` means "explicitly cleared in OmniFocus"; an
+    // absent key means "field not requested by the script." parseTasks now
+    // honors both: strings convert to Date objects, nulls pass through as
+    // nulls, absent keys stay absent. Truthy-check consumers
+    // (`if (t.dueDate)`) are unaffected.
+    const t = task as Record<string, unknown>;
+    const result: Record<string, unknown> = { ...t };
+    for (const field of TASK_DATE_FIELDS) {
+      if (field in t) {
+        const raw = t[field];
+        // Strict null/undefined check (not truthy): the input type is
+        // `string | null`, but a defensive `=== null` aligns with the
+        // documented contract — strings → Date, nulls → null.
+        result[field] = raw === null || raw === undefined ? null : new Date(raw as string);
+      }
+    }
+    return result as unknown as OmniFocusTask;
   });
 }
 

@@ -350,16 +350,71 @@ describe('parseTasks', () => {
     expect(result[0].inInbox).toBe(true);
   });
 
-  it('handles missing date fields gracefully', () => {
-    const raw = [{ id: '1', name: 'Test', completed: false, flagged: false, blocked: false }];
-    const result = parseTasks(raw);
-    // OMN-82: parseTasks now collapses missing-or-null dates to `null`, not
-    // `undefined`, so explicit null from the OmniJS projection survives and
-    // is distinguishable from "field not requested." Aligns with the
-    // canonical `Date | null` typing in the OmniJS API declarations and
-    // matches the OMN-80 fix for parseProjects.
-    expect(result[0].dueDate).toBeNull();
-    expect(result[0].deferDate).toBeNull();
+  // OMN-88: the OMN-82 commit message claimed `null` (explicitly cleared)
+  // was distinguishable from "field not requested" (absent key). The old
+  // implementation didn't honor that — it spread the input then unconditionally
+  // overrode every date field with `t.dueDate ? Date : null`, so absent
+  // input keys came back as `null`. OMN-88 fixes parseTasks to only set a
+  // date key when it was present in the input. The three cases now
+  // distinguish:
+  //   absent input  → absent output key   (field not requested by the script)
+  //   null input    → null output         (explicitly cleared in OmniJS)
+  //   string input  → Date object output  (value present)
+  // Truthy-check consumers (`if (t.dueDate)`) are unchanged — both null and
+  // absent are falsy. The observable win is that field-projection's payload
+  // reduction (the OmniJS-side `fields:['name']` projection) is no longer
+  // defeated by parseTasks resurrecting null date keys.
+  describe('absent vs cleared vs present (OMN-88)', () => {
+    it('leaves absent date keys absent in output (not null)', () => {
+      const raw = [{ id: '1', name: 'Test', completed: false, flagged: false, blocked: false }];
+      const result = parseTasks(raw);
+      expect('dueDate' in result[0]).toBe(false);
+      expect('deferDate' in result[0]).toBe(false);
+      expect('completionDate' in result[0]).toBe(false);
+      expect('added' in result[0]).toBe(false);
+      expect('modified' in result[0]).toBe(false);
+      expect('dropDate' in result[0]).toBe(false);
+      expect(result[0].dueDate).toBeUndefined();
+    });
+
+    it('preserves explicit null dates as null (OMN-82 cleared case still works)', () => {
+      const raw = [
+        {
+          id: '1',
+          name: 'Test',
+          completed: false,
+          flagged: false,
+          blocked: false,
+          dueDate: null,
+          deferDate: null,
+        },
+      ];
+      const result = parseTasks(raw);
+      // Key IS present in output (input had it explicitly), value is null.
+      expect('dueDate' in result[0]).toBe(true);
+      expect(result[0].dueDate).toBeNull();
+      expect('deferDate' in result[0]).toBe(true);
+      expect(result[0].deferDate).toBeNull();
+    });
+
+    it('mixed: absent dueDate + null deferDate + string completionDate all distinguishable', () => {
+      const raw = [
+        {
+          id: '1',
+          name: 'Test',
+          completed: false,
+          flagged: false,
+          blocked: false,
+          // dueDate intentionally absent
+          deferDate: null, // explicitly cleared
+          completionDate: '2026-05-20T12:00:00.000Z', // present
+        },
+      ];
+      const result = parseTasks(raw);
+      expect('dueDate' in result[0]).toBe(false);
+      expect(result[0].deferDate).toBeNull();
+      expect(result[0].completionDate).toBeInstanceOf(Date);
+    });
   });
 
   it('converts deferDate strings to Date objects', () => {
