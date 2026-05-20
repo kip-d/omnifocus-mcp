@@ -366,7 +366,7 @@ function generateWarningsMetadata(hasProjectPreamble: boolean): string {
 function generateMatchesFilterBlock(ctx: ScriptBuildContext): string {
   return `${ctx.filterCode.preamble ? ctx.filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
-  // Filter: ${ctx.filterDescription}
+  // Filter: ${sanitizeForScriptComment(ctx.filterDescription)}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
     return ${ctx.filterCode.predicate};
@@ -784,7 +784,7 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
 
   ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
-  // Filter: ${filterDescription}
+  // Filter: ${sanitizeForScriptComment(filterDescription)}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
     return ${filterCode.predicate};

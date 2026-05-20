@@ -6,6 +6,7 @@ import {
   buildFilteredFoldersScript,
   buildTaskCountScript,
 } from '../../../../src/contracts/ast/script-builder.js';
+import { buildListTasksScriptV4 } from '../../../../src/omnifocus/scripts/tasks/list-tasks-ast.js';
 
 const NL = String.fromCharCode(10); // a real newline
 const BS = 'a\\b'; // literal single backslash: the 3-char string a \ b
@@ -62,5 +63,24 @@ describe('OMN-65: bridge builders survive hostile filter strings', () => {
     it(`buildFilteredFoldersScript search=${tag}`, () =>
       assertSafe(buildFilteredFoldersScript({ search: v }).script, v));
     it(`buildProjectByIdScript projectId=${tag}`, () => assertSafe(buildProjectByIdScript(v).script, v));
+  }
+});
+
+// OMN-66: the list-tasks-ast.ts path was scoped OUT of OMN-65 because its
+// backtick/${ vectors are already neutralized by the whole-source
+// escapeTemplateString wrap at list-tasks-ast.ts:89. But that wrap
+// deliberately does NOT touch CR/LF/control chars — so a raw newline in
+// the user `text` filter could still split the `// Filter:` comment line.
+// Exercise the production entry point (buildListTasksScriptV4) so the test
+// runs against the wrapped form OmniFocus actually executes, not the
+// inner unwrapped builder output. Covers both the general-filter and
+// inbox routes since they share generateMatchesFilterBlock.
+describe('OMN-66: list-tasks-ast comment channel survives hostile filter strings', () => {
+  for (const v of [...HOSTILE, 'benign_abc']) {
+    const tag = JSON.stringify(v);
+    it(`buildListTasksScriptV4 general filter text=${tag}`, () =>
+      assertSafe(buildListTasksScriptV4({ filter: { text: v } }), v));
+    it(`buildListTasksScriptV4 inbox mode text=${tag}`, () =>
+      assertSafe(buildListTasksScriptV4({ filter: { text: v }, mode: 'inbox' }), v));
   }
 });
