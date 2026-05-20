@@ -18,6 +18,7 @@ import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
 import { assertFieldPersisted } from '../../helpers/assert-field-persisted.js';
 import { SANDBOX_FOLDER_NAME, ensureSandboxFolder } from '../../helpers/sandbox-manager.js';
+import { runScopedName } from '../../helpers/run-id.js';
 
 describe('Review interval round-trip (OMN-60)', () => {
   let serverProcess: ChildProcess;
@@ -104,7 +105,7 @@ describe('Review interval round-trip (OMN-60)', () => {
         operation: 'create',
         target: 'project',
         data: {
-          name: `__TEST__ OMN-60 ReviewInterval ${Date.now()}`,
+          name: runScopedName(`OMN-60_ReviewInterval_${Date.now()}`),
           folder: SANDBOX_FOLDER_NAME,
         },
       },

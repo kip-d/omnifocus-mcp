@@ -2,6 +2,17 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
+import { runScopedName, runScopedTag } from '../../helpers/run-id.js';
+
+// OMN-84: per-run scoped fixture names so concurrent / aborted runs cannot
+// collide on the literal "__TEST__ ..." names that used to be hardcoded.
+const E2E_E2E_TAG = runScopedTag('e2e');
+const E2E_PLANNED_DATES_TAG = runScopedTag('planned-dates');
+const E2E_PLANNED_UPDATE_TAG = runScopedTag('planned-update');
+const E2E_CLEAR_PLANNED_TAG = runScopedTag('clear-planned');
+const E2E_REPEATS_TAG = runScopedTag('repeats');
+const E2E_WEEKLY_REPEAT_TAG = runScopedTag('weekly-repeat');
+const E2E_LIMITED_REPEAT_TAG = runScopedTag('limited-repeat');
 
 describe('Unified Tools End-to-End Integration', () => {
   let serverProcess: ChildProcess;
@@ -368,7 +379,7 @@ describe('Unified Tools End-to-End Integration', () => {
               operation: 'create',
               target: 'task',
               data: {
-                name: '__TEST__ E2E Test Task - Builder API',
+                name: runScopedName('E2E_Test_Task-Builder_API'),
                 note: 'Created by unified builder API end-to-end test',
                 flagged: true,
               },
@@ -564,9 +575,9 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Task with Planned Date',
+                  name: runScopedName('Task_with_Planned_Date'),
                   plannedDate: '2025-11-15 09:00',
-                  tags: ['__test-e2e', '__test-planned-dates'],
+                  tags: [E2E_E2E_TAG, E2E_PLANNED_DATES_TAG],
                 },
               },
             },
@@ -595,9 +606,9 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Task to Update Planned Date',
+                  name: runScopedName('Task_to_Update_Planned_Date'),
                   plannedDate: '2025-11-15',
-                  tags: ['__test-e2e', '__test-planned-update'],
+                  tags: [E2E_E2E_TAG, E2E_PLANNED_UPDATE_TAG],
                 },
               },
             },
@@ -647,9 +658,9 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Task to Clear Planned Date',
+                  name: runScopedName('Task_to_Clear_Planned_Date'),
                   plannedDate: '2025-11-15',
-                  tags: ['__test-e2e', '__test-clear-planned'],
+                  tags: [E2E_E2E_TAG, E2E_CLEAR_PLANNED_TAG],
                 },
               },
             },
@@ -700,13 +711,13 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Daily Standup',
+                  name: runScopedName('Daily_Standup'),
                   dueDate: '2025-11-17 09:00',
                   repetitionRule: {
                     frequency: 'daily',
                     interval: 1,
                   },
-                  tags: ['__test-e2e', '__test-repeats'],
+                  tags: [E2E_E2E_TAG, E2E_REPEATS_TAG],
                 },
               },
             },
@@ -732,14 +743,14 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Weekly Review',
+                  name: runScopedName('Weekly_Review'),
                   dueDate: '2025-11-17',
                   repetitionRule: {
                     frequency: 'weekly',
                     interval: 1,
                     daysOfWeek: [{ day: 'MO' }], // Monday
                   },
-                  tags: ['__test-e2e', '__test-weekly-repeat'],
+                  tags: [E2E_E2E_TAG, E2E_WEEKLY_REPEAT_TAG],
                 },
               },
             },
@@ -764,14 +775,14 @@ describe('Unified Tools End-to-End Integration', () => {
                 operation: 'create',
                 target: 'task',
                 data: {
-                  name: '__TEST__ Limited Repeat Task',
+                  name: runScopedName('Limited_Repeat_Task'),
                   dueDate: '2025-11-17',
                   repetitionRule: {
                     frequency: 'daily',
                     interval: 2,
                     endDate: '2025-12-31',
                   },
-                  tags: ['__test-e2e', '__test-limited-repeat'],
+                  tags: [E2E_E2E_TAG, E2E_LIMITED_REPEAT_TAG],
                 },
               },
             },

@@ -36,6 +36,7 @@ import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
 import { assertFieldPersisted } from '../../helpers/assert-field-persisted.js';
 import { SANDBOX_FOLDER_NAME, ensureSandboxFolder, fullCleanup } from '../../helpers/sandbox-manager.js';
+import { runScopedName, runScopedTag } from '../../helpers/run-id.js';
 
 // A fixed, unambiguous future datetime. NOT a default time: due defaults to
 // 17:00, defer to 08:00 — :23 past 14:00 can only be a value we wrote.
@@ -43,6 +44,18 @@ const TEST_DATETIME = '2026-12-25 14:23';
 const TEST_DATETIME_EPOCH = new Date(TEST_DATETIME).getTime();
 
 const TS = Date.now();
+
+// OMN-84: per-run scoped fixture names. The literal "__TEST__ RT" prefix used
+// to cause cross-run contamination — Ctrl-C'd runs would leave behind
+// "__TEST__ RT <some-epoch>" inbox tasks that masked as current-run leakage.
+// Each run now stamps RUN_ID into every fixture name.
+const RT_TASK_NAME = runScopedName(`RT_${TS}`);
+const RT_PROJ_A_NAME = runScopedName(`RT_A_${TS}`);
+const RT_PROJ_B_NAME = runScopedName(`RT_B_${TS}`);
+const RT_TASK_RENAMED = runScopedName(`RT_renamed_${TS}`);
+const RT_PROJ_RENAMED = runScopedName(`RT_proj_renamed_${TS}`);
+const RT_SUBFOLDER_NAME = runScopedName(`RTsub_${TS}`);
+const RT_TAG = runScopedTag(`rt-${TS}`);
 
 describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
   let serverProcess: ChildProcess;
@@ -108,7 +121,7 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
 
   async function createTask(data: Record<string, unknown>): Promise<string> {
     const res = await client.callTool('omnifocus_write', {
-      mutation: { operation: 'create', target: 'task', data: { name: `__TEST__ RT ${TS}`, ...data } },
+      mutation: { operation: 'create', target: 'task', data: { name: RT_TASK_NAME, ...data } },
     });
     expectOk(res, `create task (${JSON.stringify(data).slice(0, 120)})`);
     const id = extractId(res);
@@ -121,7 +134,7 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       mutation: {
         operation: 'create',
         target: 'project',
-        data: { name: `__TEST__ RT ${TS}`, folder: SANDBOX_FOLDER_NAME, ...data },
+        data: { name: RT_TASK_NAME, folder: SANDBOX_FOLDER_NAME, ...data },
       },
     });
     expectOk(res, `create project (${JSON.stringify(data).slice(0, 120)})`);
@@ -215,10 +228,10 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
     {
       field: 'name',
       op: 'update',
-      setValue: `__TEST__ RT renamed ${TS}`,
+      setValue: RT_TASK_RENAMED,
       readFields: ['name'],
       extract: (t) => t?.name,
-      expected: `__TEST__ RT renamed ${TS}`,
+      expected: RT_TASK_RENAMED,
     },
     {
       field: 'note',
@@ -272,10 +285,10 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       // Bridge-applied — high silent-fail risk (the exact class OMN-61 exists for).
       field: 'tags',
       op: 'create',
-      setValue: [`__test-rt-${TS}`],
+      setValue: [RT_TAG],
       readFields: ['tags'],
       extract: (t) => t?.tags,
-      expected: [`__test-rt-${TS}`],
+      expected: [RT_TAG],
     },
     {
       // Bridge-applied — read shape is {ruleString,...}, NOT the write shape.
@@ -317,10 +330,10 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
     {
       field: 'name',
       op: 'update',
-      setValue: `__TEST__ RT proj renamed ${TS}`,
+      setValue: RT_PROJ_RENAMED,
       readFields: ['name'],
       extract: (p) => p?.name,
-      expected: `__TEST__ RT proj renamed ${TS}`,
+      expected: RT_PROJ_RENAMED,
     },
     {
       field: 'note',
@@ -390,10 +403,10 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       // oracle: name-array (project.tags.map(t => t.name)).
       field: 'tags',
       op: 'create',
-      setValue: [`__test-rt-${TS}`],
+      setValue: [RT_TAG],
       readFields: ['tags'],
       extract: (p) => p?.tags,
-      expected: [`__test-rt-${TS}`],
+      expected: [RT_TAG],
     },
     {
       // OMN-62: was an it.fails read-gap. OF 4.7+ planned date; accessor
@@ -433,8 +446,8 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
   // ── Relational fields (need extra sandbox entities) ───────────────────
   describe('relational fields', () => {
     it('task.project move persists (projectId reads back the new project)', async () => {
-      const projA = await createProject({ name: `__TEST__ RT A ${TS}` });
-      const projB = await createProject({ name: `__TEST__ RT B ${TS}` });
+      const projA = await createProject({ name: RT_PROJ_A_NAME });
+      const projB = await createProject({ name: RT_PROJ_B_NAME });
       const taskId = await createTask({ project: projA });
       await updateTask(taskId, { project: projB });
       await assertFieldPersisted(client, {
@@ -463,21 +476,21 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       const subRes = await client.callTool('omnifocus_write', {
         mutation: {
           operation: 'create_folder',
-          data: { name: `__TEST__ RTsub ${TS}`, parentFolder: SANDBOX_FOLDER_NAME },
+          data: { name: RT_SUBFOLDER_NAME, parentFolder: SANDBOX_FOLDER_NAME },
         },
       });
       expectOk(subRes, 'create sandbox subfolder');
       const projId = await createProject({});
-      await updateProject(projId, { folder: `__TEST__ RTsub ${TS}` });
+      await updateProject(projId, { folder: RT_SUBFOLDER_NAME });
       // Read back from the DESTINATION folder: if the move persisted the
       // project is here with folder == subfolder; if it silently no-op'd the
       // project is still in the sandbox root and absent here → undefined →
       // fails (correctly signaling non-persistence). Honest in both directions.
       await assertFieldPersisted(client, {
         readTool: 'omnifocus_read',
-        readParams: projectQuery(['folder'], `__TEST__ RTsub ${TS}`),
+        readParams: projectQuery(['folder'], RT_SUBFOLDER_NAME),
         extract: (r) => findProject(r, projId)?.folder,
-        expected: `__TEST__ RTsub ${TS}`,
+        expected: RT_SUBFOLDER_NAME,
         context: 'project.folder move (read back from destination folder)',
       });
     }, 120000);
