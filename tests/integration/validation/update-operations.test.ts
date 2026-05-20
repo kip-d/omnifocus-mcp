@@ -171,9 +171,13 @@ describe('Update Operations - Read-Back Validation', () => {
       updateResult = await updateTask(taskId, { clearDueDate: true });
       expectOk(updateResult, 'clear dueDate');
 
-      // Verify dueDate was cleared
+      // Verify dueDate was cleared.
+      // OMN-86: OMN-82 (commit 7e5a97d) changed `parseTasks` to emit `null`
+      // for cleared dates (was collapsing to `undefined`). Test was written
+      // pre-OMN-82 and still expected `undefined`; aligning with the new
+      // contract.
       task = await readTask(taskId);
-      expect(task.dueDate).toBeUndefined();
+      expect(task.dueDate).toBeNull();
       expect(task.deferDate.split('T')[0]).toBe('2025-12-20'); // Still set
     }, 120000);
 
