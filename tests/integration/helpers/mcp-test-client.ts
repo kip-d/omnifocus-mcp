@@ -76,7 +76,7 @@ export class MCPTestClient {
     // server child inherited it by accident if (and only if) the parent had already
     // imported sandbox-manager before the spawn. Tests that didn't import it could
     // silently bypass the guard and write to live DB. Explicit-set closes the bypass.
-    const env: NodeJS.ProcessEnv = {
+    const env: Record<string, string | undefined> = {
       ...process.env,
       NODE_ENV: 'test',
       OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
@@ -107,8 +107,7 @@ export class MCPTestClient {
       try {
         const response: MCPResponse = JSON.parse(line);
         this.handleResponse(response);
-      } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
+      } catch {
         // Ignore non-JSON output (logging lines, etc.)
       }
     });
@@ -233,8 +232,7 @@ export class MCPTestClient {
       if (first.type === 'json') return first.json;
       if (first.type === 'text') return JSON.parse(first.text);
       return response.result;
-    } catch (error: unknown) {
-      // Critical Issue #1: Proper error typing
+    } catch {
       return response.result;
     }
   }
@@ -457,8 +455,7 @@ export class MCPTestClient {
     if (this.server && !this.server.killed) {
       try {
         this.server.stdin?.end();
-      } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
+      } catch {
         // Ignore errors during stdin close
       }
 
