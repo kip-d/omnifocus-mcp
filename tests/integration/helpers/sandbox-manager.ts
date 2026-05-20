@@ -300,6 +300,57 @@ export function isFixtureProjectByName(projectName: string, parentFolderName: st
 }
 
 /**
+ * OMN-87: shared OmniJS-side predicate source.
+ *
+ * The deletion / scan sweeps run inside OmniFocus's OmniJS context — they
+ * can't import the TypeScript predicates above. Pre-OMN-87 each sweep
+ * inlined the predicate logic, creating three independently-maintained
+ * copies of the OMN-83 contract. A future edit to one copy (e.g. someone
+ * "I'll just be permissive here" reintroducing substring matching) would
+ * silently diverge — the 23 TS-predicate regression tests would stay
+ * green, the sweep would behave differently. Same drift-risk shape as
+ * OMN-46 / OMN-47.
+ *
+ * This constant is the SINGLE source for the OmniJS-side predicate
+ * functions. Each sweep interpolates it as a preamble and calls
+ * `isFixtureTask` / `isFixtureProject` instead of inlining. The
+ * characterization test at
+ * `tests/unit/integration-helpers/sandbox-manager-omnijs-predicate-parity.test.ts`
+ * evaluates this string via `new Function` and verifies it produces the
+ * same results as the TypeScript predicates on the OMN-83 fixture
+ * corpus — closing the drift gap.
+ *
+ * The functions take their prefix/sandbox constants as arguments rather
+ * than closing over module-level values: this keeps the source pure
+ * (`new Function`-able) and decouples it from how the constants are
+ * interpolated into each call site (which still happens via the
+ * `${TEST_INBOX_PREFIX}` template-literal interpolation in each script).
+ *
+ * Do NOT add backticks, template-literal interpolation, or top-level
+ * mutable state to this string — it must remain interpolatable into a
+ * JXA → OmniJS double-backtick context AND evaluatable in Node via
+ * `new Function`.
+ */
+export const OMNIJS_FIXTURE_PREDICATES_SOURCE = `
+function isFixtureTask(name, tagNames, namePrefix, tagPrefix) {
+  if (!name) return false;
+  if (name.startsWith(namePrefix)) return true;
+  if (tagNames) {
+    for (var i = 0; i < tagNames.length; i++) {
+      if (tagNames[i] && tagNames[i].startsWith(tagPrefix)) return true;
+    }
+  }
+  return false;
+}
+function isFixtureProject(name, parentFolderName, namePrefix, sandboxName) {
+  if (!name) return false;
+  if (name.startsWith(namePrefix)) return true;
+  if (parentFolderName === sandboxName) return true;
+  return false;
+}
+`;
+
+/**
  * Delete orphaned test projects that escaped the sandbox folder.
  * Uses OmniJS deleteObject() — the correct API for project deletion.
  *
@@ -312,23 +363,24 @@ async function deleteOrphanedProjects(): Promise<{ deleted: number; errors: stri
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
+        ${OMNIJS_FIXTURE_PREDICATES_SOURCE}
+
         let deleted = 0;
         const errors = [];
-        const prefix = '${TEST_INBOX_PREFIX}';
+        const namePrefix = '${TEST_INBOX_PREFIX}';
         const sandboxName = '${SANDBOX_FOLDER_NAME}';
 
-        // Collect orphaned projects (__TEST__ prefix, NOT in sandbox)
+        // Collect orphaned projects (__TEST__ prefix, NOT in sandbox).
+        // OMN-87: isFixtureProject covers prefix OR sandbox; filter sandbox
+        // here so deleteSandboxProjects handles those.
         const toDelete = [];
         for (const project of flattenedProjects) {
           try {
             const name = project.name;
-            if (!name) continue;
-            if (!name.startsWith(prefix)) continue;
-
-            // Skip projects in sandbox (handled by deleteSandboxProjects)
             const folder = project.parentFolder;
-            if (folder && folder.name === sandboxName) continue;
-
+            const folderName = folder ? folder.name : null;
+            if (!isFixtureProject(name, folderName, namePrefix, sandboxName)) continue;
+            if (folderName === sandboxName) continue;
             toDelete.push(project);
           } catch (e) {}
         }
@@ -369,33 +421,28 @@ async function deleteTestTasksEverywhere(): Promise<{ deleted: number; errors: s
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
+        ${OMNIJS_FIXTURE_PREDICATES_SOURCE}
+
         let deleted = 0;
         const errors = [];
         const namePrefix = '${TEST_INBOX_PREFIX}';
         const tagPrefix = '${TEST_TAG_PREFIX}';
 
-        // Collect tasks to delete first (avoid modifying while iterating)
+        // OMN-87: collect tasks to delete via the shared OmniJS predicate.
+        // isFixtureTask encodes the OMN-83 contract (__TEST__ name prefix OR
+        // any tag with __test- prefix). Sweep collects first, deletes second
+        // to avoid modifying the collection while iterating.
         const toDelete = [];
         for (const task of flattenedTasks) {
           try {
             const name = task.name;
-            if (!name) continue;
-
-            // Predicate: name carries __TEST__ prefix OR any tag with __test- prefix.
-            // No substring matching, no project-location heuristic — the prefix /
-            // tag-prefix IS the test-fixture contract.
-            if (name.startsWith(namePrefix)) {
-              toDelete.push(task);
-              continue;
-            }
-
-            const tags = task.tags;
+            const tags = task.tags || [];
+            const tagNames = [];
             for (let i = 0; i < tags.length; i++) {
-              const tagName = tags[i].name;
-              if (tagName && tagName.startsWith(tagPrefix)) {
-                toDelete.push(task);
-                break;
-              }
+              tagNames.push(tags[i] ? tags[i].name : null);
+            }
+            if (isFixtureTask(name, tagNames, namePrefix, tagPrefix)) {
+              toDelete.push(task);
             }
           } catch (e) {
             // Skip invalid/dropped tasks
@@ -725,6 +772,8 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
+        ${OMNIJS_FIXTURE_PREDICATES_SOURCE}
+
         const inboxPrefix = '${TEST_INBOX_PREFIX}';
         const tagPrefix = '${TEST_TAG_PREFIX}';
         const sandboxName = '${SANDBOX_FOLDER_NAME}';
@@ -738,24 +787,17 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
           testTags: [],
         };
 
-        // Tasks: __TEST__ name prefix OR membership of a __test- tag
+        // OMN-87: classify tasks via the shared isFixtureTask predicate;
+        // bucket by containing-project name (Inbox vs other).
         for (const task of flattenedTasks) {
           try {
             const name = task.name;
-            if (!name) continue;
-
-            let isFixture = name.startsWith(inboxPrefix);
-            if (!isFixture) {
-              const tags = task.tags;
-              for (let i = 0; i < tags.length; i++) {
-                const tagName = tags[i].name;
-                if (tagName && tagName.startsWith(tagPrefix)) {
-                  isFixture = true;
-                  break;
-                }
-              }
+            const tags = task.tags || [];
+            const tagNames = [];
+            for (let i = 0; i < tags.length; i++) {
+              tagNames.push(tags[i] ? tags[i].name : null);
             }
-            if (!isFixture) continue;
+            if (!isFixtureTask(name, tagNames, inboxPrefix, tagPrefix)) continue;
 
             const proj = task.containingProject;
             const where = proj ? proj.name : 'Inbox';
@@ -767,17 +809,20 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
           } catch (e) {}
         }
 
-        // Projects: anything inside sandbox folder OR __TEST__ prefix outside
+        // OMN-87: classify projects via the shared isFixtureProject
+        // predicate; bucket by sandbox vs orphan based on parent folder.
+        // Predicate covers prefix-or-sandbox; the bucketing decides which
+        // cleanup function will handle each.
         for (const project of flattenedProjects) {
           try {
             const name = project.name;
-            if (!name) continue;
             const folder = project.parentFolder;
-            const folderName = folder ? folder.name : '(no folder)';
-            if (folder && folder.name === sandboxName) {
+            const folderName = folder ? folder.name : null;
+            if (!isFixtureProject(name, folderName, inboxPrefix, sandboxName)) continue;
+            if (folderName === sandboxName) {
               out.sandboxProjects.push({ id: project.id.primaryKey, name, location: sandboxName });
-            } else if (name.startsWith(inboxPrefix)) {
-              out.orphanProjects.push({ id: project.id.primaryKey, name, location: folderName });
+            } else {
+              out.orphanProjects.push({ id: project.id.primaryKey, name, location: folderName || '(no folder)' });
             }
           } catch (e) {}
         }
