@@ -353,8 +353,13 @@ describe('parseTasks', () => {
   it('handles missing date fields gracefully', () => {
     const raw = [{ id: '1', name: 'Test', completed: false, flagged: false, blocked: false }];
     const result = parseTasks(raw);
-    expect(result[0].dueDate).toBeUndefined();
-    expect(result[0].deferDate).toBeUndefined();
+    // OMN-82: parseTasks now collapses missing-or-null dates to `null`, not
+    // `undefined`, so explicit null from the OmniJS projection survives and
+    // is distinguishable from "field not requested." Aligns with the
+    // canonical `Date | null` typing in the OmniJS API declarations and
+    // matches the OMN-80 fix for parseProjects.
+    expect(result[0].dueDate).toBeNull();
+    expect(result[0].deferDate).toBeNull();
   });
 
   it('converts deferDate strings to Date objects', () => {

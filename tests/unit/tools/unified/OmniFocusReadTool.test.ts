@@ -1457,4 +1457,70 @@ describe('OmniFocusReadTool', () => {
       expect(tasksCacheCalls).toHaveLength(0);
     });
   });
+
+  // OMN-82: symmetric to OMN-80 (which fixed parseProjects). parseTasks had
+  // the same `x ? new Date(x) : undefined` anti-pattern across 6 task date
+  // fields (dueDate, deferDate, completionDate, added, modified, dropDate).
+  // Explicit `null` from the OmniJS projection must survive end-to-end as
+  // `null`, distinguishable from "field absent from projection." Unlike the
+  // projects path, TaskFieldEnum uses the same names as the source, so the
+  // projection-stripping bug OMN-81 doesn't confound this test — fields with
+  // null source values survive end-to-end with the right value.
+  describe('parseTasks preserves explicit null dates (OMN-82)', () => {
+    it('explicit null dueDate / deferDate / completionDate survive as null (not undefined)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            {
+              id: 't_nulls',
+              name: 'No Dates Task',
+              completed: false,
+              flagged: false,
+              blocked: false,
+              dueDate: null,
+              deferDate: null,
+              completionDate: null,
+            },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', details: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const task = result.data.tasks[0];
+      expect(task.dueDate).toBeNull();
+      expect(task.deferDate).toBeNull();
+      expect(task.completionDate).toBeNull();
+    });
+
+    it('non-null date strings still convert to Date instances (back-compat)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            {
+              id: 't_dated',
+              name: 'Has Due Date',
+              completed: false,
+              flagged: false,
+              blocked: false,
+              dueDate: '2026-12-31T17:00:00.000Z',
+            },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', details: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const task = result.data.tasks[0];
+      expect(task.dueDate).toBeInstanceOf(Date);
+    });
+  });
 });
