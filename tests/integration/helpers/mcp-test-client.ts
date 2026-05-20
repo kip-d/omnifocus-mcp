@@ -1,8 +1,16 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
+import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from './run-id.js';
 
 export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
+
+/**
+ * OMN-84: per-run sentinel tag attached to every fixture created via
+ * `MCPTestClient.createTestTask()` / `createTestProject()`. Lets teardown
+ * scope cleanup strictly to this process's artifacts.
+ */
+export const RUN_TAG = runScopedTag('mcp-run');
 
 /**
  * Generate a unique session ID for this test run
@@ -238,14 +246,22 @@ export class MCPTestClient {
   }
 
   async createTestTask(name: string, properties: any = {}): Promise<any> {
-    // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
-    // Prefix tags with __test- if not already prefixed
+    // OMN-84: tags get the per-run sentinel (RUN_TAG) for runId-scoped
+    // teardown. TESTING_TAG and sessionId stay for back-compat fast cleanup.
+    // Prefix tags with __test- if not already prefixed.
     const rawTags = properties.tags || [];
     const prefixedTags = rawTags.map((t: string) => (t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`));
-    const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
+    const tags = [...prefixedTags, TESTING_TAG, this.sessionId, RUN_TAG];
 
-    // Ensure task name has __TEST__ prefix for inbox tasks (sandbox compliance)
-    const taskName = name.startsWith(TEST_INBOX_PREFIX) ? name : `${TEST_INBOX_PREFIX} ${name}`;
+    // OMN-84: ensure task name carries the per-run prefix __TEST__-<RUN_ID>-…
+    // so concurrent or aborted runs don't collide on suffixes. Pre-existing
+    // __TEST__ prefixes (without runId) are upgraded; fully-formed
+    // RUN_NAME_PREFIX names are left alone.
+    const taskName = name.startsWith(RUN_NAME_PREFIX)
+      ? name
+      : name.startsWith(TEST_INBOX_PREFIX)
+        ? `${RUN_NAME_PREFIX}${name.slice(TEST_INBOX_PREFIX.length).replace(/^[\s-]+/, '')}`
+        : runScopedName(name);
 
     const taskParams = {
       name: taskName,
@@ -267,14 +283,23 @@ export class MCPTestClient {
   }
 
   async createTestProject(name: string, properties: any = {}): Promise<any> {
-    // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
-    // Prefix tags with __test- if not already prefixed
+    // OMN-84: tags get the per-run sentinel (RUN_TAG) for runId-scoped
+    // teardown. TESTING_TAG and sessionId stay for back-compat fast cleanup.
+    // Prefix tags with __test- if not already prefixed.
     const rawTags = properties.tags || [];
     const prefixedTags = rawTags.map((t: string) => (t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`));
-    const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
+    const tags = [...prefixedTags, TESTING_TAG, this.sessionId, RUN_TAG];
+
+    // OMN-84: project names carry __TEST__-<RUN_ID>-… so concurrent runs
+    // can't collide on suffix. Pre-existing __TEST__ prefixes are upgraded.
+    const projectName = name.startsWith(RUN_NAME_PREFIX)
+      ? name
+      : name.startsWith(TEST_INBOX_PREFIX)
+        ? `${RUN_NAME_PREFIX}${name.slice(TEST_INBOX_PREFIX.length).replace(/^[\s-]+/, '')}`
+        : runScopedName(name);
 
     const projectParams = {
-      name: name,
+      name: projectName,
       ...properties,
       tags: tags,
     };

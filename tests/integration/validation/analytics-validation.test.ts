@@ -17,12 +17,13 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
-import { TEST_TAG_PREFIX } from '../helpers/sandbox-manager.js';
+import { runScopedTag } from '../helpers/run-id.js';
 import { expectOk } from '../helpers/expect-ok.js';
 
 describe('Analytics Validation - Actual Calculations', () => {
   let client: MCPTestClient;
-  const testSessionTag = `${TEST_TAG_PREFIX}analytics-${Date.now()}`;
+  // OMN-84: per-run-scoped session tag (was per-process-millisecond before)
+  const testSessionTag = runScopedTag(`analytics-${Date.now()}`);
 
   beforeAll(async () => {
     // Use shared server - avoids 13s startup cost per test file

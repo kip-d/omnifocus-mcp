@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
-import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
+import { runScopedName, runScopedTag } from './helpers/run-id.js';
 import { expectOk } from './helpers/expect-ok.js';
 
 // Auto-enable on macOS with OmniFocus
@@ -93,15 +93,18 @@ d('MCP Protocol Compliance Tests', () => {
     });
 
     it('should handle task creation with validation', { timeout: 90000 }, async () => {
+      const testTag = runScopedTag('test');
+      const integrationTag = runScopedTag('integration');
+      const mcpTestTag = runScopedTag('mcp-test');
       const result = await client.callTool('omnifocus_write', {
         mutation: {
           operation: 'create',
           target: 'task',
           data: {
-            name: `${TEST_INBOX_PREFIX} Protocol test task`,
+            name: runScopedName('Protocol_test_task'),
             note: 'This is a test task',
             flagged: true,
-            tags: [`${TEST_TAG_PREFIX}test`, `${TEST_TAG_PREFIX}integration`, `${TEST_TAG_PREFIX}mcp-test`],
+            tags: [testTag, integrationTag, mcpTestTag],
           },
         },
       });
@@ -117,9 +120,9 @@ d('MCP Protocol Compliance Tests', () => {
         expect(result.data.task).toBeDefined();
         expect(result.data.task.taskId).toBeDefined();
         if (result.data.task.tags) {
-          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}test`);
-          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}integration`);
-          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}mcp-test`);
+          expect(result.data.task.tags).toContain(testTag);
+          expect(result.data.task.tags).toContain(integrationTag);
+          expect(result.data.task.tags).toContain(mcpTestTag);
         }
       }
     });

@@ -22,12 +22,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { fullCleanup, TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../helpers/sandbox-manager.js';
+import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from '../helpers/run-id.js';
 import { expectOk } from '../helpers/expect-ok.js';
 
 describe('Update Operations - Read-Back Validation', () => {
   let client: MCPTestClient;
   const createdTaskIds: string[] = [];
-  const TEST_TAG = `${TEST_TAG_PREFIX}update-ops-${Date.now()}`;
+  // OMN-84: per-run-scoped tag (was per-process-millisecond before)
+  const TEST_TAG = runScopedTag('update-ops');
 
   beforeAll(async () => {
     // Use shared server - avoids 13s startup cost per test file
@@ -58,8 +60,14 @@ describe('Update Operations - Read-Back Validation', () => {
 
   // Helper functions
   async function createTask(name: string, properties: Record<string, unknown> = {}) {
-    // Ensure inbox tasks have __TEST__ prefix
-    const taskName = name.startsWith(TEST_INBOX_PREFIX) ? name : `${TEST_INBOX_PREFIX} ${name}`;
+    // OMN-84: inbox tasks carry __TEST__-<RUN_ID>-… so concurrent runs don't
+    // collide on overlapping suffixes. Pre-existing __TEST__ prefixes get
+    // upgraded; fully-formed RUN_NAME_PREFIX names are left alone.
+    const taskName = name.startsWith(RUN_NAME_PREFIX)
+      ? name
+      : name.startsWith(TEST_INBOX_PREFIX)
+        ? `${RUN_NAME_PREFIX}${name.slice(TEST_INBOX_PREFIX.length).replace(/^[\s-]+/, '')}`
+        : runScopedName(name);
 
     // Ensure tags have __test- prefix
     const tags = properties.tags

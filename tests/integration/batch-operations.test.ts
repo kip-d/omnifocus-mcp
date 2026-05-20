@@ -12,13 +12,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
-import {
-  ensureSandboxFolder,
-  fullCleanup,
-  SANDBOX_FOLDER_NAME,
-  TEST_INBOX_PREFIX,
-  TEST_TAG_PREFIX,
-} from './helpers/sandbox-manager.js';
+import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
+import { runScopedName } from './helpers/run-id.js';
 import { expectOk } from './helpers/expect-ok.js';
 
 // Only run on macOS with OmniFocus
@@ -93,7 +88,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj1',
-              name: `${TEST_INBOX_PREFIX} TestBatch_Simple_${timestamp}`,
+              name: runScopedName(`TestBatch_Simple_${timestamp}`),
               note: 'Integration test project',
               folder: SANDBOX_FOLDER_NAME,
             },
@@ -127,7 +122,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj2',
-              name: `${TEST_INBOX_PREFIX} TestBatch_ProjectWithTasks_${timestamp}`,
+              name: runScopedName(`TestBatch_ProjectWithTasks_${timestamp}`),
               note: 'Has child tasks',
               folder: SANDBOX_FOLDER_NAME,
             },
@@ -137,7 +132,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task1',
-              name: `${TEST_INBOX_PREFIX} TestBatch_ChildTask_${timestamp}`,
+              name: runScopedName(`TestBatch_ChildTask_${timestamp}`),
               parentTempId: 'proj2',
               dueDate: '2025-10-15',
             },
@@ -180,7 +175,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj3',
-              name: `${TEST_INBOX_PREFIX} TestBatch_NestedTasks_${timestamp}`,
+              name: runScopedName(`TestBatch_NestedTasks_${timestamp}`),
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -189,7 +184,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task2',
-              name: `${TEST_INBOX_PREFIX} TestBatch_ParentTask_${timestamp}`,
+              name: runScopedName(`TestBatch_ParentTask_${timestamp}`),
               parentTempId: 'proj3',
             },
           },
@@ -198,7 +193,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task3',
-              name: `${TEST_INBOX_PREFIX} TestBatch_Subtask_${timestamp}`,
+              name: runScopedName(`TestBatch_Subtask_${timestamp}`),
               parentTempId: 'task2',
             },
           },
@@ -215,7 +210,7 @@ d('Batch Operations Integration (Unified API)', () => {
   }, 60000); // Nested task operations may take longer due to validation
 
   it('should allow duplicate project names (OmniFocus behavior)', async () => {
-    const projectName = 'Test Duplicate Project ' + Date.now();
+    const projectName = runScopedName(`TestBatch_Duplicate_Project_${Date.now()}`);
 
     // Create first project
     const result1 = await client.callTool('omnifocus_write', {
@@ -281,7 +276,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj6',
-              name: `${TEST_INBOX_PREFIX} TestBatch_Mapping_${timestamp}`,
+              name: runScopedName(`TestBatch_Mapping_${timestamp}`),
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -310,7 +305,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj7',
-              name: `${TEST_INBOX_PREFIX} TestBatch_ValidProject_${timestamp}`,
+              name: runScopedName(`TestBatch_ValidProject_${timestamp}`),
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -319,7 +314,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task4',
-              name: `${TEST_INBOX_PREFIX} TestBatch_MissingParent_${timestamp}`,
+              name: runScopedName(`TestBatch_MissingParent_${timestamp}`),
               parentTempId: 'nonexistent',
             },
           },
@@ -328,7 +323,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj8',
-              name: `${TEST_INBOX_PREFIX} TestBatch_ShouldNotCreate_${timestamp}`,
+              name: runScopedName(`TestBatch_ShouldNotCreate_${timestamp}`),
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -361,7 +356,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task5',
-              name: `${TEST_INBOX_PREFIX} TestBatch_CircularA_${timestamp}`,
+              name: runScopedName(`TestBatch_CircularA_${timestamp}`),
               parentTempId: 'task6',
             },
           },
@@ -370,7 +365,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task6',
-              name: `${TEST_INBOX_PREFIX} TestBatch_CircularB_${timestamp}`,
+              name: runScopedName(`TestBatch_CircularB_${timestamp}`),
               parentTempId: 'task5',
             },
           },
@@ -403,7 +398,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'project',
             data: {
               tempId: 'proj9',
-              name: `${TEST_INBOX_PREFIX} TestBatch_Metadata_${timestamp}`,
+              name: runScopedName(`TestBatch_Metadata_${timestamp}`),
               folder: SANDBOX_FOLDER_NAME,
             },
           },
@@ -412,7 +407,7 @@ d('Batch Operations Integration (Unified API)', () => {
             target: 'task',
             data: {
               tempId: 'task7',
-              name: `${TEST_INBOX_PREFIX} TestBatch_FullMetadata_${timestamp}`,
+              name: runScopedName(`TestBatch_FullMetadata_${timestamp}`),
               parentTempId: 'proj9',
               dueDate: '2025-10-20 17:00',
               deferDate: '2025-10-10 08:00',
