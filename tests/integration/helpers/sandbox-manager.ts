@@ -251,102 +251,85 @@ async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string
 }
 
 /**
- * Common test task name patterns that indicate orphaned test data.
- * These are checked in addition to __TEST__ prefix.
- * Only tasks in "Miscellaneous" or "Inbox" with no tags are deleted.
+ * OMN-83: orphan-fixture identity is now the `__TEST__` name prefix OR
+ * membership of a `__test-` tag — full stop. The previous
+ * ORPHAN_TASK_PATTERNS / ORPHAN_PROJECT_PATTERNS lists were grandfathered-in
+ * substring/prefix matchers that risked nuking real user data (a task named
+ * "Test fire alarm" would have matched "Test " family prefixes). All
+ * integration-test fixtures must carry the `__TEST__` name prefix
+ * (see TEST_INBOX_PREFIX) or a `__test-` tag (see TEST_TAG_PREFIX). This
+ * contract is enforced by `MCPTestClient.createTestTask()` / `createTestProject()`
+ * and individual tests that bypass those helpers (e.g. batch-operations).
+ *
+ * The two predicates below are the single source of truth for fixture
+ * identity. The JXA/OmniJS-embedded scripts duplicate the logic (they run
+ * in OmniFocus's JS context, not Node's), but the predicate semantics MUST
+ * match. Unit tests drive these pure functions to pin the contract and
+ * regression-prove that real-user-shaped task names are NOT classified as
+ * fixtures.
  */
-const ORPHAN_TASK_PATTERNS = [
-  // Common test task naming patterns (prefix match)
-  'TestBatch_',
-  'Test Task',
-  'Test update',
-  'Test delete',
-  'Test create',
-  'Test batch',
-  'Test clear',
-  'Test tags',
-  'Test addTags',
-  'Test removeTags',
-  'Test flag',
-  'Test multiple',
-  'Test urgent',
-  'Test Project',
-  'Test Op ',
-  'MCP Test',
-  'MCP Final Test',
-  'E2E Test',
-  'Smoke Test',
-  'Integration Test',
-  'Performance Test',
-  'Lightweight Test',
-  'MCP Coercion Test',
-  'Quick Test',
-  'v2.2.0 Test',
-  // Builder API / Concurrent / Sequential test patterns
-  'Builder API test',
-  'Task for non-zero',
-  'Concurrent Task',
-  'Timing Test',
-  'Debug Timing Test',
-  'Sequential Test',
-  'BrandedType Test',
-  // Planned date test patterns (without __TEST__ prefix)
-  'Task with Planned Date',
-  'Task to Update Planned Date',
-  'Task to Clear Planned Date',
-  // Analytics test patterns
-  'Completed 1',
-  'Completed 2',
-  'Completed 3',
-  'Completed Task for Stats',
-  'Another Completed',
-  'Overdue Task Test',
-  'Future Task Test',
-  'Velocity Test Task',
-  'Consistency Test',
-];
 
 /**
- * Common test project name patterns that indicate orphaned test data.
- * These projects should only exist inside __MCP_TEST_SANDBOX__ folder.
- * If found outside the sandbox, they are orphans from interrupted test runs.
+ * True iff a task is an integration-test fixture by the OMN-83 contract:
+ * name starts with `__TEST__` OR carries a tag whose name starts with
+ * `__test-`.
+ *
+ * @param taskName    task name as it appears in OmniFocus
+ * @param tagNames    full names of all tags currently on the task
  */
-const ORPHAN_PROJECT_PATTERNS = ['TestBatch_', 'Test Duplicate Project', 'Test Project', '__TEST__'];
+export function isFixtureTaskByName(taskName: string, tagNames: readonly string[] = []): boolean {
+  if (taskName.startsWith(TEST_INBOX_PREFIX)) return true;
+  for (const tag of tagNames) {
+    if (tag.startsWith(TEST_TAG_PREFIX)) return true;
+  }
+  return false;
+}
+
+/**
+ * True iff a project is an integration-test fixture by the OMN-83 contract:
+ * name starts with `__TEST__` OR the project lives inside the sandbox folder.
+ *
+ * @param projectName       project name as it appears in OmniFocus
+ * @param parentFolderName  name of the project's parent folder, or `null` if
+ *                          the project sits at the root of the document
+ */
+export function isFixtureProjectByName(projectName: string, parentFolderName: string | null): boolean {
+  if (projectName.startsWith(TEST_INBOX_PREFIX)) return true;
+  if (parentFolderName === SANDBOX_FOLDER_NAME) return true;
+  return false;
+}
 
 /**
  * Delete orphaned test projects that escaped the sandbox folder.
  * Uses OmniJS deleteObject() — the correct API for project deletion.
  *
- * Only deletes projects matching ORPHAN_PROJECT_PATTERNS that are
- * NOT inside the sandbox folder (those are handled by deleteSandboxProjects).
+ * OMN-83: deletion contract is `__TEST__` name prefix (TEST_INBOX_PREFIX)
+ * for projects NOT inside the sandbox folder. Projects inside the sandbox
+ * are handled by deleteSandboxProjects. No substring/loose matching: the
+ * prefix is the contract.
  */
 async function deleteOrphanedProjects(): Promise<{ deleted: number; errors: string[] }> {
-  const patternsJson = JSON.stringify(ORPHAN_PROJECT_PATTERNS);
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
         let deleted = 0;
         const errors = [];
-        const patterns = ${patternsJson};
+        const prefix = '${TEST_INBOX_PREFIX}';
         const sandboxName = '${SANDBOX_FOLDER_NAME}';
 
-        // Collect orphaned projects (match patterns, NOT in sandbox)
+        // Collect orphaned projects (__TEST__ prefix, NOT in sandbox)
         const toDelete = [];
         for (const project of flattenedProjects) {
           try {
             const name = project.name;
             if (!name) continue;
+            if (!name.startsWith(prefix)) continue;
 
             // Skip projects in sandbox (handled by deleteSandboxProjects)
             const folder = project.parentFolder;
             if (folder && folder.name === sandboxName) continue;
 
-            for (const pattern of patterns) {
-              if (name.startsWith(pattern)) {
-                toDelete.push(project);
-                break;
-              }
-            }
+            toDelete.push(project);
           } catch (e) {}
         }
 
@@ -369,22 +352,27 @@ async function deleteOrphanedProjects(): Promise<{ deleted: number; errors: stri
 }
 
 /**
- * Delete all tasks with __TEST__ name prefix ANYWHERE in OmniFocus
- * This catches orphaned test tasks that ended up in projects like "Miscellaneous"
- * instead of the sandbox folder.
+ * Delete all test-fixture tasks ANYWHERE in OmniFocus.
  *
- * Note: This is slower than deleteTestInboxTasks since it scans all tasks,
- * but necessary to clean up tasks that escaped the sandbox.
+ * OMN-83: orphan task identity is `__TEST__` name prefix (TEST_INBOX_PREFIX)
+ * OR membership of any `__test-` tag (TEST_TAG_PREFIX). The previous
+ * loose-prefix pattern list (ORPHAN_TASK_PATTERNS) is gone — a task named
+ * "Test fire alarm" must NEVER be classified as a fixture. The prefix /
+ * tag-prefix is the contract; every integration-test fixture must carry one
+ * of them.
+ *
+ * This is slower than deleteTestInboxTasks since it scans all tasks, but
+ * it's the safety net for tasks that escaped the sandbox (e.g. inbox tasks
+ * that drifted to "Miscellaneous", projectless tasks under a deleted project).
  */
 async function deleteTestTasksEverywhere(): Promise<{ deleted: number; errors: string[] }> {
-  const patternsJson = JSON.stringify(ORPHAN_TASK_PATTERNS);
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
         let deleted = 0;
         const errors = [];
-        const prefix = '${TEST_INBOX_PREFIX}';
-        const orphanPatterns = ${patternsJson};
+        const namePrefix = '${TEST_INBOX_PREFIX}';
+        const tagPrefix = '${TEST_TAG_PREFIX}';
 
         // Collect tasks to delete first (avoid modifying while iterating)
         const toDelete = [];
@@ -393,27 +381,20 @@ async function deleteTestTasksEverywhere(): Promise<{ deleted: number; errors: s
             const name = task.name;
             if (!name) continue;
 
-            // Check 1: __TEST__ prefix (always delete)
-            if (name.startsWith(prefix)) {
+            // Predicate: name carries __TEST__ prefix OR any tag with __test- prefix.
+            // No substring matching, no project-location heuristic — the prefix /
+            // tag-prefix IS the test-fixture contract.
+            if (name.startsWith(namePrefix)) {
               toDelete.push(task);
               continue;
             }
 
-            // Check 2: Orphan patterns (only in Miscellaneous/Inbox with no tags)
-            const project = task.containingProject;
-            const projName = project ? project.name : 'Inbox';
-            const tagCount = task.tags.length;
-
-            // OMN-46: prefix-only match (was startsWith || includes). The .includes()
-            // substring match risked nuking real user tasks whose name happened to
-            // contain a test-pattern substring (e.g. "Test fire alarm" would match
-            // "Test " in the pattern list). startsWith is the strict, safe predicate.
-            if ((projName === 'Miscellaneous' || projName === 'Inbox') && tagCount === 0) {
-              for (const pattern of orphanPatterns) {
-                if (name.startsWith(pattern)) {
-                  toDelete.push(task);
-                  break;
-                }
+            const tags = task.tags;
+            for (let i = 0; i < tags.length; i++) {
+              const tagName = tags[i].name;
+              if (tagName && tagName.startsWith(tagPrefix)) {
+                toDelete.push(task);
+                break;
               }
             }
           } catch (e) {
@@ -711,13 +692,18 @@ export async function fullCleanup(): Promise<CleanupReport> {
 }
 
 /**
- * OMN-46: read-only inventory of test fixtures currently present in the live
- * OmniFocus DB. Mirrors fullCleanup's categories without mutating anything.
+ * OMN-46/OMN-83: read-only inventory of test fixtures currently present in
+ * the live OmniFocus DB. Mirrors fullCleanup's categories without mutating
+ * anything.
  *
- * Uses prefix-only matching (no .includes() — see the comment at the orphan-
- * task sweep). Tags are matched by `__test-` prefix; tasks by `__TEST__`
- * prefix OR by ORPHAN_TASK_PATTERNS prefix in Miscellaneous/Inbox with no
- * tags (the same predicate the sweep uses post-OMN-46).
+ * Fixture identity (OMN-83):
+ *   - Task: name starts with `__TEST__` (TEST_INBOX_PREFIX) OR has a tag with
+ *     `__test-` prefix (TEST_TAG_PREFIX).
+ *   - Project: name starts with `__TEST__` OR is inside the sandbox folder.
+ *   - Folder: is the sandbox folder, or a descendant of it.
+ *   - Tag: name starts with `__test-`.
+ *
+ * No substring matching, no pattern lists. The prefix is the contract.
  *
  * Returns an empty report (`total: 0`) when the DB is clean — that's the
  * post-cleanup assertion's success signal.
@@ -736,17 +722,12 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
     durationMs: 0,
   };
 
-  const orphanTaskPatternsJson = JSON.stringify(ORPHAN_TASK_PATTERNS);
-  const orphanProjectPatternsJson = JSON.stringify(ORPHAN_PROJECT_PATTERNS);
-
   const script = `
     const result = app.evaluateJavascript(\`
       (() => {
         const inboxPrefix = '${TEST_INBOX_PREFIX}';
         const tagPrefix = '${TEST_TAG_PREFIX}';
         const sandboxName = '${SANDBOX_FOLDER_NAME}';
-        const orphanTaskPatterns = ${orphanTaskPatternsJson};
-        const orphanProjectPatterns = ${orphanProjectPatternsJson};
 
         const out = {
           inboxTasks: [],
@@ -757,35 +738,36 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
           testTags: [],
         };
 
-        // Tasks: __TEST__ prefix (anywhere) OR ORPHAN_TASK_PATTERNS prefix in Misc/Inbox with no tags
+        // Tasks: __TEST__ name prefix OR membership of a __test- tag
         for (const task of flattenedTasks) {
           try {
             const name = task.name;
             if (!name) continue;
-            if (name.startsWith(inboxPrefix)) {
-              const proj = task.containingProject;
-              const where = proj ? proj.name : 'Inbox';
-              if (where === 'Inbox') {
-                out.inboxTasks.push({ id: task.id.primaryKey, name, location: where });
-              } else {
-                out.orphanTasks.push({ id: task.id.primaryKey, name, location: where });
-              }
-              continue;
-            }
-            const proj2 = task.containingProject;
-            const projName = proj2 ? proj2.name : 'Inbox';
-            if ((projName === 'Miscellaneous' || projName === 'Inbox') && task.tags.length === 0) {
-              for (const pattern of orphanTaskPatterns) {
-                if (name.startsWith(pattern)) {
-                  out.orphanTasks.push({ id: task.id.primaryKey, name, location: projName });
+
+            let isFixture = name.startsWith(inboxPrefix);
+            if (!isFixture) {
+              const tags = task.tags;
+              for (let i = 0; i < tags.length; i++) {
+                const tagName = tags[i].name;
+                if (tagName && tagName.startsWith(tagPrefix)) {
+                  isFixture = true;
                   break;
                 }
               }
             }
+            if (!isFixture) continue;
+
+            const proj = task.containingProject;
+            const where = proj ? proj.name : 'Inbox';
+            if (where === 'Inbox') {
+              out.inboxTasks.push({ id: task.id.primaryKey, name, location: where });
+            } else {
+              out.orphanTasks.push({ id: task.id.primaryKey, name, location: where });
+            }
           } catch (e) {}
         }
 
-        // Projects: anything inside sandbox folder OR ORPHAN_PROJECT_PATTERNS prefix outside
+        // Projects: anything inside sandbox folder OR __TEST__ prefix outside
         for (const project of flattenedProjects) {
           try {
             const name = project.name;
@@ -794,13 +776,8 @@ export async function scanForFixtures(): Promise<FixtureScanReport> {
             const folderName = folder ? folder.name : '(no folder)';
             if (folder && folder.name === sandboxName) {
               out.sandboxProjects.push({ id: project.id.primaryKey, name, location: sandboxName });
-            } else {
-              for (const pattern of orphanProjectPatterns) {
-                if (name.startsWith(pattern)) {
-                  out.orphanProjects.push({ id: project.id.primaryKey, name, location: folderName });
-                  break;
-                }
-              }
+            } else if (name.startsWith(inboxPrefix)) {
+              out.orphanProjects.push({ id: project.id.primaryKey, name, location: folderName });
             }
           } catch (e) {}
         }
