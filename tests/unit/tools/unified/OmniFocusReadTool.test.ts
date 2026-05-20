@@ -260,17 +260,13 @@ describe('OmniFocusReadTool', () => {
       // Dates should be parsed into Date objects
       expect(proj.dueDate).toBeInstanceOf(Date);
       expect(proj.nextReviewDate).toBeInstanceOf(Date);
-      // NOTE: completionDate is undefined here NOT because of the
-      // null-collapse bug (that's fixed by OMN-80, see next test), but
-      // because of a SEPARATE defect — `projectFieldsOnResult` strips it.
-      // The source field name is `completionDate` (what parseProjects
-      // writes) but ProjectFieldEnum only knows `completedDate` (a stale
-      // name from earlier API revisions). The projection layer filters by
-      // the enum and removes the unrecognized key. Tracked as a follow-up
-      // ticket. Until that's fixed, completionDate cannot survive the
-      // projection layer regardless of source value, so the right
-      // assertion here is "field stripped by projection" = undefined.
-      expect(proj.completionDate).toBeUndefined();
+      // OMN-81: completionDate now survives projection (was previously stripped
+      // because ProjectFieldEnum erroneously had `completedDate`, a name with
+      // no OmniJS Project property, causing silent total failure). After the
+      // rename, completionDate is in the enum + DETAIL_PROJECT_FIELDS, so
+      // details:true includes it; OMN-80's null-preservation now applies to
+      // the consumer-visible field.
+      expect(proj.completionDate).toBeNull();
     });
 
     // OMN-80: regression — null dueDate from the script must NOT be silently
@@ -294,6 +290,47 @@ describe('OmniFocusReadTool', () => {
       const proj = result.data.projects[0];
       expect(proj.dueDate).toBeNull();
       expect(proj.lastReviewDate).toBeNull();
+    });
+
+    // OMN-81: completionDate is now the canonical name (was completedDate,
+    // which the OmniJS Project class doesn't have → script always emitted
+    // null → user-facing silent total failure). After the rename + adding
+    // completionDate to DETAIL_PROJECT_FIELDS, completed projects' dates
+    // survive end-to-end.
+    it('OMN-81: explicit fields:["completionDate"] returns the parsed Date', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p_done', name: 'Done Project', completionDate: '2026-04-01T17:00:00.000Z' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', fields: ['completionDate'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      expect(proj.completionDate).toBeInstanceOf(Date);
+    });
+
+    it('OMN-81: completionDate is included in details:true output', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p_done', name: 'Done Project', completionDate: '2026-04-01T17:00:00.000Z' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', details: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      expect(proj.completionDate).toBeInstanceOf(Date);
     });
   });
 

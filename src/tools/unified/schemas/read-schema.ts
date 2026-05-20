@@ -140,7 +140,7 @@ const PROJECT_FIELDS = [
   'note',
   'dueDate',
   'deferDate',
-  'completedDate',
+  'completionDate', // OMN-81: was completedDate (stale name, no OmniJS Project property of that name → silent total failure); aligned with OmniJS Project.completionDate + filterFields.completionDate + task side
   'folder',
   'folderPath',
   'folderId',

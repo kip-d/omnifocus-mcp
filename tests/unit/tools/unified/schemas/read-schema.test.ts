@@ -439,7 +439,7 @@ describe('ReadSchema', () => {
         'note',
         'dueDate',
         'deferDate',
-        'completedDate',
+        'completionDate', // OMN-81: renamed from completedDate to match OmniJS canonical API
         'folder',
         'folderPath',
         'folderId',
@@ -453,6 +453,18 @@ describe('ReadSchema', () => {
         query: { type: 'projects', fields: allProjectFields },
       };
       const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    // OMN-81: completionDate is the canonical name (matches OmniJS Project class
+    // + filterFields.completionDate + parseProjects' override key). Was
+    // erroneously named completedDate in the enum and script-builder, causing
+    // silent total failure (script always emitted null because the OmniJS
+    // Project class has no .completedDate property).
+    it('OMN-81: accepts fields:["completionDate"] on a projects query', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'projects', fields: ['completionDate'] },
+      });
       expect(result.success).toBe(true);
     });
 

@@ -144,7 +144,19 @@ export const MINIMAL_PROJECT_FIELDS = ['id', 'name', 'status', 'flagged', 'dueDa
  * but surface ONLY when explicitly requested via `fields`, never on a bare
  * `details:true` — keeps the detailed response token-cheap and shape-stable.
  */
-export const DETAIL_PROJECT_FIELDS = ['note', 'folderPath', 'sequential', 'lastReviewDate', 'nextReviewDate'];
+// OMN-81: completionDate added — was effectively unavailable on all responses
+// (script emitted null for every project due to the completedDate/completionDate
+// rename bug); now that the script emits real values, surface it on details:true
+// so completed-project responses carry the date without an explicit fields:[...]
+// request.
+export const DETAIL_PROJECT_FIELDS = [
+  'note',
+  'folderPath',
+  'sequential',
+  'lastReviewDate',
+  'nextReviewDate',
+  'completionDate',
+];
 
 /**
  * Resolve effective task fields based on user input and details flag.
@@ -1122,8 +1134,13 @@ function generateProjectFieldProjection(fields: string[], context?: { noteTrunca
           'reviewInterval: project.reviewInterval ? { unit: project.reviewInterval.unit, steps: project.reviewInterval.steps } : null',
         );
         break;
-      case 'completedDate':
-        projections.push('completedDate: project.completedDate ? project.completedDate.toISOString() : null');
+      case 'completionDate':
+        // OMN-81: was 'completedDate' reading `project.completedDate` — the
+        // OmniJS Project class has no such property (canonical name is
+        // `completionDate`, per the .d.ts at OmniFocus-4.8.x), so the script
+        // emitted null for EVERY project regardless of completion state.
+        // Aligned with the canonical API + the rest of the codebase.
+        projections.push('completionDate: project.completionDate ? project.completionDate.toISOString() : null');
         break;
       case 'defaultSingletonActionHolder':
         projections.push('defaultSingletonActionHolder: project.defaultSingletonActionHolder || false');
