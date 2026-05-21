@@ -13,5 +13,6 @@
 // Note: ANALYZE_RECURRING_TASKS_SCRIPT replaced by AST builder (Phase 4 consolidation)
 export { GET_RECURRING_PATTERNS_SCRIPT } from './recurring/get-recurring-patterns.js';
 
-// AST-powered builders (Phase 4)
-export { buildRecurringTasksScript, buildRecurringSummaryScript } from './recurring/analyze-recurring-tasks-ast.js';
+// AST-powered builders (Phase 4) — consumers import directly from
+// './recurring/analyze-recurring-tasks-ast.js'; barrel re-export was
+// unused and removed in OMN-93.
