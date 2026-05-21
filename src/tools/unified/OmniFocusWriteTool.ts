@@ -43,7 +43,11 @@ import type {
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
-import { COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import {
+  buildBulkDeleteTasksScript,
+  buildCompleteTaskScript,
+  buildDeleteTaskScript,
+} from '../../omnifocus/scripts/tasks.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
@@ -822,17 +826,11 @@ SAFETY:
       );
     }
 
-    // Convert completionDate if provided
-    const processedArgs = {
-      taskId,
-      completionDate: compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : undefined,
-    };
-
     try {
-      const completeScript = this.omniAutomation.buildScript(
-        COMPLETE_TASK_SCRIPT,
-        processedArgs as unknown as Record<string, unknown>,
-      );
+      const completeScript = buildCompleteTaskScript({
+        taskId,
+        completionDate: compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : null,
+      });
       const res = await this.execJson(completeScript);
       const completeResult =
         res && typeof res === 'object' && 'success' in res
@@ -901,9 +899,7 @@ SAFETY:
     }
 
     try {
-      const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, {
-        taskId,
-      } as unknown as Record<string, unknown>);
+      const deleteScript = buildDeleteTaskScript({ taskId });
       const res = await this.execJson(deleteScript);
       const deleteResult =
         res && typeof res === 'object' && 'success' in res
@@ -1013,7 +1009,7 @@ SAFETY:
     const errors: unknown[] = [];
 
     try {
-      const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, {
+      const script = buildBulkDeleteTasksScript({
         taskIds: taskIds.map((id) => id as string),
       });
       const result = await this.execJson(script);

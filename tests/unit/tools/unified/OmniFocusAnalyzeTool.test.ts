@@ -702,11 +702,16 @@ describe('OmniFocusAnalyzeTool', () => {
 
   // ==========================================================================
   // manage_reviews set_schedule — reviewInterval wiring (OMN-60)
+  //
+  // Post-OMN-32: SET_REVIEW_SCHEDULE_SCRIPT template was replaced by
+  // buildSetReviewScheduleScript(). The OMN-60 invariant — "the requested
+  // reviewInterval ends up in the generated script, not hardcoded null" — is
+  // now verified by inspecting the script string passed to executeJson, since
+  // the builder JSON-serializes the params and bakes them into the OmniJS body.
   // ==========================================================================
   describe('manage_reviews set_schedule reviewInterval wiring (OMN-60)', () => {
     it('passes the requested reviewInterval through to the script (not hardcoded null)', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
@@ -723,15 +728,13 @@ describe('OmniFocusAnalyzeTool', () => {
         },
       });
 
-      expect(mockOmni.buildScript).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ reviewInterval: { unit: 'week', steps: 2 } }),
-      );
+      expect(mockOmni.executeJson).toHaveBeenCalledTimes(1);
+      const generatedScript = mockOmni.executeJson.mock.calls[0][0] as string;
+      expect(generatedScript).toContain('"reviewInterval":{"unit":"week","steps":2}');
     });
 
     it('passes reviewInterval: null when none is supplied (back-compat)', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
@@ -744,10 +747,9 @@ describe('OmniFocusAnalyzeTool', () => {
         },
       });
 
-      expect(mockOmni.buildScript).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ reviewInterval: null }),
-      );
+      expect(mockOmni.executeJson).toHaveBeenCalledTimes(1);
+      const generatedScript = mockOmni.executeJson.mock.calls[0][0] as string;
+      expect(generatedScript).toContain('"reviewInterval":null');
     });
   });
 });

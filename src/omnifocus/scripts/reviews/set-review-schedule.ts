@@ -9,7 +9,26 @@
  * - Handle projects that don't exist
  * - Detailed reporting of changes made
  */
-export const SET_REVIEW_SCHEDULE_SCRIPT = `
+
+export interface ReviewIntervalSpec {
+  unit: string;
+  steps: number;
+}
+
+export interface SetReviewScheduleParams {
+  projectIds: string[];
+  reviewInterval: ReviewIntervalSpec | null;
+  nextReviewDate: string | null;
+}
+
+export function buildSetReviewScheduleScript(params: SetReviewScheduleParams): string {
+  const serialized = JSON.stringify({
+    projectIds: params.projectIds,
+    reviewInterval: params.reviewInterval ?? null,
+    nextReviewDate: params.nextReviewDate ?? null,
+  });
+
+  return `
   // SET_REVIEW_SCHEDULE - OmniJS-first pattern
   (() => {
     const app = Application('OmniFocus');
@@ -17,9 +36,10 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const projectIds = {{projectIds}};
-          const reviewInterval = {{reviewInterval}};
-          const nextReviewDateParam = {{nextReviewDate}};
+          const __params = ${serialized};
+          const projectIds = __params.projectIds;
+          const reviewInterval = __params.reviewInterval;
+          const nextReviewDateParam = __params.nextReviewDate;
 
           // Helper function to calculate next review date from now
           function calculateNextReviewDate(interval, baseDate = null) {
@@ -188,3 +208,4 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
     }
   })();
 `;
+}

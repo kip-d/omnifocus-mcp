@@ -10,12 +10,21 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  *
  * Accepts array of task IDs and deletes them all using OmniJS bridge
  */
-export const BULK_DELETE_TASKS_SCRIPT = `
+
+export interface BulkDeleteTasksParams {
+  taskIds: string[];
+}
+
+export function buildBulkDeleteTasksScript(params: BulkDeleteTasksParams): string {
+  const serialized = JSON.stringify({ taskIds: params.taskIds });
+
+  return `
   ${getUnifiedHelpers()}
 
   (() => {
     const app = Application('OmniFocus');
-    const taskIds = {{taskIds}};
+    const __params = ${serialized};
+    const taskIds = __params.taskIds;
 
     if (!Array.isArray(taskIds) || taskIds.length === 0) {
       return JSON.stringify({
@@ -67,3 +76,4 @@ export const BULK_DELETE_TASKS_SCRIPT = `
     }
   })();
 `;
+}
