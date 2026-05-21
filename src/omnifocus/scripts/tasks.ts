@@ -15,7 +15,7 @@
 export { buildCompleteTaskScript, type CompleteTaskParams } from './tasks/complete-task.js';
 export { buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
 export { buildDeleteTaskScript, type DeleteTaskParams } from './tasks/delete-task.js';
-export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
+export { buildBulkDeleteTasksScript, type BulkDeleteTasksParams } from './tasks/delete-tasks-bulk.js';
 // Note: TODAYS_AGENDA_SCRIPT archived 2026-02-09, replaced by AST builder (todayMode in buildAST)
 
 // AST-powered scripts (Phase 1-2 migration complete 2025-12-17):

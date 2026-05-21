@@ -44,9 +44,9 @@ import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-ty
 import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import {
+  buildBulkDeleteTasksScript,
   buildCompleteTaskScript,
   buildDeleteTaskScript,
-  BULK_DELETE_TASKS_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
@@ -1009,7 +1009,7 @@ SAFETY:
     const errors: unknown[] = [];
 
     try {
-      const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, {
+      const script = buildBulkDeleteTasksScript({
         taskIds: taskIds.map((id) => id as string),
       });
       const result = await this.execJson(script);
