@@ -68,7 +68,7 @@ export class OmniAutomation {
     try {
       const result = await this.execute<unknown>(script);
 
-      // Handle raw script errors (legacy shape)
+      // Handle raw script errors (back-compat shape from pre-envelope scripts)
       const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
       if (isObj(result) && 'error' in result && (result as Record<string, unknown>).error === true) {
         const obj = result as Record<string, unknown>;
@@ -118,7 +118,7 @@ export class OmniAutomation {
     try {
       env = JxaEnvelopeSchema.parse(raw);
     } catch {
-      // Fallback for legacy scripts: normalize legacy shapes to envelope
+      // Fallback for back-compat scripts: normalize pre-envelope shapes to envelope
       env = normalizeToEnvelope(raw);
     }
     if (env.ok === false) {
