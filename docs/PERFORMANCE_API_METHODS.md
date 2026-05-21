@@ -32,7 +32,6 @@ project.rootTask().numberOfCompletedTasks(); // Completed direct children
 **Used in:**
 
 - `src/omnifocus/scripts/projects/list-projects.ts:137-139`
-- `src/omnifocus/scripts/projects/get-project-stats.ts:76-78`
 - `src/omnifocus/scripts/export/export-projects.ts:103-105`
 - `src/omnifocus/scripts/analytics/workflow-analysis.ts:143-144`
 
@@ -93,7 +92,6 @@ readonly effectivelyDropped: boolean;
 
 ### Actual Improvements Achieved
 
-- **50-80% faster** for project statistics (verified in get-project-stats.ts)
 - **60-90% faster** for tag analytics (verified in list-tags.ts)
 - **40-70% faster** for velocity calculations (verified in task-velocity.ts)
 - **Eliminates timeouts** on large databases (2000+ tasks verified)
