@@ -12,7 +12,7 @@
 // Re-export the modularized scripts
 // Note: CREATE_TASK_SCRIPT archived 2025-12-18, replaced by AST builder
 // Note: GET_TASK_COUNT_SCRIPT archived 2025-12-19, replaced by buildTaskCountScript in script-builder.ts
-export { COMPLETE_TASK_SCRIPT } from './tasks/complete-task.js';
+export { buildCompleteTaskScript, type CompleteTaskParams } from './tasks/complete-task.js';
 export { buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
 export { DELETE_TASK_SCRIPT } from './tasks/delete-task.js';
 export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
