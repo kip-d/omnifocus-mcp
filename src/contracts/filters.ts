@@ -173,9 +173,14 @@ export interface TaskFilter {
    */
   orBranches?: TaskFilter[];
 
-  // --- Legacy (PUBLIC API deprecation) ---
+  // --- Compat alias (intentional PUBLIC API boundary — do NOT remove in "legacy" sweeps) ---
   /**
    * @deprecated PUBLIC API ONLY - Use `completed: true` instead
+   *
+   * AUDIT NOTE (OMN-25, 2026-05-21): The `@deprecated` tag here is a
+   * PUBLIC API hint, not a removal signal. Re-flagging this in "legacy
+   * code" audits is incorrect — the dual naming is a permanent boundary.
+   * See the design note below for the full rationale.
    *
    * INTERNAL DESIGN NOTE: The codebase intentionally uses dual naming:
    * - PUBLIC API: `completed` (what users should use)

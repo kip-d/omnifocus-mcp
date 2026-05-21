@@ -42,8 +42,11 @@ interface RawOmniFocusData {
 }
 
 /**
- * Legacy error format from older OmniFocus scripts.
- * Some scripts return { error: true, message: "..." } instead of ScriptResult.
+ * Back-compat error shape from older OmniFocus scripts that pre-date the
+ * ScriptResult envelope. The `Legacy*` symbol names are retained because they
+ * appear in wire-observable error categories (e.g. `'Legacy script error'`)
+ * that MCP clients may match on. "Legacy" here means "older wire shape we
+ * still parse," not "deprecated and scheduled for removal."
  */
 interface LegacyScriptError {
   error?: boolean | string;
@@ -53,7 +56,7 @@ interface LegacyScriptError {
 }
 
 /**
- * Type guard: checks if an unknown value is a legacy script error object.
+ * Type guard: checks if an unknown value is a back-compat script error object.
  * Matches objects with error flags (true/'true') or explicit success: false.
  */
 export function isLegacyScriptError(value: unknown): value is LegacyScriptError {
@@ -65,7 +68,7 @@ export function isLegacyScriptError(value: unknown): value is LegacyScriptError 
 }
 
 /**
- * Safely extract error message from a legacy error object.
+ * Safely extract error message from a back-compat error object.
  */
 export function getLegacyErrorMessage(error: LegacyScriptError): string {
   return typeof error.message === 'string' ? error.message : 'Script execution failed';
@@ -101,6 +104,7 @@ function parseStringResult<T>(res: string): ScriptResult<T> {
 
     if (isLegacyScriptError(parsed)) {
       const details = parsed.details !== undefined ? parsed.details : parsed;
+      // 'Legacy script error' is wire-observable; preserve verbatim for client back-compat.
       return createScriptError(getLegacyErrorMessage(parsed), 'Legacy script error', details);
     }
 
