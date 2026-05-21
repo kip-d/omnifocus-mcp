@@ -244,22 +244,6 @@ export function generateRecommendations(metrics: AnalysisMetrics, configs: Recom
 // =============================================================================
 
 /**
- * Calculate a percentage safely (handles division by zero)
- */
-export function safePercentage(numerator: number, denominator: number, decimals: number = 1): number {
-  if (denominator === 0) return 0;
-  return Number(((numerator / denominator) * 100).toFixed(decimals));
-}
-
-/**
- * Calculate a rate (items per day)
- */
-export function calculateRate(count: number, days: number, decimals: number = 2): number {
-  if (days === 0) return 0;
-  return Number((count / days).toFixed(decimals));
-}
-
-/**
  * Create empty metrics (useful for initialization)
  */
 export function createEmptyMetrics(): AnalysisMetrics {
