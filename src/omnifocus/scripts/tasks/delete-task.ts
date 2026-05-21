@@ -8,12 +8,21 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  * - New approach: O(1) lookup using Task.byIdentifier() + deleteObject() in single OmniJS call
  * - Performance: ~1000x faster (sub-second vs 27 seconds)
  */
-export const DELETE_TASK_SCRIPT = `
+
+export interface DeleteTaskParams {
+  taskId: string;
+}
+
+export function buildDeleteTaskScript(params: DeleteTaskParams): string {
+  const serialized = JSON.stringify({ taskId: params.taskId });
+
+  return `
   ${getUnifiedHelpers()}
 
   (() => {
     const app = Application('OmniFocus');
-    const taskId = {{taskId}};
+    const __params = ${serialized};
+    const taskId = __params.taskId;
 
     try {
       // Use pure OmniJS for O(1) lookup AND deletion in single bridge call
@@ -49,3 +58,4 @@ export const DELETE_TASK_SCRIPT = `
     }
   })();
 `;
+}

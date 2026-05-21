@@ -14,7 +14,7 @@
 // Note: GET_TASK_COUNT_SCRIPT archived 2025-12-19, replaced by buildTaskCountScript in script-builder.ts
 export { buildCompleteTaskScript, type CompleteTaskParams } from './tasks/complete-task.js';
 export { buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
-export { DELETE_TASK_SCRIPT } from './tasks/delete-task.js';
+export { buildDeleteTaskScript, type DeleteTaskParams } from './tasks/delete-task.js';
 export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
 // Note: TODAYS_AGENDA_SCRIPT archived 2026-02-09, replaced by AST builder (todayMode in buildAST)
 

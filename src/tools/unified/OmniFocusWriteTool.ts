@@ -45,7 +45,7 @@ import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/sc
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import {
   buildCompleteTaskScript,
-  DELETE_TASK_SCRIPT,
+  buildDeleteTaskScript,
   BULK_DELETE_TASKS_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import { localToUTC } from '../../utils/timezone.js';
@@ -899,9 +899,7 @@ SAFETY:
     }
 
     try {
-      const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, {
-        taskId,
-      } as unknown as Record<string, unknown>);
+      const deleteScript = buildDeleteTaskScript({ taskId });
       const res = await this.execJson(deleteScript);
       const deleteResult =
         res && typeof res === 'object' && 'success' in res
