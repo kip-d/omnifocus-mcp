@@ -20,7 +20,7 @@ import { ANALYZE_OVERDUE_V3 as ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/sc
 import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
-import { buildMarkProjectReviewedScript, SET_REVIEW_SCHEDULE_SCRIPT } from '../../omnifocus/scripts/reviews.js';
+import { buildMarkProjectReviewedScript, buildSetReviewScheduleScript } from '../../omnifocus/scripts/reviews.js';
 import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/projects-for-review.js';
 
 // Pure-JS analyzer imports (for pattern analysis)
@@ -2939,10 +2939,10 @@ SCOPE FILTERING:
     const projectId = compiled.params?.projectId;
     const brandedProjectIds = projectId ? [convertToProjectId(projectId)] : [];
 
-    const script = this.omniAutomation.buildScript(SET_REVIEW_SCHEDULE_SCRIPT, {
+    // OMN-60: pass the requested interval through (was hardcoded null, which
+    // made the entire reviewInterval path dead code).
+    const script = buildSetReviewScheduleScript({
       projectIds: brandedProjectIds,
-      // OMN-60: pass the requested interval through (was hardcoded null, which
-      // made the entire reviewInterval path dead code).
       reviewInterval: compiled.params?.reviewInterval ?? null,
       nextReviewDate: compiled.params?.reviewDate ?? null,
     });
@@ -2981,7 +2981,7 @@ SCOPE FILTERING:
     const projectId = compiled.params?.projectId;
     const brandedProjectIds = projectId ? [convertToProjectId(projectId)] : [];
 
-    const script = this.omniAutomation.buildScript(SET_REVIEW_SCHEDULE_SCRIPT, {
+    const script = buildSetReviewScheduleScript({
       projectIds: brandedProjectIds,
       reviewInterval: null,
       nextReviewDate: null,
