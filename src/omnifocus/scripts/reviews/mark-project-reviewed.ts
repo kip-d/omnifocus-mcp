@@ -9,7 +9,21 @@
  * - Handle projects with and without review intervals
  * - Proper error handling for missing projects
  */
-export const MARK_PROJECT_REVIEWED_SCRIPT = `
+
+export interface MarkProjectReviewedParams {
+  projectId: string | null;
+  reviewDate: string;
+  updateNextReviewDate: boolean;
+}
+
+export function buildMarkProjectReviewedScript(params: MarkProjectReviewedParams): string {
+  const serialized = JSON.stringify({
+    projectId: params.projectId ?? null,
+    reviewDate: params.reviewDate,
+    updateNextReviewDate: params.updateNextReviewDate,
+  });
+
+  return `
   // MARK_PROJECT_REVIEWED - OmniJS-first pattern
   (() => {
     const app = Application('OmniFocus');
@@ -17,9 +31,10 @@ export const MARK_PROJECT_REVIEWED_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const projectId = {{projectId}};
-          const reviewDate = {{reviewDate}};
-          const updateNextReviewDate = {{updateNextReviewDate}};
+          const __params = ${serialized};
+          const projectId = __params.projectId;
+          const reviewDate = __params.reviewDate;
+          const updateNextReviewDate = __params.updateNextReviewDate;
 
           // Helper function to calculate next review date
           function calculateNextReviewDate(reviewInterval, fromDate) {
@@ -120,3 +135,4 @@ export const MARK_PROJECT_REVIEWED_SCRIPT = `
     }
   })();
 `;
+}

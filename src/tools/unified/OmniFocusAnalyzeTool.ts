@@ -20,7 +20,7 @@ import { ANALYZE_OVERDUE_V3 as ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/sc
 import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
-import { MARK_PROJECT_REVIEWED_SCRIPT, SET_REVIEW_SCHEDULE_SCRIPT } from '../../omnifocus/scripts/reviews.js';
+import { buildMarkProjectReviewedScript, SET_REVIEW_SCHEDULE_SCRIPT } from '../../omnifocus/scripts/reviews.js';
 import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/projects-for-review.js';
 
 // Pure-JS analyzer imports (for pattern analysis)
@@ -2897,8 +2897,8 @@ SCOPE FILTERING:
     const reviewDate = compiled.params?.reviewDate || new Date().toISOString();
     const brandedProjectId = projectId ? convertToProjectId(projectId) : undefined;
 
-    const script = this.omniAutomation.buildScript(MARK_PROJECT_REVIEWED_SCRIPT, {
-      projectId: brandedProjectId,
+    const script = buildMarkProjectReviewedScript({
+      projectId: brandedProjectId ?? null,
       reviewDate,
       updateNextReviewDate: true,
     });
