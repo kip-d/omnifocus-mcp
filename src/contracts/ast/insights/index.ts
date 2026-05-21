@@ -1,12 +1,29 @@
 /**
  * Insights Module - Configurable insight and recommendation generation
  *
+ * ⏸ PARKED — Phase 4C is half-built (OMN-95).
+ * ─────────────────────────────────────────────────────────────────────────
+ * This subtree (the typed insight preset system) was added in commit
+ * `addd9bb` as Phase 4C of the AST consolidation. The DATA layer is
+ * complete; the WIRING layer was never built. As of 2026-05-21, nothing
+ * in `src/tools/` calls `generateInsights()` / `generateRecommendations()`
+ * — the live `workflow_analysis` capability in `OmniFocusAnalyzeTool`
+ * still uses the script-side `WORKFLOW_ANALYSIS_V3` insight pipeline.
+ *
+ * **Do NOT delete this subtree in "unused export" audits** — it is
+ * intentional WIP, not stillborn code. Completion is tracked in
+ * [OMN-95](https://linear.app/omnifocus-mcp/issue/OMN-95).
+ *
+ * When OMN-95 lands, remove this banner. Until then, ts-prune will flag
+ * everything below as orphan; that is correct-but-known.
+ * ─────────────────────────────────────────────────────────────────────────
+ *
  * This module provides:
  * - Pre-defined insight configurations for workflow analysis
  * - Pre-defined recommendation configurations
  * - Utilities for filtering and sorting insights
  *
- * Usage:
+ * Usage (once OMN-95 wires it in):
  * ```typescript
  * import {
  *   ALL_WORKFLOW_INSIGHTS,
