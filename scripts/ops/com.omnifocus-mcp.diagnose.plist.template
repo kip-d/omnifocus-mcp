@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from scripts/ops/com.omnifocus-mcp.diagnose.plist.template by
+     install-diagnose-schedule.sh, which substitutes absolute paths and a
+     Homebrew-aware PATH (launchd does NOT expand $HOME or ~). Re-run the
+     installer to update; do not hand-edit the deployed copy. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.omnifocus-mcp.diagnose</string>
+    <!-- launchd's default PATH omits Homebrew → npm not found → exit 127. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>__PATH_VALUE__</string>
+    </dict>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>__WRAPPER_PATH__</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Weekday</key>
+      <integer>0</integer>
+      <key>Hour</key>
+      <integer>9</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>__LAUNCHD_LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LAUNCHD_LOG__</string>
+  </dict>
+</plist>

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# of-mcp-diagnose — cron/launchd wrapper for `npm run diagnose-failures`.
+#
+# Canonical source: scripts/ops/of-mcp-diagnose in the omnifocus-mcp repo.
+# Deploy with scripts/ops/install-diagnose-schedule.sh, which copies this file
+# to ~/bin and installs the launchd plist. Do NOT hand-edit the deployed copy —
+# edit here and re-run the installer, or the next deploy will clobber your change.
+#
+# Runs against the PROD checkout ($OF_MCP_REPO_DIR, default ~/omnifocus-mcp) and
+# regenerates its tracked docs/dev/mcp-failure-triage.md; ~/bin/of-mcp-redeploy
+# discards that churn before its `git pull --rebase`. The durable record is $LOG,
+# not the in-repo .md (which is regenerated scratch on the prod checkout).
+set -euo pipefail
+
+# launchd and cron run with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin) that
+# omits Homebrew, so npm/node/npx are not found and the job dies at exit 127.
+# Prepend Homebrew's bin dir if present (Apple Silicon: /opt/homebrew, Intel:
+# /usr/local). The launchd plist sets PATH too; this keeps a manual or cron
+# invocation robust regardless of the caller's environment. (Probes fixed dirs
+# rather than calling `brew`, which would itself be off the minimal PATH.)
+for d in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$d" ] && PATH="$d:$PATH"
+done
+export PATH
+
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LOG="${OF_MCP_DIAGNOSE_LOG:-$HOME/.omnifocus-mcp/diagnose-failures.log}"
+DAYS="${OF_MCP_DIAGNOSE_DAYS:-90}"
+
+mkdir -p "$(dirname "$LOG")"
+cd "$REPO_DIR"
+echo "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') =====" >> "$LOG"
+npm run diagnose-failures -- --days="$DAYS" >> "$LOG" 2>&1

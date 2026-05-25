@@ -139,78 +139,53 @@ Auto-filing guards (enforced by `src/diagnostics/linear-filer.ts`):
 
 ---
 
-## Scheduling: `~/bin/of-mcp-diagnose` (NOT committed — machine-specific)
+## Scheduling: weekly launchd job
 
-> This recipe is **not committed to the repo**. It is a local ops script, following the same convention as
-> `~/bin/of-mcp-redeploy`.
+The wrapper and launchd plist are **committed** under `scripts/ops/` and deployed by a script — the runtime locations
+(`~/bin`, `~/Library/LaunchAgents`) are install targets, not the source of truth. Edit the canonical files and re-run
+the installer; never hand-edit the deployed copies.
 
-Create `~/bin/of-mcp-diagnose`:
+| Committed source                                        | Deployed to                                               | Role                                          |
+| ------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------- |
+| `scripts/ops/of-mcp-diagnose`                           | `~/bin/of-mcp-diagnose`                                   | cron/launchd wrapper for `diagnose-failures`. |
+| `scripts/ops/com.omnifocus-mcp.diagnose.plist.template` | `~/Library/LaunchAgents/com.omnifocus-mcp.diagnose.plist` | launchd job definition (paths substituted).   |
+| `scripts/ops/install-diagnose-schedule.sh`              | —                                                         | Installs both, (re)loads the job.             |
 
-```bash
-#!/usr/bin/env bash
-# ~/bin/of-mcp-diagnose — local cron/launchd wrapper for diagnose-failures
-# NOT committed; machine-specific. See docs/dev/mcp-failure-diagnosis.md.
-set -euo pipefail
-
-REPO_DIR="$HOME/omnifocus-mcp"
-LOG="$HOME/.omnifocus-mcp/diagnose-failures.log"
-
-cd "$REPO_DIR"
-npm run diagnose-failures -- --days=90 >> "$LOG" 2>&1
-```
-
-Make it executable:
+### Deploy
 
 ```bash
-chmod +x ~/bin/of-mcp-diagnose
+scripts/ops/install-diagnose-schedule.sh            # install / reload
+scripts/ops/install-diagnose-schedule.sh --verify   # also kickstart + assert exit 0
+scripts/ops/install-diagnose-schedule.sh --uninstall # bootout + remove the plist
 ```
 
-### launchd plist (weekly, Sunday 09:00)
+The installer is idempotent: it copies the wrapper to `~/bin`, generates the plist from the template (substituting
+absolute paths — launchd does NOT expand `$HOME`/`~`), validates it with `plutil`, and reloads via
+`launchctl bootout`/`bootstrap`. Schedule is weekly, **Sunday 09:00**.
 
-> launchd does NOT expand `$HOME` or `~` in `ProgramArguments` — substitute your own absolute username path (replace
-> `/Users/kip/...` below). The cron alternative further down uses `$HOME` and is fine as-is.
+Env overrides: `OF_MCP_BIN_DIR` (default `~/bin`), `OF_MCP_REPO_DIR` (default `~/omnifocus-mcp`, the prod checkout the
+job runs against).
 
-Save as `~/Library/LaunchAgents/com.omnifocus-mcp.diagnose.plist`:
+### The PATH gotcha (why the plist sets `EnvironmentVariables`)
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>Label</key>
-    <string>com.omnifocus-mcp.diagnose</string>
-    <key>ProgramArguments</key>
-    <array>
-      <string>/bin/bash</string>
-      <string>/Users/kip/bin/of-mcp-diagnose</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-      <key>Weekday</key>
-      <integer>0</integer>
-      <key>Hour</key>
-      <integer>9</integer>
-      <key>Minute</key>
-      <integer>0</integer>
-    </dict>
-    <key>RunAtLoad</key>
-    <false/>
-    <key>StandardOutPath</key>
-    <string>/Users/kip/.omnifocus-mcp/diagnose-failures-launchd.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/kip/.omnifocus-mcp/diagnose-failures-launchd.log</string>
-  </dict>
-</plist>
-```
+launchd and cron run with a minimal `PATH=/usr/bin:/bin:/usr/sbin:/sbin` that omits Homebrew. With Node installed via
+Homebrew, `npm`/`node`/`npx` are not found and the job **dies at exit 127** — a wrapper that works by hand fails
+silently when scheduled. Two layers guard this:
 
-Load it:
+1. The installer detects the Homebrew bin dir (`/opt/homebrew/bin` on Apple Silicon, `/usr/local/bin` on Intel) and
+   bakes it into the plist's `EnvironmentVariables` → `PATH`.
+2. The wrapper itself prepends the same dirs at runtime, so a manual or cron invocation is robust regardless of the
+   caller's environment.
 
-```bash
-launchctl load ~/Library/LaunchAgents/com.omnifocus-mcp.diagnose.plist
-```
+**Diagnosing a broken job:** `launchctl list | grep diagnose` — the middle column is the **last exit code** (127 =
+command-not-found / PATH bug; 0 = healthy). A stale triage-doc mtime means a scheduled run never regenerated it.
+**Verify a fix through launchd, not your shell:** `launchctl kickstart -p gui/$(id -u)/com.omnifocus-mcp.diagnose` runs
+the job with the plist's environment applied (`--verify` does this for you). Note `launchctl print` does NOT echo
+per-job `EnvironmentVariables`, so don't use it to confirm the PATH took — confirm via a successful kickstart.
 
 ### cron alternative (weekly, Sunday 09:00)
+
+The wrapper is cron-safe (it sets its own PATH), so launchd is optional:
 
 ```cron
 0 9 * * 0 $HOME/bin/of-mcp-diagnose
