@@ -18,9 +18,15 @@ set -euo pipefail
 # /usr/local). The launchd plist sets PATH too; this keeps a manual or cron
 # invocation robust regardless of the caller's environment. (Probes fixed dirs
 # rather than calling `brew`, which would itself be off the minimal PATH.)
+# Order matches install-diagnose-schedule.sh: /opt/homebrew first, so both the
+# scheduled and manual runs resolve npm/node to the same prefix.
+brew_dirs=()
 for d in /opt/homebrew/bin /usr/local/bin; do
-  [ -d "$d" ] && PATH="$d:$PATH"
+  [ -d "$d" ] && brew_dirs+=("$d")
 done
+if [ ${#brew_dirs[@]} -gt 0 ]; then
+  PATH="$(IFS=:; printf '%s' "${brew_dirs[*]}"):$PATH"
+fi
 export PATH
 
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
@@ -28,6 +34,6 @@ LOG="${OF_MCP_DIAGNOSE_LOG:-$HOME/.omnifocus-mcp/diagnose-failures.log}"
 DAYS="${OF_MCP_DIAGNOSE_DAYS:-90}"
 
 mkdir -p "$(dirname "$LOG")"
-cd "$REPO_DIR"
+cd "$REPO_DIR" || { echo "of-mcp-diagnose: repo dir not found: $REPO_DIR" >&2; exit 1; }
 echo "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') =====" >> "$LOG"
 npm run diagnose-failures -- --days="$DAYS" >> "$LOG" 2>&1
