@@ -1092,4 +1092,65 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // OMN-98: RepetitionRuleSchema was the last non-strict object in the write
+  // mutation tree after OMN-97 — unknown keys inside data.repetitionRule (and
+  // its nested daysOfWeek entries) were still silently stripped, so a typo like
+  // `freqency` vanished and the rule was created with defaults.
+  describe('repetitionRule strictness (OMN-98)', () => {
+    it('rejects an unknown key inside data.repetitionRule (e.g. the `freqency` typo)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'X', repetitionRule: { frequency: 'daily', freqency: 'weekly' } },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown key inside a daysOfWeek entry', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: {
+            name: 'X',
+            repetitionRule: { frequency: 'weekly', daysOfWeek: [{ day: 'MO', bogus: true }] },
+          },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown key inside changes.repetitionRule on update', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-1',
+          changes: { repetitionRule: { frequency: 'daily', interva: 2 } },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts a valid repetitionRule with daysOfWeek (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: {
+            name: 'X',
+            repetitionRule: {
+              frequency: 'weekly',
+              interval: 1,
+              daysOfWeek: [{ day: 'MO' }, { day: 'WE', position: 1 }],
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });

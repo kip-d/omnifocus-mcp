@@ -15,38 +15,42 @@ type SameKeys<A, B> =
 // Repetition rule schema — derived from RepetitionRule contract via `satisfies`.
 // Constrains output type only (input is `unknown` to allow MCP bridge string coercion).
 // If the contract changes a field type, `satisfies` errors here.
-const RepetitionRuleSchema = z.object({
-  frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
-  interval: z
-    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-    .pipe(z.number().min(1))
-    .optional()
-    .default(1),
-  // Fix 1: daysOfWeek must be DayOfWeek[] (object with day + optional position), not number[]
-  daysOfWeek: z
-    .array(
-      z.object({
-        day: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']),
-        position: z.number().optional(),
-      }),
-    )
-    .optional(),
-  // Fix 2: 4 missing fields that contract + script builder already support
-  daysOfMonth: z.array(z.number().min(-31).max(31)).optional(),
-  count: z
-    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-    .pipe(z.number().min(1))
-    .optional(),
-  weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
-  setPositions: z.array(z.number().min(-366).max(366)).optional(),
-  endDate: z.string().optional(),
-  // OmniFocus 4.7+ repetition method control
-  method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
-  scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
-  anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
-  // Fix 4: coerceBoolean for MCP bridge compatibility (Claude Desktop sends strings)
-  catchUpAutomatically: coerceBoolean().optional(),
-}) satisfies z.ZodType<RepetitionRule, z.ZodTypeDef, unknown>;
+const RepetitionRuleSchema = z
+  .object({
+    frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
+    interval: z
+      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+      .pipe(z.number().min(1))
+      .optional()
+      .default(1),
+    // Fix 1: daysOfWeek must be DayOfWeek[] (object with day + optional position), not number[]
+    daysOfWeek: z
+      .array(
+        z
+          .object({
+            day: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']),
+            position: z.number().optional(),
+          })
+          .strict(), // OMN-98: reject unknown keys in a daysOfWeek entry
+      )
+      .optional(),
+    // Fix 2: 4 missing fields that contract + script builder already support
+    daysOfMonth: z.array(z.number().min(-31).max(31)).optional(),
+    count: z
+      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+      .pipe(z.number().min(1))
+      .optional(),
+    weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
+    setPositions: z.array(z.number().min(-366).max(366)).optional(),
+    endDate: z.string().optional(),
+    // OmniFocus 4.7+ repetition method control
+    method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
+    scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
+    anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
+    // Fix 4: coerceBoolean for MCP bridge compatibility (Claude Desktop sends strings)
+    catchUpAutomatically: coerceBoolean().optional(),
+  })
+  .strict() satisfies z.ZodType<RepetitionRule, z.ZodTypeDef, unknown>; // OMN-98: last non-strict object in the write tree
 
 // Key-set sync: catches missing optional fields (which `satisfies` alone allows through).
 // If RepetitionRule gains or loses a field, `never = true` fails to compile.
