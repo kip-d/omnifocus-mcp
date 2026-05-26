@@ -180,6 +180,7 @@ FILTER OPERATORS:
 - dates (dueDate, deferDate, plannedDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
 - text: { contains: "..." }, { matches: "regex" }
 - boolean: flagged, blocked, available, inInbox
+- folder (projects queries): "<name>" matches folder-name substring; null = top-level projects only (no containing folder)
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
 
 RESPONSE CONTROL:
@@ -608,7 +609,11 @@ PERFORMANCE:
     if (compiled.filters.projectStatus) {
       projectFilter.status = compiled.filters.projectStatus;
     }
-    if (compiled.filters.folder) {
+    // OMN-96: `folder: null` compiled to folderTopLevel → top-level projects
+    // only (no containing folder). A folder string is a name substring filter.
+    if (compiled.filters.folderTopLevel) {
+      projectFilter.topLevelOnly = true;
+    } else if (compiled.filters.folder) {
       projectFilter.folderName = compiled.filters.folder;
     }
     if (compiled.filters.search) {

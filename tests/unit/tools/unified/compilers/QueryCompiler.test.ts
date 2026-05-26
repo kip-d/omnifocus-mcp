@@ -706,6 +706,21 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({ folder: 'Work' });
         expect(result.folder).toBe('Work');
       });
+
+      // OMN-96: `folder: null` is the model's natural guess for "top-level
+      // projects, no containing folder." Map it to the internal folderTopLevel
+      // flag (NOT result.folder, which does substring matching on the folder
+      // name and would never match a null).
+      it('input.folder: null maps to folderTopLevel and not result.folder', () => {
+        const result = compiler.transformFilters({ folder: null });
+        expect(result.folderTopLevel).toBe(true);
+        expect(result.folder).toBeUndefined();
+      });
+
+      it('a folder name does not set folderTopLevel', () => {
+        const result = compiler.transformFilters({ folder: 'Work' });
+        expect(result.folderTopLevel).toBeUndefined();
+      });
     });
 
     describe('compile() export passthrough', () => {
