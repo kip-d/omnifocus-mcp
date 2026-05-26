@@ -66,7 +66,32 @@ const filterFields = {
   text: TextFilterSchema.optional(),
   estimatedMinutes: NumberFilterSchema.optional(), // Task duration
   name: TextFilterSchema.optional(), // Project/Task name filter
-  folder: z.string().optional(), // Project filters
+  // OMN-96 DECISION RECORD — `folder: null` = "top-level projects only".
+  //
+  // The model repeatedly sent `filters.folder: null` on projects queries,
+  // expecting it to mean "top-level projects with no containing folder"
+  // (failures-2026-03-05 and -2026-05-21, 2.5 months apart). The old schema
+  // typed folder as a bare string and hard-rejected null. We chose to MOLD THE
+  // SERVER TO THE MODEL'S NATURAL GUESS: accept null and treat it as the
+  // top-level filter. A string still means "folder name contains <string>".
+  //
+  // Alternatives considered and NOT taken (recorded so a future revisit is
+  // cheap — pick a different row here and re-thread):
+  //   1. Explicit boolean `topLevelOnly: true`. Self-documenting, but the model
+  //      doesn't reach for it unprompted; `folder: null` is what it actually
+  //      emits, so accepting null closes the real gap with zero new vocabulary.
+  //   2. Structured `folder: { exists: false }`. More expressive (room for
+  //      `{ exists: true }`, name/id sub-filters later) but heavier schema and
+  //      still not the model's first guess.
+  //   3. Keep rejecting, but make the error actionable ("to list top-level
+  //      projects, use …"). Lowest effort, but leaves a capability gap — the
+  //      model has no working way to express a common, legitimate intent.
+  //
+  // The internal representation is the boolean flag `folderTopLevel`
+  // (TaskFilter) → `topLevelOnly` (ProjectFilter); null never reaches the
+  // emitter as a folder *name*. See QueryCompiler.transformFilters and
+  // generateProjectFilterCode.
+  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96)
 };
 
 // Flat filter: base fields only, no logical operators.

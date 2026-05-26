@@ -13,10 +13,7 @@ import {
   isEmptyProjectFilter,
   describeProjectFilter,
 } from '../../src/contracts/ast/filter-generator.js';
-import {
-  buildFilteredProjectsScript,
-  buildProjectByIdScript,
-} from '../../src/contracts/ast/script-builder.js';
+import { buildFilteredProjectsScript, buildProjectByIdScript } from '../../src/contracts/ast/script-builder.js';
 import { buildTagsScript, buildActiveTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import type { ProjectFilter } from '../../src/contracts/filters.js';
 import type { TagQueryOptions } from '../../src/contracts/tag-options.js';
@@ -70,6 +67,13 @@ describe('Phase 3 AST Builders', () => {
       expect(code).toContain('toLowerCase()');
     });
 
+    // OMN-96: top-level-only means "no containing folder" → !project.parentFolder
+    it('should generate top-level-only filter', () => {
+      const filter: ProjectFilter = { topLevelOnly: true };
+      const code = generateProjectFilterCode(filter);
+      expect(code).toContain('!project.parentFolder');
+    });
+
     it('should combine multiple filters with AND', () => {
       const filter: ProjectFilter = { status: ['active'], flagged: true };
       const code = generateProjectFilterCode(filter);
@@ -93,6 +97,11 @@ describe('Phase 3 AST Builders', () => {
     it('should return false for filter with flagged', () => {
       expect(isEmptyProjectFilter({ flagged: true })).toBe(false);
     });
+
+    // OMN-96: topLevelOnly is a real constraint, so the filter isn't empty
+    it('should return false for filter with topLevelOnly', () => {
+      expect(isEmptyProjectFilter({ topLevelOnly: true })).toBe(false);
+    });
   });
 
   describe('describeProjectFilter', () => {
@@ -110,6 +119,12 @@ describe('Phase 3 AST Builders', () => {
       expect(desc).toContain('status');
       expect(desc).toContain('flagged');
       expect(desc).toContain('AND');
+    });
+
+    // OMN-96
+    it('should describe top-level-only filter', () => {
+      const desc = describeProjectFilter({ topLevelOnly: true });
+      expect(desc).toContain('top-level');
     });
   });
 

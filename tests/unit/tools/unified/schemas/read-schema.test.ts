@@ -192,6 +192,33 @@ describe('ReadSchema', () => {
     });
   });
 
+  // OMN-96: `folder: null` means "top-level projects only" (no containing
+  // folder). We mold the schema to the model's natural guess for that intent —
+  // see the decision record in read-schema.ts at the `folder` field.
+  describe('folder: null → top-level only (OMN-96)', () => {
+    it('should accept folder: null on projects queries', () => {
+      const input = {
+        query: {
+          type: 'projects',
+          filters: { folder: null },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should still accept a folder name string', () => {
+      const input = {
+        query: {
+          type: 'projects',
+          filters: { folder: 'Work' },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
+
   // OMN-43: explicit projectId filter key. Previously the only project-related
   // filter was `project` (string-or-null), which routed string values through a
   // name-resolution path that failed with SCRIPT_ERROR for ambiguous or unmatched

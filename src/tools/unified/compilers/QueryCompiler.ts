@@ -118,7 +118,15 @@ export class QueryCompiler {
 
     // ID/folder passthrough
     if (input.id) result.id = input.id;
-    if (input.folder) result.folder = input.folder;
+    // OMN-96: `folder: null` means "top-level projects only" (the model's
+    // natural guess); a string is a folder-name substring filter. Distinguish
+    // them explicitly — `null` is falsy, so the old `if (input.folder)` truthy
+    // check silently dropped it. See the decision record in read-schema.ts.
+    if (input.folder === null) {
+      result.folderTopLevel = true;
+    } else if (typeof input.folder === 'string') {
+      result.folder = input.folder;
+    }
 
     // Safety net: warn on unknown properties that survived schema validation
     const unknownProps = validateFilterProperties(result as Record<string, unknown>);

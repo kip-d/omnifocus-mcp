@@ -157,6 +157,8 @@ export interface TaskFilter {
 
   // --- Folder (for project filtering) ---
   folder?: string; // Filter projects by folder name
+  // OMN-96: `folder: null` (top-level projects only) compiles to this flag.
+  folderTopLevel?: boolean;
 
   // --- Pagination ---
   limit?: number;
@@ -245,6 +247,11 @@ export interface ProjectFilter {
    * Filter by folder name (case-insensitive substring match)
    */
   folderName?: string;
+  /**
+   * OMN-96: match only top-level projects (no containing folder).
+   * Set when the read query passes `folder: null`.
+   */
+  topLevelOnly?: boolean;
 
   // --- Pagination ---
   limit?: number;
@@ -262,6 +269,7 @@ export const PROJECT_FILTER_PROPERTY_NAMES = [
   'text',
   'folderId',
   'folderName',
+  'topLevelOnly', // OMN-96
   'limit',
   'offset',
 ] as const;
@@ -363,6 +371,7 @@ export const FILTER_PROPERTY_NAMES = [
   'search',
   'projectStatus',
   'folder',
+  'folderTopLevel', // OMN-96
   'limit',
   'offset',
   'mode',

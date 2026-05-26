@@ -306,6 +306,11 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
     );
   }
 
+  // OMN-96: top-level projects only — no containing folder.
+  if (filter.topLevelOnly) {
+    conditions.push('!project.parentFolder');
+  }
+
   // Return 'true' if no conditions (match all projects)
   return conditions.length > 0 ? conditions.join(' && ') : 'true';
 }
@@ -320,7 +325,8 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
     filter.needsReview === undefined &&
     !filter.text &&
     !filter.folderId &&
-    !filter.folderName
+    !filter.folderName &&
+    !filter.topLevelOnly // OMN-96
   );
 }
 
@@ -347,6 +353,9 @@ export function describeProjectFilter(filter: ProjectFilter): string {
   }
   if (filter.folderName) {
     conditions.push(`folder name contains "${filter.folderName}"`);
+  }
+  if (filter.topLevelOnly) {
+    conditions.push('top-level only (no folder)'); // OMN-96
   }
 
   if (conditions.length === 0) {
