@@ -991,4 +991,105 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  // OMN-97: OMN-76 made the *leaf* data/changes payloads strict. This block
+  // closes the residual surface — `.strict()` does NOT propagate through
+  // discriminatedUnion/union, so the enclosing members and the top-level
+  // wrapper were still plain z.object and silently stripped misplaced keys.
+  describe('mutation-tree strictness — siblings + wrapper (OMN-97)', () => {
+    // helper: join all issue messages so we can assert actionable hints
+    const messagesOf = (result: ReturnType<typeof WriteSchema.safeParse>): string =>
+      result.success ? '' : result.error.issues.map((i) => i.message).join(' | ');
+
+    it('rejects `flagged` placed as a sibling of data (the canonical misplacement)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'X' },
+          flagged: true, // belongs INSIDE data; as a sibling it was silently dropped
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown key at the top-level WriteSchema wrapper (sibling of mutation)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'X' } },
+        bogusTopLevel: true,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown sibling key inside the update member', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-1',
+          changes: { flagged: true },
+          bogusSibling: 1,
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown sibling key inside the complete member', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'complete', target: 'task', id: 'task-1', bogus: 1 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown sibling key on a batch operation entry (sibling of data)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [{ operation: 'create', target: 'task', data: { name: 'A' }, flagged: true }],
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    // Actionable rejection messages for the four well-known misplaced/aliased fields.
+    it('names `estimatedMinutes` when `estimate` is used inside data', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'X', estimate: 30 } },
+      });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result)).toContain('estimatedMinutes');
+    });
+
+    it('names `tags` when `context` is used inside data', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'X', context: 'home' } },
+      });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result)).toContain('tags');
+    });
+
+    it('names `flagged` when `priority` is used inside data', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'X', priority: 1 } },
+      });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result)).toContain('flagged');
+    });
+
+    it('names the batch/parentTempId path when `subtasks` is used inside data', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'X', subtasks: [] } },
+      });
+      expect(result.success).toBe(false);
+      expect(messagesOf(result)).toContain('parentTempId');
+    });
+
+    it('still accepts a fully valid create (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'create', target: 'task', data: { name: 'Real', flagged: true } },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });

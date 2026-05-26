@@ -84,6 +84,41 @@ const ReviewIntervalSchema = z
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
 const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 
+// ── OMN-97: strict everywhere + actionable redirects ─────────────────
+// `.strict()` does NOT propagate through discriminatedUnion/union (prior art
+// OMN-90 on the read path), so every object literal in the mutation tree needs
+// its own — otherwise a key at the wrong nesting level (e.g. `flagged` as a
+// sibling of `data`) is silently stripped and the caller believes it was set.
+//
+// `.strict()`'s generic "Unrecognized key(s)" error is unhelpful for the
+// handful of fields LLMs reach for that OmniFocus simply doesn't have (or
+// names differently). We attach an errorMap that turns those into a loud error
+// that ALSO names the supported alternative. Empirically the errorMap fires
+// for unrecognized_keys at every depth — leaf `data`, member sibling, wrapper.
+const WRITE_FIELD_REDIRECTS: Record<string, string> = {
+  estimate: "use 'estimatedMinutes' (duration in minutes as a number)",
+  context: "OmniFocus 3+ has no contexts — use 'tags'",
+  priority: "OmniFocus has no priority levels — use 'flagged: true'",
+  subtasks: "create children via a batch op with 'parentTempId' (or set 'parentTaskId' on create)",
+};
+
+const writeAliasErrorMap: z.ZodErrorMap = (issue, ctx) => {
+  if (issue.code === z.ZodIssueCode.unrecognized_keys) {
+    const hints = issue.keys.filter((k) => k in WRITE_FIELD_REDIRECTS).map((k) => `${k} → ${WRITE_FIELD_REDIRECTS[k]}`);
+    if (hints.length > 0) {
+      return { message: `${ctx.defaultError}. ${hints.join('; ')}` };
+    }
+  }
+  return { message: ctx.defaultError };
+};
+
+/**
+ * Strict object literal with the write-path alias errorMap attached. Use for
+ * EVERY object in the mutation tree so unknown keys are rejected (not stripped)
+ * and the four known misplaced/aliased fields get an actionable message.
+ */
+const strictObj = <T extends z.ZodRawShape>(shape: T) => z.object(shape, { errorMap: writeAliasErrorMap }).strict();
+
 // Create data schema — single source of truth for task/project creation fields.
 // Both the unified write tool and batch-schemas derive from this.
 // Exported for OMN-61 write-side parity testing (settable field ↔ builder).
@@ -96,66 +131,73 @@ const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 // silent data loss into a loud Zod rejection that `logToolFailure` records,
 // closing the diagnose-pipeline blind spot.
 export const CreateDataSchema = z
-  .object({
-    name: z.string().min(1),
-    note: z.string().optional(),
-    project: z.union([z.string(), z.null()]).optional(),
-    parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
-    tags: z.array(z.string()).optional(),
-    dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-    deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-    plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-    flagged: coerceBoolean().optional(),
-    estimatedMinutes: z
-      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-      .pipe(z.number())
-      .optional(),
-    repetitionRule: RepetitionRuleSchema.optional(),
+  .object(
+    {
+      name: z.string().min(1),
+      note: z.string().optional(),
+      project: z.union([z.string(), z.null()]).optional(),
+      parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
+      tags: z.array(z.string()).optional(),
+      dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+      deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+      plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+      flagged: coerceBoolean().optional(),
+      estimatedMinutes: z
+        .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+        .pipe(z.number())
+        .optional(),
+      repetitionRule: RepetitionRuleSchema.optional(),
 
-    // Project-specific
-    folder: z.string().optional(),
-    sequential: coerceBoolean().optional(),
-    status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
-    reviewInterval: ReviewIntervalSchema.optional(),
-  })
+      // Project-specific
+      folder: z.string().optional(),
+      sequential: coerceBoolean().optional(),
+      status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
+      reviewInterval: ReviewIntervalSchema.optional(),
+    },
+    { errorMap: writeAliasErrorMap },
+  ) // OMN-97: actionable redirects on unknown keys
   .strict();
 
 // Update changes schema
 // Exported for OMN-61 write-side parity testing (settable field ↔ builder).
 export const UpdateChangesSchema = z
-  .object({
-    name: z.string().optional(),
-    note: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    addTags: z.array(z.string()).optional(),
-    removeTags: z.array(z.string()).optional(),
-    dueDate: z.union([z.string(), z.null()]).optional(),
-    deferDate: z.union([z.string(), z.null()]).optional(),
-    plannedDate: z.union([z.string(), z.null()]).optional(),
-    clearDueDate: coerceBoolean().optional(),
-    clearDeferDate: coerceBoolean().optional(),
-    clearPlannedDate: coerceBoolean().optional(),
-    flagged: coerceBoolean().optional(),
-    // Note: tasks only support 'completed'/'dropped'; projects support all 4.
-    // Task-specific narrowing happens in sanitizer + script builder.
-    status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
-    project: z.union([z.string(), z.null()]).optional(),
-    folder: z.union([z.string(), z.null()]).optional(),
-    parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
-    estimatedMinutes: z
-      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-      .pipe(z.number())
-      .optional(),
-    clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
-    repetitionRule: z.union([RepetitionRuleSchema, z.null()]).optional(), // Set (object) or clear (null)
-    // Project-specific update fields
-    sequential: coerceBoolean().optional(),
-    reviewInterval: ReviewIntervalSchema.optional(),
-  })
+  .object(
+    {
+      name: z.string().optional(),
+      note: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      addTags: z.array(z.string()).optional(),
+      removeTags: z.array(z.string()).optional(),
+      dueDate: z.union([z.string(), z.null()]).optional(),
+      deferDate: z.union([z.string(), z.null()]).optional(),
+      plannedDate: z.union([z.string(), z.null()]).optional(),
+      clearDueDate: coerceBoolean().optional(),
+      clearDeferDate: coerceBoolean().optional(),
+      clearPlannedDate: coerceBoolean().optional(),
+      flagged: coerceBoolean().optional(),
+      // Note: tasks only support 'completed'/'dropped'; projects support all 4.
+      // Task-specific narrowing happens in sanitizer + script builder.
+      status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
+      project: z.union([z.string(), z.null()]).optional(),
+      folder: z.union([z.string(), z.null()]).optional(),
+      parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
+      estimatedMinutes: z
+        .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+        .pipe(z.number())
+        .optional(),
+      clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
+      repetitionRule: z.union([RepetitionRuleSchema, z.null()]).optional(), // Set (object) or clear (null)
+      // Project-specific update fields
+      sequential: coerceBoolean().optional(),
+      reviewInterval: ReviewIntervalSchema.optional(),
+    },
+    { errorMap: writeAliasErrorMap },
+  ) // OMN-97: actionable redirects on unknown keys
   .strict();
 
 // Folder create data schema — minimal: just name + optional parent folder
-const FolderCreateDataSchema = z.object({
+// OMN-97: strict so misplaced keys are rejected, not silently dropped.
+const FolderCreateDataSchema = strictObj({
   name: z.string().min(1),
   parentFolder: z.string().optional(),
 });
@@ -168,25 +210,27 @@ export const BatchItemDataSchema = CreateDataSchema.extend({
 });
 
 // Batch operation schema - discriminated union
+// OMN-97: each member strictObj() so a misplaced sibling of `data`/`changes`
+// inside a batch entry is rejected, not silently stripped.
 const BatchOperationSchema = z.discriminatedUnion('operation', [
-  z.object({
+  strictObj({
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: BatchItemDataSchema,
   }),
-  z.object({
+  strictObj({
     operation: z.literal('update'),
     target: z.enum(['task', 'project']),
     id: z.string(),
     changes: UpdateChangesSchema,
   }),
-  z.object({
+  strictObj({
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']),
     id: z.string(),
     completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
   }),
-  z.object({
+  strictObj({
     operation: z.literal('delete'),
     target: z.enum(['task', 'project']),
     id: z.string(),
@@ -207,14 +251,14 @@ const TagActionSchema = z.enum([
 // Mutation schema - discriminated union by operation
 const MutationSchema = z.discriminatedUnion('operation', [
   // Create operation (task/project)
-  z.object({
+  strictObj({
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: CreateDataSchema,
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Create folder operation
-  z.object({
+  strictObj({
     operation: z.literal('create_folder'),
     data: FolderCreateDataSchema,
   }),
@@ -225,7 +269,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
   // WriteSchema superRefine enforces exactly-one-present. `target` defaults to
   // 'task' (the model frequently omits it on update/complete); non-breaking
   // since a missing target was previously a hard error.
-  z.object({
+  strictObj({
     operation: z.literal('update'),
     target: z.enum(['task', 'project']).default('task'),
     id: z.string(),
@@ -234,7 +278,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Complete operation
-  z.object({
+  strictObj({
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']).default('task'), // OMN-75: model often omits target
     id: z.string(),
@@ -251,14 +295,14 @@ const MutationSchema = z.discriminatedUnion('operation', [
   // a more consistent shape than `id`. Accept it as a non-breaking alias.
   // Both are optional here; the WriteSchema superRefine enforces exactly-one-
   // present so an empty delete still fails with a clear, schema-level error.
-  z.object({
+  strictObj({
     operation: z.literal('delete'),
     target: z.enum(['task', 'project']),
     id: z.string().optional(),
     target_id: z.string().optional(),
   }),
   // Batch operation with options
-  z.object({
+  strictObj({
     operation: z.literal('batch'),
     target: z.enum(['task', 'project']).optional(),
     operations: z.array(BatchOperationSchema),
@@ -269,14 +313,14 @@ const MutationSchema = z.discriminatedUnion('operation', [
     dryRun: coerceBoolean().optional().default(false), // Preview without executing
   }),
   // Bulk delete operation - for efficient batch deletion
-  z.object({
+  strictObj({
     operation: z.literal('bulk_delete'),
     target: z.enum(['task', 'project']),
     ids: z.array(z.string()).min(1).max(100), // Limit to 100 items for safety
     dryRun: coerceBoolean().optional().default(false), // Preview without executing
   }),
   // Tag management operation
-  z.object({
+  strictObj({
     operation: z.literal('tag_manage'),
     action: TagActionSchema,
     tagName: z.string().min(1).describe('The tag name to operate on'),
@@ -289,9 +333,13 @@ const MutationSchema = z.discriminatedUnion('operation', [
 // Main write schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const WriteSchema = z
-  .object({
-    mutation: coerceObject(MutationSchema),
-  })
+  .object(
+    {
+      mutation: coerceObject(MutationSchema),
+    },
+    { errorMap: writeAliasErrorMap }, // OMN-97
+  )
+  .strict() // OMN-97: reject unknown keys at the top-level wrapper (sibling of `mutation`)
   // OMN-71: delete accepts `id` OR its alias `target_id`. The discriminated-
   // union member can't carry a refinement (zod requires ZodObject members),
   // so enforce "exactly one identifier present" at the boundary schema — this
