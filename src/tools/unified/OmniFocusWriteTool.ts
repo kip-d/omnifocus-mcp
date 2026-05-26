@@ -106,6 +106,11 @@ OPERATIONS:
 - bulk_delete: Delete multiple items by IDs
 - tag_manage: Manage tag hierarchy (create, rename, delete, merge, nest, unnest, reparent)
 
+FIELD PLACEMENT (fields go INSIDE data/changes, not beside them):
+- Unknown or misplaced keys are rejected (not silently dropped). Common fixes:
+  estimate → estimatedMinutes; context → tags (no contexts in OF3+);
+  priority → flagged (no priority levels); subtasks → a batch op with parentTempId.
+
 FOLDER CREATION:
 - operation: "create_folder"
 - data.name: Folder name (required)
@@ -181,6 +186,37 @@ SAFETY:
    * which is what surfaces caller mistakes through the failure-log pipeline.
    */
   override get inputSchema(): Record<string, unknown> {
+    // OMN-97: advertise the supported fields of `data`/`changes` so MCP clients
+    // get field-level guidance and misplace fewer keys. Mirrors CreateDataSchema /
+    // UpdateChangesSchema in write-schema.ts — keep in sync (dual-schema rule).
+    // (Plain `type: string` for enum-bearing fields like `status` to avoid
+    // advertising an enum the inputSchema↔Zod parity test would police.)
+    const createDataProperties: Record<string, unknown> = {
+      name: { type: 'string' },
+      note: { type: 'string' },
+      project: { type: 'string', description: 'name or ID; omit/null = inbox' },
+      parentTaskId: { type: 'string', description: 'create as subtask of this ID' },
+      tags: { type: 'array', items: { type: 'string' }, description: 'no contexts in OF3+ — use tags' },
+      dueDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
+      deferDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
+      plannedDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
+      flagged: { type: 'boolean', description: 'no priority levels — use flagged' },
+      estimatedMinutes: { type: 'number', description: 'minutes (not "estimate")' },
+      repetitionRule: { type: 'object' },
+      folder: { type: 'string', description: 'project-only' },
+      sequential: { type: 'boolean', description: 'project-only' },
+      status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
+      reviewInterval: { description: 'project-only: days or {steps,unit}' },
+    };
+    const updateChangesProperties: Record<string, unknown> = {
+      ...createDataProperties,
+      addTags: { type: 'array', items: { type: 'string' } },
+      removeTags: { type: 'array', items: { type: 'string' } },
+      clearDueDate: { type: 'boolean' },
+      clearDeferDate: { type: 'boolean' },
+      clearPlannedDate: { type: 'boolean' },
+      clearEstimatedMinutes: { type: 'boolean' },
+    };
     return {
       type: 'object',
       properties: {
@@ -194,9 +230,10 @@ SAFETY:
             },
             target: { type: 'string', enum: ['task', 'project'] },
 
-            // create/update shared
-            data: { type: 'object' },
-            changes: { type: 'object' },
+            // create/update shared — OMN-97: field-level guidance; misplaced
+            // siblings (e.g. `flagged` outside `data`) are now hard-rejected.
+            data: { type: 'object', properties: createDataProperties },
+            changes: { type: 'object', properties: updateChangesProperties },
             id: { type: 'string' },
             target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
             minimalResponse: { type: 'boolean' },
@@ -216,6 +253,10 @@ SAFETY:
                 properties: {
                   operation: { type: 'string', enum: ['create', 'update', 'complete', 'delete'] },
                   target: { type: 'string', enum: ['task', 'project'] },
+                  // OMN-97: kept bare to bound advertised-schema size — the
+                  // top-level data/changes carry the field guidance, and Zod
+                  // (BatchItemDataSchema/UpdateChangesSchema) still hard-rejects
+                  // misplaced keys inside batch entries regardless.
                   data: { type: 'object' },
                   changes: { type: 'object' },
                   id: { type: 'string' },

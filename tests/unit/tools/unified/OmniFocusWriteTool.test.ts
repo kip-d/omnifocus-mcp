@@ -799,9 +799,19 @@ describe('OmniFocusWriteTool task operations', () => {
       const schema = tool.inputSchema as any;
       const mutationProps = schema.properties.mutation.properties;
 
-      // data and changes should be loose objects
-      expect(mutationProps.data).toEqual({ type: 'object' });
-      expect(mutationProps.changes).toEqual({ type: 'object' });
+      // OMN-97: data/changes now advertise their supported fields so MCP
+      // clients get field-level guidance and misplace fewer keys.
+      expect(mutationProps.data.type).toBe('object');
+      for (const f of ['name', 'dueDate', 'estimatedMinutes', 'flagged', 'tags', 'status']) {
+        expect(mutationProps.data.properties[f]).toBeDefined();
+      }
+      // changes is a superset (adds addTags/removeTags/clear* fields)
+      expect(mutationProps.changes.properties.addTags).toBeDefined();
+      expect(mutationProps.changes.properties.clearDueDate).toBeDefined();
+
+      // repetitionRule stays shallow — advertised as a loose object, NOT the
+      // deeply-expanded recursive shape (the size blowup this test guards).
+      expect(mutationProps.data.properties.repetitionRule).toEqual({ type: 'object' });
     });
 
     it('should advertise batch control flags as boolean, not string', () => {
