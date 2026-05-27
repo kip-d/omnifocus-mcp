@@ -1153,4 +1153,70 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // OMN-99: ReviewIntervalObjectSchema (the { steps, unit } form) was the last
+  // non-strict object reachable on the write mutation tree after OMN-98 — an
+  // unknown key inside reviewInterval (e.g. `bogu`) was silently stripped. The
+  // object carries a .transform() (steps→days), so .strict() must be chained
+  // BEFORE .transform() (.strict() is a ZodObject method; .transform() yields
+  // ZodEffects, which has none).
+  describe('reviewInterval object strictness (OMN-99)', () => {
+    it('rejects an unknown key inside reviewInterval object on create', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'P', reviewInterval: { steps: 2, unit: 'weeks', bogu: 1 } },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown key inside reviewInterval object on update', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'project-1',
+          changes: { reviewInterval: { steps: 2, unit: 'months', bogu: 1 } },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts a valid reviewInterval object (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'P', reviewInterval: { steps: 2, unit: 'weeks' } },
+        },
+      });
+      expect(result.success).toBe(true);
+      const data = (result.data!.mutation as { data: { reviewInterval: number } }).data;
+      expect(data.reviewInterval).toBe(14);
+    });
+
+    it('still accepts the bare-number reviewInterval form (no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'P', reviewInterval: 14 },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the string reviewInterval form (MCP bridge, no regression)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'P', reviewInterval: '7' },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });

@@ -75,6 +75,12 @@ const ReviewIntervalObjectSchema = z
     steps: z.union([z.number(), z.string().transform((v) => parseInt(v, 10))]).pipe(z.number().min(1)),
     unit: z.string(),
   })
+  // OMN-99: .strict() rejects unknown keys (e.g. a typo'd `bogu`) instead of
+  // silently stripping them — same data-loss class as OMN-76/97/98. Must chain
+  // BEFORE .transform(): .strict() is a ZodObject method; .transform() returns
+  // ZodEffects, which has none. This was the last non-strict object on the
+  // write mutation tree.
+  .strict()
   .transform((obj) => {
     const multiplier = UNIT_TO_DAYS[obj.unit.toLowerCase()] ?? 1;
     return obj.steps * multiplier;
