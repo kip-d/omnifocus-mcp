@@ -34,12 +34,13 @@ import { detectContextTags } from '../capture/context-detection.js';
 import { extractDates } from '../capture/date-extraction.js';
 
 // Response types
-import type { ProductivityStatsData } from '../../omnifocus/script-response-types.js';
-import type { OverdueAnalysisData } from '../../omnifocus/script-response-types.js';
-import type { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
-import type { ReviewListData } from '../../omnifocus/script-response-types.js';
-import type { OverdueAnalysisDataV2 } from '../response-types-v2.js';
-import type { RecurringTaskV2 } from '../response-types-v2.js';
+import type {
+  ProductivityStatsData,
+  OverdueAnalysisData,
+  WorkflowAnalysisData,
+  ReviewListData,
+} from '../../omnifocus/script-response-types.js';
+import type { OverdueAnalysisDataV2, RecurringTaskV2 } from '../response-types-v2.js';
 import type { ProjectId } from '../../utils/branded-types.js';
 
 // ---------------------------------------------------------------------------

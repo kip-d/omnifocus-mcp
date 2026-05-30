@@ -2,6 +2,7 @@ import eslint from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import sonarjs from 'eslint-plugin-sonarjs';
+import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 import localRules from './eslint-rules/index.js';
 
@@ -30,10 +31,14 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint,
+      import: importPlugin,
     },
     rules: {
       // TypeScript recommended rules (but relaxed for MCP server)
       ...tseslint.configs['recommended'].rules,
+
+      // Catch split imports from the same module (autofixable; merges type + value).
+      'import/no-duplicates': 'error',
 
       // Relaxed any type rules for MCP server
       '@typescript-eslint/no-explicit-any': 'warn', // Allow any but warn

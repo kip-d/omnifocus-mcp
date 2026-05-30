@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { createLogger, redactArgs } from '../../../src/utils/logger.js';
 
 describe('logger', () => {
@@ -17,7 +17,7 @@ describe('logger', () => {
       node = node.next;
     }
     const out = redactArgs(input);
-    expect(out.name).toBe('[REDACTED]');
+    expect((out as any).name).toBe('[REDACTED]');
     expect((out as any).nested.note).toBe('[REDACTED]');
     expect((out as any).nested.deep).toBeTypeOf('object');
   });
@@ -25,17 +25,17 @@ describe('logger', () => {
   it('includes structured args at debug level, not at info', () => {
     const logger = createLogger('test');
     // Should not throw; we check that redactArgs processed, meaning JSON stringifiable
-    logger.debug('dbg', { name: 'secret', taskName: 'x' });
+    expect(() => logger.debug('dbg', { name: 'secret', taskName: 'x' })).not.toThrow();
 
     process.env.LOG_LEVEL = 'info';
     const infoLogger = createLogger('test');
-    infoLogger.info('info', { name: 'secret' }); // args ignored at info
+    expect(() => infoLogger.info('info', { name: 'secret' })).not.toThrow(); // args ignored at info
   });
 
   it('appends error message when single Error arg is provided at error level', () => {
     process.env.LOG_LEVEL = 'error';
     const logger = createLogger('test');
-    logger.error('boom', new Error('details'));
+    expect(() => logger.error('boom', new Error('details'))).not.toThrow();
   });
 
   afterAll(() => {

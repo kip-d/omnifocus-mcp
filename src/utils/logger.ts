@@ -41,17 +41,18 @@ export function generateCorrelationId(): string {
 // Keys whose values should be redacted in logs
 const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectName', 'tagName', 'title', 'script']);
 
-// Best‑effort deep redaction that preserves structure for debugging
-export function redactArgs<T>(value: T, depth = 0): T {
+// Best‑effort deep redaction that preserves structure for debugging.
+// Returns `unknown`: the redacted value is only ever serialized to a log sink,
+// never read field-by-field, so a typed return would be a lie (it rebuilds the
+// structure rather than preserving the input type).
+export function redactArgs(value: unknown, depth = 0): unknown {
   if (depth > 6) return value; // Avoid pathological recursion
 
   if (value == null) return value;
   if (typeof value !== 'object') return value;
 
   if (Array.isArray(value)) {
-    // Array mapping preserves generic type structure
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return value.map((v) => redactArgs(v, depth + 1)) as unknown as T;
+    return value.map((v) => redactArgs(v, depth + 1));
   }
 
   const out: Record<string, unknown> = {};
@@ -64,7 +65,7 @@ export function redactArgs<T>(value: T, depth = 0): T {
       out[k] = v;
     }
   }
-  return out as unknown as T;
+  return out;
 }
 
 export function createLogger(context: string, initialContext?: LogContext): Logger {
@@ -96,7 +97,8 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
         ...initialContext?.metadata,
         ...logContext?.metadata,
       },
-      args: args.length > 0 ? redactArgs(args) : undefined,
+      // redactArgs preserves array-ness for an array input, so this narrows honestly.
+      args: args.length > 0 ? (redactArgs(args) as unknown[]) : undefined,
     };
   };
 

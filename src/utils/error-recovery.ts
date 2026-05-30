@@ -1,141 +1,11 @@
 /**
  * Error Recovery Utilities for OmniFocus MCP Server
  *
- * Provides automatic recovery patterns for transient errors including
- * retry with exponential backoff and intelligent error classification.
+ * Provides intelligent error classification that maps OmniFocus/JXA failures to
+ * actionable recovery guidance. (Retry-with-backoff lives on BaseTool — see
+ * `executeWithRetry` in src/tools/base.ts; the former standalone copy here was
+ * dead and was removed.)
  */
-
-export interface RetryOptions {
-  /** Maximum number of retry attempts */
-  maxRetries?: number;
-
-  /** Initial delay in milliseconds */
-  initialDelay?: number;
-
-  /** Maximum delay in milliseconds */
-  maxDelay?: number;
-
-  /** Function to check if an error is transient (retryable) */
-  isTransientError?: (error: unknown) => boolean;
-
-  /** Function to call before each retry */
-  onRetry?: (attempt: number, error: unknown) => void;
-}
-
-export interface RetryResult<T> {
-  result: T;
-  attempts: number;
-  succeeded: boolean;
-  lastError?: unknown;
-}
-
-export const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
-  maxRetries: 3,
-  initialDelay: 100,
-  maxDelay: 5000,
-  isTransientError: (error) => isTransientError(error),
-  onRetry: () => {},
-};
-
-/**
- * Check if an error is transient (retryable)
- */
-export function isTransientError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const errorMessage = error.message.toLowerCase();
-
-  // Transient error patterns
-  const transientPatterns = [
-    'timeout',
-    'timed out',
-    'connection',
-    'network',
-    'busy',
-    'locked',
-    'not responding',
-    'temporarily unavailable',
-    'resource temporarily unavailable',
-    'try again later',
-    'rate limit',
-    'too many requests',
-    'service unavailable',
-    '503',
-    '504',
-  ];
-
-  return transientPatterns.some((pattern) => errorMessage.includes(pattern));
-}
-
-/**
- * Execute an operation with automatic retry for transient errors
- */
-export async function executeWithRetry<T>(
-  operation: () => Promise<T>,
-  options: RetryOptions = {},
-): Promise<RetryResult<T>> {
-  const mergedOptions: Required<RetryOptions> = {
-    ...DEFAULT_RETRY_OPTIONS,
-    ...options,
-  };
-
-  let lastError: unknown;
-  let attempts = 0;
-
-  for (let attempt = 1; attempt <= mergedOptions.maxRetries + 1; attempt++) {
-    attempts = attempt;
-
-    try {
-      const result = await operation();
-      return {
-        result,
-        attempts,
-        succeeded: true,
-      };
-    } catch (error) {
-      lastError = error;
-
-      // Don't retry if this is the last attempt or error is not transient
-      if (attempt === mergedOptions.maxRetries + 1 || !mergedOptions.isTransientError(error)) {
-        return {
-          result: undefined as unknown as T,
-          attempts,
-          succeeded: false,
-          lastError: error,
-        };
-      }
-
-      // Calculate exponential backoff delay
-      const delay = calculateExponentialBackoff(attempt, mergedOptions.initialDelay, mergedOptions.maxDelay);
-
-      // Call onRetry callback
-      mergedOptions.onRetry(attempt, error);
-
-      // Wait before retrying
-      await sleep(delay);
-    }
-  }
-
-  // This should never be reached, but TypeScript requires it
-  throw lastError;
-}
-
-/**
- * Calculate exponential backoff delay
- */
-function calculateExponentialBackoff(attempt: number, initialDelay: number, maxDelay: number): number {
-  const delay = initialDelay * Math.pow(2, attempt - 1);
-  return Math.min(delay, maxDelay);
-}
-
-/**
- * Sleep for specified milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Enhanced error context for better debugging and user guidance
@@ -155,28 +25,6 @@ export interface EnhancedErrorContext {
 
   /** Additional technical details */
   technical_details?: Record<string, unknown>;
-}
-
-/**
- * Create an enhanced error response with additional context
- */
-export function createEnhancedErrorResponse(
-  error: Error,
-  context: EnhancedErrorContext = {},
-): Error & EnhancedErrorContext {
-  const enhancedError = new Error(error.message) as Error & EnhancedErrorContext;
-
-  // Copy all properties from original error
-  Object.assign(enhancedError, error);
-
-  // Add enhanced context
-  enhancedError.error_id = context.error_id || generateErrorId();
-  enhancedError.recovery_suggestions = context.recovery_suggestions;
-  enhancedError.related_documentation = context.related_documentation;
-  enhancedError.support_contact = context.support_contact;
-  enhancedError.technical_details = context.technical_details;
-
-  return enhancedError;
 }
 
 /**
