@@ -14,7 +14,6 @@ import {
   buildUnparentTagScript,
   buildReparentTagScript,
 } from '../../contracts/ast/tag-mutation-script-builder.js';
-import type { GeneratedMutationScript } from '../../contracts/ast/mutation-script-builder.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -23,6 +22,7 @@ import {
 } from '../../utils/response-format.js';
 import { TaskId } from '../../utils/branded-types.js';
 import {
+  type GeneratedMutationScript,
   buildUpdateProjectScript,
   buildCreateProjectScript,
   buildCreateFolderScript,
@@ -41,7 +41,11 @@ import type {
   TaskCreateData,
 } from '../../contracts/mutations.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
-import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
+import type {
+  ScriptExecutionResult,
+  TaskCreationArgs,
+  TaskOperationResult,
+} from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import {
   buildBulkDeleteTasksScript,
@@ -51,7 +55,6 @@ import {
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import type { TaskOperationResult } from '../../omnifocus/script-response-types.js';
 import { flattenBatchResults } from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
