@@ -123,6 +123,11 @@ export class QueryCompiler {
       result.projectId = input.project;
     }
 
+    // OMN-114: parentTaskId — direct children of a task. Unambiguous id match.
+    if (typeof input.parentTaskId === 'string') {
+      result.parentTaskId = input.parentTaskId;
+    }
+
     // ID/folder passthrough
     if (input.id) result.id = input.id;
     // OMN-96: `folder: null` means "top-level projects only" (the model's

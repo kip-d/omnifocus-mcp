@@ -163,10 +163,26 @@ function emitOmniJSTagStatusValid(operator: ComparisonOperator, value: unknown):
 }
 
 /**
+ * OMN-114: parentTaskId filter. Compares the task's parent id, guarding against
+ * a null parent before reading `.id.primaryKey` (top-level tasks have no parent).
+ */
+function emitOmniJSParentTaskId(operator: ComparisonOperator, value: unknown): string {
+  const id = JSON.stringify(value as string);
+  if (operator === '==') {
+    return `(task.parent && task.parent.id.primaryKey === ${id})`;
+  }
+  if (operator === '!=') {
+    return `(!task.parent || task.parent.id.primaryKey !== ${id})`;
+  }
+  throw new Error(`Unsupported parentTaskId operator: ${operator}`);
+}
+
+/**
  * Registry of synthetic fields and their emitter functions.
  * Adding a new synthetic field requires one entry here.
  */
 export const SYNTHETIC_FIELD_DEFS: readonly SyntheticFieldDef[] = [
+  { field: 'task.parentTaskId', omnijs: emitOmniJSParentTaskId },
   { field: 'task.dropped', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Dropped') },
   {
     field: 'task.available',
@@ -201,6 +217,7 @@ export const KNOWN_FIELDS = [
   'task.taskStatus', // TaskStatus enum: active, completed, dropped
   'task.dropped', // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
   'task.tagStatusValid', // Synthetic: has active/on-hold tag or untagged (computed in emitter)
+  'task.parentTaskId', // OMN-114 synthetic: task.parent.id.primaryKey === <id> (null-guarded, computed in emitter)
 
   // Date properties
   'task.dueDate',

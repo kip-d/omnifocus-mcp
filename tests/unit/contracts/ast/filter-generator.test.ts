@@ -56,6 +56,14 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toContain('task.note');
     });
 
+    it('OMN-114: parentTaskId emits a null-guarded parent id comparison', () => {
+      const filter: TaskFilter = { parentTaskId: 'abc123' };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      // Must guard against null parent before reading .id.primaryKey.
+      expect(result.predicate).toBe('(task.parent && task.parent.id.primaryKey === "abc123")');
+    });
+
     it('generateFilterCode returns EmitResult with preamble and predicate', () => {
       const filter = { completed: false, flagged: true };
       const result = generateFilterCode(filter);

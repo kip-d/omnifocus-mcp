@@ -61,6 +61,19 @@ describe('QueryCompiler', () => {
       expect(compiled.filters.fastSearch).toBeUndefined();
     });
 
+    it('OMN-114: passes parentTaskId filter through to the compiled filter', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          filters: { parentTaskId: 'abc123' },
+        },
+      };
+
+      const compiled = compiler.compile(input);
+
+      expect(compiled.filters.parentTaskId).toBe('abc123');
+    });
+
     it('should compile smart_suggest mode', () => {
       const input: ReadInput = {
         query: {

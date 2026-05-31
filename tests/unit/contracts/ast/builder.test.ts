@@ -291,6 +291,27 @@ describe('buildAST', () => {
     });
   });
 
+  describe('parent task filter (OMN-114)', () => {
+    it('transforms parentTaskId to a synthetic comparison node', () => {
+      const filter: TaskFilter = { parentTaskId: 'abc123' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.parentTaskId',
+        operator: '==',
+        value: 'abc123',
+      });
+    });
+
+    it('omits the parent filter when parentTaskId is undefined', () => {
+      const filter: TaskFilter = {};
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({ type: 'literal', value: true });
+    });
+  });
+
   describe('date filters', () => {
     it('transforms dueBefore', () => {
       const filter: TaskFilter = { dueBefore: '2025-12-31' };

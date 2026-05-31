@@ -183,6 +183,13 @@ export const FILTER_DEFS: readonly FilterDef[] = [
     },
   },
 
+  // --- Parent task filter (OMN-114) ---
+  // Direct children of a given task id — read-side mirror of write's parentTaskId.
+  {
+    fields: ['task.parentTaskId'],
+    build: (f) => (f.parentTaskId !== undefined ? comparison('task.parentTaskId', '==', f.parentTaskId) : null),
+  },
+
   // --- Estimated minutes (numeric) filter (OMN-49) ---
   {
     fields: ['task.estimatedMinutes'],
