@@ -143,7 +143,13 @@ export const FILTER_DEFS: readonly FilterDef[] = [
       const searchTerm = f.text ?? f.search;
       if (searchTerm === undefined) return null;
       const operator = f.textOperator === 'MATCHES' ? 'matches' : 'includes';
-      return or(comparison('task.name', operator, searchTerm), comparison('task.note', operator, searchTerm));
+      const nameMatch = comparison('task.name', operator, searchTerm);
+      // OMN-115: fastSearch restricts matching to the task NAME only, skipping
+      // the note body — the documented "Name search" fast path. Reading fewer
+      // properties per task is the only avoidable cost in an otherwise
+      // bridge-bound full scan.
+      if (f.fastSearch) return nameMatch;
+      return or(nameMatch, comparison('task.note', operator, searchTerm));
     },
   },
 

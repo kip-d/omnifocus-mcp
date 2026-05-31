@@ -152,6 +152,14 @@ export interface TaskFilter {
   // --- Search (for name/note search) ---
   search?: string; // Search term for name/note content
 
+  /**
+   * OMN-115: fast search restricts text matching to the task NAME only,
+   * skipping the note body. Fulfils the documented "Name search → fastSearch:
+   * true" fast path (QuickReferencePrompt). When undefined/false, search
+   * matches both name and note.
+   */
+  fastSearch?: boolean;
+
   // --- Project Status (preserved for project queries) ---
   projectStatus?: ProjectStatus[];
 
@@ -369,6 +377,7 @@ export const FILTER_PROPERTY_NAMES = [
   'projectId',
   'project',
   'search',
+  'fastSearch', // OMN-115: name-only fast search
   'projectStatus',
   'folder',
   'folderTopLevel', // OMN-96

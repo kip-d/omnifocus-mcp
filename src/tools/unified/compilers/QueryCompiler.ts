@@ -49,6 +49,13 @@ export class QueryCompiler {
 
     // Transform filters from API schema to internal contract, then normalize
     const rawFilters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
+    // OMN-115: fastSearch is a query-level param, but the AST search builder only
+    // sees the filter object. Thread it onto the filter so `fastSearch: true`
+    // emits a name-only predicate (skips the note body) per the documented
+    // "Name search" fast path.
+    if ('fastSearch' in query && query.fastSearch !== undefined) {
+      rawFilters.fastSearch = query.fastSearch;
+    }
     const filters = normalizeFilter(rawFilters);
     const taskMode = 'mode' in query && query.mode ? query.mode : 'all';
 
