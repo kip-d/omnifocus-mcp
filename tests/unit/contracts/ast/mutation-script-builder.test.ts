@@ -8,6 +8,7 @@ import {
   buildCompleteScript,
   buildDeleteScript,
   buildBatchScript,
+  buildBatchCreateTasksScript,
   buildBulkDeleteScript,
   type GeneratedMutationScript,
 } from '../../../../src/contracts/ast/mutation-script-builder.js';
@@ -1089,5 +1090,65 @@ describe('buildCreateFolderScript', () => {
     });
 
     expect(result.script).toContain('Parent folder not found');
+  });
+});
+
+describe('buildBatchCreateTasksScript (OMN-113)', () => {
+  it('emits ONE evaluateJavascript round-trip creating all tasks with a shared tempId map', () => {
+    const result = buildBatchCreateTasksScript([
+      { tempId: 'p1', name: 'Parent Task' },
+      { tempId: 'c1', name: 'Child Task', parentTempId: 'p1' },
+    ]);
+
+    expect(result.operation).toBe('create');
+    expect(result.target).toBe('task');
+    expect(result.script).toContain("Application('OmniFocus')");
+    expect(result.script).toContain('new Task(');
+    expect(result.script).toContain('moveTasks');
+    expect(result.script).toContain('Parent Task');
+    expect(result.script).toContain('Child Task');
+    expect(result.script).toContain('p1');
+    expect(result.script).toContain('c1');
+    // THE perf invariant: the whole batch is ONE bridge round-trip, not N.
+    expect((result.script.match(/app\.evaluateJavascript\(/g) || []).length).toBe(1);
+  });
+
+  it('produces a parse-safe script across all container + field cases', () => {
+    const result = buildBatchCreateTasksScript([
+      {
+        tempId: 't1',
+        name: "Task with 'quotes' and fields",
+        note: 'multi\nline\nnote',
+        flagged: true,
+        projectId: 'proj123',
+        tags: ['Work : Deep', 'urgent'],
+        dueDate: '2026-06-04 17:00:00',
+        deferDate: '2026-06-01 08:00:00',
+        estimatedMinutes: 30,
+      },
+      { tempId: 't2', name: 'Under existing task', parentTaskId: 'realTask456' },
+      { tempId: 't3', name: 'Inbox task' },
+    ]);
+
+    expect(() => new Function(result.script)).not.toThrow();
+  });
+
+  it('stays parse-safe when names/notes/tags contain backticks or ${ (OMN-111 class)', () => {
+    // Backticks and ${ in user data must NOT break the generated script — the
+    // common dev-GTD case (e.g. "Fix `parseTagPath`") and a literal ${ in notes.
+    const result = buildBatchCreateTasksScript([
+      {
+        tempId: 't1',
+        name: 'Fix `parseTagPath` edge case',
+        note: 'cost is ${total}; run `npm test`\nsecond line',
+        tags: ['proj`tag`', 'Work : ${dyn}'],
+      },
+      { tempId: 't2', name: 'plain child', parentTempId: 't1' },
+    ]);
+
+    expect(() => new Function(result.script)).not.toThrow();
+    // The hazardous characters must survive into the script verbatim (data not lost).
+    expect(result.script).toContain('parseTagPath');
+    expect(result.script).toContain('${total}');
   });
 });
