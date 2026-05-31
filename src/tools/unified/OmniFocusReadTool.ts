@@ -159,6 +159,7 @@ export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
 COMMON QUERIES:
 - Inbox: { query: { type: "tasks", filters: { project: null } } }
 - Tasks in a specific project (by ID, fast): { query: { type: "tasks", filters: { projectId: "<id>" } } }
+- Direct children of a task (subtasks): { query: { type: "tasks", filters: { parentTaskId: "<id>" } } }
 - Overdue: { query: { type: "tasks", mode: "overdue" } }
 - Today perspective: { query: { type: "tasks", mode: "today" } }
 - Flagged: { query: { type: "tasks", mode: "flagged" } }

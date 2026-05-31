@@ -240,6 +240,76 @@ describe('buildAST', () => {
         ],
       });
     });
+
+    it('OMN-115: fastSearch:true matches name only (skips note) for text', () => {
+      const filter: TaskFilter = { text: 'review', fastSearch: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'includes',
+        value: 'review',
+      });
+    });
+
+    it('OMN-115: fastSearch:true honors MATCHES operator, still name only', () => {
+      const filter: TaskFilter = { text: '^review.*', textOperator: 'MATCHES', fastSearch: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'matches',
+        value: '^review.*',
+      });
+    });
+
+    it('OMN-115: fastSearch:true matches name only for the search alias', () => {
+      const filter: TaskFilter = { search: 'meeting notes', fastSearch: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'includes',
+        value: 'meeting notes',
+      });
+    });
+
+    it('OMN-115: fastSearch:false still matches both name and note', () => {
+      const filter: TaskFilter = { text: 'review', fastSearch: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'review' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'review' },
+        ],
+      });
+    });
+  });
+
+  describe('parent task filter (OMN-114)', () => {
+    it('transforms parentTaskId to a synthetic comparison node', () => {
+      const filter: TaskFilter = { parentTaskId: 'abc123' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.parentTaskId',
+        operator: '==',
+        value: 'abc123',
+      });
+    });
+
+    it('omits the parent filter when parentTaskId is undefined', () => {
+      const filter: TaskFilter = {};
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({ type: 'literal', value: true });
+    });
   });
 
   describe('date filters', () => {

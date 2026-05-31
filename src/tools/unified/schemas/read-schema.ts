@@ -54,6 +54,10 @@ const filterFields = {
   // ambiguous when multiple projects share a name. `projectId` is unambiguous and
   // takes the fast path through Project.byIdentifier().
   projectId: z.string().optional(),
+  // OMN-114: filter to direct children of a task. Read-side mirror of write's
+  // `data.parentTaskId` (writes accept it, reads project it). Unambiguous id
+  // match via task.parent.id.primaryKey.
+  parentTaskId: z.string().optional(),
   dueDate: DateFilterSchema.optional(),
   deferDate: DateFilterSchema.optional(),
   plannedDate: DateFilterSchema.optional(),

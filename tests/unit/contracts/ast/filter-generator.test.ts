@@ -40,6 +40,30 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toBe('true');
     });
 
+    it('OMN-115: fastSearch emits a name-only predicate (no task.note read)', () => {
+      const filter: TaskFilter = { search: 'review', fastSearch: true };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      expect(result.predicate).toContain('task.name');
+      expect(result.predicate).not.toContain('task.note');
+    });
+
+    it('OMN-115: default search still reads task.note', () => {
+      const filter: TaskFilter = { search: 'review' };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      expect(result.predicate).toContain('task.name');
+      expect(result.predicate).toContain('task.note');
+    });
+
+    it('OMN-114: parentTaskId emits a null-guarded parent id comparison', () => {
+      const filter: TaskFilter = { parentTaskId: 'abc123' };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      // Must guard against null parent before reading .id.primaryKey.
+      expect(result.predicate).toBe('(task.parent && task.parent.id.primaryKey === "abc123")');
+    });
+
     it('generateFilterCode returns EmitResult with preamble and predicate', () => {
       const filter = { completed: false, flagged: true };
       const result = generateFilterCode(filter);

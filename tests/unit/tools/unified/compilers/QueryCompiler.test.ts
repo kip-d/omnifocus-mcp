@@ -30,6 +30,50 @@ describe('QueryCompiler', () => {
       expect(compiled.limit).toBe(25);
     });
 
+    it('OMN-115: threads query-level fastSearch onto the compiled filter', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          mode: 'search',
+          filters: { text: { contains: 'review' } },
+          fastSearch: true,
+        },
+      };
+
+      const compiled = compiler.compile(input);
+
+      expect(compiled.fastSearch).toBe(true);
+      // Must also reach the filter object so the AST search builder emits name-only.
+      expect(compiled.filters.fastSearch).toBe(true);
+    });
+
+    it('OMN-115: omits fastSearch from the filter when not requested', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          mode: 'search',
+          filters: { text: { contains: 'review' } },
+        },
+      };
+
+      const compiled = compiler.compile(input);
+
+      expect(compiled.filters.fastSearch).toBeUndefined();
+    });
+
+    it('OMN-114: passes parentTaskId filter through to the compiled filter', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          filters: { parentTaskId: 'abc123' },
+        },
+      };
+
+      const compiled = compiler.compile(input);
+
+      expect(compiled.filters.parentTaskId).toBe('abc123');
+    });
+
     it('should compile smart_suggest mode', () => {
       const input: ReadInput = {
         query: {

@@ -77,6 +77,8 @@ const FILTER_SAMPLES: Record<string, unknown> = {
   tags: { any: ['@home'] },
   project: 'sample-project-id',
   projectId: 'sample-project-id',
+  parentTaskId: 'sample-parent-task-id', // OMN-114
+
   dueDate: { before: '2026-12-31' },
   deferDate: { before: '2026-12-31' },
   plannedDate: { before: '2026-12-31' },

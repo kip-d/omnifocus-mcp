@@ -149,8 +149,24 @@ export interface TaskFilter {
   projectId?: string; // Filter by project ID (from advanced filters)
   project?: string | null; // Filter by project (simple param, null = inbox)
 
+  // --- Parent task (OMN-114) ---
+  /**
+   * Filter to direct children of the given task ID — the read-side mirror of
+   * `data.parentTaskId` on write, which writes already accept and reads already
+   * project. Matches `task.parent.id.primaryKey === parentTaskId` (null-guarded).
+   */
+  parentTaskId?: string;
+
   // --- Search (for name/note search) ---
   search?: string; // Search term for name/note content
+
+  /**
+   * OMN-115: fast search restricts text matching to the task NAME only,
+   * skipping the note body. Fulfils the documented "Name search → fastSearch:
+   * true" fast path (QuickReferencePrompt). When undefined/false, search
+   * matches both name and note.
+   */
+  fastSearch?: boolean;
 
   // --- Project Status (preserved for project queries) ---
   projectStatus?: ProjectStatus[];
@@ -368,7 +384,9 @@ export const FILTER_PROPERTY_NAMES = [
   'dueSoonDays',
   'projectId',
   'project',
+  'parentTaskId', // OMN-114: direct children of a task
   'search',
+  'fastSearch', // OMN-115: name-only fast search
   'projectStatus',
   'folder',
   'folderTopLevel', // OMN-96
