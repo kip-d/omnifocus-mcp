@@ -29,6 +29,8 @@ import {
   buildCompleteScript,
   buildDeleteScript,
   buildCreateTaskScript,
+  buildBatchCreateTasksScript,
+  type BatchTaskSpec,
   buildUpdateTaskScript,
   markProjectAsValidated,
   markTaskAsValidated,
@@ -1654,14 +1656,22 @@ SAFETY:
     // Step 3: Get creation order (respects dependencies)
     const orderedItems = options.createSequentially ? graph.getCreationOrder() : items;
 
-    // Step 4: Create items in order
-    for (let i = 0; i < orderedItems.length; i++) {
-      const item = orderedItems[i];
-      const result = await this.executeSingleBatchCreate(item, resolver);
-      batchResults.push(result);
+    // Step 4: Create items in order.
+    // OMN-113 fast path: an all-task batch with no repetition rules creates in
+    // ONE osascript round-trip (one process spawn) instead of one spawn per
+    // item — the ~6s/op → near-O(1) win. Mixed project+task batches, repetition
+    // rules, or unordered intra-batch parents fall back to the per-item loop.
+    if (this.isBatchCreateFastPathEligible(orderedItems, options)) {
+      await this.executeBatchCreatesFastPath(orderedItems, resolver, batchResults, options.stopOnError);
+    } else {
+      for (let i = 0; i < orderedItems.length; i++) {
+        const item = orderedItems[i];
+        const result = await this.executeSingleBatchCreate(item, resolver);
+        batchResults.push(result);
 
-      if (!result.success && options.stopOnError) {
-        break;
+        if (!result.success && options.stopOnError) {
+          break;
+        }
       }
     }
 
@@ -1706,6 +1716,87 @@ SAFETY:
     }
 
     return response;
+  }
+
+  /**
+   * OMN-113: a batch qualifies for the single-script fast path when every item
+   * is a task with no repetition rule (repetition is applied via a separate
+   * post-create update, kept on the per-item path). When any item references an
+   * in-batch parent (parentTempId), the items must already be in dependency
+   * order — guaranteed only when createSequentially produced the ordering.
+   */
+  private isBatchCreateFastPathEligible(items: BatchItem[], options: { createSequentially: boolean }): boolean {
+    const allSimpleTasks = items.every((item) => item.type === 'task' && !item.repetitionRule);
+    if (!allSimpleTasks) return false;
+    const hasIntraBatchParent = items.some((item) => Boolean(item.parentTempId));
+    return hasIntraBatchParent ? options.createSequentially : true;
+  }
+
+  /**
+   * OMN-113: create every task in the batch in ONE osascript invocation.
+   * Parents precede children (dependency order), so the script resolves
+   * parentTempId from its own in-script map; real parentTaskId/project ids are
+   * resolved via byIdentifier inside the same OmniJS context. Populates the
+   * resolver + batchResults exactly like the per-item path so the downstream
+   * rollback / cache-invalidation / response steps are unchanged.
+   */
+  private async executeBatchCreatesFastPath(
+    items: BatchItem[],
+    resolver: TempIdResolver,
+    batchResults: BatchItemCreationResult[],
+    stopOnError: boolean,
+  ): Promise<void> {
+    const specs: BatchTaskSpec[] = items.map((item) => {
+      const spec: BatchTaskSpec = { tempId: item.tempId, name: item.name };
+      if (item.note) spec.note = item.note;
+      if (item.flagged) spec.flagged = true;
+      if (item.tags && item.tags.length > 0) spec.tags = item.tags;
+      if (item.dueDate) spec.dueDate = localToUTC(item.dueDate, 'due');
+      if (item.deferDate) spec.deferDate = localToUTC(item.deferDate, 'defer');
+      if (item.plannedDate) spec.plannedDate = localToUTC(item.plannedDate, 'planned');
+      if (item.estimatedMinutes !== undefined) spec.estimatedMinutes = item.estimatedMinutes;
+      // Container priority mirrors resolveBatchTaskParent, but parentTempId is
+      // passed through verbatim — it is resolved inside the script, not here
+      // (the parent has no real id yet at build time).
+      if (item.parentTempId) {
+        spec.parentTempId = item.parentTempId;
+      } else if (item.parentTaskId && typeof item.parentTaskId === 'string') {
+        spec.parentTaskId = item.parentTaskId;
+      } else if (item.project) {
+        spec.projectId = item.project;
+      }
+      return spec;
+    });
+
+    const { script } = buildBatchCreateTasksScript(specs, { stopOnError });
+    const result = await this.execJson(script);
+
+    if (isScriptError(result)) {
+      // Whole-script failure: mark every item failed so atomic rollback / error
+      // reporting behave correctly.
+      for (const item of items) {
+        resolver.markFailed(item.tempId, result.error);
+        batchResults.push({ tempId: item.tempId, realId: null, success: false, error: result.error, type: 'task' });
+      }
+      return;
+    }
+
+    const data = (isScriptSuccess(result) ? result.data : undefined) as
+      | { results?: Array<{ tempId: string; taskId: string | null; success: boolean; error?: string }> }
+      | undefined;
+    const scriptResults = data?.results ?? [];
+
+    for (const r of scriptResults) {
+      if (r.success && r.taskId) {
+        resolver.resolve(r.tempId, r.taskId);
+        markTaskAsValidated(r.taskId);
+        batchResults.push({ tempId: r.tempId, realId: r.taskId, success: true, type: 'task' });
+      } else {
+        const error = r.error || 'Creation failed';
+        resolver.markFailed(r.tempId, error);
+        batchResults.push({ tempId: r.tempId, realId: null, success: false, error, type: 'task' });
+      }
+    }
   }
 
   /**

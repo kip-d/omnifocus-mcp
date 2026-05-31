@@ -22,22 +22,25 @@ class StubCache {
 }
 
 describe('Batch create project field', () => {
-  it('should pass project field to buildCreateTaskScript when provided', async () => {
+  it('should pass project field to the batch-create fast path when provided', async () => {
     const cache = new StubCache();
     const tool = new OmniFocusWriteTool(cache as any);
 
-    // Spy on buildCreateTaskScript to capture the TaskCreateData
-    const spy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+    // OMN-113: an all-task batch takes the single-script fast path, so the
+    // project field flows into buildBatchCreateTasksScript as spec.projectId
+    // (not buildCreateTaskScript). The regression guard — "project must not be
+    // silently dropped" — is unchanged; only the seam moved.
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockReturnValue({
       script: 'mock script',
       operation: 'create',
       target: 'task',
       description: 'mock',
     });
 
-    // Mock execJson to return a successful task creation
+    // Mock execJson to return the fast-path result shape.
     vi.spyOn(tool as any, 'execJson').mockResolvedValue({
       success: true,
-      data: { taskId: 'new-task-id-123' },
+      data: { results: [{ tempId: 'task1', taskId: 'new-task-id-123', success: true }] },
     });
 
     await tool.execute({
@@ -58,10 +61,9 @@ describe('Batch create project field', () => {
       },
     });
 
-    // Verify buildCreateTaskScript was called with project in TaskCreateData
     expect(spy).toHaveBeenCalledOnce();
-    const taskCreateData = spy.mock.calls[0][0];
-    expect(taskCreateData).toHaveProperty('project', 'My Existing Project');
+    const specs = spy.mock.calls[0][0];
+    expect(specs[0]).toHaveProperty('projectId', 'My Existing Project');
 
     spy.mockRestore();
   });
@@ -130,11 +132,13 @@ describe('Batch create project field', () => {
     taskSpy.mockRestore();
   });
 
-  it('should pass parentTaskId to buildCreateTaskScript when provided (OMN-31)', async () => {
+  it('should pass parentTaskId to the batch-create fast path when provided (OMN-31)', async () => {
     const cache = new StubCache();
     const tool = new OmniFocusWriteTool(cache as any);
 
-    const spy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+    // OMN-113: all-task batch → single-script fast path; parentTaskId flows in
+    // as spec.parentTaskId (resolved via Task.byIdentifier inside the script).
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockReturnValue({
       script: 'mock script',
       operation: 'create',
       target: 'task',
@@ -143,7 +147,7 @@ describe('Batch create project field', () => {
 
     vi.spyOn(tool as any, 'execJson').mockResolvedValue({
       success: true,
-      data: { taskId: 'new-subtask-id' },
+      data: { results: [{ tempId: 'subtask1', taskId: 'new-subtask-id', success: true }] },
     });
 
     await tool.execute({
@@ -165,8 +169,8 @@ describe('Batch create project field', () => {
     });
 
     expect(spy).toHaveBeenCalledOnce();
-    const taskCreateData = spy.mock.calls[0][0];
-    expect(taskCreateData).toHaveProperty('parentTaskId', 'existing-parent-task-id');
+    const specs = spy.mock.calls[0][0];
+    expect(specs[0]).toHaveProperty('parentTaskId', 'existing-parent-task-id');
 
     spy.mockRestore();
   });

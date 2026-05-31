@@ -831,6 +831,126 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
 }
 
 /**
+ * OMN-113: one task spec in a single-script batch create. Dates are already
+ * UTC-normalized by the caller (localToUTC). Exactly one container hint applies,
+ * checked in priority order: parentTempId (a task created earlier in THIS batch)
+ * → parentTaskId (existing task id) → projectId (existing project id/name) →
+ * inbox.
+ */
+export interface BatchTaskSpec {
+  tempId: string;
+  name: string;
+  note?: string;
+  flagged?: boolean;
+  tags?: string[];
+  dueDate?: string;
+  deferDate?: string;
+  plannedDate?: string;
+  estimatedMinutes?: number;
+  parentTempId?: string;
+  parentTaskId?: string;
+  projectId?: string;
+}
+
+export function buildBatchCreateTasksScript(
+  specs: BatchTaskSpec[],
+  options: { stopOnError?: boolean } = {},
+): GeneratedMutationScript {
+  const stopOnError = options.stopOnError === true;
+
+  // OMN-111 SAFETY: this OmniJS body carries NO user data and is assembled into
+  // the OmniJS source by string CONCATENATION (not a nested template literal),
+  // so backticks / ${ / newlines in task names, notes, or tags can never break
+  // a template. `specs` is injected at JXA runtime via JSON.stringify (a plain
+  // double-quoted string literal in the generated source — backtick-safe, the
+  // same property the per-item buildCreateTaskScript relies on). The static
+  // body references `specs`, which the concatenation defines just before it.
+  const omniBody = `
+${OMNIJS_PARSE_TAG_PATH}
+${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
+const byTempId = {};
+const results = [];
+for (let s = 0; s < specs.length; s++) {
+  const spec = specs[s];
+  try {
+    const task = new Task(spec.name);
+    if (spec.note) task.note = spec.note;
+    if (spec.flagged) task.flagged = true;
+    if (spec.dueDate) task.dueDate = new Date(spec.dueDate);
+    if (spec.deferDate) task.deferDate = new Date(spec.deferDate);
+    if (spec.plannedDate) task.plannedDate = new Date(spec.plannedDate);
+    if (spec.estimatedMinutes) task.estimatedMinutes = spec.estimatedMinutes;
+
+    // Container priority: intra-batch parent -> existing task -> project -> inbox.
+    let container = null;
+    if (spec.parentTempId) {
+      const p = byTempId[spec.parentTempId];
+      if (!p) throw new Error('Parent not created in batch: ' + spec.parentTempId);
+      container = p.ending;
+    } else if (spec.parentTaskId) {
+      const pt = Task.byIdentifier(spec.parentTaskId);
+      if (!pt) throw new Error('Parent task not found: ' + spec.parentTaskId);
+      container = pt.ending;
+    } else if (spec.projectId) {
+      let proj = Project.byIdentifier(spec.projectId);
+      if (!proj) proj = flattenedProjects.find(x => x.name === spec.projectId) || null;
+      if (!proj) throw new Error('Project not found: ' + spec.projectId);
+      container = proj.ending;
+    }
+    if (container) moveTasks([task], container);
+
+    if (spec.tags && spec.tags.length) {
+      for (let t = 0; t < spec.tags.length; t++) {
+        const tagName = spec.tags[t];
+        const segs = parseTagPath(tagName);
+        let tag;
+        if (segs) {
+          tag = resolveOrCreateTagByPath(segs);
+        } else {
+          tag = flattenedTags.find(x => x.name === tagName) || new Tag(tagName, null);
+        }
+        task.addTag(tag);
+      }
+    }
+
+    byTempId[spec.tempId] = task;
+    results.push({ tempId: spec.tempId, taskId: task.id.primaryKey, success: true });
+  } catch (e) {
+    results.push({ tempId: spec.tempId, taskId: null, success: false, error: String(e && e.message ? e.message : e) });
+    if (${stopOnError}) break;
+  }
+}
+return JSON.stringify({ results: results });`;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+  try {
+    const specs = ${JSON.stringify(specs)};
+    const omniSource =
+      '(() => {' +
+      'const specs = ' + JSON.stringify(specs) + ';' +
+      ${JSON.stringify(omniBody)} +
+      '})()';
+    // Return the OmniJS payload RAW ({results:[...]}). OmniAutomation.executeJson
+    // wraps raw output into a ScriptResult ({success, data}); pre-wrapping here
+    // would double-wrap and hide data.results from callers.
+    return app.evaluateJavascript(omniSource);
+  } catch (e) {
+    return JSON.stringify({ error: true, message: String(e && e.message ? e.message : e), context: 'batch_create_tasks' });
+  }
+})();
+`;
+
+  return {
+    script: script.trim(),
+    operation: 'create',
+    target: 'task',
+    description: `Batch-create ${specs.length} task(s)`,
+  };
+}
+
+/**
  * Build a JXA script for creating a project
  */
 export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMutationScript {

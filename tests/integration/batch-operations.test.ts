@@ -387,6 +387,103 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(errorResults[0].error).toContain('Circular');
   }, 30000);
 
+  it('OMN-113: all-task batch nests via the single-script fast path', async () => {
+    // No project item → the OMN-113 fast path (one osascript round-trip for the
+    // whole batch). Parent in inbox, two subtasks via parentTempId.
+    const response = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'fp_parent', name: runScopedName(`OMN113_FastParent_${timestamp}`), flagged: true },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'fp_child1',
+              name: runScopedName(`OMN113_FastChild1_${timestamp}`),
+              parentTempId: 'fp_parent',
+              dueDate: '2026-06-04 17:00',
+              tags: [`${TEST_TAG_PREFIX}omn113`],
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'fp_child2',
+              name: runScopedName(`OMN113_FastChild2_${timestamp}`),
+              parentTempId: 'fp_parent',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
+    })) as BatchResponse;
+
+    expect(response).toHaveProperty('success', true);
+    expect(response.data.summary.created).toBe(3);
+    expect(response.data.results.filter((r) => r.operation === 'create')).toHaveLength(3);
+
+    // The first subtask must be nested under the parent (not left in the inbox).
+    const childId = response.data.tempIdMapping?.['fp_child1'];
+    expect(childId).toBeTruthy();
+
+    const readResult = (await client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { id: childId }, details: true },
+    })) as { data?: { tasks?: Array<{ inInbox: boolean; parentTaskName?: string | null; tags?: string[] }> } };
+
+    const task = readResult.data?.tasks?.[0];
+    expect(task).toBeDefined();
+    expect(task!.inInbox).toBe(false);
+  }, 30000);
+
+  it('OMN-113: parentTaskId read filter returns the fast-path subtasks (OMN-114)', async () => {
+    // Build a parent + 3 children via the fast path, then query children by
+    // parentTaskId — exercises OMN-114 against OMN-113-created tasks.
+    const created = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'q_parent', name: runScopedName(`OMN113_QParent_${timestamp}`) },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'q_c1', name: runScopedName(`OMN113_QC1_${timestamp}`), parentTempId: 'q_parent' },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'q_c2', name: runScopedName(`OMN113_QC2_${timestamp}`), parentTempId: 'q_parent' },
+          },
+        ],
+        createSequentially: true,
+        returnMapping: true,
+      },
+    })) as BatchResponse;
+
+    const parentId = created.data.tempIdMapping?.['q_parent'];
+    expect(parentId).toBeTruthy();
+
+    const children = (await client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { parentTaskId: parentId } },
+    })) as { data?: { tasks?: Array<{ id: string }> } };
+
+    expect(children.data?.tasks?.length).toBe(2);
+  }, 30000);
+
   it('should handle tasks with dates and metadata in sandbox', async () => {
     const response = (await client.callTool('omnifocus_write', {
       mutation: {
