@@ -200,9 +200,21 @@ export async function isProjectInSandbox(projectId: string): Promise<boolean> {
  * so it matches the broader sweep's contract exactly — strict superset
  * of the pre-OMN-89 name-prefix-only behavior.
  */
-async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string[] }> {
-  // Use pure OmniJS to iterate inbox directly - very fast even with large databases
-  const script = `
+/**
+ * OmniJS inbox-fixture deletion script.
+ *
+ * Exported for the parse-safety guard in
+ * `tests/unit/integration-helpers/sandbox-manager-script-parse.test.ts`.
+ *
+ * OMN-111: comments inside the `app.evaluateJavascript(\`...\`)` template MUST
+ * NOT contain backticks. A stray backtick (e.g. markdown-style `` `inbox` ``)
+ * terminates the inner template literal early — the JS engine then parses the
+ * following identifier as a bare token in the argument list and the entire
+ * sweep dies with "Unexpected identifier … Expected ')'", silently leaking
+ * every fixture the sweep should have deleted.
+ */
+export function buildDeleteTestInboxFixturesScript(): string {
+  return `
     const result = app.evaluateJavascript(\`
       (() => {
         ${OMNIJS_FIXTURE_PREDICATES_SOURCE}
@@ -214,7 +226,7 @@ async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string
 
         // OMN-89: classify via the shared isFixtureTask predicate (the
         // single source covered by sandbox-manager-omnijs-predicate-parity).
-        // Iterating \`inbox\` directly (OmniJS global) keeps this O(inbox.length),
+        // Iterating the inbox global directly keeps this O(inbox.length),
         // not O(flattenedTasks) — inbox tasks rarely carry tags but checking
         // both legs of the contract costs nothing.
         for (const task of inbox) {
@@ -238,7 +250,11 @@ async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string
     \`);
     return result;
   `;
-  return executeJXA<{ deleted: number; errors: string[] }>(script);
+}
+
+async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string[] }> {
+  // Use pure OmniJS to iterate inbox directly - very fast even with large databases
+  return executeJXA<{ deleted: number; errors: string[] }>(buildDeleteTestInboxFixturesScript());
 }
 
 /**
