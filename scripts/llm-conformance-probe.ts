@@ -34,6 +34,7 @@ import { ReadSchema } from '../src/tools/unified/schemas/read-schema.js';
 import { WriteSchema } from '../src/tools/unified/schemas/write-schema.js';
 import { AnalyzeSchema } from '../src/tools/unified/schemas/analyze-schema.js';
 import { SystemToolSchema } from '../src/tools/system/SystemTool.js';
+import { parseWithNormalization } from '../src/tools/normalization/normalize-input.js';
 
 // ── Grading config ──────────────────────────────────────────────────────────
 
@@ -223,6 +224,8 @@ interface CaseResult {
   toolCalled?: string;
   /** Top Zod issues (path + message) when schema_invalid. */
   issues?: string[];
+  /** OMN-122: leniencies the normalize-then-strict layer applied to make this pass. */
+  normalizedVia?: string[];
   detail?: string;
 }
 
@@ -244,9 +247,19 @@ function gradeToolCall(c: ConformanceCase, call: ToolCall | undefined): CaseResu
       return { caseId: c.id, outcome: 'schema_invalid', toolCalled: name, issues: ['arguments not valid JSON'] };
     }
   }
-  const parsed = schema.safeParse(args);
-  if (parsed.success) return { caseId: c.id, outcome: 'pass', toolCalled: name };
-  const issues = parsed.error.issues.slice(0, 4).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+  // OMN-122: grade against the server's REAL front door — strict schema first, then
+  // the normalize-then-strict layer. A pass that needed normalization is still a pass
+  // (the server would accept it), and we record which leniencies were load-bearing.
+  const result = parseWithNormalization(schema, args, name);
+  if (result.success) {
+    return {
+      caseId: c.id,
+      outcome: 'pass',
+      toolCalled: name,
+      normalizedVia: result.applied.length ? result.applied : undefined,
+    };
+  }
+  const issues = result.error!.issues.slice(0, 4).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
   return { caseId: c.id, outcome: 'schema_invalid', toolCalled: name, issues };
 }
 
@@ -315,17 +328,18 @@ function renderReport(reports: ModelReport[]): string {
   // Summary table
   lines.push('## Summary');
   lines.push('');
-  lines.push('| Model | Pass | Wrong tool | Schema invalid | No tool call | Errors | Score |');
-  lines.push('|-------|------|-----------|----------------|--------------|--------|-------|');
+  lines.push('| Model | Pass | (of which normalized) | Wrong tool | Schema invalid | No tool call | Errors | Score |');
+  lines.push('|-------|------|----------------------|-----------|----------------|--------------|--------|-------|');
   for (const r of reports) {
     if (!r.available) {
-      lines.push(`| ${r.model} | — | — | — | — | — | UNAVAILABLE (${r.error ?? ''}) |`);
+      lines.push(`| ${r.model} | — | — | — | — | — | — | UNAVAILABLE (${r.error ?? ''}) |`);
       continue;
     }
     const tally = (o: Outcome) => r.results.filter((x) => x.outcome === o).length;
     const pass = tally('pass');
+    const normalized = r.results.filter((x) => x.outcome === 'pass' && x.normalizedVia).length;
     lines.push(
-      `| ${r.model} | ${pass} | ${tally('wrong_tool')} | ${tally('schema_invalid')} | ${tally('no_tool_call')} | ${tally('model_error')} | **${pct(pass, CASES.length)}** |`,
+      `| ${r.model} | ${pass} | ${normalized} | ${tally('wrong_tool')} | ${tally('schema_invalid')} | ${tally('no_tool_call')} | ${tally('model_error')} | **${pct(pass, CASES.length)}** |`,
     );
   }
   lines.push('');
@@ -338,11 +352,28 @@ function renderReport(reports: ModelReport[]): string {
     lines.push('| Case | Outcome | Tool called | Detail |');
     lines.push('|------|---------|-------------|--------|');
     for (const res of r.results) {
-      const detail = res.issues ? res.issues.join('; ') : (res.detail ?? '');
+      const detail = res.normalizedVia
+        ? `normalized via: ${res.normalizedVia.join(', ')}`
+        : res.issues
+          ? res.issues.join('; ')
+          : (res.detail ?? '');
       const toolCell = (res.toolCalled ?? '—').replace(/\|/g, '\\|');
       lines.push(`| ${res.caseId} | ${res.outcome} | ${toolCell} | ${detail.replace(/\|/g, '\\|')} |`);
     }
     lines.push('');
+
+    // OMN-122: which leniencies were load-bearing for this model (audit signal).
+    const normVia = r.results.filter((x) => x.normalizedVia).flatMap((x) => x.normalizedVia ?? []);
+    if (normVia.length) {
+      const counts = new Map<string, number>();
+      for (const n of normVia) counts.set(n, (counts.get(n) ?? 0) + 1);
+      lines.push(`### ${r.model} — normalizations applied (OMN-122)`);
+      lines.push('');
+      for (const [name, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+        lines.push(`- (${n}×) ${name}`);
+      }
+      lines.push('');
+    }
 
     // Aggregate the malformation patterns — the signal for whether a normalize-then-strict
     // layer is worth building, and which leniencies would be load-bearing.
