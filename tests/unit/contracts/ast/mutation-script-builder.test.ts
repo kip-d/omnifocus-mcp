@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   buildCreateTaskScript,
   buildCreateProjectScript,
@@ -10,6 +10,7 @@ import {
   buildBatchScript,
   buildBatchCreateTasksScript,
   buildBulkDeleteScript,
+  validateBatchCreateOps,
   type GeneratedMutationScript,
 } from '../../../../src/contracts/ast/mutation-script-builder.js';
 
@@ -1150,5 +1151,63 @@ describe('buildBatchCreateTasksScript (OMN-113)', () => {
     // The hazardous characters must survive into the script verbatim (data not lost).
     expect(result.script).toContain('parseTagPath');
     expect(result.script).toContain('${total}');
+  });
+});
+
+describe('validateBatchCreateOps (OMN-119: batch creates must honor the sandbox guard)', () => {
+  // The single-create path guards inside buildCreateTaskScript/buildCreateProjectScript,
+  // but batch creates run through a separate path that bypassed it — letting a model emit
+  // a `batch` envelope to write outside the sandbox (the OMN-118 real-inbox leak).
+  // isTestMode() needs NODE_ENV==='test' (set by vitest) AND SANDBOX_GUARD_ENABLED==='true'.
+  let priorGuard: string | undefined;
+  let priorNodeEnv: string | undefined;
+
+  beforeEach(() => {
+    priorGuard = process.env.SANDBOX_GUARD_ENABLED;
+    priorNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+  });
+
+  afterEach(() => {
+    if (priorGuard === undefined) delete process.env.SANDBOX_GUARD_ENABLED;
+    else process.env.SANDBOX_GUARD_ENABLED = priorGuard;
+    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = priorNodeEnv;
+  });
+
+  it('rejects an unscoped inbox task create (the OMN-118 leak shape)', async () => {
+    await expect(
+      validateBatchCreateOps([{ operation: 'create', target: 'task', data: { name: 'Test LLM Integration' } }]),
+    ).rejects.toThrow(/TEST GUARD/);
+  });
+
+  it('allows a __TEST__-prefixed inbox task create', async () => {
+    await expect(
+      validateBatchCreateOps([{ operation: 'create', target: 'task', data: { name: '__TEST__-run-Probe' } }]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a project create outside the sandbox folder', async () => {
+    await expect(
+      validateBatchCreateOps([
+        { operation: 'create', target: 'project', data: { name: 'Real Project', folder: 'Personal' } },
+      ]),
+    ).rejects.toThrow(/TEST GUARD/);
+  });
+
+  it('rejects inbox tasks with non-__test- tags even when the name is scoped', async () => {
+    await expect(
+      validateBatchCreateOps([
+        { operation: 'create', target: 'task', data: { name: '__TEST__-run-x', tags: ['real-tag'] } },
+      ]),
+    ).rejects.toThrow(/TEST GUARD/);
+  });
+
+  it('is a no-op when the guard is disabled (production)', async () => {
+    delete process.env.SANDBOX_GUARD_ENABLED;
+    await expect(
+      validateBatchCreateOps([{ operation: 'create', target: 'task', data: { name: 'Unscoped Production Task' } }]),
+    ).resolves.toBeUndefined();
   });
 });

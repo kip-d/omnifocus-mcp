@@ -34,6 +34,7 @@ import {
   buildUpdateTaskScript,
   markProjectAsValidated,
   markTaskAsValidated,
+  validateBatchCreateOps,
 } from '../../contracts/ast/mutation-script-builder.js';
 import type {
   ProjectUpdateData,
@@ -1393,6 +1394,36 @@ SAFETY:
 
   // ─── Batch routing ─────────────────────────────────────────────────
 
+  /**
+   * OMN-119: enforce the sandbox guard on batch CREATE sub-ops (no-op outside test mode).
+   * Returns a SANDBOX_GUARD error response if any create would write outside the sandbox,
+   * else null. Extracted from routeToBatch to keep that orchestrator's complexity in check.
+   */
+  private async guardBatchCreates(
+    createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
+    batchTimer: OperationTimerV2,
+  ): Promise<StandardResponseV2<unknown> | null> {
+    try {
+      await validateBatchCreateOps(
+        createOps.map((op) => ({
+          operation: op.operation,
+          target: op.target,
+          data: (op.data ?? {}) as Parameters<typeof validateBatchCreateOps>[0][number]['data'],
+        })),
+      );
+      return null;
+    } catch (guardError) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'SANDBOX_GUARD',
+        guardError instanceof Error ? guardError.message : String(guardError),
+        'Batch creates must stay inside the test sandbox (folder/name/tag scoping).',
+        undefined,
+        batchTimer.toMetadata(),
+      );
+    }
+  }
+
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     const batchTimer = new OperationTimerV2();
 
@@ -1401,6 +1432,13 @@ SAFETY:
     const updateOps = compiled.operations.filter((op) => op.operation === 'update');
     const completeOps = compiled.operations.filter((op) => op.operation === 'complete');
     const deleteOps = compiled.operations.filter((op) => op.operation === 'delete');
+
+    // OMN-119: batch creates run through a separate execution path that bypassed the
+    // per-builder sandbox guard. Validate create sub-ops up front (no-op outside test mode)
+    // so a `batch` envelope cannot write outside the sandbox. Update/complete/delete sub-ops
+    // dispatch through the already-guarded single-op handlers.
+    const guardError = await this.guardBatchCreates(createOps, batchTimer);
+    if (guardError) return guardError;
 
     const results: {
       created: unknown[];
