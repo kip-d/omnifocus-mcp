@@ -200,6 +200,9 @@ COMPLETED TASKS:
 - Use filters: { completed: true } or filters: { status: "completed" } to query completed tasks
 - includeCompleted is for export operations only (type: "export"); honored by exportType: "tasks" and exportType: "all"
 
+FOLDERS (type: "folders"):
+- Returns a FLAT list; each folder appears once as a full entry (id, name, status, depth, path, parentId). Folders with subfolders additionally carry a children array of lightweight {id,name} refs plus childCount for navigation — those nested refs are adjacency hints, NOT duplicate rows.
+
 EXPORT TO DISK:
 - outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
 - A response-path export (no outputDirectory) caps at 1000 by default and emits summary.truncated when the cap fires; override with limit
