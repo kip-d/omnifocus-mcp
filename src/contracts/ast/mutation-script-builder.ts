@@ -355,6 +355,34 @@ async function validateProjectInSandbox(projectId: string, operation: string): P
 }
 
 /**
+ * Guard batch CREATE operations against the sandbox (test mode only). OMN-119.
+ *
+ * The single-create builders (buildCreateTaskScript / buildCreateProjectScript) embed the
+ * sandbox guard, but batch creates run through a separate execution path
+ * (routeToBatch → executeBatchCreatePhase / buildBatchCreateTasksScript) that did NOT —
+ * so a `batch` envelope could create tasks/projects outside the sandbox during test runs
+ * (the OMN-118 real-inbox leak: a model wrapped an unscoped create in a batch). The batch
+ * orchestrator must call this up front so batch creates honor the same guard as single
+ * creates, independent of the fast/slow create path.
+ *
+ * No-op outside test mode. Throws (message prefixed "TEST GUARD") on the first op that
+ * would write outside the sandbox. Update/complete/delete sub-ops are already guarded —
+ * they dispatch through the single-op handlers — so only creates need this.
+ */
+export async function validateBatchCreateOps(
+  createOps: ReadonlyArray<{ operation?: string; target?: MutationTarget; data: TaskCreateData | ProjectCreateData }>,
+): Promise<void> {
+  if (!isTestMode()) return;
+  for (const op of createOps) {
+    if (op.target === 'project') {
+      validateProjectCreate(op.data as ProjectCreateData);
+    } else {
+      await validateTaskCreate(op.data as TaskCreateData);
+    }
+  }
+}
+
+/**
  * Clear all sandbox caches (for testing)
  */
 export function clearSandboxCache(): void {
