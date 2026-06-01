@@ -20,6 +20,7 @@ import { homedir } from 'os';
 import { ScriptResult, createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { classifyErrorWithContext } from '../utils/error-recovery.js';
+import { parseWithNormalization } from './normalization/normalize-input.js';
 
 // Type for raw data structure from OmniFocus scripts (used in execJson)
 interface RawOmniFocusData {
@@ -225,7 +226,19 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     const parameterCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
 
     try {
-      const validated = this.schema.parse(args) as z.infer<TSchema>;
+      // OMN-122: strict-first, normalize-on-failure, re-validate-strict. Canonical
+      // (cloud/frontier) callers pass `this.schema` on the first try and never touch
+      // the normalizer — zero behavior change. Only inputs that would have errored
+      // anyway get a bounded repair attempt; an un-repairable input throws the SAME
+      // strict ZodError as before (handled below as a VALIDATION_ERROR).
+      const parseResult = parseWithNormalization(this.schema, args, this.name);
+      if (!parseResult.success) {
+        throw parseResult.error;
+      }
+      const validated = parseResult.data as z.infer<TSchema>;
+      if (parseResult.applied.length > 0) {
+        this.logNormalization(args, parseResult.applied);
+      }
       this.logger.debug(`Executing ${this.name} with validated args:`, validated);
 
       const result = await this.executeValidated(validated);
@@ -364,6 +377,38 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     } catch (logError) {
       // Don't let logging failures break the tool
       this.logger.error('Failed to log tool failure:', logError);
+    }
+  }
+
+  /**
+   * OMN-122: record an applied input normalization so we can audit which leniencies
+   * are load-bearing and catch regressions. Reuses the failure-log suppression gate
+   * and diagnostics directory (sibling to the tool-failures log) so the diagnose-
+   * failures pipeline can read both. Logging never throws into the tool path.
+   */
+  private logNormalization(args: unknown, applied: string[]): void {
+    // Always emit a structured breadcrumb (visible at default LOG_LEVEL=info).
+    this.logger.info(`input normalized tool=${this.name} applied=[${applied.join(', ')}]`);
+    try {
+      const suppression = failureLogSuppression();
+      if (suppression.suppressed) {
+        return;
+      }
+      const logsDir = join(homedir(), '.omnifocus-mcp', 'tool-failures');
+      if (!existsSync(logsDir)) {
+        mkdirSync(logsDir, { recursive: true });
+      }
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        tool: this.name,
+        applied,
+        inputArgs: redactArgs(args),
+      };
+      const today = new Date().toISOString().split('T')[0];
+      const logFile = join(logsDir, `normalizations-${today}.jsonl`);
+      writeFileSync(logFile, JSON.stringify(logEntry) + '\n', { flag: 'a' });
+    } catch (logError) {
+      this.logger.debug('Failed to log normalization:', logError);
     }
   }
 
