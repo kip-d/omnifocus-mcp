@@ -90,9 +90,7 @@ describe('Analytics Validation - Actual Calculations', () => {
         analysis: {
           type: 'productivity_stats',
           params: {
-            period: 'week',
-            includeProjectStats: false,
-            includeTagStats: false,
+            groupBy: 'week',
           },
         },
       });
@@ -148,10 +146,6 @@ describe('Analytics Validation - Actual Calculations', () => {
       const result = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'overdue_analysis',
-          params: {
-            groupBy: 'project',
-            limit: 100,
-          },
         },
       });
 
@@ -196,9 +190,7 @@ describe('Analytics Validation - Actual Calculations', () => {
         analysis: {
           type: 'task_velocity',
           params: {
-            days: 7,
             groupBy: 'day',
-            includeWeekends: true,
           },
         },
       });
@@ -226,7 +218,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       const productivityResult = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'productivity_stats',
-          params: { period: 'week' },
+          params: { groupBy: 'week' },
         },
       });
 
@@ -234,7 +226,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       const velocityResult = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'task_velocity',
-          params: { days: 7 },
+          params: { groupBy: 'day' },
         },
       });
 
