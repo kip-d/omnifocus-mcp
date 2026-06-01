@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { Ollama } from 'ollama';
+// Importing run-id transitively imports sandbox-manager, which enables SANDBOX_GUARD_ENABLED
+// for this test process — so any write the model triggers is rejected unless sandbox-scoped.
+import { runScopedName, runScopedTag } from './helpers/run-id.js';
 
 const sleep = promisify(setTimeout);
 
@@ -13,14 +16,24 @@ const sleep = promisify(setTimeout);
  *
  * Features tested:
  * - Natural language understanding of tool descriptions
- * - Intelligent tool selection and sequencing
+ * - Intelligent tool selection and sequencing across the 4 unified tools
  * - Complex workflow execution
  * - Emergent behavior discovery
+ *
+ * Tools exercised are the 4 unified tools: omnifocus_read / omnifocus_write /
+ * omnifocus_analyze / system. (OMN-118: ported off the retired pre-unification tool API —
+ * tasks/projects/manage_task/productivity_stats/analyze_overdue/tags — which no longer exists.
+ * Because intents collapse onto fewer tools under unification, assertions check that the
+ * correct *unified* tool was selected, and the request-envelope shape — query{} / analysis{} /
+ * mutation{} — is what a model must now produce.)
  *
  * Requirements:
  * - Ollama installed and running
  * - Small models available (phi3.5:3.8b, qwen2.5:0.5b, etc.)
  * - Environment variable ENABLE_REAL_LLM_TESTS=true
+ *
+ * NOTE: this suite is gated and was ported under OMN-118 against the unified API; it must be
+ * run with a live Ollama instance (ENABLE_REAL_LLM_TESTS=true) to be considered validated.
  */
 
 const RUN_REAL_LLM_TESTS = process.env.ENABLE_REAL_LLM_TESTS === 'true';
@@ -30,13 +43,13 @@ interface MCPMessage {
   jsonrpc: '2.0';
   id: number;
   method: string;
-  params?: any;
+  params?: unknown;
 }
 
 interface MCPResponse {
   jsonrpc: '2.0';
   id: number;
-  result?: any;
+  result?: { content?: Array<{ type: string; text?: string; json?: unknown }> } & Record<string, unknown>;
   error?: { code: number; message: string };
 }
 
@@ -45,9 +58,15 @@ interface MCPTool {
   description: string;
   inputSchema: {
     type: string;
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
   };
+}
+
+interface ToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
 }
 
 class RealLLMTestHarness {
@@ -85,11 +104,12 @@ class RealLLMTestHarness {
   async discoverTools(): Promise<MCPTool[]> {
     const response = await this.sendMessage('tools/list');
     expect(response.result).toBeDefined();
-    expect(response.result.tools).toBeInstanceOf(Array);
-    return response.result.tools;
+    const tools = (response.result as { tools: MCPTool[] }).tools;
+    expect(tools).toBeInstanceOf(Array);
+    return tools;
   }
 
-  async callTool(name: string, arguments_: any): Promise<any> {
+  async callTool(name: string, arguments_: unknown): Promise<unknown> {
     const response = await this.sendMessage('tools/call', {
       name,
       arguments: arguments_,
@@ -102,7 +122,7 @@ class RealLLMTestHarness {
     // Extract the actual result from MCP response format
     const content = response.result?.content;
     if (content && content[0]) {
-      return content[0].type === 'json' ? content[0].json : JSON.parse(content[0].text);
+      return content[0].type === 'json' ? content[0].json : JSON.parse(content[0].text ?? '{}');
     }
     return response.result;
   }
@@ -112,10 +132,11 @@ class RealLLMTestHarness {
       .map((tool) => {
         const requiredParams = tool.inputSchema.required || [];
         const properties = Object.entries(tool.inputSchema.properties || {})
-          .map(([name, schema]: [string, any]) => {
+          .map(([name, schema]: [string, unknown]) => {
+            const s = schema as { type?: string; description?: string };
             const required = requiredParams.includes(name) ? ' (required)' : ' (optional)';
-            const type = schema.type || 'any';
-            const description = schema.description || '';
+            const type = s.type || 'any';
+            const description = s.description || '';
             return `  - ${name}${required}: ${type} - ${description}`;
           })
           .join('\n');
@@ -132,10 +153,12 @@ ${toolDescriptions}
 
 When a user asks for help, analyze their request and use the appropriate tools to provide a helpful response.
 Always use real tool calls - do not simulate or describe what you would do. Actually call the tools.
-Provide clear, actionable responses based on the actual data you retrieve.
 
-Important: When calling tools, use the exact parameter names and format specified in the tool schemas.
-All string parameters should be properly quoted. Boolean values should be true/false.`;
+Important: these tools take a single wrapper object:
+- omnifocus_read: { query: { type: "tasks" | "projects" | "tags" | "folders", mode?: "today" | "overdue" | "upcoming" | "all", ... } }
+- omnifocus_analyze: { analysis: { type: "productivity_stats" | "overdue_analysis" | ..., params?: { ... } } }
+- omnifocus_write: { mutation: { operation: "create" | "update" | "complete" | "delete", target: "task" | "project", data?: { ... } } }
+- system: { operation: "version" | ... }`;
   }
 
   async askLLM(
@@ -143,27 +166,22 @@ All string parameters should be properly quoted. Boolean values should be true/f
     model: string = process.env.REAL_LLM_MODEL || 'phi3.5:3.8b',
   ): Promise<{
     response: string;
-    toolCalls: Array<{ tool: string; args: any; result: any }>;
+    toolCalls: ToolCall[];
     reasoning: string[];
   }> {
-    const systemPrompt = this.generateToolsSystemPrompt();
-    const toolCalls: Array<{ tool: string; args: any; result: any }> = [];
+    const toolCalls: ToolCall[] = [];
     const reasoning: string[] = [];
 
     try {
-      // Let the LLM make decisions about tool usage with a concise prompt
+      // Let the LLM make decisions about tool usage, primed with the full tool schemas.
       const executionResponse = await this.ollama.chat({
         model,
         messages: [
+          { role: 'system', content: this.generateToolsSystemPrompt() },
           {
-            role: 'system',
-            content: `You are an AI assistant for OmniFocus task management.
-            Available tools: ${this.availableTools.map((t) => `${t.name}: ${t.description}`).join(', ')}
-
-            For user queries, identify which tool(s) to use and respond concisely. Use phrases like:
-            "I'll use the [toolname] tool" or "Call the [toolname] tool" to indicate tool usage.`,
+            role: 'user',
+            content: `${userQuery}\n\nWhich tool(s) should I use? Reply concisely with phrases like "I'll use the [toolname] tool" or "Call the [toolname] tool".`,
           },
-          { role: 'user', content: `${userQuery}\n\nWhich tool(s) should I use and how?` },
         ],
         stream: false,
       });
@@ -173,7 +191,7 @@ All string parameters should be properly quoted. Boolean values should be true/f
       // Parse the LLM's response to extract tool usage intentions
       const toolMatches: string[] = [];
 
-      // Try multiple patterns to capture tool intentions
+      // Try multiple patterns to capture tool intentions (tool names contain underscores)
       const patterns = [
         /(?:use|call|invoke)\s+(?:the\s+)?(\w+)\s+tool/gi,
         /(?:use|call|invoke)\s+(?:the\s+)?`(\w+)`/gi,
@@ -200,31 +218,30 @@ All string parameters should be properly quoted. Boolean values should be true/f
             messages: [
               {
                 role: 'system',
-                content: `You are helping determine parameters for the ${toolName} tool.
+                content: `You are helping determine the JSON request for the ${toolName} tool.
                   Tool description: ${this.availableTools.find((t) => t.name === toolName)?.description}
 
-                  Respond with ONLY a valid JSON object containing the parameters.
-                  For the original query: "${userQuery}"`,
+                  Respond with ONLY a valid JSON object containing the single wrapper key the tool expects
+                  (query / analysis / mutation / operation). For the original query: "${userQuery}"`,
               },
               {
                 role: 'user',
-                content: `What parameters should I use for the ${toolName} tool to help with: "${userQuery}"?`,
+                content: `What JSON request should I send to the ${toolName} tool to help with: "${userQuery}"?`,
               },
             ],
             stream: false,
           });
 
           // Try to parse JSON parameters from LLM response
-          let params = {};
+          let params: Record<string, unknown> = {};
           try {
             const jsonMatch = paramsResponse.message.content.match(/\{.*\}/s);
             if (jsonMatch) {
-              params = JSON.parse(jsonMatch[0]);
+              params = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
             } else {
-              // Fallback to reasonable defaults based on tool
               params = this.getDefaultParamsForTool(toolName, userQuery);
             }
-          } catch (e) {
+          } catch {
             params = this.getDefaultParamsForTool(toolName, userQuery);
           }
 
@@ -232,7 +249,7 @@ All string parameters should be properly quoted. Boolean values should be true/f
           toolCalls.push({ tool: toolName, args: params, result });
           reasoning.push(`Called ${toolName} with params: ${JSON.stringify(params)}`);
         } catch (error) {
-          reasoning.push(`Failed to call ${toolName}: ${error}`);
+          reasoning.push(`Failed to call ${toolName}: ${String(error)}`);
         }
       }
 
@@ -245,7 +262,7 @@ All string parameters should be properly quoted. Boolean values should be true/f
             toolCalls.push({ tool: directCall.tool, args: directCall.params, result });
             reasoning.push(`Direct call: ${directCall.tool} with ${JSON.stringify(directCall.params)}`);
           } catch (error) {
-            reasoning.push(`Direct call failed: ${error}`);
+            reasoning.push(`Direct call failed: ${String(error)}`);
           }
         }
       }
@@ -256,62 +273,103 @@ All string parameters should be properly quoted. Boolean values should be true/f
         reasoning,
       };
     } catch (error) {
-      throw new Error(`LLM interaction failed: ${error}`);
+      throw new Error(`LLM interaction failed: ${String(error)}`);
     }
   }
 
-  private getDefaultParamsForTool(toolName: string, query: string): any {
-    // Provide reasonable defaults based on tool name and query
+  /**
+   * Reasonable unified-API request envelopes, keyed on the query intent. Used as a fallback
+   * when a small model cannot emit a valid wrapper object itself.
+   */
+  private getDefaultParamsForTool(toolName: string, query: string): Record<string, unknown> {
+    const q = query.toLowerCase();
     switch (toolName) {
-      case 'tasks':
-        if (query.toLowerCase().includes('today')) {
-          return { mode: 'today', limit: '10', details: 'true' };
-        } else if (query.toLowerCase().includes('overdue')) {
-          return { mode: 'overdue', limit: '20', details: 'true' };
-        } else {
-          return { mode: 'all', limit: '25', details: 'false' };
+      case 'omnifocus_read':
+        if (q.includes('today') || (q.includes('due') && !q.includes('overdue'))) {
+          return { query: { type: 'tasks', mode: 'today', limit: 10, details: true } };
+        } else if (q.includes('overdue')) {
+          return { query: { type: 'tasks', mode: 'overdue', limit: 20, details: true } };
+        } else if (q.includes('project')) {
+          return { query: { type: 'projects', limit: 20 } };
+        } else if (q.includes('tag')) {
+          return { query: { type: 'tags' } };
         }
-      case 'projects':
-        return { operation: 'list', limit: '20', details: 'true' };
-      case 'productivity_stats':
-        return { period: 'week', includeProjectStats: 'true', includeTagStats: 'false' };
-      case 'analyze_overdue':
-        return { includeRecentlyCompleted: 'false', groupBy: 'project', limit: '50' };
+        return { query: { type: 'tasks', mode: 'all', limit: 25 } };
+      case 'omnifocus_analyze':
+        if (q.includes('overdue')) {
+          return { analysis: { type: 'overdue_analysis' } };
+        }
+        return { analysis: { type: 'productivity_stats', params: { groupBy: 'week' } } };
+      case 'omnifocus_write':
+        // Sandbox-scope the name + tag so any created task is a sweepable fixture
+        // (and accepted by the sandbox guard) rather than a real-inbox leak.
+        return {
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: { name: runScopedName(this.extractTaskName(query)), tags: [runScopedTag('llm')] },
+          },
+        };
+      case 'system':
+        return { operation: 'version' };
       default:
         return {};
     }
   }
 
-  private suggestDirectToolCall(query: string): { tool: string; params: any } | null {
-    const lowerQuery = query.toLowerCase();
+  /**
+   * Map a free-text query directly to the most appropriate unified tool + envelope.
+   */
+  private suggestDirectToolCall(query: string): { tool: string; params: Record<string, unknown> } | null {
+    const q = query.toLowerCase();
 
-    // Prioritize specific patterns
-    if (lowerQuery.includes('overdue')) {
+    if (q.includes('overdue')) {
       return {
-        tool: 'analyze_overdue',
-        params: { includeRecentlyCompleted: 'false', groupBy: 'project', limit: '50' },
+        tool: 'omnifocus_read',
+        params: { query: { type: 'tasks', mode: 'overdue', limit: 20, details: true } },
       };
     }
-    if (lowerQuery.includes('today') || (lowerQuery.includes('due') && !lowerQuery.includes('overdue'))) {
-      return { tool: 'tasks', params: { mode: 'today', limit: '10', details: 'true' } };
+    if (q.includes('today') || (q.includes('due') && !q.includes('overdue'))) {
+      return { tool: 'omnifocus_read', params: { query: { type: 'tasks', mode: 'today', limit: 10, details: true } } };
     }
-    if (lowerQuery.includes('project')) {
-      return { tool: 'projects', params: { operation: 'list', limit: '20', details: 'true' } };
-    }
-    if (lowerQuery.includes('productive') || lowerQuery.includes('stats')) {
+    if (q.includes('create') && q.includes('task')) {
       return {
-        tool: 'productivity_stats',
-        params: { period: 'week', includeProjectStats: 'true', includeTagStats: 'false' },
+        tool: 'omnifocus_write',
+        params: {
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: { name: runScopedName(this.extractTaskName(query)), tags: [runScopedTag('llm')] },
+          },
+        },
       };
     }
-    if (lowerQuery.includes('overwhelm') || lowerQuery.includes('plan')) {
-      return { tool: 'tasks', params: { mode: 'today', limit: '10', details: 'true' } };
+    if (q.includes('project')) {
+      return { tool: 'omnifocus_read', params: { query: { type: 'projects', limit: 20 } } };
+    }
+    if (q.includes('productive') || q.includes('stats') || q.includes('complete')) {
+      return {
+        tool: 'omnifocus_analyze',
+        params: { analysis: { type: 'productivity_stats', params: { groupBy: 'week' } } },
+      };
+    }
+    if (q.includes('overwhelm') || q.includes('plan') || q.includes('prioritize') || q.includes('workload')) {
+      return { tool: 'omnifocus_read', params: { query: { type: 'tasks', mode: 'today', limit: 10, details: true } } };
     }
 
     return null;
   }
 
-  private async sendMessage(method: string, params?: any): Promise<MCPResponse> {
+  /** Pull a quoted task name out of a "create a task called ..." query, else a default. */
+  private extractTaskName(query: string): string {
+    const quoted = query.match(/["'“”]([^"'“”]+)["'“”]/);
+    if (quoted) return quoted[1];
+    const called = query.match(/called\s+(.+?)[.!?]?$/i);
+    if (called) return called[1].trim();
+    return 'New Task';
+  }
+
+  private async sendMessage(method: string, params?: unknown): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
       const request: MCPMessage = {
         jsonrpc: '2.0',
@@ -342,13 +400,13 @@ All string parameters should be properly quoted. Boolean values should be true/f
                 resolve(response);
                 return;
               }
-            } catch (e) {
+            } catch {
               // Not JSON, skip
             }
           }
         } catch (error) {
           clearTimeout(timeout);
-          reject(error);
+          reject(error as Error);
         }
       };
 
@@ -368,7 +426,7 @@ d('Real LLM Integration Tests', () => {
       const ollama = new Ollama();
       await ollama.list();
     } catch (error) {
-      throw new Error(`Ollama not available: ${error}. Please install and start Ollama first.`);
+      throw new Error(`Ollama not available: ${String(error)}. Please install and start Ollama first.`);
     }
 
     // Start the MCP server
@@ -390,18 +448,17 @@ d('Real LLM Integration Tests', () => {
   }, 10000);
 
   describe('Natural Language Query Processing', () => {
-    it('should understand "What should I work on today?" and use appropriate tools', async () => {
+    it('should understand "What should I work on today?" and read the Today perspective', async () => {
       const result = await llmHarness.askLLM('What should I work on today?');
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
-      // Should call tasks tool with today mode
-      const tasksCalls = result.toolCalls.filter((call) => call.tool === 'tasks');
-      expect(tasksCalls.length).toBeGreaterThan(0);
+      // Should read tasks via the unified read tool
+      const readCalls = result.toolCalls.filter((call) => call.tool === 'omnifocus_read');
+      expect(readCalls.length).toBeGreaterThan(0);
 
-      // Reasoning should show logical progression
       expect(result.reasoning.length).toBeGreaterThan(0);
-      expect(result.reasoning.some((r) => r.includes('today') || r.includes('tasks'))).toBe(true);
+      expect(result.reasoning.some((r) => /today|task|read/i.test(r))).toBe(true);
 
       console.log('Query: "What should I work on today?"');
       console.log('Reasoning:', result.reasoning);
@@ -411,15 +468,21 @@ d('Real LLM Integration Tests', () => {
       );
     }, 120000);
 
-    it('should understand "Show me my overdue tasks" and use analyze_overdue tool', async () => {
+    it('should understand "Show me my overdue tasks" and target overdue data', async () => {
       const result = await llmHarness.askLLM('Show me my overdue tasks');
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
-      // Should use overdue-related tools
-      const relevantCalls = result.toolCalls.filter(
-        (call) => call.tool === 'analyze_overdue' || (call.tool === 'tasks' && call.args.mode === 'overdue'),
-      );
+      // Either overdue_analysis, or a read with mode: overdue
+      const relevantCalls = result.toolCalls.filter((call) => {
+        if (call.tool === 'omnifocus_analyze') {
+          return (call.args.analysis as { type?: string } | undefined)?.type === 'overdue_analysis';
+        }
+        if (call.tool === 'omnifocus_read') {
+          return (call.args.query as { mode?: string } | undefined)?.mode === 'overdue';
+        }
+        return false;
+      });
       expect(relevantCalls.length).toBeGreaterThan(0);
 
       console.log('Query: "Show me my overdue tasks"');
@@ -430,17 +493,23 @@ d('Real LLM Integration Tests', () => {
       );
     }, 120000);
 
-    it('should understand "How productive was I this week?" and use productivity stats', async () => {
+    it('should understand "How productive was I this week?" and analyze productivity', async () => {
       const result = await llmHarness.askLLM('How productive was I this week?');
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
-      // Should call productivity_stats tool
-      const productivityCalls = result.toolCalls.filter((call) => call.tool === 'productivity_stats');
+      // Should analyze productivity via the unified analyze tool
+      const productivityCalls = result.toolCalls.filter(
+        (call) =>
+          call.tool === 'omnifocus_analyze' &&
+          (call.args.analysis as { type?: string } | undefined)?.type === 'productivity_stats',
+      );
       expect(productivityCalls.length).toBeGreaterThan(0);
 
-      // Should use week period
-      const weekCall = productivityCalls.find((call) => call.args.period === 'week');
+      // Prefer a week grouping (the fallback supplies it; a capable model may too)
+      const weekCall = productivityCalls.find(
+        (call) => (call.args.analysis as { params?: { groupBy?: string } } | undefined)?.params?.groupBy === 'week',
+      );
       expect(weekCall).toBeDefined();
 
       console.log('Query: "How productive was I this week?"');
@@ -460,12 +529,9 @@ d('Real LLM Integration Tests', () => {
 
       expect(result.toolCalls.length).toBeGreaterThan(1);
 
-      // Should use multiple relevant tools
+      // Should at least read tasks; may also analyze
       const toolNames = result.toolCalls.map((call) => call.tool);
-      expect(toolNames).toContain('tasks');
-
-      // Might also use productivity stats or overdue analysis
-      const hasComprehensiveData = toolNames.some((name) => ['productivity_stats', 'analyze_overdue'].includes(name));
+      expect(toolNames).toContain('omnifocus_read');
 
       console.log('Query: "Help me plan my day"');
       console.log('Reasoning:', result.reasoning);
@@ -481,11 +547,9 @@ d('Real LLM Integration Tests', () => {
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
-      // Should show sophisticated understanding by using tools
       const toolNames = result.toolCalls.map((call) => call.tool);
       expect(toolNames.length).toBeGreaterThan(0);
 
-      // If multiple tools used, that's great emergent behavior
       const uniqueTools = new Set(toolNames);
       if (uniqueTools.size > 1) {
         console.log('✅ Emergent behavior: Used', uniqueTools.size, 'different tools');
@@ -499,7 +563,6 @@ d('Real LLM Integration Tests', () => {
       );
       console.log('Emergent behavior: Used', uniqueTools.size, 'different tools');
 
-      // Log the actual reasoning to see how the LLM approaches the problem
       expect(
         result.reasoning.some(
           (r) =>
@@ -513,22 +576,21 @@ d('Real LLM Integration Tests', () => {
 
   describe('Tool Description Validation', () => {
     it('should validate that tool descriptions guide LLM decisions correctly', async () => {
-      // Test with a specific scenario that should trigger appropriate tools
       const testQueries = [
         {
           query: 'Show me my projects',
-          expectedTools: ['projects'],
-          description: 'Should use projects tool for project listing',
+          expectedTools: ['omnifocus_read'],
+          description: 'Should use omnifocus_read for project listing',
         },
         {
           query: 'What tasks are due today?',
-          expectedTools: ['tasks'],
-          description: 'Should use tasks tool for due date queries',
+          expectedTools: ['omnifocus_read'],
+          description: 'Should use omnifocus_read for due-date queries',
         },
         {
           query: 'How many tasks did I complete this week?',
-          expectedTools: ['productivity_stats', 'tasks'], // Both tools can handle completion data
-          description: 'Should use productivity_stats OR tasks tool for completion queries',
+          expectedTools: ['omnifocus_analyze', 'omnifocus_read'],
+          description: 'Should use omnifocus_analyze OR omnifocus_read for completion queries',
         },
       ];
 
@@ -554,10 +616,9 @@ d('Real LLM Integration Tests', () => {
 
   describe('Error Handling and Recovery', () => {
     it('should handle and recover from tool failures gracefully', async () => {
-      // Try a query that might fail (e.g., if OmniFocus isn't running)
       const result = await llmHarness.askLLM('Create a new task called "Test LLM Integration"');
 
-      // Should attempt to use manage_task tool
+      // Should attempt to use the write tool
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
       // Even if tools fail, should have reasoning
@@ -570,24 +631,23 @@ d('Real LLM Integration Tests', () => {
       );
       console.log(
         'Results:',
-        result.toolCalls.map((c) => (c.result?.success ? 'SUCCESS' : 'FAILED')),
+        result.toolCalls.map((c) => ((c.result as { success?: boolean })?.success ? 'SUCCESS' : 'FAILED')),
       );
     }, 120000);
   });
 
   describe('Performance and Resource Usage', () => {
     it('should complete queries in reasonable time with small models', async () => {
-      const startTime = Date.now();
+      const startTime = process.hrtime.bigint();
 
       const result = await llmHarness.askLLM('Quick check: any tasks due today?');
 
-      const endTime = Date.now();
-      const duration = endTime - startTime;
+      const durationMs = Number(process.hrtime.bigint() - startTime) / 1e6;
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
-      expect(duration).toBeLessThan(60000); // Should complete within 60 seconds
+      expect(durationMs).toBeLessThan(60000); // Should complete within 60 seconds
 
-      console.log(`Performance test completed in ${duration}ms`);
+      console.log(`Performance test completed in ${Math.round(durationMs)}ms`);
       console.log('Tool calls:', result.toolCalls.length);
     }, 120000);
   });
