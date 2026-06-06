@@ -264,6 +264,9 @@ interface ExtractedProject {
 interface ExtractionResult {
   tasks: ExtractedTask[];
   projects: ExtractedProject[];
+  // OMN-123: content lines that were neither metadata nor turned into a task.
+  // Surfaced so nothing is ever silently discarded.
+  unparsed: string[];
 }
 
 // Convert string ID to branded ProjectId for type safety
@@ -2383,6 +2386,7 @@ SCOPE FILTERING:
     const lines = input.split('\n').filter((line) => line.trim());
     const tasks: ExtractedTask[] = [];
     const projects: ExtractedProject[] = [];
+    const unparsed: string[] = [];
 
     let taskCounter = 1;
     let projectCounter = 1;
@@ -2395,16 +2399,45 @@ SCOPE FILTERING:
         continue;
       }
 
-      const projectResult = this.tryExtractProject(trimmed, args.extractMode, currentProject, projects, projectCounter);
-      if (projectResult) {
-        currentProject = projectResult.currentProject;
-        projectCounter = projectResult.projectCounter;
+      const isList = this.isListItem(trimmed);
+
+      // OMN-123: only NON-bullet lines are considered project headers
+      // ("Website Redesign project:"). A bullet is always an action — without
+      // this gate, "- Marketing project: launch the new site" was misread as a
+      // project named "- Marketing" and its action text vanished from both
+      // tasks[] and unparsed[].
+      if (!isList) {
+        const projectResult = this.tryExtractProject(
+          trimmed,
+          args.extractMode,
+          currentProject,
+          projects,
+          projectCounter,
+        );
+        if (projectResult) {
+          currentProject = projectResult.currentProject;
+          projectCounter = projectResult.projectCounter;
+          continue;
+        }
+      }
+
+      // OMN-123: task-candidacy is decided by list-membership, NOT by a verb
+      // allowlist. A line is a task if it is a bullet/numbered list item, or if
+      // the caller is in explicit action_items mode (every line is asserted to be
+      // an action). Anything else is non-bullet prose — surface it in unparsed[]
+      // rather than silently dropping it.
+      const isTaskCandidate = isList || args.extractMode === 'action_items';
+      if (!isTaskCandidate) {
+        unparsed.push(trimmed);
         continue;
       }
 
       const taskResult = this.tryExtractAndAssignTask(trimmed, args, taskCounter, currentProject, tasks);
       if (taskResult) {
         taskCounter = taskResult.taskCounter;
+      } else {
+        // Candidate that failed extraction (e.g. too short) — surface, never drop.
+        unparsed.push(trimmed);
       }
     }
 
@@ -2412,7 +2445,17 @@ SCOPE FILTERING:
       projects.push(currentProject);
     }
 
-    return { tasks, projects };
+    return { tasks, projects, unparsed };
+  }
+
+  /**
+   * OMN-123: a line is a task candidate when it is a markdown list item —
+   * a bullet (-, *, •) or a numbered item (1. / 1)). This replaces the old
+   * hardcoded action-verb allowlist, which silently dropped any item whose
+   * leading verb was not on the list (finalize, coordinate, secure, ...).
+   */
+  private isListItem(line: string): boolean {
+    return /^\s*([-*•]|\d+[.)])\s+/.test(line);
   }
 
   private tryExtractProject(
@@ -2459,7 +2502,7 @@ SCOPE FILTERING:
   ): { taskCounter: number } | null {
     if (args.extractMode === 'projects') return null;
 
-    const task = this.extractTask(trimmed, args, taskCounter, currentProject !== null);
+    const task = this.extractTask(trimmed, args, taskCounter);
     if (!task) return null;
 
     if (currentProject) {
@@ -2534,63 +2577,28 @@ SCOPE FILTERING:
       defaultProject?: string;
     },
     taskId: number,
-    isUnderProject = false,
   ): ExtractedTask | null {
-    let cleaned = line
+    const cleaned = line
       .replace(/^[-*\u2022]\s*/, '')
-      .replace(/^\d+\.\s*/, '')
+      .replace(/^\d+[.)]\s*/, '')
       .trim();
 
     if (cleaned.length < 5) {
       return null;
     }
 
-    const actionVerbs = [
-      'send',
-      'call',
-      'email',
-      'review',
-      'update',
-      'create',
-      'write',
-      'schedule',
-      'discuss',
-      'follow up',
-      'check',
-      'prepare',
-      'organize',
-      'plan',
-      'research',
-      'contact',
-      'complete',
-      'finish',
-      'implement',
-      'test',
-      'deploy',
-      'ask',
-      'buy',
-      'purchase',
-      'get',
-      'pick up',
-      'drop off',
-      'waiting',
-      'task',
-    ];
-
-    const hasActionVerb = actionVerbs.some((verb) => new RegExp(`\\b${verb}\\b`, 'i').test(cleaned));
-
-    if (!hasActionVerb && !isUnderProject) {
-      return null;
-    }
-
-    if (isUnderProject && !hasActionVerb && cleaned.length < 3) {
-      return null;
-    }
-
+    // OMN-123: the hardcoded actionVerbs allowlist used to gate here dropped
+    // ~8/13 real action items whose leading verb (finalize, coordinate, secure,
+    // reorder, provide, attend, confirm, evaluate, ...) was not on the list, and
+    // its failure mode was silent. Task-candidacy is now decided upstream by
+    // list-membership (see isListItem / extractActionItems), so any candidate of
+    // sufficient length becomes a task.
     const taskName = this.extractTaskName(cleaned);
-    const assigneeTags = this.detectAssignee(cleaned);
+    // OMN-123: people tags (waiting-for / agenda) and context tags both come from
+    // detectContextTags now — the single source of truth. The old parallel
+    // detectAssignee re-emitted non-vault tag shapes into this same union.
     const contextTags = args.suggestTags ? detectContextTags(cleaned) : [];
-    const allTags = [...new Set([...assigneeTags, ...contextTags])];
+    const allTags = [...new Set(contextTags)];
     const dates = args.suggestDueDates ? extractDates(cleaned) : {};
     const estimate = args.suggestEstimates ? this.estimateDuration(cleaned) : undefined;
 
@@ -2620,31 +2628,20 @@ SCOPE FILTERING:
   }
 
   private extractTaskName(text: string): string {
-    let name = text.replace(/\b(by|for|with|from)\s+\w+\b/gi, '');
-    const datePreposIdx = name.search(/\s(by|on|before|after|until)\s/i);
-    if (datePreposIdx >= 0) {
-      name = name.substring(0, datePreposIdx);
-    }
-    name = name.replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i, '');
-    name = name.replace(/\b(next|this) week$/i, '');
-    return name.trim();
-  }
-
-  private detectAssignee(text: string): string[] {
-    const tags: string[] = [];
-    const assigneeMatch = /^(\w+)\s+(to|needs to|will|should)\b/i.exec(text);
-    if (assigneeMatch) {
-      tags.push(`@${assigneeMatch[1].toLowerCase()}`);
-    }
-    const waitingMatch = /waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i.exec(text);
-    if (waitingMatch) {
-      tags.push(`@waiting-for-${waitingMatch[1].toLowerCase()}`);
-    }
-    const agendaMatch = /(ask|check with|discuss with|talk to)\s+(\w+)/i.exec(text);
-    if (agendaMatch) {
-      tags.push(`@agenda-${agendaMatch[2].toLowerCase()}`);
-    }
-    return tags;
+    // OMN-123: the old implementation ran two greedy operations that deleted real
+    // content — a global /\b(by|for|with|from)\s+\w+\b/gi strip (which ate
+    // "with Westgate", "with PEDS", "for testing") and a mid-sentence truncation
+    // at the first " by|on|before|after|until " (which lopped off
+    // "...before installing new microfilm station").
+    //
+    // Over-truncation is itself silent data loss, so the name is now the bullet-
+    // stripped line VERBATIM. Earlier drafts also trimmed a leading "Owner:"
+    // label and trailing date tokens, but both reintroduced the same failure
+    // class: "Owner:" can't be told from content labels ("Update:", "Order:"),
+    // and stripping a trailing weekday left dangling prepositions ("...report by").
+    // Dates are still captured separately by extractDates(); a slightly longer,
+    // faithful name is strictly safer than a cleverly-shortened, lossy one.
+    return text.trim();
   }
 
   private estimateDuration(text: string): number | undefined {
@@ -2720,10 +2717,24 @@ SCOPE FILTERING:
       .filter((t) => t.confidence === 'low' || t.projectMatch === 'none')
       .map((t) => t.tempId);
 
+    const unparsed = extracted.unparsed;
+
     return {
-      extracted: { tasks: extracted.tasks, projects: extracted.projects },
-      summary: { totalTasks, totalProjects: extracted.projects.length, highConfidence, mediumConfidence, needsReview },
-      nextSteps: 'Review extracted items and use batch_create to add to OmniFocus',
+      // OMN-123: `unparsed` carries every content line that was NOT turned into a
+      // task, so nothing the user wrote can silently vanish.
+      extracted: { tasks: extracted.tasks, projects: extracted.projects, unparsed },
+      summary: {
+        totalTasks,
+        totalProjects: extracted.projects.length,
+        highConfidence,
+        mediumConfidence,
+        needsReview,
+        unparsedCount: unparsed.length,
+      },
+      nextSteps:
+        unparsed.length > 0
+          ? 'Review extracted items AND unparsed[] (lines not turned into tasks — add any missed actions by hand), then use batch_create to add to OmniFocus'
+          : 'Review extracted items and use batch_create to add to OmniFocus',
     };
   }
 

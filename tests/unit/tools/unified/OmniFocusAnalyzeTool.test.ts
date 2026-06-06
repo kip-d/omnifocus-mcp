@@ -574,6 +574,139 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.success).toBe(true);
       expect(res.data.extracted.tasks).toHaveLength(0);
     });
+
+    // OMN-123 regression: the real ops-meeting sample, verbatim from the ticket's
+    // reproduction block. The old verb-allowlist + greedy preposition strip
+    // returned 5 mangled tasks from these clean bullets. All must survive with
+    // names intact and nothing dropped silently.
+    // NOTE: the ticket prose says "13 items" but its code block lists exactly 12
+    // bullets — we match the literal sample (12). Flagged for the owner.
+    const OMN_123_SAMPLE = [
+      '- Kip: finalize remote access solution for new Mac minis before deployment.',
+      '- Coordinate with Dennis Ball for feedback on bookmark files for book processing stations.',
+      '- Plan branch-by-branch Mac mini rollout starting with Westgate (oldest, 2016).',
+      '- Kip: secure Kensington lock for new microfilm station.',
+      '- Coordinate with PEDS supervisors for advance notice before installing new microfilm station; double-check printing.',
+      '- Order six self-check scanners and four lobby-style stand models for testing.',
+      '- Kip: provide network ports list for blocking Minecraft multiplayer/self-hosting.',
+      '- Reorder two CyberPower battery packs.',
+      '- Kip: help Joe Harris with Smart App Control blocking his XLS shortcut.',
+      '- Lantz: attend Iru AI webinar Thursday June 4th 2026.',
+      '- Phone system: confirm shipment dates and build prep timeline for July 20th rollout.',
+      '- Evaluate centralized software license tracking including Square proposal.',
+    ].join('\n');
+
+    it('OMN-123: extracts all 12 sample bullets — including verbs off the old allowlist', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      expect(res.success).toBe(true);
+      const tasks = res.data.extracted.tasks;
+      // Every bullet survives — nothing dropped.
+      expect(tasks.length).toBe(12);
+      expect(res.data.summary.totalTasks).toBe(12);
+
+      // Lock the list-membership semantics against a regression to verb-gating:
+      // these leading verbs were NOT on the old actionVerbs allowlist, so each is
+      // proof that candidacy now comes from being a bullet, not from a known verb.
+      const joined = tasks.map((t: any) => t.name).join('\n');
+      for (const offAllowlistVerb of [
+        'finalize',
+        'Coordinate',
+        'secure',
+        'Reorder',
+        'provide',
+        'attend',
+        'confirm',
+        'Evaluate',
+      ]) {
+        expect(joined).toContain(offAllowlistVerb);
+      }
+    });
+
+    it('OMN-123: a bulleted "X project:" line stays an action — its text never vanishes', async () => {
+      const res: any = await tool.execute({
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: '- Marketing project: launch the new site\n- Build the analytics dashboard' },
+        },
+      });
+
+      expect(res.success).toBe(true);
+      // Bullets are actions, not project headers — so the action text is preserved
+      // as a task rather than being lost to a phantom empty project.
+      const joined = res.data.extracted.tasks.map((t: any) => t.name).join('\n');
+      expect(joined).toContain('launch the new site');
+      expect(res.data.extracted.unparsed).toHaveLength(0);
+    });
+
+    it('OMN-123: preserves mid-sentence objects/proper nouns eaten by the old greedy strip', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      const names: string[] = res.data.extracted.tasks.map((t: any) => t.name);
+      const joined = names.join('\n');
+      // "with Westgate", "with PEDS", "for testing" were deleted by the global
+      // /\b(by|for|with|from)\s+\w+\b/gi strip. They must survive now.
+      expect(joined).toContain('Westgate');
+      expect(joined).toContain('PEDS');
+      expect(joined).toContain('for testing');
+    });
+
+    it('OMN-123: never silently drops a content line — surfaces leftovers in unparsed[]', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      // Every bullet became a task → nothing left unparsed for this clean sample.
+      expect(Array.isArray(res.data.extracted.unparsed)).toBe(true);
+      expect(res.data.extracted.unparsed).toHaveLength(0);
+      expect(res.data.summary.unparsedCount).toBe(0);
+    });
+
+    // Assert on the ASSEMBLED task.suggestedTags (what the user actually sees),
+    // not on an internal detector in isolation — there used to be two people-tag
+    // detectors and only fixing one left the old shapes leaking into the union.
+    const tagsFor = async (line: string): Promise<string[]> => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: `- ${line}` } },
+      });
+      return res.data.extracted.tasks[0]?.suggestedTags ?? [];
+    };
+
+    it('OMN-123: suggestedTags use the vault convention (@waiting-for + @agenda-{Name})', async () => {
+      const waiting = await tagsFor('waiting for Dennis to send bookmark files');
+      expect(waiting).toContain('@waiting-for');
+      expect(waiting).toContain('@agenda-Dennis');
+
+      const agenda = await tagsFor('ask Joe Harris about the XLS shortcut');
+      expect(agenda).toContain('@agenda-Joe');
+    });
+
+    it('OMN-123: the old non-vault tag shapes never leak into suggestedTags', async () => {
+      const waiting = await tagsFor('waiting for Dennis to send bookmark files');
+      // No @waiting-for-{name} and no lowercase @agenda-{name} duplicate.
+      expect(waiting).not.toContain('@waiting-for-dennis');
+      expect(waiting).not.toContain('@agenda-dennis');
+
+      const agenda = await tagsFor('ask Joe Harris about the XLS shortcut');
+      expect(agenda).not.toContain('@agenda-joe');
+
+      // The bogus bare "@name" shape from "X will/should/to" must be gone.
+      const bare = await tagsFor('Sarah will review the quarterly report');
+      expect(bare).not.toContain('@sarah');
+
+      // "task to complete" must NOT yield a spurious @agenda-To (missing \b on "ask").
+      const spurious = await tagsFor('task to complete the migration checklist');
+      expect(spurious).not.toContain('@agenda-To');
+
+      // A trailing possessive must not bleed into the tag.
+      const possessive = await tagsFor("waiting on Dennis's reply");
+      expect(possessive).toContain('@agenda-Dennis');
+      expect(possessive).not.toContain("@agenda-Dennis's");
+    });
   });
 
   // ==========================================================================

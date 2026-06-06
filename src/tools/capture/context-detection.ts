@@ -107,27 +107,6 @@ const PRIORITY_CONTEXTS: ContextPattern[] = [
 ];
 
 /**
- * People-based context patterns (dynamic)
- */
-const PEOPLE_PATTERNS = [
-  {
-    // Pattern: "waiting for X" or "waiting on X" - handle possessive forms
-    pattern: /waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i,
-    tagFormat: (name: string) => `@waiting-for-${name.toLowerCase()}`,
-  },
-  {
-    // Pattern: "ask X", "discuss with X", "talk to X", "check with X"
-    pattern: /(?:ask|discuss with|talk to|check with|meet with)\s+(\w+)/i,
-    tagFormat: (name: string) => `@agenda-${name.toLowerCase()}`,
-  },
-  {
-    // Pattern: "X to do" (assignee at start)
-    pattern: /^(\w+)\s+(?:to|will|should|needs to)\b/i,
-    tagFormat: (name: string) => `@${name.toLowerCase()}`,
-  },
-];
-
-/**
  * Detect appropriate context tags for a task
  *
  * @param text - Task text to analyze
@@ -215,21 +194,37 @@ function findBestEnergyContext(text: string): string | null {
 }
 
 /**
- * Detect people-based tags (waiting for, agenda items, assignees)
+ * Detect people-based tags in THIS vault's convention.
+ *
+ * OMN-123: the previous patterns emitted `@waiting-for-{name}`, lowercase
+ * `@agenda-{name}`, and a bare `@{name}` assignee shape — none of which match
+ * real tags in this vault and which polluted the tag namespace. The vault uses a
+ * flat `@waiting-for` plus a capitalized `@agenda-{Name}`. The bare-`@name` shape
+ * is dropped entirely (it fired on ordinary sentences, e.g. "Sarah will review…"
+ * → `@sarah`). This is the single source of truth for people tags — the analyze
+ * tool no longer has a parallel `detectAssignee`.
  */
 function detectPeopleTags(text: string): string[] {
   const tags: string[] = [];
+  const commonWords = new Set(['me', 'you', 'us', 'them', 'it', 'this', 'that']);
+  const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  const isName = (n: string): boolean => !commonWords.has(n.toLowerCase());
 
-  for (const pattern of PEOPLE_PATTERNS) {
-    const match = pattern.pattern.exec(text);
-    if (match && match[1]) {
-      const name = match[1];
-      // Filter out common words that aren't names
-      const commonWords = ['me', 'you', 'us', 'them', 'it', 'this', 'that'];
-      if (!commonWords.includes(name.toLowerCase())) {
-        tags.push(pattern.tagFormat(name));
-      }
-    }
+  // The name capture excludes the apostrophe so a trailing possessive ("Dennis's
+  // reply") yields @agenda-Dennis, not @agenda-Dennis's.
+  // "waiting for/on X" → flat @waiting-for + the person's agenda tag
+  const waiting = /\bwaiting\s+(?:for|on)\s+([a-z][\w-]*)/i.exec(text);
+  if (waiting && isName(waiting[1])) {
+    tags.push('@waiting-for');
+    tags.push(`@agenda-${capitalize(waiting[1])}`);
+  }
+
+  // delegation / agenda cues → @agenda-{Name}. The leading \b prevents "task to"
+  // from matching "ask to" → a spurious @agenda-To.
+  const agenda = /\b(?:ask|check with|discuss with|talk to|meet with)\s+([a-z][\w-]*)/i.exec(text);
+  if (agenda && isName(agenda[1])) {
+    const tag = `@agenda-${capitalize(agenda[1])}`;
+    if (!tags.includes(tag)) tags.push(tag);
   }
 
   return tags;
