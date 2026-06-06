@@ -2399,11 +2399,26 @@ SCOPE FILTERING:
         continue;
       }
 
-      const projectResult = this.tryExtractProject(trimmed, args.extractMode, currentProject, projects, projectCounter);
-      if (projectResult) {
-        currentProject = projectResult.currentProject;
-        projectCounter = projectResult.projectCounter;
-        continue;
+      const isList = this.isListItem(trimmed);
+
+      // OMN-123: only NON-bullet lines are considered project headers
+      // ("Website Redesign project:"). A bullet is always an action — without
+      // this gate, "- Marketing project: launch the new site" was misread as a
+      // project named "- Marketing" and its action text vanished from both
+      // tasks[] and unparsed[].
+      if (!isList) {
+        const projectResult = this.tryExtractProject(
+          trimmed,
+          args.extractMode,
+          currentProject,
+          projects,
+          projectCounter,
+        );
+        if (projectResult) {
+          currentProject = projectResult.currentProject;
+          projectCounter = projectResult.projectCounter;
+          continue;
+        }
       }
 
       // OMN-123: task-candidacy is decided by list-membership, NOT by a verb
@@ -2411,7 +2426,7 @@ SCOPE FILTERING:
       // the caller is in explicit action_items mode (every line is asserted to be
       // an action). Anything else is non-bullet prose — surface it in unparsed[]
       // rather than silently dropping it.
-      const isTaskCandidate = this.isListItem(trimmed) || args.extractMode === 'action_items';
+      const isTaskCandidate = isList || args.extractMode === 'action_items';
       if (!isTaskCandidate) {
         unparsed.push(trimmed);
         continue;
@@ -2579,9 +2594,11 @@ SCOPE FILTERING:
     // list-membership (see isListItem / extractActionItems), so any candidate of
     // sufficient length becomes a task.
     const taskName = this.extractTaskName(cleaned);
-    const assigneeTags = this.detectAssignee(cleaned);
+    // OMN-123: people tags (waiting-for / agenda) and context tags both come from
+    // detectContextTags now — the single source of truth. The old parallel
+    // detectAssignee re-emitted non-vault tag shapes into this same union.
     const contextTags = args.suggestTags ? detectContextTags(cleaned) : [];
-    const allTags = [...new Set([...assigneeTags, ...contextTags])];
+    const allTags = [...new Set(contextTags)];
     const dates = args.suggestDueDates ? extractDates(cleaned) : {};
     const estimate = args.suggestEstimates ? this.estimateDuration(cleaned) : undefined;
 
@@ -2611,46 +2628,20 @@ SCOPE FILTERING:
   }
 
   private extractTaskName(text: string): string {
-    // OMN-123: the old implementation ran two greedy operations that deleted
-    // real content:
-    //   1. /\b(by|for|with|from)\s+\w+\b/gi  — removed a preposition AND the
-    //      following word *anywhere* in the string ("with Westgate", "with PEDS",
-    //      "for testing" all vanished).
-    //   2. truncation at the first mid-sentence " by|on|before|after|until "
-    //      ("...before installing new microfilm station" was lopped off).
-    // Over-truncation is itself silent data loss, so the name now preserves the
-    // line essentially verbatim. Dates are captured separately by extractDates().
-    // We trim only two unambiguous, edge-anchored bits of noise:
-    //   - a leading single-word owner label ("Kip:", "Lantz:")
-    //   - a trailing standalone relative-date token
-    let name = text.replace(/^[A-Z][A-Za-z]+:\s*/, '');
-    name = name.replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\.?\s*$/i, '');
-    name = name.replace(/\b(next|this)\s+week\.?\s*$/i, '');
-    return name.trim();
-  }
-
-  // OMN-123: emit tags in THIS vault's convention — a flat `@waiting-for` plus a
-  // capitalized `@agenda-{Name}` — not the old `@{name}` / `@waiting-for-{name}`
-  // shapes, which polluted the tag namespace and matched no real tag. The bogus
-  // bare-`@name` shape from "X to/will/should" is removed entirely: it fired on
-  // far too many ordinary sentences ("Sarah will review…" → `@sarah`).
-  private detectAssignee(text: string): string[] {
-    const tags: string[] = [];
-    const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-
-    const waitingMatch = /waiting\s+(?:for|on)\s+([a-z][\w'-]*)/i.exec(text);
-    if (waitingMatch) {
-      tags.push('@waiting-for');
-      tags.push(`@agenda-${capitalize(waitingMatch[1])}`);
-    }
-
-    const agendaMatch = /(?:ask|check with|discuss with|talk to)\s+([a-z][\w'-]*)/i.exec(text);
-    if (agendaMatch) {
-      const tag = `@agenda-${capitalize(agendaMatch[1])}`;
-      if (!tags.includes(tag)) tags.push(tag);
-    }
-
-    return tags;
+    // OMN-123: the old implementation ran two greedy operations that deleted real
+    // content — a global /\b(by|for|with|from)\s+\w+\b/gi strip (which ate
+    // "with Westgate", "with PEDS", "for testing") and a mid-sentence truncation
+    // at the first " by|on|before|after|until " (which lopped off
+    // "...before installing new microfilm station").
+    //
+    // Over-truncation is itself silent data loss, so the name is now the bullet-
+    // stripped line VERBATIM. Earlier drafts also trimmed a leading "Owner:"
+    // label and trailing date tokens, but both reintroduced the same failure
+    // class: "Owner:" can't be told from content labels ("Update:", "Order:"),
+    // and stripping a trailing weekday left dangling prepositions ("...report by").
+    // Dates are still captured separately by extractDates(); a slightly longer,
+    // faithful name is strictly safer than a cleverly-shortened, lossy one.
+    return text.trim();
   }
 
   private estimateDuration(text: string): number | undefined {
