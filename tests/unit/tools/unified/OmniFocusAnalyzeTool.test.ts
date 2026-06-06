@@ -574,6 +574,74 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.success).toBe(true);
       expect(res.data.extracted.tasks).toHaveLength(0);
     });
+
+    // OMN-123 regression: the real ops-meeting sample, verbatim from the ticket's
+    // reproduction block. The old verb-allowlist + greedy preposition strip
+    // returned 5 mangled tasks from these clean bullets. All must survive with
+    // names intact and nothing dropped silently.
+    // NOTE: the ticket prose says "13 items" but its code block lists exactly 12
+    // bullets — we match the literal sample (12). Flagged for the owner.
+    const OMN_123_SAMPLE = [
+      '- Kip: finalize remote access solution for new Mac minis before deployment.',
+      '- Coordinate with Dennis Ball for feedback on bookmark files for book processing stations.',
+      '- Plan branch-by-branch Mac mini rollout starting with Westgate (oldest, 2016).',
+      '- Kip: secure Kensington lock for new microfilm station.',
+      '- Coordinate with PEDS supervisors for advance notice before installing new microfilm station; double-check printing.',
+      '- Order six self-check scanners and four lobby-style stand models for testing.',
+      '- Kip: provide network ports list for blocking Minecraft multiplayer/self-hosting.',
+      '- Reorder two CyberPower battery packs.',
+      '- Kip: help Joe Harris with Smart App Control blocking his XLS shortcut.',
+      '- Lantz: attend Iru AI webinar Thursday June 4th 2026.',
+      '- Phone system: confirm shipment dates and build prep timeline for July 20th rollout.',
+      '- Evaluate centralized software license tracking including Square proposal.',
+    ].join('\n');
+
+    it('OMN-123: extracts all 13 action items from a real ops-meeting sample', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      expect(res.success).toBe(true);
+      const tasks = res.data.extracted.tasks;
+      // 12 bullet lines in the sample (one was merged above) → assert none dropped.
+      expect(tasks.length).toBe(12);
+      expect(res.data.summary.totalTasks).toBe(12);
+    });
+
+    it('OMN-123: preserves mid-sentence objects/proper nouns eaten by the old greedy strip', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      const names: string[] = res.data.extracted.tasks.map((t: any) => t.name);
+      const joined = names.join('\n');
+      // "with Westgate", "with PEDS", "for testing" were deleted by the global
+      // /\b(by|for|with|from)\s+\w+\b/gi strip. They must survive now.
+      expect(joined).toContain('Westgate');
+      expect(joined).toContain('PEDS');
+      expect(joined).toContain('for testing');
+    });
+
+    it('OMN-123: never silently drops a content line — surfaces leftovers in unparsed[]', async () => {
+      const res: any = await tool.execute({
+        analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
+      });
+
+      // Every bullet became a task → nothing left unparsed for this clean sample.
+      expect(Array.isArray(res.data.extracted.unparsed)).toBe(true);
+      expect(res.data.extracted.unparsed).toHaveLength(0);
+      expect(res.data.summary.unparsedCount).toBe(0);
+    });
+
+    it('OMN-123: emits vault-convention assignee tags (@waiting-for, @agenda-{Name})', () => {
+      // detectAssignee is the unit under test for tag-shape correctness.
+      const anyTool = tool as any;
+      expect(anyTool.detectAssignee('waiting for Dennis to send bookmark files')).toContain('@waiting-for');
+      expect(anyTool.detectAssignee('waiting for Dennis to send bookmark files')).toContain('@agenda-Dennis');
+      expect(anyTool.detectAssignee('ask Joe Harris about the XLS shortcut')).toContain('@agenda-Joe');
+      // The old bogus bare "@name" shape from "X to/will/should" must be gone.
+      expect(anyTool.detectAssignee('Sarah will review the report')).not.toContain('@sarah');
+    });
   });
 
   // ==========================================================================
