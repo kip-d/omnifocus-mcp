@@ -701,6 +701,11 @@ describe('OmniFocusAnalyzeTool', () => {
       // "task to complete" must NOT yield a spurious @agenda-To (missing \b on "ask").
       const spurious = await tagsFor('task to complete the migration checklist');
       expect(spurious).not.toContain('@agenda-To');
+
+      // A trailing possessive must not bleed into the tag.
+      const possessive = await tagsFor("waiting on Dennis's reply");
+      expect(possessive).toContain('@agenda-Dennis');
+      expect(possessive).not.toContain("@agenda-Dennis's");
     });
   });
 

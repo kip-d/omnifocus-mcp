@@ -210,8 +210,10 @@ function detectPeopleTags(text: string): string[] {
   const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
   const isName = (n: string): boolean => !commonWords.has(n.toLowerCase());
 
+  // The name capture excludes the apostrophe so a trailing possessive ("Dennis's
+  // reply") yields @agenda-Dennis, not @agenda-Dennis's.
   // "waiting for/on X" → flat @waiting-for + the person's agenda tag
-  const waiting = /\bwaiting\s+(?:for|on)\s+([a-z][\w'-]*)/i.exec(text);
+  const waiting = /\bwaiting\s+(?:for|on)\s+([a-z][\w-]*)/i.exec(text);
   if (waiting && isName(waiting[1])) {
     tags.push('@waiting-for');
     tags.push(`@agenda-${capitalize(waiting[1])}`);
@@ -219,7 +221,7 @@ function detectPeopleTags(text: string): string[] {
 
   // delegation / agenda cues → @agenda-{Name}. The leading \b prevents "task to"
   // from matching "ask to" → a spurious @agenda-To.
-  const agenda = /\b(?:ask|check with|discuss with|talk to|meet with)\s+([a-z][\w'-]*)/i.exec(text);
+  const agenda = /\b(?:ask|check with|discuss with|talk to|meet with)\s+([a-z][\w-]*)/i.exec(text);
   if (agenda && isName(agenda[1])) {
     const tag = `@agenda-${capitalize(agenda[1])}`;
     if (!tags.includes(tag)) tags.push(tag);
