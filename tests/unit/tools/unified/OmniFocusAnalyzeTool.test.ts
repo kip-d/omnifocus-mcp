@@ -838,6 +838,30 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(res.data.batchPayload.operations).toHaveLength(1);
       });
 
+      it('wraps the incomplete-tasks read in the JXA bridge (flattenedTasks is OmniJS-only)', async () => {
+        // Regression guard: buildFilteredTasksScript returns a BARE OmniJS body
+        // that references `flattenedTasks` — a global that only exists inside the
+        // evaluateJavascript bridge. Passing it raw to execJson throws
+        // "Can't find variable: flattenedTasks" and silently disabled dedupe in
+        // prod (caught only by live verification, since mocks can't see a bad
+        // script). The tasks read must go through buildListTasksScriptV4, which
+        // embeds the body in the JXA→bridge harness.
+        const scripts: string[] = [];
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          return Promise.resolve({ tasks: [] });
+        });
+
+        await tool.execute({
+          analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', project: 'Y' }] } },
+        });
+
+        const tasksScript = scripts.find((s) => s.includes('flattenedTasks'));
+        expect(tasksScript).toBeDefined();
+        // The flattenedTasks body must be embedded inside the evaluateJavascript bridge.
+        expect(tasksScript).toContain('evaluateJavascript');
+      });
+
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
         const res: any = await tool.execute({
           analysis: {
