@@ -635,11 +635,32 @@ count, inbox size, and completion rate.
 | `pattern_analysis`    | Database-wide patterns, stale items       | 5-10s (1000+) |
 | `workflow_analysis`   | Deep workflow assessment                  | 3-5s          |
 | `recurring_tasks`     | Repeat task patterns and frequencies      | Fast          |
-| `parse_meeting_notes` | Extract action items from text            | Fast          |
+| `parse_meeting_notes` | Structure action items into OmniFocus     | Fast          |
 | `manage_reviews`      | Project review scheduling                 | Fast          |
 
 All analysis types accept an optional `scope` with `dateRange`, `tags`, `projects`, `includeCompleted`, and
 `includeDropped`.
+
+### Parsing Meeting Notes (`parse_meeting_notes`)
+
+**Extract the action items yourself, then pass `items[]` — do not paste raw prose.** You read the notes far more
+accurately than the server's heuristic. The tool's job is the read-only pre-flight only the server can do.
+
+1. Read the notes and produce structured items, one per real action:
+   `{ name, project?, tags?, dueDate?, deferDate?, estimatedMinutes?, flagged?, note? }` (convert dates to `YYYY-MM-DD`
+   / `YYYY-MM-DD HH:mm` first — see Date Conversion).
+2. Call `omnifocus_analyze` type `parse_meeting_notes` with `params.items`. It returns a preview per item
+   (`project.match` exact/partial/none, `tags.existing`/`new`, `duplicateOf`, `readyToCreate`), a `summary`, and a
+   ready-to-send **`batchPayload`**.
+3. Review the preview — especially `duplicateOf` (already exists), `project.match: "none"` (a new project would be
+   created), and `tags.new` (new tags). Adjust items and re-run if needed.
+4. Send `batchPayload` to `omnifocus_write` operation `batch` (use `dryRun: true` once to confirm, then create).
+
+`validateAgainstExisting: false` skips the DB reads (faster, but no project resolution / dedupe / tag classification).
+
+**Fallback:** if you genuinely can't pre-structure, pass `params.text` (raw prose). The heuristic extractor runs and
+surfaces anything it couldn't parse in `unparsed[]` (nothing is silently dropped). Provide exactly one of
+`items`/`text`.
 
 ### Pattern Analysis
 

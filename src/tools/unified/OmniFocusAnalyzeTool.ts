@@ -33,6 +33,11 @@ import { analyzeDueDateBunching } from '../../omnifocus/scripts/analytics/due-da
 import { detectContextTags } from '../capture/context-detection.js';
 import { extractDates } from '../capture/date-extraction.js';
 
+// OMN-124: read-only pre-flight for structured meeting-note items.
+import { buildFilteredProjectsScript, buildFilteredTasksScript } from '../../contracts/ast/script-builder.js';
+import { normalizeFilter } from '../../contracts/filters.js';
+import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
+
 // Response types
 import type {
   ProductivityStatsData,
@@ -287,7 +292,15 @@ ANALYSIS TYPES:
 - pattern_analysis: Database-wide patterns (tags, projects, stale items)
 - workflow_analysis: Deep workflow analysis
 - recurring_tasks: Recurring task patterns and frequencies
-- parse_meeting_notes: Extract action items from meeting notes
+- parse_meeting_notes: Structure meeting action items into OmniFocus.
+  PREFERRED: extract the action items YOURSELF, then pass params.items[] —
+  each { name, project?, tags?, dueDate?, deferDate?, estimatedMinutes?, flagged?, note? }.
+  The tool does a read-only pre-flight (resolves project names, dedupes against
+  existing tasks, classifies tags existing-vs-new) and returns a batchPayload you
+  send to omnifocus_write { batch } (try dryRun:true first). Set
+  validateAgainstExisting:false to skip the DB reads.
+  FALLBACK: pass params.text (raw prose) and the heuristic extractor runs;
+  un-parsed lines are surfaced in unparsed[]. Provide exactly one of items|text.
 - manage_reviews: Project review operations
   params: { operation, projectId, reviewDate, reviewInterval }
   - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
@@ -2325,14 +2338,24 @@ SCOPE FILTERING:
   // Parse Meeting Notes
   // =========================================================================
 
-  private executeParseMeetingNotes(compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>): unknown {
+  private async executeParseMeetingNotes(
+    compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>,
+  ): Promise<unknown> {
     const timer = new OperationTimerV2();
 
+    // OMN-124: structured items[] is the preferred path — the caller (LLM) has
+    // already extracted the action items, and the tool does the read-only
+    // pre-flight (resolve/dedupe/classify) and emits a ready batch payload.
+    // The schema guarantees exactly one of items|text.
+    if (compiled.params.items && compiled.params.items.length > 0) {
+      return this.parseStructuredItems(compiled.params, timer);
+    }
+
     try {
-      const input = compiled.params.text;
+      const input = compiled.params.text ?? '';
       const taskMode = compiled.params.extractTasks ? 'action_items' : 'both';
       const extractMode = compiled.params.extractTasks !== undefined ? taskMode : 'both';
-      const defaultProject = compiled.params.defaultProject;
+      const defaultProject = compiled.params.defaultProject ?? undefined;
       const defaultTags = compiled.params.defaultTags;
 
       this.logger.info('Parsing meeting notes', {
@@ -2370,6 +2393,257 @@ SCOPE FILTERING:
         timer.toMetadata(),
       );
     }
+  }
+
+  // =========================================================================
+  // OMN-124: structured items[] — read-only pre-flight
+  // =========================================================================
+
+  /**
+   * The caller (an LLM) has already extracted action items into `items[]`. This
+   * path does NOT do NLP — it does what only the server can: read the live
+   * database to resolve project names, dedupe against existing tasks, and
+   * classify tags existing-vs-new, then hand back an `omnifocus_write { batch }`
+   * payload that round-trips unchanged. Creation stays in the write tool; this
+   * stays read-only.
+   */
+  private async parseStructuredItems(
+    params: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>['params'],
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    try {
+      const items = params.items ?? [];
+      const validate = params.validateAgainstExisting !== false; // default true
+      const defaultProject = params.defaultProject ?? null;
+      const defaultTags = params.defaultTags ?? [];
+
+      this.logger.info('Parsing structured meeting items', { count: items.length, validate });
+
+      let existingProjects: string[] = [];
+      let existingTags = new Set<string>();
+      let existingTasks: Array<{ name: string; project: string | null }> = [];
+      if (validate) {
+        [existingProjects, existingTags, existingTasks] = await Promise.all([
+          this.fetchExistingProjectNames(),
+          this.fetchExistingTagNames(),
+          this.fetchExistingIncompleteTasks(),
+        ]);
+      }
+
+      const previewItems = items.map((item) => {
+        const requestedProject = item.project ?? defaultProject ?? null;
+        const combinedTags = [...new Set([...(item.tags ?? []), ...defaultTags])];
+
+        const project = this.resolveProjectName(requestedProject, existingProjects, validate);
+        const tags = this.classifyItemTags(combinedTags, existingTags, validate);
+        // Dedup against the project the task will ACTUALLY be created in
+        // (buildBatchCreateData uses project.requested). For a 'partial' match,
+        // resolved is a different, existing project — scoping dedup there would
+        // check the wrong project. exact/inbox: requested === resolved anyway.
+        const duplicateOf = validate ? this.findDuplicateTask(item.name, project.requested, existingTasks) : null;
+
+        return {
+          name: item.name,
+          project,
+          tags,
+          combinedTags,
+          dueDate: item.dueDate,
+          deferDate: item.deferDate,
+          estimatedMinutes: item.estimatedMinutes,
+          flagged: item.flagged,
+          note: item.note,
+          duplicateOf,
+          readyToCreate: !duplicateOf,
+        };
+      });
+
+      const operations = previewItems
+        .filter((p) => p.readyToCreate)
+        .map((p) => ({
+          operation: 'create' as const,
+          target: 'task' as const,
+          data: this.buildBatchCreateData(p),
+        }));
+
+      const newProjects = [
+        ...new Set(
+          previewItems
+            .filter((p) => p.project.match === 'none' && typeof p.project.requested === 'string')
+            .map((p) => p.project.requested as string),
+        ),
+      ];
+      const newTags = [...new Set(previewItems.flatMap((p) => p.tags.new))];
+
+      const result = {
+        mode: 'structured' as const,
+        // Strip the internal combinedTags helper from the surfaced shape.
+        items: previewItems.map(({ combinedTags: _omit, ...rest }) => rest),
+        unparsed: [] as string[],
+        summary: {
+          total: previewItems.length,
+          readyToCreate: operations.length,
+          needsReview: previewItems.filter(
+            (p) => Boolean(p.duplicateOf) || p.project.match === 'none' || p.tags.new.length > 0,
+          ).length,
+          duplicates: previewItems.filter((p) => Boolean(p.duplicateOf)).length,
+          newProjects: validate ? newProjects.length : null,
+          newTags: validate ? newTags.length : null,
+          unparsedCount: 0,
+        },
+        batchPayload: { operations },
+        nextSteps:
+          operations.length > 0
+            ? 'Review the preview (duplicateOf, project.match==="none", tags.new), then send batchPayload to omnifocus_write { mutation: { operation: "batch", operations } } — try dryRun:true first.'
+            : 'No items ready to create (all were duplicates). Review duplicateOf entries.',
+      };
+
+      return createSuccessResponseV2('parse_meeting_notes', result, undefined, timer.toMetadata());
+    } catch (error) {
+      this.logger.error('Parse structured meeting items failed', { error });
+      return createErrorResponseV2(
+        'parse_meeting_notes',
+        'PARSE_ERROR',
+        error instanceof Error ? error.message : 'Failed to process structured items',
+        'Check that each item has a non-empty name; set validateAgainstExisting:false to skip DB reads',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+  }
+
+  /** Resolve a requested project name against existing projects (case-insensitive). */
+  private resolveProjectName(
+    requested: string | null,
+    existing: string[],
+    validate: boolean,
+  ): { requested: string | null; resolved: string | null; match: 'exact' | 'partial' | 'none' | 'unchecked' } {
+    if (!validate) return { requested, resolved: requested, match: 'unchecked' };
+    if (requested === null) return { requested: null, resolved: null, match: 'exact' }; // inbox is always valid
+
+    const lower = requested.toLowerCase();
+    const exact = existing.find((p) => p.toLowerCase() === lower);
+    if (exact) return { requested, resolved: exact, match: 'exact' };
+
+    const partial = existing.find((p) => p.toLowerCase().includes(lower) || lower.includes(p.toLowerCase()));
+    if (partial) return { requested, resolved: partial, match: 'partial' };
+
+    return { requested, resolved: requested, match: 'none' };
+  }
+
+  /** Split tags into those that already exist vs those that would be created. */
+  private classifyItemTags(
+    tags: string[],
+    existing: Set<string>,
+    validate: boolean,
+  ): { existing: string[]; new: string[] } {
+    if (!validate) return { existing: [], new: tags };
+    const lowerExisting = new Set([...existing].map((t) => t.toLowerCase()));
+    const have: string[] = [];
+    const fresh: string[] = [];
+    for (const tag of tags) {
+      (lowerExisting.has(tag.toLowerCase()) ? have : fresh).push(tag);
+    }
+    return { existing: have, new: fresh };
+  }
+
+  /** Find an existing incomplete task with the same name in the target project. */
+  private findDuplicateTask(
+    name: string,
+    resolvedProject: string | null,
+    existing: Array<{ name: string; project: string | null }>,
+  ): { name: string; project: string | null } | null {
+    const lowerName = name.toLowerCase();
+    const targetProject = resolvedProject?.toLowerCase() ?? null;
+    const dup = existing.find(
+      (t) => t.name.toLowerCase() === lowerName && (t.project?.toLowerCase() ?? null) === targetProject,
+    );
+    return dup ? { name: dup.name, project: dup.project } : null;
+  }
+
+  /** Build a batch `create` data object, omitting undefined optional fields. */
+  private buildBatchCreateData(p: {
+    name: string;
+    project: { requested: string | null; resolved: string | null };
+    combinedTags: string[];
+    dueDate?: string;
+    deferDate?: string;
+    estimatedMinutes?: number;
+    flagged?: boolean;
+    note?: string;
+  }): Record<string, unknown> {
+    const data: Record<string, unknown> = { name: p.name };
+    // Use the requested project name (literal caller intent); preview.project.match
+    // tells the human whether it already exists.
+    if (typeof p.project.requested === 'string' && p.project.requested.length > 0) {
+      data.project = p.project.requested;
+    }
+    if (p.combinedTags.length > 0) data.tags = p.combinedTags;
+    if (p.dueDate !== undefined) data.dueDate = p.dueDate;
+    if (p.deferDate !== undefined) data.deferDate = p.deferDate;
+    if (p.estimatedMinutes !== undefined) data.estimatedMinutes = p.estimatedMinutes;
+    if (p.flagged !== undefined) data.flagged = p.flagged;
+    if (p.note !== undefined) data.note = p.note;
+    return data;
+  }
+
+  /** Read existing project names (lite, no stats). Returns [] on script error. */
+  private async fetchExistingProjectNames(): Promise<string[]> {
+    const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
+    const result = await this.execJson(gen.script);
+    if (!isScriptSuccess(result)) return [];
+    return this.unwrapList(result.data, ['projects', 'items'])
+      .map((p) => (p as { name?: unknown }).name)
+      .filter((n): n is string => typeof n === 'string');
+  }
+
+  /** Read existing tag names (basic mode). Returns empty set on script error. */
+  private async fetchExistingTagNames(): Promise<Set<string>> {
+    const gen = buildTagsScript({ mode: 'basic', includeEmpty: true, sortBy: 'name' });
+    const result = await this.execJson(gen.script);
+    if (!isScriptSuccess(result)) return new Set();
+    const names = this.unwrapList(result.data, ['tags', 'items'])
+      .map((t) => (typeof t === 'string' ? t : (t as { name?: unknown }).name))
+      .filter((n): n is string => typeof n === 'string');
+    return new Set(names);
+  }
+
+  /** Read incomplete (not completed/dropped) tasks with their project name. */
+  private async fetchExistingIncompleteTasks(): Promise<Array<{ name: string; project: string | null }>> {
+    // Both terminal states excluded: a dropped task has completed===false, so
+    // without dropped:false an abandoned task would false-positive as a duplicate.
+    const filter = normalizeFilter({ completed: false, dropped: false });
+    const gen = buildFilteredTasksScript(filter, { limit: 2000, fields: ['name', 'project'] });
+    const result = await this.execJson(gen.script);
+    if (!isScriptSuccess(result)) return [];
+    return this.unwrapList(result.data, ['tasks', 'items'])
+      .map((t) => {
+        const rec = t as { name?: unknown; project?: unknown };
+        return {
+          name: typeof rec.name === 'string' ? rec.name : '',
+          project: typeof rec.project === 'string' && rec.project.length > 0 ? rec.project : null,
+        };
+      })
+      .filter((t) => t.name.length > 0);
+  }
+
+  /**
+   * Unwrap a script result's data into an array, tolerating the `{ ok, v, data }`
+   * envelope and `{ <key>: [...] }` / bare-array shapes the OmniJS bridge emits.
+   */
+  private unwrapList(data: unknown, keys: string[]): unknown[] {
+    let d = data;
+    if (d && typeof d === 'object' && 'data' in (d as Record<string, unknown>)) {
+      const inner = (d as { data?: unknown }).data;
+      if (inner && typeof inner === 'object') d = inner;
+    }
+    if (Array.isArray(d)) return d;
+    if (d && typeof d === 'object') {
+      for (const key of keys) {
+        const v = (d as Record<string, unknown>)[key];
+        if (Array.isArray(v)) return v;
+      }
+    }
+    return [];
   }
 
   private extractActionItems(
