@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAnalyzeTool.js';
+import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 
@@ -706,6 +707,137 @@ describe('OmniFocusAnalyzeTool', () => {
       const possessive = await tagsFor("waiting on Dennis's reply");
       expect(possessive).toContain('@agenda-Dennis');
       expect(possessive).not.toContain("@agenda-Dennis's");
+    });
+
+    // ========================================================================
+    // OMN-124: structured items[] — read-only pre-flight + batch payload
+    // ========================================================================
+    describe('OMN-124 structured items[]', () => {
+      it('builds a preview + batchPayload without touching the DB when validateAgainstExisting=false', async () => {
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              items: [
+                { name: 'Order scanners', project: 'Hardware', tags: ['@errand'], dueDate: '2026-06-20' },
+                { name: 'Email Dennis', flagged: true },
+              ],
+              validateAgainstExisting: false,
+            },
+          },
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.data.mode).toBe('structured');
+        expect(res.data.items).toHaveLength(2);
+        expect(res.data.summary.total).toBe(2);
+        expect(res.data.summary.readyToCreate).toBe(2);
+
+        // No DB read happened.
+        expect(mockOmni.executeJson).not.toHaveBeenCalled();
+
+        // batchPayload is ready to hand to omnifocus_write { batch }.
+        const ops = res.data.batchPayload.operations;
+        expect(ops).toHaveLength(2);
+        expect(ops[0]).toMatchObject({
+          operation: 'create',
+          target: 'task',
+          data: { name: 'Order scanners', project: 'Hardware', tags: ['@errand'], dueDate: '2026-06-20' },
+        });
+        expect(ops[1].data).toMatchObject({ name: 'Email Dennis', flagged: true });
+      });
+
+      it('does not emit undefined optional fields into batch data', async () => {
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Bare task' }], validateAgainstExisting: false },
+          },
+        });
+        const data = res.data.batchPayload.operations[0].data;
+        expect(data).toEqual({ name: 'Bare task' });
+      });
+
+      it('validates against the live DB by default: resolves projects, dedupes, classifies tags', async () => {
+        // execJson reads run via Promise.all in array order: projects, tags, tasks.
+        const dbResponses = [
+          { projects: [{ name: 'Hardware' }] },
+          { tags: [{ name: '@errand' }] },
+          { tasks: [{ name: 'Order scanners', project: 'Hardware' }] },
+        ];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              // validateAgainstExisting omitted → defaults true (also tests the default).
+              items: [
+                { name: 'Order scanners', project: 'hardware', tags: ['@errand', '@new'] }, // dup + case-insensitive project
+                { name: 'Buy lock', project: 'Nonexistent Project' }, // new project
+              ],
+            },
+          },
+        });
+
+        expect(res.success).toBe(true);
+        expect(mockOmni.executeJson).toHaveBeenCalledTimes(3);
+
+        const [a, b] = res.data.items;
+        // Item A: exact (case-insensitive) project, tag split, flagged duplicate.
+        expect(a.project).toMatchObject({ requested: 'hardware', resolved: 'Hardware', match: 'exact' });
+        expect(a.tags.existing).toEqual(['@errand']);
+        expect(a.tags.new).toEqual(['@new']);
+        expect(a.duplicateOf).toMatchObject({ name: 'Order scanners', project: 'Hardware' });
+        expect(a.readyToCreate).toBe(false);
+
+        // Item B: unknown project, not a duplicate, ready.
+        expect(b.project.match).toBe('none');
+        expect(b.duplicateOf).toBeNull();
+        expect(b.readyToCreate).toBe(true);
+
+        expect(res.data.summary).toMatchObject({
+          total: 2,
+          readyToCreate: 1,
+          duplicates: 1,
+          newProjects: 1,
+          newTags: 1,
+        });
+
+        // Only the non-duplicate item is in the batch payload.
+        expect(res.data.batchPayload.operations).toHaveLength(1);
+        expect(res.data.batchPayload.operations[0].data.name).toBe('Buy lock');
+      });
+
+      it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              items: [
+                {
+                  name: 'Order scanners',
+                  project: 'Hardware',
+                  tags: ['@errand'],
+                  dueDate: '2026-06-20',
+                  deferDate: '2026-06-18 08:00',
+                  estimatedMinutes: 30,
+                  flagged: true,
+                  note: 'six units',
+                },
+                { name: 'Email Dennis' },
+              ],
+              validateAgainstExisting: false,
+            },
+          },
+        });
+
+        const parsed = WriteSchema.safeParse({
+          mutation: { operation: 'batch', operations: res.data.batchPayload.operations },
+        });
+        expect(parsed.success).toBe(true);
+      });
     });
   });
 

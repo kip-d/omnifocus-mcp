@@ -38,6 +38,56 @@ describe('AnalyzeSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  // OMN-124: structured items[] input (Option 1)
+  describe('parse_meeting_notes structured items[] (OMN-124)', () => {
+    it('accepts a structured items[] array (no text)', () => {
+      const input = {
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: {
+            items: [
+              { name: 'Order scanners', project: 'Hardware', tags: ['@errand'], dueDate: '2026-06-20' },
+              { name: 'Email Dennis', flagged: true },
+            ],
+            validateAgainstExisting: false,
+          },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
+
+    it('rejects providing BOTH text and items', () => {
+      const input = {
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: 'Some notes', items: [{ name: 'X' }] },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects providing NEITHER text nor items', () => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { defaultProject: 'Inbox' } },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects an item with an empty name', () => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { items: [{ name: '' }] } },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects unknown keys on an item (strict)', () => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', priority: 'high' }] } },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+  });
+
   it('should reject invalid type', () => {
     const input = {
       analysis: {

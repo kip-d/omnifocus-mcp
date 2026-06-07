@@ -55,10 +55,22 @@ export type CompiledAnalysis =
   | {
       type: 'parse_meeting_notes';
       params: {
-        text: string;
+        // OMN-124: structured items[] (preferred) XOR text (OMN-123 fallback).
+        items?: Array<{
+          name: string;
+          project?: string | null;
+          tags?: string[];
+          dueDate?: string;
+          deferDate?: string;
+          estimatedMinutes?: number;
+          flagged?: boolean;
+          note?: string;
+        }>;
+        text?: string;
         extractTasks?: boolean;
-        defaultProject?: string;
+        defaultProject?: string | null;
         defaultTags?: string[];
+        validateAgainstExisting?: boolean;
       };
     }
   | {

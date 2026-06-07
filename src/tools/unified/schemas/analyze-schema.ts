@@ -27,6 +27,25 @@ const AnalysisScopeSchema = z
   })
   .strict();
 
+// OMN-124: one already-extracted action item passed by the caller (the LLM).
+// Mirrors the write tool's CreateData (name/note/project/tags/dates/flagged/
+// estimatedMinutes) so the preview can emit a batch payload that round-trips
+// into omnifocus_write { batch } unchanged. Dates are validated loosely here
+// ('YYYY-MM-DD[ HH:mm]', no Z) — the write boundary is the strict enforcement
+// point. `.strict()` so unknown keys are rejected, not silently dropped.
+const ParsedItemSchema = z
+  .object({
+    name: z.string().min(1),
+    project: z.string().nullable().optional(), // existing/new name, or null = inbox
+    tags: z.array(z.string()).optional(),
+    dueDate: z.string().optional(),
+    deferDate: z.string().optional(),
+    estimatedMinutes: z.number().int().positive().optional(),
+    flagged: z.boolean().optional(),
+    note: z.string().optional(),
+  })
+  .strict();
+
 // Analysis schema - discriminated union by type
 const AnalysisSchema = z.discriminatedUnion('type', [
   // Productivity stats
@@ -100,18 +119,32 @@ const AnalysisSchema = z.discriminatedUnion('type', [
         .optional(),
     })
     .strict(),
-  // Parse meeting notes (text is required)
+  // Parse meeting notes — exactly one of `items` (OMN-124, preferred) or `text`
+  // (OMN-123 heuristic fallback).
   z
     .object({
       type: z.literal('parse_meeting_notes'),
       params: z
         .object({
-          text: z.string(),
-          extractTasks: z.boolean().optional(),
-          defaultProject: z.string().optional(),
+          // OMN-124: caller (the LLM) passes already-extracted action items. The
+          // tool does the read-only pre-flight (resolve/dedupe/classify) and emits
+          // a ready omnifocus_write { batch } payload — it does NOT extract here.
+          items: z.array(ParsedItemSchema).optional(),
+          // OMN-123 fallback: raw prose; the trustworthy heuristic extractor runs.
+          text: z.string().optional(),
+          extractTasks: z.boolean().optional(), // text-mode only
+          defaultProject: z.string().nullable().optional(),
           defaultTags: z.array(z.string()).optional(),
+          // Read the live database to resolve project names, dedupe against
+          // existing tasks, and classify tags existing-vs-new. Default true.
+          validateAgainstExisting: z.boolean().optional().default(true),
         })
-        .strict(),
+        .strict()
+        // OMN-124: exactly one input mode. `.strict()` precedes `.refine` so the
+        // unknown-key check still runs (refine returns ZodEffects).
+        .refine((p) => Boolean(p.text) !== Boolean(p.items && p.items.length > 0), {
+          message: 'parse_meeting_notes requires exactly one of params.items (structured) or params.text (prose)',
+        }),
     })
     .strict(),
   // Manage reviews
