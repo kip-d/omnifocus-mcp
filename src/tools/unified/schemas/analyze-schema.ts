@@ -33,13 +33,19 @@ const AnalysisScopeSchema = z
 // into omnifocus_write { batch } unchanged. Dates are validated loosely here
 // ('YYYY-MM-DD[ HH:mm]', no Z) — the write boundary is the strict enforcement
 // point. `.strict()` so unknown keys are rejected, not silently dropped.
+// Mirror of write-schema's DATE_REGEX (not exported there). Validating dates
+// here keeps the "ready to send" promise honest — a bad date is rejected at this
+// boundary instead of silently riding into a batchPayload the write tool rejects.
+const ITEM_DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
+const ITEM_DATE_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
+
 const ParsedItemSchema = z
   .object({
     name: z.string().min(1),
     project: z.string().nullable().optional(), // existing/new name, or null = inbox
     tags: z.array(z.string()).optional(),
-    dueDate: z.string().optional(),
-    deferDate: z.string().optional(),
+    dueDate: z.string().regex(ITEM_DATE_REGEX, ITEM_DATE_MSG).optional(),
+    deferDate: z.string().regex(ITEM_DATE_REGEX, ITEM_DATE_MSG).optional(),
     estimatedMinutes: z.number().int().positive().optional(),
     flagged: z.boolean().optional(),
     note: z.string().optional(),

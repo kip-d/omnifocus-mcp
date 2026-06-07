@@ -2436,7 +2436,11 @@ SCOPE FILTERING:
 
         const project = this.resolveProjectName(requestedProject, existingProjects, validate);
         const tags = this.classifyItemTags(combinedTags, existingTags, validate);
-        const duplicateOf = validate ? this.findDuplicateTask(item.name, project.resolved, existingTasks) : null;
+        // Dedup against the project the task will ACTUALLY be created in
+        // (buildBatchCreateData uses project.requested). For a 'partial' match,
+        // resolved is a different, existing project — scoping dedup there would
+        // check the wrong project. exact/inbox: requested === resolved anyway.
+        const duplicateOf = validate ? this.findDuplicateTask(item.name, project.requested, existingTasks) : null;
 
         return {
           name: item.name,
@@ -2605,7 +2609,9 @@ SCOPE FILTERING:
 
   /** Read incomplete (not completed/dropped) tasks with their project name. */
   private async fetchExistingIncompleteTasks(): Promise<Array<{ name: string; project: string | null }>> {
-    const filter = normalizeFilter({ completed: false });
+    // Both terminal states excluded: a dropped task has completed===false, so
+    // without dropped:false an abandoned task would false-positive as a duplicate.
+    const filter = normalizeFilter({ completed: false, dropped: false });
     const gen = buildFilteredTasksScript(filter, { limit: 2000, fields: ['name', 'project'] });
     const result = await this.execJson(gen.script);
     if (!isScriptSuccess(result)) return [];

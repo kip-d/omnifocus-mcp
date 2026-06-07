@@ -73,6 +73,20 @@ describe('AnalyzeSchema', () => {
       expect(AnalyzeSchema.safeParse(input).success).toBe(false);
     });
 
+    it('rejects an empty items[] array (treated as "neither provided")', () => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { items: [] } },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects an item with a malformed date (kept honest with the write boundary)', () => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', dueDate: 'tomorrow' }] } },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
     it('rejects an item with an empty name', () => {
       const input = {
         analysis: { type: 'parse_meeting_notes', params: { items: [{ name: '' }] } },

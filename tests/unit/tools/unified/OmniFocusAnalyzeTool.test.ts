@@ -810,6 +810,34 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(res.data.batchPayload.operations[0].data.name).toBe('Buy lock');
       });
 
+      it('on a partial project match, dedupes against the create target (requested), not the partial match', async () => {
+        // Existing project "Hardware Refresh" partial-matches requested "Hardware";
+        // an existing "Order scanners" lives in "Hardware Refresh". Since the task
+        // would be created under the *requested* "Hardware" (a different project),
+        // it must NOT be flagged a duplicate.
+        const dbResponses = [
+          { projects: [{ name: 'Hardware Refresh' }] },
+          { tags: [] },
+          { tasks: [{ name: 'Order scanners', project: 'Hardware Refresh' }] },
+        ];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Order scanners', project: 'Hardware' }] },
+          },
+        });
+
+        const item = res.data.items[0];
+        expect(item.project.match).toBe('partial');
+        expect(item.project.resolved).toBe('Hardware Refresh');
+        expect(item.duplicateOf).toBeNull();
+        expect(item.readyToCreate).toBe(true);
+        expect(res.data.batchPayload.operations).toHaveLength(1);
+      });
+
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
         const res: any = await tool.execute({
           analysis: {
