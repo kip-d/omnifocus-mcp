@@ -34,8 +34,8 @@ import { detectContextTags } from '../capture/context-detection.js';
 import { extractDates } from '../capture/date-extraction.js';
 
 // OMN-124: read-only pre-flight for structured meeting-note items.
-import { buildFilteredProjectsScript, buildFilteredTasksScript } from '../../contracts/ast/script-builder.js';
-import { normalizeFilter } from '../../contracts/filters.js';
+import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
+import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
 // Response types
@@ -2611,9 +2611,20 @@ SCOPE FILTERING:
   private async fetchExistingIncompleteTasks(): Promise<Array<{ name: string; project: string | null }>> {
     // Both terminal states excluded: a dropped task has completed===false, so
     // without dropped:false an abandoned task would false-positive as a duplicate.
-    const filter = normalizeFilter({ completed: false, dropped: false });
-    const gen = buildFilteredTasksScript(filter, { limit: 2000, fields: ['name', 'project'] });
-    const result = await this.execJson(gen.script);
+    //
+    // OMN-124 follow-up: use buildListTasksScriptV4, NOT the bare
+    // buildFilteredTasksScript — the latter returns an OmniJS body that uses
+    // `flattenedTasks`, which only exists inside the evaluateJavascript bridge.
+    // The V4 wrapper embeds that body in the JXA→bridge harness (unlike
+    // buildFilteredProjectsScript/buildTagsScript, which self-wrap). Passing the
+    // bare body to execJson throws "Can't find variable: flattenedTasks", and the
+    // swallowed failure silently disabled dedupe. Output shape is { tasks, metadata }.
+    const script = buildListTasksScriptV4({
+      filter: { completed: false, dropped: false },
+      fields: ['name', 'project'],
+      limit: 2000,
+    });
+    const result = await this.execJson(script);
     if (!isScriptSuccess(result)) return [];
     return this.unwrapList(result.data, ['tasks', 'items'])
       .map((t) => {
