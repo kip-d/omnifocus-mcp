@@ -123,6 +123,12 @@ FOLDER CREATION:
 - data.parentFolder: Parent folder name, path ("Parent : Child"), or ID (optional, omit for top-level)
 - Supports nested path lookup with " : " syntax (parent must already exist)
 
+PROJECT FOLDER PLACEMENT (data.folder on create / changes.folder on update):
+- Accepts a bare name, a nested path (" : " or "/", resolved as a strict parent→child chain from the root), or a folder ID
+- A nested path must be complete — partial paths (missing a top-level segment) do NOT resolve
+- An unresolvable folder returns an error; the project is NEVER silently filed at the root
+- On update, folder: null moves the project to the database root
+
 BATCH OPERATIONS:
 - operations: Array of create, update, complete, and delete operations
 - Execution order: creates first, then updates, completes, deletes last
@@ -195,6 +201,9 @@ SAFETY:
     // OMN-97: advertise the supported fields of `data`/`changes` so MCP clients
     // get field-level guidance and misplace fewer keys. Mirrors CreateDataSchema /
     // UpdateChangesSchema in write-schema.ts — keep in sync (dual-schema rule).
+    // BUDGET: a unit test enforces JSON.stringify(inputSchema).length < 4000 (token cost).
+    // Currently ~3941 bytes — only ~60 bytes of headroom. Trim an existing field
+    // description before adding a field or lengthening a description, or the guard fails.
     // (Plain `type: string` for enum-bearing fields like `status` to avoid
     // advertising an enum the inputSchema↔Zod parity test would police.)
     const createDataProperties: Record<string, unknown> = {
@@ -209,7 +218,7 @@ SAFETY:
       flagged: { type: 'boolean', description: 'no priority levels — use flagged' },
       estimatedMinutes: { type: 'number', description: 'minutes (not "estimate")' },
       repetitionRule: { type: 'object' },
-      folder: { type: 'string', description: 'project-only' },
+      folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
       sequential: { type: 'boolean', description: 'project-only' },
       status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
       reviewInterval: { description: 'project-only: days or {steps,unit}' },

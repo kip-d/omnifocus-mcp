@@ -426,6 +426,19 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Work/Engineering/Backend');
   });
 
+  it('returns a loud error instead of silent root fallback when a requested folder is unresolved (OMN-127 #1)', () => {
+    const result = buildCreateProjectScript({
+      name: 'Misfiled Project',
+      folder: 'Personal : Other Games : Shop Titans',
+    });
+
+    // A requested-but-unresolved folder must NOT silently file the project at the
+    // database root with success:true. The generated script must emit a loud error
+    // return for the folder-requested-but-not-found case (cf. buildCreateFolderScript).
+    expect(result.script).toContain('Folder not found');
+    expect(result.script).toContain("context: 'create_project'");
+  });
+
   it('falls back to leaf name matching for simple folder names', () => {
     const result = buildCreateProjectScript({
       name: 'Simple Folder Project',
@@ -609,6 +622,18 @@ describe('buildUpdateProjectScript', () => {
 
     expect(result.script).toContain('moveSections');
     expect(result.script).toContain('Development');
+  });
+
+  it('resolves " : " nested folder paths on update, identically to create (OMN-127 #2)', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      folder: 'Personal : Other Games : Shop Titans',
+    });
+
+    // The update move-path must use the same path-aware resolver as create,
+    // not the old byIdentifier + flat-name-only lookup that can never resolve
+    // a " : " nested path.
+    expect(result.script).toContain('parseFolderPath');
+    expect(result.script).toContain('resolveFolderPath');
   });
 
   it('handles tags replacement (clearTags + addTag)', async () => {
