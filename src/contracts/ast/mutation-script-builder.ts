@@ -520,6 +520,32 @@ function resolveFolderPath(segments) {
   return current;
 }`;
 
+/**
+ * OmniJS: ONE flexible folder resolver shared by every write site that places a
+ * project/folder into a folder (create folder, create project, update project).
+ * Resolution order: (1) " : "/"/" path walk, (2) Folder.byIdentifier, (3) leaf-name
+ * match. Returns the Folder object or null. Requires parseFolderPath + resolveFolderPath
+ * to be injected alongside it. Consolidating here (OMN-127) stops the three sites from
+ * drifting apart again — they previously had three different resolution behaviors.
+ */
+const OMNIJS_RESOLVE_FOLDER_FLEXIBLE = `
+function resolveFolderFlexible(target) {
+  // 1. Try parsing as a path (" : " or "/")
+  var pathSegs = parseFolderPath(target);
+  if (pathSegs) {
+    var found = resolveFolderPath(pathSegs);
+    if (found) return found;
+  }
+  // 2. Try by identifier (id.primaryKey)
+  var byId = Folder.byIdentifier(target);
+  if (byId) return byId;
+  // 3. Fall back to leaf name match
+  for (var i = 0; i < flattenedFolders.length; i++) {
+    if (flattenedFolders[i].name === target) return flattenedFolders[i];
+  }
+  return null;
+}`;
+
 /** OmniJS: walk tag tree returning null if any segment missing (read-only) */
 const OMNIJS_RESOLVE_TAG_PATH = `
 function resolveTagByPath(segments) {
@@ -1001,33 +1027,26 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
         (() => {
           ${OMNIJS_PARSE_FOLDER_PATH}
           ${OMNIJS_RESOLVE_FOLDER_PATH}
+          ${OMNIJS_RESOLVE_FOLDER_FLEXIBLE}
 
           var target = \${JSON.stringify(projectData.folder)};
-
-          // 1. Try parsing as a path (" : " or "/")
-          var pathSegs = parseFolderPath(target);
-          if (pathSegs) {
-            var found = resolveFolderPath(pathSegs);
-            if (found) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(found) });
-          }
-
-          // 2. Try by identifier (id.primaryKey)
-          var folder = Folder.byIdentifier(target);
+          var folder = resolveFolderFlexible(target);
           if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
-
-          // 3. Fall back to leaf name match
-          for (var i = 0; i < flattenedFolders.length; i++) {
-            if (flattenedFolders[i].name === target) {
-              return JSON.stringify({ found: true, index: i });
-            }
-          }
-
           return JSON.stringify({ found: false });
         })()
       \`;
       const findFolderResult = JSON.parse(app.evaluateJavascript(findFolderScript));
       if (findFolderResult.found && findFolderResult.index >= 0) {
         targetFolder = doc.flattenedFolders()[findFolderResult.index];
+      } else {
+        // OMN-127 #1: a folder WAS requested but did not resolve. Never silently
+        // file the project at the database root — that was the silent-success bug.
+        // Fail loudly so typos / partial paths surface instead of misfiling.
+        return JSON.stringify({
+          error: true,
+          message: 'Folder not found: ' + projectData.folder,
+          context: 'create_project'
+        });
       }
     }
 
@@ -1245,27 +1264,11 @@ export function buildCreateFolderScript(data: FolderCreateData): GeneratedMutati
         (() => {
           ${OMNIJS_PARSE_FOLDER_PATH}
           ${OMNIJS_RESOLVE_FOLDER_PATH}
+          ${OMNIJS_RESOLVE_FOLDER_FLEXIBLE}
 
           var target = \${JSON.stringify(folderData.parentFolder)};
-
-          // 1. Try parsing as a path (" : " or "/")
-          var pathSegs = parseFolderPath(target);
-          if (pathSegs) {
-            var found = resolveFolderPath(pathSegs);
-            if (found) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(found) });
-          }
-
-          // 2. Try by identifier (id.primaryKey)
-          var folder = Folder.byIdentifier(target);
+          var folder = resolveFolderFlexible(target);
           if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
-
-          // 3. Fall back to leaf name match
-          for (var i = 0; i < flattenedFolders.length; i++) {
-            if (flattenedFolders[i].name === target) {
-              return JSON.stringify({ found: true, index: i });
-            }
-          }
-
           return JSON.stringify({ found: false });
         })()
       \`;
@@ -1805,14 +1808,17 @@ export async function buildUpdateProjectScript(
             }
           })()\`
         : \`(() => {
+            ${OMNIJS_PARSE_FOLDER_PATH}
+            ${OMNIJS_RESOLVE_FOLDER_PATH}
+            ${OMNIJS_RESOLVE_FOLDER_FLEXIBLE}
+
             const project = Project.byIdentifier('\${projectId}');
             if (!project) return JSON.stringify({ success: false, error: 'project_not_found' });
-            const targetId = '\${changes.folder}';
-            // Try by ID first, then by name
-            let folder = Folder.byIdentifier(targetId);
-            if (!folder) {
-              folder = flattenedFolders.find(f => f.name === targetId);
-            }
+            // OMN-127 #2: resolve identically to create — path walk (" : "/"/"),
+            // then byIdentifier, then leaf name. The old lookup was byIdentifier +
+            // flat-name only, so " : " nested paths could never resolve on update.
+            const targetId = \${JSON.stringify(changes.folder)};
+            const folder = resolveFolderFlexible(targetId);
             if (!folder) return JSON.stringify({ success: false, error: 'folder_not_found: ' + targetId });
             try {
               moveSections([project], folder.beginning);

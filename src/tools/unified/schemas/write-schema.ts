@@ -159,7 +159,12 @@ export const CreateDataSchema = z
       repetitionRule: RepetitionRuleSchema.optional(),
 
       // Project-specific
-      folder: z.string().optional(),
+      folder: z
+        .string()
+        .describe(
+          'Place the project in this folder. Accepts a bare name ("Shop Titans"), a nested path ("Personal : Other Games : Shop Titans" or "Personal/Other Games"), or a folder ID. Paths resolve as a strict parent→child chain from the root — partial paths do NOT resolve. An unresolvable folder returns an error (never a silent root placement). Omit for top-level.',
+        )
+        .optional(),
       sequential: coerceBoolean().optional(),
       status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
       reviewInterval: ReviewIntervalSchema.optional(),
@@ -189,7 +194,12 @@ export const UpdateChangesSchema = z
       // Task-specific narrowing happens in sanitizer + script builder.
       status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
       project: z.union([z.string(), z.null()]).optional(),
-      folder: z.union([z.string(), z.null()]).optional(),
+      folder: z
+        .union([z.string(), z.null()])
+        .describe(
+          'Move the project to this folder. Same resolution as create: bare name, nested path (" : " or "/", strict parent→child chain), or folder ID. An unresolvable folder errors. null moves the project to the database root.',
+        )
+        .optional(),
       parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
       estimatedMinutes: z
         .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
