@@ -155,9 +155,9 @@ export function emitStmt(node: Stmt): string {
       //   (alongside `let _warnings`) when the program contains a stopOnError
       //   batchItem — NOT via a bind statement: the validator reserves
       //   `_aborted`, and bind emits `const` anyway. The per-item gating
-      //   (`if (!_aborted) { ... }`) is owned by the batch PROGRAM BUILDER
-      //   (Task 9). This case only SETS `_aborted = true` in its catch when
-      //   stopOnError.
+      //   (`if (!_aborted) { ... }`) is ALSO owned by emitProgram, which wraps
+      //   each batchItem's emission when any stopOnError batchItem exists.
+      //   This case only SETS `_aborted = true` in its catch when stopOnError.
       // - `results` IS declared by the program builder via a bind statement
       //   (deliberately unreserved); batchItem just pushes to it.
       const wVar = `_w${node.index}`;
@@ -180,11 +180,26 @@ export const EMITTED_PROGRAM_SIZE_LIMIT = 200_000;
 
 export function emitProgram(program: Program): string {
   const snippets = program.snippetDeps.length > 0 ? collectSnippets(program.snippetDeps) : '';
-  const body = program.statements.map(emitStmt).join('\n');
+  // Batch scaffolding (owned HERE, not by the program builder): when any
+  // batchItem has stopOnError, emitProgram declares `let _aborted = false;`
+  // (batchItem's catch assigns it — without the declaration every stopOnError
+  // batch program would assign an undeclared variable) and gates EVERY
+  // batchItem's emission behind `if (!_aborted) { ... }` so items after a
+  // failed stopOnError item never execute. Gating every item (not just
+  // stopOnError ones) is the simplest correct shape: `_aborted` only ever
+  // flips when a stopOnError item fails, so the gate is a no-op until then.
+  const hasStopOnError = program.statements.some((s) => s.type === 'batchItem' && s.stopOnError);
+  const body = program.statements
+    .map((s) => {
+      const emitted = emitStmt(s);
+      return hasStopOnError && s.type === 'batchItem' ? `if (!_aborted) {\n${emitted}\n}` : emitted;
+    })
+    .join('\n');
   // `_warnings` is declared UNCONDITIONALLY as the first body line (OMN-137).
   // Conditional declaration would recreate the `appliedTags` ReferenceError class
   // (a later consumer referencing an undeclared binding); one dead `let` is free.
-  const inner = ['let _warnings = [];', snippets, body].filter((s) => s.length > 0).join('\n');
+  const decls = hasStopOnError ? 'let _warnings = [];\nlet _aborted = false;' : 'let _warnings = [];';
+  const inner = [decls, snippets, body].filter((s) => s.length > 0).join('\n');
 
   // Snippet-dependency coverage guard (replaces the plan's original validator
   // Rule 4 — enforced HERE because helper usage is implicit in emission, not in

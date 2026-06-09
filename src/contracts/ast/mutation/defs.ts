@@ -4,10 +4,17 @@
 // BEFORE building, so a registered op can never bypass it (the OMN-119/120
 // non-bypass property — batch & bulk paths previously skipped the guard).
 import type { ProjectCreateData, TaskCreateData } from '../../mutations.js';
-import { validateProjectCreate, validateTaskCreate } from '../mutation-script-builder.js';
+import {
+  validateBatchTaskSpecs,
+  validateProjectCreate,
+  validateTaskCreate,
+  type BatchTaskSpec,
+} from '../mutation-script-builder.js';
 import { lowerRepetitionRule } from './repetition.js';
 import {
   assignTags,
+  batchItem,
+  bind,
   constructProject,
   constructTask,
   dateExpr,
@@ -183,6 +190,10 @@ export interface TaskLoweringNames {
  *
  * Container priority (spec §3, uniform for both paths): containerOverride
  * (batch tempIdRef) → data.parentTaskId → data.project (non-null string) → inbox.
+ *
+ * An empty-string project is treated as no-project → inbox (the truthy check is
+ * legacy-faithful); the same applies to a batch spec's empty-string projectId,
+ * which toTaskCreateData maps straight onto `project`.
  */
 export function lowerTaskCreate(
   data: TaskCreateData,
@@ -332,6 +343,105 @@ export function buildCreateTaskProgram(data: TaskCreateData): Program {
 }
 
 // =============================================================================
+// BATCH TASK CREATE (unrolled program — the runtime byTempId map is gone)
+// =============================================================================
+
+export interface BatchCreateTasksData {
+  specs: BatchTaskSpec[];
+  stopOnError?: boolean;
+}
+
+/**
+ * Map one BatchTaskSpec onto the shared TaskCreateData shape consumed by
+ * lowerTaskCreate. projectId→project (an empty string falls through to inbox,
+ * legacy-faithful — see lowerTaskCreate's JSDoc); tempId/parentTempId are
+ * consumed by buildBatchCreateTasksProgram itself (result identity + the
+ * tempIdRef container), so they are deliberately NOT carried here.
+ */
+function toTaskCreateData(spec: BatchTaskSpec): TaskCreateData {
+  // Compile-time exhaustiveness guard (same discipline as TaskCreateData's in
+  // lowerTaskCreate): forces a build error if BatchTaskSpec gains a field this
+  // mapping doesn't handle, so a new spec field can't be silently dropped.
+  // Note BatchTaskSpec has NO repetitionRule, so this guard's key set is
+  // deliberately narrower than lowerTaskCreate's. When this stops compiling,
+  // add the field below AND route it (here, or in the program builder for
+  // batch-composition fields like tempId/parentTempId).
+  const _exhaustive: Record<keyof BatchTaskSpec, true> = {
+    tempId: true,
+    name: true,
+    note: true,
+    flagged: true,
+    tags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    estimatedMinutes: true,
+    parentTempId: true,
+    parentTaskId: true,
+    projectId: true,
+  };
+  void _exhaustive;
+
+  const data: TaskCreateData = { name: spec.name };
+  if (spec.note !== undefined) data.note = spec.note;
+  if (spec.flagged !== undefined) data.flagged = spec.flagged;
+  if (spec.tags !== undefined) data.tags = spec.tags;
+  if (spec.dueDate !== undefined) data.dueDate = spec.dueDate;
+  if (spec.deferDate !== undefined) data.deferDate = spec.deferDate;
+  if (spec.plannedDate !== undefined) data.plannedDate = spec.plannedDate;
+  if (spec.estimatedMinutes !== undefined) data.estimatedMinutes = spec.estimatedMinutes;
+  if (spec.parentTaskId !== undefined) data.parentTaskId = spec.parentTaskId;
+  if (spec.projectId !== undefined) data.project = spec.projectId;
+  return data;
+}
+
+/**
+ * Lower a batch task-create request into ONE unrolled Program: per spec i, the
+ * shared lowerTaskCreate statements (names parameterized as `_t<i>` /
+ * `appliedTags_<i>` / `<base>_<i>`, throw-mode guards) wrapped in a batchItem
+ * try/capture that pushes into the builder-bound `results` array. Container
+ * priority per item: parentTempId (a task created EARLIER in this batch,
+ * resolved at build time to that item's `_t<j>` binding) → parentTaskId →
+ * projectId → inbox. A forward or missing parentTempId reference is a
+ * BUILD-time error (legacy made it a runtime per-item error; build time is
+ * strictly earlier and loud — item order comes from createSequentially
+ * handling upstream, unchanged).
+ */
+export function buildBatchCreateTasksProgram(data: BatchCreateTasksData): Program {
+  const statements: Stmt[] = [bind('results', raw('[]'))];
+  const snippetDeps = new Set<string>();
+  const tempIdToVar = new Map<string, string>();
+
+  data.specs.forEach((spec, i) => {
+    let containerOverride: ContainerResolution | undefined;
+    if (spec.parentTempId) {
+      const parentVar = tempIdToVar.get(spec.parentTempId);
+      if (!parentVar) {
+        throw new Error(`parentTempId "${spec.parentTempId}" not created earlier in batch (item ${i})`);
+      }
+      containerOverride = { kind: 'tempIdRef', var: parentVar };
+    }
+
+    const { statements: itemStmts, snippetDeps: itemDeps } = lowerTaskCreate(
+      toTaskCreateData(spec),
+      {
+        taskVar: `_t${i}`,
+        tagsVar: `appliedTags_${i}`,
+        resolveVar: (base) => `${base}_${i}`,
+        guardMode: 'throw',
+      },
+      containerOverride,
+    );
+    for (const dep of itemDeps) snippetDeps.add(dep);
+    statements.push(batchItem(spec.tempId, i, `_t${i}`, itemStmts, data.stopOnError === true));
+    tempIdToVar.set(spec.tempId, `_t${i}`);
+  });
+
+  statements.push(return_({ results: ref('results') }));
+  return { statements, context: 'batch_create_tasks', snippetDeps: [...snippetDeps] };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -351,6 +461,10 @@ export const MUTATION_DEFS = {
     guard: validateTaskCreate,
     build: buildCreateTaskProgram,
   } as MutationDef<TaskCreateData>,
+  'batch-create/tasks': {
+    guard: (d) => validateBatchTaskSpecs(d.specs),
+    build: buildBatchCreateTasksProgram,
+  } as MutationDef<BatchCreateTasksData>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =

@@ -1200,50 +1200,71 @@ describe('buildCreateFolderScript', () => {
   });
 });
 
-describe('buildBatchCreateTasksScript (OMN-113)', () => {
-  it('emits ONE evaluateJavascript round-trip creating all tasks with a shared tempId map', () => {
-    const result = buildBatchCreateTasksScript([
+// OMN-128 slice 2: buildBatchCreateTasksScript emits ONE unrolled OmniJS
+// program from the mutation AST (dispatchMutation → emitProgram →
+// wrapInLauncher) — the legacy concat launcher and its runtime byTempId map
+// are gone. Runtime behavior (vm execution, chains, stopOnError, warnings)
+// is covered in tests/unit/contracts/ast/mutation/create-task-batch.test.ts.
+describe('buildBatchCreateTasksScript (OMN-128 AST emission)', () => {
+  it('emits the JXA launcher around ONE JSON-encoded unrolled program — async, raw-return, no byTempId', async () => {
+    // Async contract: the builder now awaits the dispatch guard.
+    const pending = buildBatchCreateTasksScript([
       { tempId: 'p1', name: 'Parent Task' },
       { tempId: 'c1', name: 'Child Task', parentTempId: 'p1' },
     ]);
+    expect(pending).toBeInstanceOf(Promise);
+    const result = await pending;
 
     expect(result.operation).toBe('create');
     expect(result.target).toBe('task');
+    expect(result.description).toBe('Batch-create 2 task(s)');
     expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('new Task(');
-    expect(result.script).toContain('moveTasks');
-    expect(result.script).toContain('Parent Task');
-    expect(result.script).toContain('Child Task');
-    expect(result.script).toContain('p1');
-    expect(result.script).toContain('c1');
     // THE perf invariant: the whole batch is ONE bridge round-trip, not N.
     expect((result.script.match(/app\.evaluateJavascript\(/g) || []).length).toBe(1);
+    // RAW launcher shape (tool-layer-facing): the OmniJS payload
+    // ({results:[...]}) is RETURNED unwrapped — OmniAutomation.executeJson
+    // wraps raw output into ScriptResult itself, so pre-wrapping here would
+    // double-wrap and hide data.results from the batch caller (the legacy
+    // launcher preserved exactly this shape; see executeBatchCreatesFastPath).
+    expect(result.script).toContain('return app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('var _t0 = new Task("Parent Task");');
+    expect(program).toContain('var _t1 = new Task("Child Task");');
+    expect(program).toContain('moveTasks([_t1], _t0.ending);');
+    expect(program).toContain('return JSON.stringify({ results: results });');
+    // The legacy runtime tempId map is GONE — chains resolve at build time.
+    expect(program).not.toContain('byTempId');
   });
 
-  it('produces a parse-safe script across all container + field cases', () => {
-    const result = buildBatchCreateTasksScript([
-      {
-        tempId: 't1',
-        name: "Task with 'quotes' and fields",
-        note: 'multi\nline\nnote',
-        flagged: true,
-        projectId: 'proj123',
-        tags: ['Work : Deep', 'urgent'],
-        dueDate: '2026-06-04 17:00:00',
-        deferDate: '2026-06-01 08:00:00',
-        estimatedMinutes: 30,
-      },
-      { tempId: 't2', name: 'Under existing task', parentTaskId: 'realTask456' },
-      { tempId: 't3', name: 'Inbox task' },
-    ]);
+  it('contains NO backtick characters — the nested-template island class (OMN-111/113) is dead', async () => {
+    const result = await buildBatchCreateTasksScript(
+      [
+        {
+          tempId: 't1',
+          name: "Task with 'quotes' and fields",
+          note: 'multi\nline\nnote',
+          flagged: true,
+          projectId: 'proj123',
+          tags: ['Work : Deep', 'urgent'],
+          dueDate: '2026-06-04 17:00:00',
+          deferDate: '2026-06-01 08:00:00',
+          estimatedMinutes: 30,
+        },
+        { tempId: 't2', name: 'Under existing task', parentTaskId: 'realTask456' },
+        { tempId: 't3', name: 'Inbox task' },
+      ],
+      { stopOnError: true },
+    );
 
+    expect(result.script).not.toContain('`');
     expect(() => new Function(result.script)).not.toThrow();
   });
 
-  it('stays parse-safe when names/notes/tags contain backticks or ${ (OMN-111 class)', () => {
+  it('stays parse-safe when names/notes/tags contain backticks or ${ (OMN-111 class)', async () => {
     // Backticks and ${ in user data must NOT break the generated script — the
     // common dev-GTD case (e.g. "Fix `parseTagPath`") and a literal ${ in notes.
-    const result = buildBatchCreateTasksScript([
+    const result = await buildBatchCreateTasksScript([
       {
         tempId: 't1',
         name: 'Fix `parseTagPath` edge case',
@@ -1254,9 +1275,12 @@ describe('buildBatchCreateTasksScript (OMN-113)', () => {
     ]);
 
     expect(() => new Function(result.script)).not.toThrow();
-    // The hazardous characters must survive into the script verbatim (data not lost).
+    // The hazardous characters must survive into the script (data not lost).
     expect(result.script).toContain('parseTagPath');
     expect(result.script).toContain('${total}');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('Fix `parseTagPath` edge case');
+    expect(program).toContain('${total}');
   });
 });
 

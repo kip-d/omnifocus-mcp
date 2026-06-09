@@ -1815,7 +1815,7 @@ SAFETY:
       return spec;
     });
 
-    const { script } = buildBatchCreateTasksScript(specs, { stopOnError });
+    const { script } = await buildBatchCreateTasksScript(specs, { stopOnError });
     const result = await this.execJson(script);
 
     if (isScriptError(result)) {

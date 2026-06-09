@@ -299,11 +299,45 @@ export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   }
 
   // Validate tags (applies to all cases)
-  if (data.tags && data.tags.length > 0) {
-    const invalidTags = data.tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
+  validateTestTags(data.tags);
+}
+
+/**
+ * Tag-prefix sandbox rule (pure extraction of validateTaskCreate's tag tail —
+ * behavior identical): test-mode tags must carry the __test- prefix. Callers
+ * gate on isTestMode() themselves.
+ */
+function validateTestTags(tags?: string[]): void {
+  if (tags && tags.length > 0) {
+    const invalidTags = tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
     if (invalidTags.length > 0) {
       throw new Error(`TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` + `Invalid: ${invalidTags.join(', ')}`);
     }
+  }
+}
+
+/**
+ * Sandbox guard for the batch-create fast path ('batch-create/tasks' dispatch).
+ * Per spec: a spec whose parentTempId points at another spec IN this batch is
+ * container-guarded transitively (its parent chain bottoms out at a spec that
+ * IS fully validated here), so only its tags need checking; every other spec
+ * goes through the full validateTaskCreate (container + name + tags). No-op
+ * outside test mode.
+ */
+export async function validateBatchTaskSpecs(specs: ReadonlyArray<BatchTaskSpec>): Promise<void> {
+  if (!isTestMode()) return;
+  const inBatch = new Set(specs.map((s) => s.tempId));
+  for (const spec of specs) {
+    if (spec.parentTempId && inBatch.has(spec.parentTempId)) {
+      validateTestTags(spec.tags); // container guarded transitively via the in-batch parent
+      continue;
+    }
+    await validateTaskCreate({
+      name: spec.name,
+      project: spec.projectId,
+      parentTaskId: spec.parentTaskId,
+      tags: spec.tags,
+    });
   }
 }
 
@@ -544,98 +578,25 @@ export interface BatchTaskSpec {
   projectId?: string;
 }
 
-export function buildBatchCreateTasksScript(
+export async function buildBatchCreateTasksScript(
   specs: BatchTaskSpec[],
   options: { stopOnError?: boolean } = {},
-): GeneratedMutationScript {
-  const stopOnError = options.stopOnError === true;
-
-  // OMN-111 SAFETY: this OmniJS body carries NO user data and is assembled into
-  // the OmniJS source by string CONCATENATION (not a nested template literal),
-  // so backticks / ${ / newlines in task names, notes, or tags can never break
-  // a template. `specs` is injected at JXA runtime via JSON.stringify (a plain
-  // double-quoted string literal in the generated source — backtick-safe, the
-  // same property the per-item buildCreateTaskScript relies on). The static
-  // body references `specs`, which the concatenation defines just before it.
-  const omniBody = `
-${OMNIJS_PARSE_TAG_PATH}
-${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
-const byTempId = {};
-const results = [];
-for (let s = 0; s < specs.length; s++) {
-  const spec = specs[s];
-  try {
-    const task = new Task(spec.name);
-    if (spec.note) task.note = spec.note;
-    if (spec.flagged) task.flagged = true;
-    if (spec.dueDate) task.dueDate = new Date(spec.dueDate);
-    if (spec.deferDate) task.deferDate = new Date(spec.deferDate);
-    if (spec.plannedDate) task.plannedDate = new Date(spec.plannedDate);
-    if (spec.estimatedMinutes) task.estimatedMinutes = spec.estimatedMinutes;
-
-    // Container priority: intra-batch parent -> existing task -> project -> inbox.
-    let container = null;
-    if (spec.parentTempId) {
-      const p = byTempId[spec.parentTempId];
-      if (!p) throw new Error('Parent not created in batch: ' + spec.parentTempId);
-      container = p.ending;
-    } else if (spec.parentTaskId) {
-      const pt = Task.byIdentifier(spec.parentTaskId);
-      if (!pt) throw new Error('Parent task not found: ' + spec.parentTaskId);
-      container = pt.ending;
-    } else if (spec.projectId) {
-      let proj = Project.byIdentifier(spec.projectId);
-      if (!proj) proj = flattenedProjects.find(x => x.name === spec.projectId) || null;
-      if (!proj) throw new Error('Project not found: ' + spec.projectId);
-      container = proj.ending;
-    }
-    if (container) moveTasks([task], container);
-
-    if (spec.tags && spec.tags.length) {
-      for (let t = 0; t < spec.tags.length; t++) {
-        const tagName = spec.tags[t];
-        const segs = parseTagPath(tagName);
-        let tag;
-        if (segs) {
-          tag = resolveOrCreateTagByPath(segs);
-        } else {
-          tag = flattenedTags.find(x => x.name === tagName) || new Tag(tagName, null);
-        }
-        task.addTag(tag);
-      }
-    }
-
-    byTempId[spec.tempId] = task;
-    results.push({ tempId: spec.tempId, taskId: task.id.primaryKey, success: true });
-  } catch (e) {
-    results.push({ tempId: spec.tempId, taskId: null, success: false, error: String(e && e.message ? e.message : e) });
-    if (${stopOnError}) break;
-  }
-}
-return JSON.stringify({ results: results });`;
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  try {
-    const specs = ${JSON.stringify(specs)};
-    const omniSource =
-      '(() => {' +
-      'const specs = ' + JSON.stringify(specs) + ';' +
-      ${JSON.stringify(omniBody)} +
-      '})()';
-    // Return the OmniJS payload RAW ({results:[...]}). OmniAutomation.executeJson
-    // wraps raw output into a ScriptResult ({success, data}); pre-wrapping here
-    // would double-wrap and hide data.results from callers.
-    return app.evaluateJavascript(omniSource);
-  } catch (e) {
-    return JSON.stringify({ error: true, message: String(e && e.message ? e.message : e), context: 'batch_create_tasks' });
-  }
-})();
-`;
-
+): Promise<GeneratedMutationScript> {
+  // Emit from the mutation AST: ONE unrolled OmniJS program (per-item
+  // lowerTaskCreate statements under batchItem try/capture, parentTempId
+  // chains resolved at BUILD time to earlier items' bindings — the runtime
+  // byTempId map is gone, OMN-128). dispatchMutation runs the build-time
+  // sandbox guard (validateBatchTaskSpecs) BEFORE building, so the batch path
+  // honors the same guard as single creates (OMN-119 non-bypass); async for
+  // that same guard. Launcher shape: wrapInLauncher returns the
+  // app.evaluateJavascript payload RAW ({results:[...]}) — same as the legacy
+  // launcher, whose comment warned that pre-wrapping would double-wrap under
+  // OmniAutomation.executeJson and hide data.results from callers.
+  const program = await dispatchMutation('batch-create/tasks', { specs, stopOnError: options.stopOnError === true });
+  validateMutationProgram(program);
+  const omnijs = emitProgram(program);
   return {
-    script: script.trim(),
+    script: wrapInLauncher(omnijs, program.context),
     operation: 'create',
     target: 'task',
     description: `Batch-create ${specs.length} task(s)`,
