@@ -31,7 +31,15 @@ export interface JsonNode {
   type: 'json';
   value: unknown;
 }
-export type Expr = RefNode | MemberNode | NewNode | EnumRefNode | DateExprNode | JsonNode;
+// Builder-internal verbatim code fragment. ONLY for builder-constructed
+// envelope/condition fragments (ternaries, `.toISOString()`) that the typed
+// nodes can't express. NEVER carries user data — user data always goes through
+// `json`. Same trust model as GuardNode.cond (builder-internal raw string).
+export interface RawNode {
+  type: 'raw';
+  code: string;
+}
+export type Expr = RefNode | MemberNode | NewNode | EnumRefNode | DateExprNode | JsonNode | RawNode;
 
 // --- Typed fail-able folder resolution ---
 export type FolderResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
@@ -69,6 +77,10 @@ export interface SetPropNode {
   // Only used by the readModifyReassign strategy: sub-property mutations applied
   // to the read-back typed instance before reassignment.
   mutations?: Array<{ prop: string; value: Expr }>;
+  // When true, the emitter wraps this statement in `try { ... } catch (e) {}` so
+  // a failure (e.g. status / reviewInterval) does NOT fail the surrounding
+  // mutation. Preserves the original best-effort bridge semantics.
+  bestEffort?: boolean;
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
 // path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
@@ -79,6 +91,10 @@ export interface AssignTagsNode {
   target: Expr;
   tags: Expr;
   bind: string;
+  // When true, the emitter wraps the tag-assignment block in
+  // `try { ... } catch (e) {}` so a tag failure does NOT fail the surrounding
+  // mutation. Preserves the original best-effort tag bridge semantics.
+  bestEffort?: boolean;
 }
 export interface ReturnNode {
   type: 'return';
@@ -108,6 +124,7 @@ export const newExpr = (className: string, args: Expr[]): NewNode => ({ type: 'n
 export const enumRef = (path: string): EnumRefNode => ({ type: 'enumRef', path });
 export const dateExpr = (value: Expr): DateExprNode => ({ type: 'dateExpr', value });
 export const json = (value: unknown): JsonNode => ({ type: 'json', value });
+export const raw = (code: string): RawNode => ({ type: 'raw', code });
 
 export const bind = (name: string, expr: Expr): BindNode => ({ type: 'bind', name, expr });
 export const resolveFolder = (bindVar: string, refStr: string): ResolveFolderNode => ({
@@ -127,16 +144,26 @@ export const setProp = (
   prop: string,
   value: Expr,
   strategy: SetPropStrategy = 'direct',
-): SetPropNode => ({ type: 'setProp', target, prop, value, strategy });
+  bestEffort = false,
+): SetPropNode => ({ type: 'setProp', target, prop, value, strategy, ...(bestEffort ? { bestEffort } : {}) });
 export const readModifyReassign = (
   target: Expr,
   prop: string,
   mutations: { prop: string; value: Expr }[],
-): SetPropNode => ({ type: 'setProp', target, prop, strategy: 'readModifyReassign', mutations });
-export const assignTags = (target: Expr, tags: Expr, bindVar: string): AssignTagsNode => ({
+  bestEffort = false,
+): SetPropNode => ({
+  type: 'setProp',
+  target,
+  prop,
+  strategy: 'readModifyReassign',
+  mutations,
+  ...(bestEffort ? { bestEffort } : {}),
+});
+export const assignTags = (target: Expr, tags: Expr, bindVar: string, bestEffort = false): AssignTagsNode => ({
   type: 'assignTags',
   target,
   tags,
   bind: bindVar,
+  ...(bestEffort ? { bestEffort } : {}),
 });
 export const return_ = (envelope: Envelope): ReturnNode => ({ type: 'return', envelope });

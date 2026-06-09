@@ -7,6 +7,7 @@ import {
   enumRef,
   dateExpr,
   json,
+  raw,
   constructProject,
   setProp,
   return_,
@@ -27,6 +28,11 @@ describe('emitExpr', () => {
     const emitted = emitExpr(json(hostile));
 
     expect(eval(emitted)).toBe(hostile);
+  });
+  it('raw → emits its code verbatim (builder-internal fragments)', () => {
+    expect(emitExpr(raw('proj.dueDate ? proj.dueDate.toISOString() : null'))).toBe(
+      'proj.dueDate ? proj.dueDate.toISOString() : null',
+    );
   });
 });
 
@@ -65,6 +71,55 @@ describe('emitProgram', () => {
     expect(out).toContain('_rmr.steps = 1;');
     expect(out).toContain('_rmr.unit = "weeks";');
     expect(out).toContain('proj.reviewInterval = _rmr;');
+  });
+
+  it('bestEffort setProp (enum) wraps the assignment in try/catch', () => {
+    const out = emitProgram({
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true)],
+    });
+    expect(out).toContain('try { proj.status = Project.Status.OnHold; } catch (e) {}');
+  });
+
+  it('non-bestEffort enum setProp is NOT wrapped', () => {
+    const out = emitProgram({
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum')],
+    });
+    expect(out).toContain('proj.status = Project.Status.OnHold;');
+    expect(out).not.toContain('try { proj.status');
+  });
+
+  it('bestEffort readModifyReassign wraps the read-mutate-reassign block in try/catch', () => {
+    const out = emitProgram({
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [readModifyReassign(ref('proj'), 'reviewInterval', [{ prop: 'steps', value: json(1) }], true)],
+    });
+    expect(out).toMatch(/try \{ \{ const _rmr = proj\.reviewInterval;.*\} catch \(e\) \{\}/s);
+  });
+
+  it('bestEffort dateExpr is NOT double-wrapped (already self-wraps)', () => {
+    const out = emitProgram({
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [setProp(ref('proj'), 'dueDate', dateExpr(json('2026-06-30')), 'dateExpr', true)],
+    });
+    expect(out).toContain('try { proj.dueDate = new Date("2026-06-30"); } catch (e) {}');
+    expect(out).not.toContain('try { try {');
+  });
+
+  it('bestEffort assignTags wraps the tag block in try/catch', () => {
+    const out = emitProgram({
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [assignTags(ref('proj'), json(['t']), 'appliedTags', true)],
+    });
+    expect(out).toContain('try {');
+    expect(out).toContain('proj.addTag(_tag);');
+    expect(out).toContain('} catch (e) {}');
   });
 
   it('emits assignTags as a resolve-or-create loop with addTag', () => {

@@ -19,6 +19,8 @@ export function emitExpr(node: Expr): string {
       return `new Date(${emitExpr(node.value)})`;
     case 'json':
       return JSON.stringify(node.value);
+    case 'raw':
+      return node.code;
     default: {
       const _x: never = node;
       throw new Error(`Unknown expr node: ${JSON.stringify(_x)}`);
@@ -58,16 +60,20 @@ export function emitStmt(node: Stmt): string {
     }
     case 'setProp': {
       const target = emitExpr(node.target);
+      // `bestEffort` wraps the block in try/catch so a failure does not fail the
+      // surrounding mutation. The dateExpr strategy ALREADY self-wraps, so it is
+      // never double-wrapped here.
+      const wrap = (block: string): string => (node.bestEffort ? `try { ${block} } catch (e) {}` : block);
       switch (node.strategy) {
         case 'direct':
-          return `${target}.${node.prop} = ${emitExpr(node.value as Expr)};`;
+          return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
         case 'dateExpr':
           return `try { ${target}.${node.prop} = ${emitExpr(node.value as Expr)}; } catch (e) {}`;
         case 'enum':
-          return `${target}.${node.prop} = ${emitExpr(node.value as Expr)};`;
+          return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
         case 'readModifyReassign': {
           const muts = (node.mutations ?? []).map((m) => `_rmr.${m.prop} = ${emitExpr(m.value)};`).join(' ');
-          return `{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } }`;
+          return wrap(`{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } }`);
         }
         default: {
           const _x: never = node.strategy;
@@ -78,7 +84,7 @@ export function emitStmt(node: Stmt): string {
     case 'assignTags': {
       const target = emitExpr(node.target);
       const tags = emitExpr(node.tags);
-      return [
+      const block = [
         `const ${node.bind} = [];`,
         `for (const _tagName of ${tags}) {`,
         '  var _segs = parseTagPath(_tagName);',
@@ -89,6 +95,9 @@ export function emitStmt(node: Stmt): string {
         `  ${node.bind}.push(_tag.name);`,
         '}',
       ].join('\n');
+      // `bestEffort` wraps the tag block so a tag failure does not fail the
+      // surrounding mutation (original best-effort tag bridge semantics).
+      return node.bestEffort ? `try {\n${block}\n} catch (e) {}` : block;
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
