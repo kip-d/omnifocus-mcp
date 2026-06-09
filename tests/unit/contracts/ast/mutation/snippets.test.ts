@@ -27,6 +27,8 @@ describe('resolveProjectFlexible', () => {
     expect(src).toContain('function resolveProjectFlexible');
     expect(src).toContain('Project.byIdentifier');
     expect(src).toContain('flattenedProjects');
+    // id lookup must precede the name scan — the legacy resolution order
+    expect(src.indexOf('Project.byIdentifier')).toBeLessThan(src.indexOf('flattenedProjects'));
     expect(src).toContain('return null'); // not-found is null — guard handles loudness
   });
 });
