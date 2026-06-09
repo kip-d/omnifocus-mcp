@@ -219,7 +219,7 @@ async function isTaskInSandbox(taskId: string): Promise<boolean> {
 /**
  * Validate that a project creation is inside the sandbox
  */
-function validateProjectCreate(data: ProjectCreateData): void {
+export function validateProjectCreate(data: ProjectCreateData): void {
   if (!isTestMode()) return;
 
   if (data.folder !== SANDBOX_FOLDER_NAME) {
