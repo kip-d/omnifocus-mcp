@@ -1,3 +1,4 @@
+import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { emitExpr, emitProgram, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
 import {
@@ -111,7 +112,7 @@ describe('emitProgram', () => {
     expect(out).not.toContain('try { try {');
   });
 
-  it('bestEffort assignTags wraps the tag block in try/catch', () => {
+  it('bestEffort assignTags wraps only the LOOP — the consumed binding is hoisted to program scope', () => {
     const out = emitProgram({
       context: 'create_project',
       snippetDeps: ['resolveOrCreateTagByPath'],
@@ -120,6 +121,11 @@ describe('emitProgram', () => {
     expect(out).toContain('try {');
     expect(out).toContain('proj.addTag(_tag);');
     expect(out).toContain('} catch (e) {}');
+    // OMN-128 regression: the `let appliedTags = []` declaration MUST be hoisted OUTSIDE the
+    // try (a later statement, e.g. the return envelope, consumes it). If it were trapped in
+    // the try, a thrown best-effort block leaves the consumer with a ReferenceError.
+    expect(out).toContain('let appliedTags = [];');
+    expect(out.indexOf('let appliedTags = [];')).toBeLessThan(out.indexOf('try {'));
   });
 
   it('emits assignTags as a resolve-or-create loop with addTag', () => {
@@ -129,10 +135,43 @@ describe('emitProgram', () => {
       statements: [assignTags(ref('proj'), json(['work', 'home']), 'appliedTags')],
     };
     const out = emitProgram(program);
-    expect(out).toContain('const appliedTags = [];');
+    expect(out).toContain('let appliedTags = [];');
     expect(out).toContain('parseTagPath(_tagName)');
     expect(out).toContain('proj.addTag(_tag);');
     expect(out).toContain('appliedTags.push(_tag.name);');
+  });
+
+  // OMN-128: the bug a shape-only test cannot catch — EXECUTE the emitted OmniJS program
+  // in a vm with stubbed OmniFocus globals and confirm it runs to a valid envelope.
+  // Before the hoist fix, the return's reference to `appliedTags` (trapped in the
+  // best-effort try) threw `ReferenceError` here. Live /verify found it; this guards it.
+  it('emitted create-with-tags program EXECUTES and builds its envelope (no ReferenceError)', () => {
+    const program = emitProgram({
+      context: 'create_project',
+      snippetDeps: ['resolveOrCreateTagByPath'],
+      statements: [
+        constructProject('proj', json('P'), { kind: 'none' }),
+        assignTags(ref('proj'), json(['work']), 'appliedTags', true),
+        return_({ tags: ref('appliedTags'), created: json(true) }),
+      ],
+    });
+    // Minimal OmniJS runtime stubs so the program runs to its return.
+    const sandbox: Record<string, unknown> = {
+      Project: function (this: Record<string, unknown>, name: string) {
+        this.id = { primaryKey: 'p1' };
+        this.name = name;
+        this.addTag = (): void => {};
+      },
+      Tag: function (name: string) {
+        return { name };
+      },
+      flattenedTags: [],
+      tags: [],
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed.created).toBe(true);
+    expect(parsed.tags).toEqual(['work']);
   });
 
   it('throws if the body calls a helper not declared in snippetDeps', () => {

@@ -84,8 +84,14 @@ export function emitStmt(node: Stmt): string {
     case 'assignTags': {
       const target = emitExpr(node.target);
       const tags = emitExpr(node.tags);
-      const block = [
-        `const ${node.bind} = [];`,
+      // The result binding is declared at PROGRAM scope (a `let`, OUTSIDE any bestEffort
+      // try-wrap) because later statements — e.g. the return envelope — consume it. If it
+      // were declared inside the try, a thrown best-effort block would leave the consumer
+      // referencing an undeclared variable (`ReferenceError`). Only the mutating loop is
+      // wrapped. (OMN-128: caught by live /verify. General rule: any bestEffort statement
+      // whose binding is consumed later MUST hoist that declaration out of the try.)
+      const decl = `let ${node.bind} = [];`;
+      const loop = [
         `for (const _tagName of ${tags}) {`,
         '  var _segs = parseTagPath(_tagName);',
         '  var _tag;',
@@ -95,9 +101,10 @@ export function emitStmt(node: Stmt): string {
         `  ${node.bind}.push(_tag.name);`,
         '}',
       ].join('\n');
-      // `bestEffort` wraps the tag block so a tag failure does not fail the
-      // surrounding mutation (original best-effort tag bridge semantics).
-      return node.bestEffort ? `try {\n${block}\n} catch (e) {}` : block;
+      // `bestEffort` wraps only the LOOP so a tag failure does not fail the surrounding
+      // mutation (original best-effort tag bridge semantics) — the binding survives.
+      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} catch (e) {}` : loop;
+      return `${decl}\n${guardedLoop}`;
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
