@@ -1,6 +1,7 @@
+// src/contracts/ast/mutation/repetition.ts
 // Build-time lowering of RepetitionRule → the constructor args for OmniJS
 // `new Task.RepetitionRule(rrule, null, scheduleType, anchorDateKey, catchUp)`.
-// Replaces the legacy runtime island (mutation-script-builder.ts ~663-782) — same
+// Replaces the legacy runtime repetition island (mutation-script-builder.ts) — same
 // mapping rules, but computed in TS where they are typed and unit-testable, and
 // invalid input fails loudly at build time instead of inside evaluateJavascript.
 import type { RepetitionRule } from '../../mutations.js';
