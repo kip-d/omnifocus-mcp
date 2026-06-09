@@ -173,6 +173,11 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain)', (
     //    hunted down. The defensive __TEST__ check should be unreachable
     //    (SWEEP_MARKER embeds the prefix) but guards against a filter bug
     //    ever turning this sweep on real data.
+    // Capture a sweep failure instead of letting it propagate immediately:
+    // "stragglers survived the sweep" is exactly the state where step 3's
+    // whole-DB fullCleanup matters most, so it must run unconditionally;
+    // the captured error is rethrown after, so the failure stays loud.
+    let sweepError: unknown;
     try {
       const stragglers = await searchTasksByName(SWEEP_MARKER);
       for (const t of stragglers) {
@@ -180,15 +185,18 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain)', (
       }
       const remaining = await searchTasksByName(SWEEP_MARKER);
       expect(remaining, `OMN-138 stragglers survived the sweep: ${JSON.stringify(remaining)}`).toHaveLength(0);
+    } catch (e) {
+      sweepError = e;
     } finally {
       serverProcess?.kill();
     }
 
     // 3. OMN-46 fixture-leak guard: osascript-driven whole-DB sweep of
-    //    __TEST__/__test- residue (no server needed). Assert OUTSIDE any
-    //    try/catch so a real leak fails the suite loud.
+    //    __TEST__/__test- residue (no server needed). Runs even when the
+    //    name sweep failed; a real leak still fails the suite loud below.
     const report = await fullCleanup();
     expect(report.errors, `sandbox cleanup errors (fixture leak): ${JSON.stringify(report.errors)}`).toHaveLength(0);
+    if (sweepError !== undefined) throw sweepError;
   }, 120000);
 
   // ── 1. Single create: every field, one program, clean envelope ─────────
