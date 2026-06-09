@@ -163,6 +163,20 @@ export default [
     },
   },
 
+  // Custom OmniFocus MCP rules — applied to the OmniJS/JXA script layer.
+  // Bans .whose()/.where(): each predicate is an Apple Event round-trip →
+  // 25s+ timeouts on large databases (docs/dev/LESSONS_LEARNED.md). The rule
+  // body re-checks the '/omnifocus/scripts/' path (double-gate, deliberate).
+  {
+    files: ['src/omnifocus/scripts/**/*.ts'],
+    plugins: {
+      'local-rules': localRules,
+    },
+    rules: {
+      'local-rules/no-whose-where': 'error',
+    },
+  },
+
   // Ignore patterns
   {
     ignores: [
