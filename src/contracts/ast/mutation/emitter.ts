@@ -142,7 +142,10 @@ export function emitStmt(node: Stmt): string {
       // moveTasks([t], container.ending). Container resolution failures are
       // guard-handled BEFORE construct (ContainerResolution has no notFound
       // kind), so there is nothing to enforce here.
-      const construct = `const ${node.bind} = new Task(${emitExpr(node.name)});`;
+      // `var`, NOT `const`: inside a batchItem the bind lives in that item's try block,
+      // but a later item's tempIdRef (parentTempId chain) must still see it. `var` hoists
+      // to the program IIFE scope — same lesson as the assignTags hoist (slice 1).
+      const construct = `var ${node.bind} = new Task(${emitExpr(node.name)});`;
       if (node.container.kind === 'inbox') return construct;
       return `${construct}\nmoveTasks([${node.bind}], ${node.container.var}.ending);`;
     }

@@ -19,6 +19,7 @@ import {
   constructTask,
   batchItem,
   guard,
+  bind,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
@@ -284,15 +285,17 @@ describe('slice-2 statement emission', () => {
   });
 
   it('constructTask: inbox has no move; resolved containers move to <var>.ending', () => {
-    expect(emitStmt(constructTask('t', json('X'), { kind: 'inbox' }))).toBe('const t = new Task("X");');
+    // `var` (not `const`): the bind must hoist out of a batchItem's try block so a
+    // later item's tempIdRef can reference it (see the emitter comment).
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'inbox' }))).toBe('var t = new Task("X");');
     expect(emitStmt(constructTask('t', json('X'), { kind: 'project', var: 'p' }))).toBe(
-      'const t = new Task("X");\nmoveTasks([t], p.ending);',
+      'var t = new Task("X");\nmoveTasks([t], p.ending);',
     );
     expect(emitStmt(constructTask('t', json('X'), { kind: 'parentTask', var: 'pt' }))).toBe(
-      'const t = new Task("X");\nmoveTasks([t], pt.ending);',
+      'var t = new Task("X");\nmoveTasks([t], pt.ending);',
     );
     expect(emitStmt(constructTask('t', json('X'), { kind: 'tempIdRef', var: '_t0' }))).toBe(
-      'const t = new Task("X");\nmoveTasks([t], _t0.ending);',
+      'var t = new Task("X");\nmoveTasks([t], _t0.ending);',
     );
   });
 
@@ -389,6 +392,46 @@ describe('slice-2 statement emission', () => {
     const parsed = JSON.parse(result);
     expect(parsed).toEqual({ error: true, message: 'Project not found: Work', context: 'create_task' });
     expect(taskCalls).toHaveLength(0);
+  });
+
+  // Cross-item tempIdRef (parentTempId chain): item 1 references item 0's task var.
+  // Item 0's bind lives inside item 0's try block — it MUST hoist (`var`, not `const`)
+  // to the program IIFE scope or item 1 throws `_t0 is not defined`. This test fails
+  // if constructTask reverts to `const` (verified by local revert).
+  it('emitted two-item batch EXECUTES: a later item tempIdRef sees an earlier item task (vm)', () => {
+    const program = emitProgram({
+      context: 'batch_create',
+      snippetDeps: [],
+      statements: [
+        bind('results', raw('[]')),
+        batchItem('a', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], false),
+        batchItem('b', 1, '_t1', [constructTask('_t1', json('B'), { kind: 'tempIdRef', var: '_t0' })], false),
+        return_({ results: ref('results') }),
+      ],
+    });
+    const created: Array<{ name: string; ending: { for: string }; id: { primaryKey: string } }> = [];
+    const moveCalls: unknown[][] = [];
+    const sandbox: Record<string, unknown> = {
+      Task: function (this: Record<string, unknown>, name: string) {
+        const ending = { for: name };
+        this.name = name;
+        this.ending = ending;
+        this.id = { primaryKey: `id-${name}` };
+        created.push(this as (typeof created)[number]);
+      },
+      moveTasks: (...args: unknown[]) => {
+        moveCalls.push(args);
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result) as { results: Array<{ tempId: string; success: boolean; taskId: string }> };
+    expect(parsed.results).toHaveLength(2);
+    expect(parsed.results[0]).toMatchObject({ tempId: 'a', success: true, taskId: 'id-A' });
+    expect(parsed.results[1]).toMatchObject({ tempId: 'b', success: true, taskId: 'id-B' });
+    // Identity check: item 1 moved to ITEM 0's task `.ending` — the cross-try reference.
+    expect(moveCalls).toHaveLength(1);
+    expect(created).toHaveLength(2);
+    expect((moveCalls[0] as unknown[])[1]).toBe(created[0].ending);
   });
 });
 
