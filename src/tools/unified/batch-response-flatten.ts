@@ -17,6 +17,24 @@ export interface FlatBatchResult {
   type?: string;
   changes?: string[];
   error?: string;
+  /** OMN-137: best-effort failures from the create script (tags, repetitionRule, …). Present only when non-empty. */
+  warnings?: string[];
+}
+
+/**
+ * OMN-137: lift non-empty script warnings off an envelope into a spreadable
+ * fragment. Non-string elements are dropped (scripts only ever emit strings;
+ * anything else is a malformed envelope). Empty or missing warnings produce {}
+ * so the response key stays omitted entirely (no noise on clean creates).
+ *
+ * Canonical omit-when-empty implementation — shared by OmniFocusWriteTool
+ * (single create + batch slow path) and flattenCreateItem below.
+ */
+export function liftWarnings(source: unknown): { warnings?: string[] } {
+  const w = (source as { warnings?: unknown } | null | undefined)?.warnings;
+  if (!Array.isArray(w)) return {};
+  const strings = w.filter((x): x is string => typeof x === 'string');
+  return strings.length > 0 ? { warnings: strings } : {};
 }
 
 /** Shape of the nested results object from routeToBatch() */
@@ -46,29 +64,9 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
 
   // Creates — unwrap from executeBatchCreates envelope
   for (const createBatch of results.created) {
-    const batch = createBatch as {
-      results?: Array<{
-        tempId: string;
-        realId: string | null;
-        success: boolean;
-        type: string;
-        error?: string;
-      }>;
-    };
-    if (batch.results) {
-      for (const item of batch.results) {
-        const entry: FlatBatchResult = {
-          operation: 'create' as const,
-          success: item.success,
-          id: item.realId,
-          tempId: item.tempId,
-          type: item.type,
-        };
-        if (item.error) {
-          (entry as { error?: string }).error = item.error;
-        }
-        flat.push(entry);
-      }
+    const batch = createBatch as { results?: CreateItemResult[] };
+    for (const item of batch.results ?? []) {
+      flat.push(flattenCreateItem(item));
     }
   }
 
@@ -94,10 +92,7 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
   for (const errorItem of results.errors) {
     const err = errorItem as { phase?: string; id?: string; error?: string | { message?: string } };
     const errorFallback = typeof err.error === 'object' ? err.error?.message : String(err.error);
-    const errorMsg =
-      typeof err.error === 'string'
-        ? err.error
-        : errorFallback;
+    const errorMsg = typeof err.error === 'string' ? err.error : errorFallback;
     flat.push({
       operation: err.phase || 'unknown',
       success: false as const,
@@ -107,6 +102,33 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
   }
 
   return flat;
+}
+
+/** Per-item shape produced by executeBatchCreates. */
+interface CreateItemResult {
+  tempId: string;
+  realId: string | null;
+  success: boolean;
+  type: string;
+  error?: string;
+  warnings?: string[];
+}
+
+/** Project one batch-create item into the flat shape (error/warnings only when present/non-empty). */
+function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
+  const entry: FlatBatchResult = {
+    operation: 'create' as const,
+    success: item.success,
+    id: item.realId,
+    tempId: item.tempId,
+    type: item.type,
+  };
+  if (item.error) {
+    entry.error = item.error;
+  }
+  // OMN-137: per-item script warnings survive the projection (non-empty only).
+  Object.assign(entry, liftWarnings(item));
+  return entry;
 }
 
 /**

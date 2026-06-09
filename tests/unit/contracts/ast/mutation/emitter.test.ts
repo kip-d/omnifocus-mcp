@@ -1,6 +1,12 @@
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
-import { emitExpr, emitProgram, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import {
+  emitExpr,
+  emitProgram,
+  emitStmt,
+  wrapInLauncher,
+  EMITTED_PROGRAM_SIZE_LIMIT,
+} from '../../../../../src/contracts/ast/mutation/emitter.js';
 import {
   ref,
   member,
@@ -14,6 +20,12 @@ import {
   return_,
   readModifyReassign,
   assignTags,
+  resolveProject,
+  resolveParentTask,
+  constructTask,
+  batchItem,
+  guard,
+  bind,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
@@ -74,13 +86,13 @@ describe('emitProgram', () => {
     expect(out).toContain('proj.reviewInterval = _rmr;');
   });
 
-  it('bestEffort setProp (enum) wraps the assignment in try/catch', () => {
+  it('bestEffort setProp (enum) wraps the assignment in try/catch with a labeled warning (OMN-137)', () => {
     const out = emitProgram({
       context: 'create_project',
       snippetDeps: [],
       statements: [setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true)],
     });
-    expect(out).toContain('try { proj.status = Project.Status.OnHold; } catch (e) {}');
+    expect(out).toContain('try { proj.status = Project.Status.OnHold; } catch (e) { _warnings.push(');
   });
 
   it('non-bestEffort enum setProp is NOT wrapped', () => {
@@ -93,13 +105,15 @@ describe('emitProgram', () => {
     expect(out).not.toContain('try { proj.status');
   });
 
-  it('bestEffort readModifyReassign wraps the read-mutate-reassign block in try/catch', () => {
+  it('bestEffort readModifyReassign wraps the read-mutate-reassign block in try/catch with a labeled warning (OMN-137)', () => {
     const out = emitProgram({
       context: 'create_project',
       snippetDeps: [],
       statements: [readModifyReassign(ref('proj'), 'reviewInterval', [{ prop: 'steps', value: json(1) }], true)],
     });
-    expect(out).toMatch(/try \{ \{ const _rmr = proj\.reviewInterval;.*\} catch \(e\) \{\}/s);
+    expect(out).toMatch(
+      /try \{ \{ const _rmr = proj\.reviewInterval;.*\} catch \(e\) \{ _warnings\.push\("reviewInterval"/s,
+    );
   });
 
   it('bestEffort dateExpr is NOT double-wrapped (already self-wraps)', () => {
@@ -120,7 +134,7 @@ describe('emitProgram', () => {
     });
     expect(out).toContain('try {');
     expect(out).toContain('proj.addTag(_tag);');
-    expect(out).toContain('} catch (e) {}');
+    expect(out).toContain('} catch (e) { _warnings.push(');
     // OMN-128 regression: the `let appliedTags = []` declaration MUST be hoisted OUTSIDE the
     // try (a later statement, e.g. the return envelope, consumes it). If it were trapped in
     // the try, a thrown best-effort block leaves the consumer with a ReferenceError.
@@ -191,6 +205,272 @@ describe('emitProgram', () => {
       statements: [assignTags(ref('proj'), json(['work']), 'appliedTags')],
     };
     expect(() => emitProgram(program)).not.toThrow();
+  });
+});
+
+// OMN-137: best-effort failures must surface as labeled envelope warnings, not be
+// swallowed. The dateExpr swallow is the ONE deliberate exception (spec §3.1: an
+// invalid date string yields Invalid Date, not a throw — a warning there is theater).
+describe('OMN-137 warnings infrastructure', () => {
+  it('every program declares _warnings at program scope', () => {
+    const program = emitProgram({ statements: [return_({ ok: json(true) })], context: 'x', snippetDeps: [] });
+    expect(program).toContain('let _warnings = [];');
+  });
+
+  it('bestEffort setProp failure pushes a labeled warning instead of swallowing', () => {
+    const stmt = setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true, 'status');
+    const out = emitStmt(stmt);
+    expect(out).toContain('catch (e)');
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"status"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort readModifyReassign failure pushes a labeled warning (explicit label)', () => {
+    const out = emitStmt(
+      readModifyReassign(ref('proj'), 'reviewInterval', [{ prop: 'steps', value: json(1) }], true, 'reviewInterval'),
+    );
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"reviewInterval"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort assignTags guarded loop pushes a labeled warning (explicit label)', () => {
+    const out = emitStmt(assignTags(ref('proj'), json(['t']), 'appliedTags', true, 'projectTags'));
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"projectTags"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort assignTags label falls back to "tags" when absent', () => {
+    const out = emitStmt(assignTags(ref('proj'), json(['t']), 'appliedTags', true));
+    expect(out).toContain('_warnings.push("tags"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort setProp label falls back to node.prop when absent', () => {
+    const out = emitStmt(setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true));
+    expect(out).toContain('_warnings.push("status"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  // EXECUTE the warning path: a throwing property setter must NOT fail the program —
+  // it must record a labeled warning the return envelope can carry out.
+  it('a throwing best-effort setProp records a labeled warning and the program still returns ok (vm)', () => {
+    const program = emitProgram({
+      context: 'x',
+      snippetDeps: [],
+      statements: [
+        setProp(ref('obj'), 'status', json('on_hold'), 'direct', true, 'status'),
+        return_({ warnings: ref('_warnings'), ok: json(true) }),
+      ],
+    });
+    const obj: Record<string, unknown> = {};
+    Object.defineProperty(obj, 'status', {
+      set() {
+        throw new Error('boom');
+      },
+    });
+    const sandbox: Record<string, unknown> = { obj };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings).toEqual(['status: boom']);
+  });
+});
+
+describe('slice-2 statement emission', () => {
+  it('resolveProject emits a resolveProjectFlexible call with JSON-escaped ref', () => {
+    expect(emitStmt(resolveProject('p', 'My "Q" Project'))).toBe(
+      'const p = resolveProjectFlexible("My \\"Q\\" Project");',
+    );
+  });
+
+  it('resolveParentTask emits Task.byIdentifier with null fallback', () => {
+    expect(emitStmt(resolveParentTask('pt', 'abc123'))).toBe('const pt = Task.byIdentifier("abc123") || null;');
+  });
+
+  it('constructTask: inbox has no move; resolved containers move to <var>.ending', () => {
+    // `var` (not `const`): the bind must hoist out of a batchItem's try block so a
+    // later item's tempIdRef can reference it (see the emitter comment).
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'inbox' }))).toBe('var t = new Task("X");');
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'project', var: 'p' }))).toBe(
+      'var t = new Task("X");\nmoveTasks([t], p.ending);',
+    );
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'parentTask', var: 'pt' }))).toBe(
+      'var t = new Task("X");\nmoveTasks([t], pt.ending);',
+    );
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'tempIdRef', var: '_t0' }))).toBe(
+      'var t = new Task("X");\nmoveTasks([t], _t0.ending);',
+    );
+  });
+
+  it('guard throw-mode emits a throw, not a return', () => {
+    const g = guard('p === null', { message: json('Project not found: X') }, 'throw');
+    expect(emitStmt(g)).toBe('if (p === null) throw new Error("Project not found: X");');
+  });
+
+  it('guard throw-mode without a message fails LOUDLY at build time', () => {
+    expect(() => emitStmt(guard('p === null', { error: json(true) }, 'throw'))).toThrow(/message/);
+  });
+
+  it('guard return-mode is unchanged (default mode)', () => {
+    expect(emitStmt(guard('p === null', { error: json(true) }))).toBe(
+      'if (p === null) return JSON.stringify({ error: true });',
+    );
+  });
+
+  it('batchItem emits try/capture with per-item warnings slice and results push', () => {
+    const node = batchItem('tmp1', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], false);
+    const out = emitStmt(node);
+    expect(out).toContain('const _w0 = _warnings.length;');
+    expect(out).toContain(
+      'results.push({ tempId: "tmp1", taskId: _t0.id.primaryKey, success: true, warnings: _warnings.slice(_w0) });',
+    );
+    expect(out).toContain('catch (e)');
+    expect(out).toContain('success: false');
+    expect(out).not.toContain('_aborted'); // stopOnError false
+    const stop = emitStmt(batchItem('tmp1', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], true));
+    expect(stop).toContain('_aborted = true;');
+  });
+
+  // VM execution: drive the WHOLE emitProgram output through a stubbed OmniJS
+  // sandbox — shape-only string assertions cannot catch wiring bugs (OMN-128 lesson).
+  const singleCreateProgram = () => ({
+    context: 'create_task',
+    snippetDeps: ['resolveProjectFlexible'],
+    statements: [
+      resolveProject('p', 'Work'),
+      guard('p === null', {
+        error: json(true),
+        message: json('Project not found: Work'),
+        context: json('create_task'),
+      }),
+      constructTask('task', json('Hello'), { kind: 'project' as const, var: 'p' }),
+      return_({ taskId: member(ref('task'), 'id.primaryKey'), warnings: ref('_warnings'), created: json(true) }),
+    ],
+  });
+
+  it('emitted single-create program EXECUTES: resolves project, constructs, moves to <project>.ending (vm)', () => {
+    const program = emitProgram(singleCreateProgram());
+    const fakeProject = { name: 'Work', ending: { marker: 'end' } };
+    const moveCalls: unknown[][] = [];
+    const taskCalls: unknown[] = [];
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => null },
+      flattenedProjects: [fakeProject],
+      moveTasks: (...args: unknown[]) => {
+        moveCalls.push(args);
+      },
+      Task: function (this: Record<string, unknown>, name: string) {
+        taskCalls.push(name);
+        this.id = { primaryKey: 'fake-id' };
+        this.name = name;
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed.taskId).toBe('fake-id');
+    expect(parsed.created).toBe(true);
+    expect(parsed.warnings).toEqual([]);
+    expect(taskCalls).toEqual(['Hello']);
+    expect(moveCalls).toHaveLength(1);
+    const [moved, destination] = moveCalls[0] as [Array<{ id: { primaryKey: string } }>, unknown];
+    expect(moved).toHaveLength(1);
+    expect(moved[0].id.primaryKey).toBe('fake-id');
+    expect(destination).toBe(fakeProject.ending);
+  });
+
+  it('emitted single-create program EXECUTES: guard fires on missing project, Task NEVER constructed (vm)', () => {
+    const program = emitProgram(singleCreateProgram());
+    const taskCalls: unknown[] = [];
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => null },
+      flattenedProjects: [],
+      moveTasks: () => {
+        throw new Error('moveTasks must not be called when the guard fires');
+      },
+      Task: function (this: Record<string, unknown>, name: string) {
+        taskCalls.push(name);
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({ error: true, message: 'Project not found: Work', context: 'create_task' });
+    expect(taskCalls).toHaveLength(0);
+  });
+
+  // Cross-item tempIdRef (parentTempId chain): item 1 references item 0's task var.
+  // Item 0's bind lives inside item 0's try block — it MUST hoist (`var`, not `const`)
+  // to the program IIFE scope or item 1 throws `_t0 is not defined`. This test fails
+  // if constructTask reverts to `const` (verified by local revert).
+  it('emitted two-item batch EXECUTES: a later item tempIdRef sees an earlier item task (vm)', () => {
+    const program = emitProgram({
+      context: 'batch_create',
+      snippetDeps: [],
+      statements: [
+        bind('results', raw('[]')),
+        batchItem('a', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], false),
+        batchItem('b', 1, '_t1', [constructTask('_t1', json('B'), { kind: 'tempIdRef', var: '_t0' })], false),
+        return_({ results: ref('results') }),
+      ],
+    });
+    const created: Array<{ name: string; ending: { for: string }; id: { primaryKey: string } }> = [];
+    const moveCalls: unknown[][] = [];
+    const sandbox: Record<string, unknown> = {
+      Task: function (this: Record<string, unknown>, name: string) {
+        const ending = { for: name };
+        this.name = name;
+        this.ending = ending;
+        this.id = { primaryKey: `id-${name}` };
+        created.push(this as (typeof created)[number]);
+      },
+      moveTasks: (...args: unknown[]) => {
+        moveCalls.push(args);
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result) as { results: Array<{ tempId: string; success: boolean; taskId: string }> };
+    expect(parsed.results).toHaveLength(2);
+    expect(parsed.results[0]).toMatchObject({ tempId: 'a', success: true, taskId: 'id-A' });
+    expect(parsed.results[1]).toMatchObject({ tempId: 'b', success: true, taskId: 'id-B' });
+    // Identity check: item 1 moved to ITEM 0's task `.ending` — the cross-try reference.
+    expect(moveCalls).toHaveLength(1);
+    expect(created).toHaveLength(2);
+    expect((moveCalls[0] as unknown[])[1]).toBe(created[0].ending);
+  });
+});
+
+describe('emitted-program size guard', () => {
+  it('throws LOUDLY when the assembled program exceeds the limit, naming both numbers', () => {
+    // Many bind statements with long raw strings — built programmatically so the
+    // test source stays tiny and the runtime cost is just string assembly.
+    const big = 'x'.repeat(10_000);
+    const statements = [
+      ...Array.from({ length: 25 }, (_, i) => bind(`b${i}`, raw(`"${big}"`))),
+      return_({ ok: json(true) }),
+    ];
+    let err: Error | undefined;
+    try {
+      emitProgram({ context: 'batch_create', snippetDeps: [], statements });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    expect(err!.message).toContain(String(EMITTED_PROGRAM_SIZE_LIMIT));
+    expect(err!.message).toMatch(/split the batch into smaller chunks/i);
+    // The ACTUAL size must be named too — and it must exceed the limit.
+    const sizes = (err!.message.match(/\d[\d_]*/g) ?? []).map((s) => Number(s.replace(/_/g, '')));
+    expect(Math.max(...sizes)).toBeGreaterThan(EMITTED_PROGRAM_SIZE_LIMIT);
+  });
+
+  it('a normal program is far under the limit (happy path, no throw)', () => {
+    const out = emitProgram({
+      context: 'create_task',
+      snippetDeps: [],
+      statements: [constructTask('t', json('Hello'), { kind: 'inbox' }), return_({ ok: json(true) })],
+    });
+    expect(out.length).toBeLessThan(EMITTED_PROGRAM_SIZE_LIMIT / 10);
   });
 });
 

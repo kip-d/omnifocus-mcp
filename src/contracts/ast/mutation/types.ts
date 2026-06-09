@@ -1,5 +1,6 @@
 // src/contracts/ast/mutation/types.ts
-// Mutation AST — node set for the create/project vertical slice (OMN-128).
+// Mutation AST — node set for the write-side create operations (OMN-128:
+// create/project slice 1; create/task + batch-create slice 2).
 // Mirrors the read-side types.ts: node union + factory functions.
 
 export type SetPropStrategy = 'direct' | 'dateExpr' | 'enum' | 'readModifyReassign';
@@ -44,6 +45,15 @@ export type Expr = RefNode | MemberNode | NewNode | EnumRefNode | DateExprNode |
 // --- Typed fail-able folder resolution ---
 export type FolderResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
 
+// --- Typed fail-able container resolution (slice 2) ---
+// Mirrors FolderResolution's named-states discipline: where a created task goes
+// is a closed set of typed states, never a stringly-typed value.
+export type ContainerResolution =
+  | { kind: 'inbox' }
+  | { kind: 'project'; var: string }
+  | { kind: 'parentTask'; var: string }
+  | { kind: 'tempIdRef'; var: string }; // batch-only: a task created earlier in the same program
+
 // --- Statements ---
 export interface BindNode {
   type: 'bind';
@@ -59,12 +69,43 @@ export interface GuardNode {
   type: 'guard';
   cond: string;
   envelope: Envelope;
+  // How the guard fails: 'return' (absent = return, the single-op behavior —
+  // emit `return JSON.stringify(envelope)`) or 'throw' (batch items fail
+  // per-item — the throw is caught by the item's try/capture wrapper).
+  mode?: 'return' | 'throw';
+}
+export interface ResolveProjectNode {
+  type: 'resolveProject';
+  bind: string;
+  ref: string;
+}
+export interface ResolveParentTaskNode {
+  type: 'resolveParentTask';
+  bind: string;
+  ref: string;
 }
 export interface ConstructProjectNode {
   type: 'constructProject';
   bind: string;
   name: Expr;
   folder: FolderResolution;
+}
+export interface ConstructTaskNode {
+  type: 'constructTask';
+  bind: string;
+  name: Expr;
+  container: ContainerResolution;
+}
+// Batch composition: one item's statements wrapped in try/capture. Emits
+// results.push({tempId, taskId, success, warnings}) on success and
+// ({tempId, taskId:null, success:false, error, warnings}) on failure.
+export interface BatchItemNode {
+  type: 'batchItem';
+  tempId: string;
+  index: number; // for per-item internal var names (_w<i>)
+  taskVar: string; // the constructTask bind inside statements — read for taskId
+  statements: Stmt[];
+  stopOnError: boolean;
 }
 export interface SetPropNode {
   type: 'setProp';
@@ -81,6 +122,10 @@ export interface SetPropNode {
   // a failure (e.g. status / reviewInterval) does NOT fail the surrounding
   // mutation. Preserves the original best-effort bridge semantics.
   bestEffort?: boolean;
+  // Warnings attribution (OMN-137): when set, a best-effort failure is recorded
+  // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
+  // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
+  label?: string;
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
 // path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
@@ -95,6 +140,10 @@ export interface AssignTagsNode {
   // `try { ... } catch (e) {}` so a tag failure does NOT fail the surrounding
   // mutation. Preserves the original best-effort tag bridge semantics.
   bestEffort?: boolean;
+  // Warnings attribution (OMN-137): when set, a best-effort failure is recorded
+  // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
+  // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
+  label?: string;
 }
 export interface ReturnNode {
   type: 'return';
@@ -103,8 +152,12 @@ export interface ReturnNode {
 export type Stmt =
   | BindNode
   | ResolveFolderNode
+  | ResolveProjectNode
+  | ResolveParentTaskNode
   | GuardNode
   | ConstructProjectNode
+  | ConstructTaskNode
+  | BatchItemNode
   | SetPropNode
   | AssignTagsNode
   | ReturnNode;
@@ -132,25 +185,63 @@ export const resolveFolder = (bindVar: string, refStr: string): ResolveFolderNod
   bind: bindVar,
   ref: refStr,
 });
-export const guard = (cond: string, envelope: Envelope): GuardNode => ({ type: 'guard', cond, envelope });
+export const resolveProject = (bindVar: string, refStr: string): ResolveProjectNode => ({
+  type: 'resolveProject',
+  bind: bindVar,
+  ref: refStr,
+});
+export const resolveParentTask = (bindVar: string, refStr: string): ResolveParentTaskNode => ({
+  type: 'resolveParentTask',
+  bind: bindVar,
+  ref: refStr,
+});
+export const guard = (cond: string, envelope: Envelope, mode?: 'return' | 'throw'): GuardNode => ({
+  type: 'guard',
+  cond,
+  envelope,
+  ...(mode ? { mode } : {}),
+});
 export const constructProject = (bindVar: string, name: Expr, folder: FolderResolution): ConstructProjectNode => ({
   type: 'constructProject',
   bind: bindVar,
   name,
   folder,
 });
+export const constructTask = (bindVar: string, name: Expr, container: ContainerResolution): ConstructTaskNode => ({
+  type: 'constructTask',
+  bind: bindVar,
+  name,
+  container,
+});
+export const batchItem = (
+  tempId: string,
+  index: number,
+  taskVar: string,
+  statements: Stmt[],
+  stopOnError: boolean,
+): BatchItemNode => ({ type: 'batchItem', tempId, index, taskVar, statements, stopOnError });
 export const setProp = (
   target: Expr,
   prop: string,
   value: Expr,
   strategy: SetPropStrategy = 'direct',
   bestEffort = false,
-): SetPropNode => ({ type: 'setProp', target, prop, value, strategy, ...(bestEffort ? { bestEffort } : {}) });
+  label?: string,
+): SetPropNode => ({
+  type: 'setProp',
+  target,
+  prop,
+  value,
+  strategy,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});
 export const readModifyReassign = (
   target: Expr,
   prop: string,
   mutations: { prop: string; value: Expr }[],
   bestEffort = false,
+  label?: string,
 ): SetPropNode => ({
   type: 'setProp',
   target,
@@ -158,12 +249,20 @@ export const readModifyReassign = (
   strategy: 'readModifyReassign',
   mutations,
   ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
 });
-export const assignTags = (target: Expr, tags: Expr, bindVar: string, bestEffort = false): AssignTagsNode => ({
+export const assignTags = (
+  target: Expr,
+  tags: Expr,
+  bindVar: string,
+  bestEffort = false,
+  label?: string,
+): AssignTagsNode => ({
   type: 'assignTags',
   target,
   tags,
   bind: bindVar,
   ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
 });
 export const return_ = (envelope: Envelope): ReturnNode => ({ type: 'return', envelope });

@@ -260,7 +260,7 @@ function validateFolderCreate(data: FolderCreateData): void {
 /**
  * Validate that a task creation is in sandbox or has __TEST__ prefix for inbox
  */
-async function validateTaskCreate(data: TaskCreateData): Promise<void> {
+export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
   // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox
@@ -299,11 +299,50 @@ async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   }
 
   // Validate tags (applies to all cases)
-  if (data.tags && data.tags.length > 0) {
-    const invalidTags = data.tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
+  validateTestTags(data.tags);
+}
+
+/**
+ * Tag-prefix sandbox rule (pure extraction of validateTaskCreate's tag tail —
+ * behavior identical): test-mode tags must carry the __test- prefix. Callers
+ * gate on isTestMode() themselves.
+ */
+function validateTestTags(tags?: string[]): void {
+  if (tags && tags.length > 0) {
+    const invalidTags = tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
     if (invalidTags.length > 0) {
       throw new Error(`TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` + `Invalid: ${invalidTags.join(', ')}`);
     }
+  }
+}
+
+/**
+ * Sandbox guard for the batch-create fast path ('batch-create/tasks' dispatch).
+ * Per spec: a spec whose parentTempId points at another spec IN this batch is
+ * container-guarded transitively (its parent chain bottoms out at a spec that
+ * IS fully validated here), so only its tags need checking; every other spec
+ * goes through the full validateTaskCreate (container + name + tags). No-op
+ * outside test mode.
+ *
+ * NOTE: the transitive parentTempId skip is sound ONLY because dispatchMutation
+ * runs guard-then-build and buildBatchCreateTasksProgram rejects self, forward,
+ * missing, and duplicate tempId references at build time — this guard is not
+ * standalone-sufficient against a malformed chain.
+ */
+export async function validateBatchTaskSpecs(specs: ReadonlyArray<BatchTaskSpec>): Promise<void> {
+  if (!isTestMode()) return;
+  const inBatch = new Set(specs.map((s) => s.tempId));
+  for (const spec of specs) {
+    if (spec.parentTempId && inBatch.has(spec.parentTempId)) {
+      validateTestTags(spec.tags); // container guarded transitively via the in-batch parent
+      continue;
+    }
+    await validateTaskCreate({
+      name: spec.name,
+      project: spec.projectId,
+      parentTaskId: spec.parentTaskId,
+      tags: spec.tags,
+    });
   }
 }
 
@@ -501,310 +540,18 @@ function resolveTagByPath(segments) {
  * Build a JXA script for creating a task
  */
 export async function buildCreateTaskScript(data: TaskCreateData): Promise<GeneratedMutationScript> {
-  // Test sandbox guard
-  await validateTaskCreate(data);
-
-  const taskData = buildTaskDataObject(data);
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
-  const taskData = ${JSON.stringify(taskData)};
-
-  try {
-    // Determine target container
-    let targetContainer = doc.inboxTasks;
-    let parentTask = null;
-
-    // parentTaskId nesting handled post-creation via OmniJS moveTasks (OMN-31)
-    // Pre-creation index bridge is unreliable: JXA/OmniJS flattenedTasks differ (OMN-28/29)
-    if (taskData.projectId) {
-      // Use OmniJS bridge for O(1) project lookup (JXA .id() differs from id.primaryKey)
-      const findProjectScript = \`
-        (() => {
-          var target = \${JSON.stringify(taskData.projectId)};
-          var byId = Project.byIdentifier(target);
-          var byName = !byId ? flattenedProjects.find(function(p) { return p.name === target; }) : null;
-          var proj = byId || byName;
-          if (!proj) return JSON.stringify({ found: false, target: target, method: 'none', totalProjects: flattenedProjects.length });
-          return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj), method: byId ? 'byIdentifier' : 'byName' });
-        })()
-      \`;
-      const findProjectResult = JSON.parse(app.evaluateJavascript(findProjectScript));
-      if (findProjectResult.found && findProjectResult.index >= 0) {
-        targetContainer = doc.flattenedProjects()[findProjectResult.index].tasks;
-      }
-    }
-
-    // Create task
-    const task = app.Task({
-      name: taskData.name,
-      note: taskData.note || '',
-      flagged: taskData.flagged || false
-    });
-
-    targetContainer.push(task);
-
-    // Set dates
-    if (taskData.dueDate) {
-      try { task.dueDate = new Date(taskData.dueDate); } catch (e) {}
-    }
-    if (taskData.deferDate) {
-      try { task.deferDate = new Date(taskData.deferDate); } catch (e) {}
-    }
-    if (taskData.plannedDate) {
-      try { task.plannedDate = new Date(taskData.plannedDate); } catch (e) {}
-    }
-
-    // Set estimated minutes
-    if (taskData.estimatedMinutes) {
-      task.estimatedMinutes = taskData.estimatedMinutes;
-    }
-
-    const jxaId = task.id();
-
-    // Bridge: unique note marker to find exact task in OmniJS (OMN-29)
-    // JXA and OmniJS flattenedTasks have different array ordering, so index-based
-    // bridging (OMN-28) maps to the wrong task. Instead, temporarily prepend a
-    // unique nonce to the task note, find it in OmniJS by that nonce, read the
-    // real primaryKey, and restore the original note.
-    let taskId = jxaId;
-    const bridgeNonce = '__BRIDGE_' + Date.now() + '_' + Math.floor(Math.random() * 1e8) + '__';
-    try {
-      const origNote = task.note() || '';
-      task.note = bridgeNonce + origNote;
-      const idScript = \`
-        (() => {
-          var marker = '\${bridgeNonce}';
-          var tasks = flattenedTasks;
-          for (var i = tasks.length - 1; i >= 0; i--) {
-            try {
-              if (tasks[i].note && tasks[i].note.startsWith(marker)) {
-                var pk = tasks[i].id.primaryKey;
-                tasks[i].note = tasks[i].note.substring(marker.length);
-                return JSON.stringify({ pk: pk });
-              }
-            } catch(e) {}
-          }
-          return JSON.stringify({ pk: null });
-        })()
-      \`;
-      const idResult = JSON.parse(app.evaluateJavascript(idScript));
-      if (idResult.pk) taskId = idResult.pk;
-    } catch (e) {}
-    // Safety: clean up marker if OmniJS bridge failed
-    try {
-      const curNote = task.note() || '';
-      if (curNote.startsWith(bridgeNonce)) {
-        task.note = curNote.substring(bridgeNonce.length);
-      }
-    } catch(e) {}
-
-    // Post-creation: move task under parent if parentTaskId specified (OMN-31)
-    // Uses OmniJS moveTasks() with primaryKey lookup — reliable unlike index bridging
-    // Note: taskId may equal jxaId (common for persisted tasks) — always attempt move
-    if (taskData.parentTaskId) {
-      try {
-        const moveScript = \`
-          (() => {
-            var child = Task.byIdentifier('\${taskId}');
-            var parent = Task.byIdentifier(\${JSON.stringify(taskData.parentTaskId)});
-            if (!child || !parent) return JSON.stringify({ moved: false, reason: 'not found' });
-            moveTasks([child], parent.ending);
-            return JSON.stringify({ moved: true });
-          })()
-        \`;
-        JSON.parse(app.evaluateJavascript(moveScript));
-      } catch(e) {}
-    }
-
-    // Set tags via bridge
-    let appliedTags = [];
-    if (taskData.tags && taskData.tags.length > 0) {
-      try {
-        const tagScript = \`
-          (() => {
-            ${OMNIJS_PARSE_TAG_PATH}
-            ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
-
-            const task = Task.byIdentifier('\${taskId}');
-            if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
-
-            const tagNames = \${JSON.stringify(taskData.tags)};
-            const appliedTags = [];
-
-            for (const tagName of tagNames) {
-              var pathSegs = parseTagPath(tagName);
-              var tag;
-              if (pathSegs) {
-                tag = resolveOrCreateTagByPath(pathSegs);
-              } else {
-                tag = flattenedTags.find(t => t.name === tagName);
-                if (!tag) tag = new Tag(tagName, null);
-              }
-              task.addTag(tag);
-              appliedTags.push(tag.name);
-            }
-
-            return JSON.stringify({success: true, tags: appliedTags});
-          })()
-        \`;
-        const result = JSON.parse(app.evaluateJavascript(tagScript));
-        if (result.success) {
-          appliedTags = result.tags;
-        }
-      } catch (e) {
-        // Tag assignment errors don't fail task creation - tags can be added later
-      }
-    }
-
-    // Apply repeat rule if provided
-    if (taskData.repetitionRule) {
-      try {
-        const ruleScript = \`
-          (() => {
-            // Use O(1) lookup - same reliable pattern as update script
-            const task = Task.byIdentifier('\${taskId}');
-            if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
-
-            const rule = \${JSON.stringify(taskData.repetitionRule)};
-
-            // Map frequency to ICS RRULE FREQ value
-            const freqMap = {
-              minutely: 'MINUTELY', hourly: 'HOURLY', daily: 'DAILY',
-              weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY'
-            };
-            const freq = freqMap[rule.frequency];
-            if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
-
-            // Build ICS RRULE string with all supported parameters
-            let rrule = 'FREQ=' + freq;
-
-            // INTERVAL - every Nth occurrence
-            if (rule.interval && rule.interval > 1) {
-              rrule += ';INTERVAL=' + rule.interval;
-            }
-
-            // BYDAY - days of week (e.g., MO,WE,FR or 2MO,-1FR)
-            if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
-              const byDay = rule.daysOfWeek.map(d => {
-                if (d.position) return d.position + d.day;
-                return d.day;
-              }).join(',');
-              rrule += ';BYDAY=' + byDay;
-            }
-
-            // BYMONTHDAY - days of month (e.g., 1,15,-1)
-            if (rule.daysOfMonth && rule.daysOfMonth.length > 0) {
-              rrule += ';BYMONTHDAY=' + rule.daysOfMonth.join(',');
-            }
-
-            // COUNT - number of occurrences
-            if (rule.count && rule.count > 0) {
-              rrule += ';COUNT=' + rule.count;
-            }
-
-            // UNTIL - end date (YYYYMMDD or YYYYMMDDTHHMMSSZ)
-            if (rule.endDate) {
-              // Convert YYYY-MM-DD to YYYYMMDD format
-              const until = rule.endDate.replace(/-/g, '');
-              rrule += ';UNTIL=' + until;
-            }
-
-            // WKST - week start day
-            if (rule.weekStart) {
-              rrule += ';WKST=' + rule.weekStart;
-            }
-
-            // BYSETPOS - filter to specific positions
-            if (rule.setPositions && rule.setPositions.length > 0) {
-              rrule += ';BYSETPOS=' + rule.setPositions.join(',');
-            }
-
-            // OmniFocus 4.7+ uses modern API: scheduleType + anchorDateKey (method is deprecated)
-            // IMPORTANT: method and scheduleType/anchorDateKey are mutually exclusive!
-            // If both are provided, OmniFocus throws an error.
-
-            // Map scheduleType string to Task.RepetitionScheduleType enum
-            // If user specified method, derive scheduleType from it
-            let scheduleType;
-            if (rule.scheduleType) {
-              const scheduleMap = {
-                'regularly': Task.RepetitionScheduleType.Regularly,
-                'from-completion': Task.RepetitionScheduleType.FromCompletion,
-                'none': Task.RepetitionScheduleType.None
-              };
-              scheduleType = scheduleMap[rule.scheduleType] || Task.RepetitionScheduleType.Regularly;
-            } else if (rule.method) {
-              // Derive scheduleType from deprecated method parameter
-              // 'fixed' -> Regularly, completion-based -> FromCompletion
-              scheduleType = (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion')
-                ? Task.RepetitionScheduleType.FromCompletion
-                : Task.RepetitionScheduleType.Regularly;
-            } else {
-              scheduleType = Task.RepetitionScheduleType.Regularly;
-            }
-
-            // Map anchorDateKey string to Task.AnchorDateKey enum
-            let anchorDateKey;
-            if (rule.anchorDateKey) {
-              const anchorMap = {
-                'due-date': Task.AnchorDateKey.DueDate,
-                'defer-date': Task.AnchorDateKey.DeferDate,
-                'planned-date': Task.AnchorDateKey.PlannedDate
-              };
-              anchorDateKey = anchorMap[rule.anchorDateKey] || Task.AnchorDateKey.DueDate;
-            } else if (rule.method === 'defer-after-completion') {
-              // defer-after-completion implies anchoring to defer date
-              anchorDateKey = Task.AnchorDateKey.DeferDate;
-            } else {
-              anchorDateKey = Task.AnchorDateKey.DueDate;
-            }
-
-            // catchUpAutomatically defaults to true
-            const catchUp = rule.catchUpAutomatically !== false;
-
-            // SETTER-PATTERNS row 2 (Task.repetitionRule — OmniJS, new Task.RepetitionRule).
-            // Use modern API: pass null for deprecated method parameter
-            task.repetitionRule = new Task.RepetitionRule(
-              rrule,
-              null,  // method is deprecated, use scheduleType/anchorDateKey instead
-              scheduleType,
-              anchorDateKey,
-              catchUp
-            );
-            return JSON.stringify({success: true, rrule: rrule, scheduleType: String(scheduleType), anchorDateKey: String(anchorDateKey)});
-          })()
-        \`;
-        app.evaluateJavascript(ruleScript);
-      } catch (e) {}
-    }
-
-    return JSON.stringify({
-      taskId: taskId,
-      name: task.name(),
-      note: task.note() || '',
-      flagged: task.flagged(),
-      dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
-      deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
-      plannedDate: task.plannedDate() ? task.plannedDate().toISOString() : null,
-      estimatedMinutes: task.estimatedMinutes() || null,
-      tags: appliedTags,
-      project: task.containingProject() ? task.containingProject().name() : null,
-      inInbox: task.inInbox(),
-      created: true
-    });
-
-  } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'create_task'
-    });
-  }
-})();
-`;
+  // Emit from the mutation AST. dispatchMutation runs the build-time sandbox
+  // guard (validateTaskCreate) BEFORE building, so it can never be bypassed;
+  // the emitter produces ONE OmniJS program (native `new Task(...)`, container
+  // resolved in-program with a loud not-found guard) wrapped in a data-free JXA
+  // launcher. The old template-string body — JXA app.Task construction, the
+  // OMN-29 __BRIDGE_ note-nonce id dance, and per-field evaluateJavascript
+  // islands for move/tags/repetition — is gone (OMN-128). Async because
+  // dispatchMutation awaits its (possibly async) sandbox guard — spec §1/§5.
+  const program = await dispatchMutation('create/task', data);
+  validateMutationProgram(program);
+  const omnijs = emitProgram(program);
+  const script = wrapInLauncher(omnijs, program.context);
 
   return {
     script: script.trim(),
@@ -836,98 +583,25 @@ export interface BatchTaskSpec {
   projectId?: string;
 }
 
-export function buildBatchCreateTasksScript(
+export async function buildBatchCreateTasksScript(
   specs: BatchTaskSpec[],
   options: { stopOnError?: boolean } = {},
-): GeneratedMutationScript {
-  const stopOnError = options.stopOnError === true;
-
-  // OMN-111 SAFETY: this OmniJS body carries NO user data and is assembled into
-  // the OmniJS source by string CONCATENATION (not a nested template literal),
-  // so backticks / ${ / newlines in task names, notes, or tags can never break
-  // a template. `specs` is injected at JXA runtime via JSON.stringify (a plain
-  // double-quoted string literal in the generated source — backtick-safe, the
-  // same property the per-item buildCreateTaskScript relies on). The static
-  // body references `specs`, which the concatenation defines just before it.
-  const omniBody = `
-${OMNIJS_PARSE_TAG_PATH}
-${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
-const byTempId = {};
-const results = [];
-for (let s = 0; s < specs.length; s++) {
-  const spec = specs[s];
-  try {
-    const task = new Task(spec.name);
-    if (spec.note) task.note = spec.note;
-    if (spec.flagged) task.flagged = true;
-    if (spec.dueDate) task.dueDate = new Date(spec.dueDate);
-    if (spec.deferDate) task.deferDate = new Date(spec.deferDate);
-    if (spec.plannedDate) task.plannedDate = new Date(spec.plannedDate);
-    if (spec.estimatedMinutes) task.estimatedMinutes = spec.estimatedMinutes;
-
-    // Container priority: intra-batch parent -> existing task -> project -> inbox.
-    let container = null;
-    if (spec.parentTempId) {
-      const p = byTempId[spec.parentTempId];
-      if (!p) throw new Error('Parent not created in batch: ' + spec.parentTempId);
-      container = p.ending;
-    } else if (spec.parentTaskId) {
-      const pt = Task.byIdentifier(spec.parentTaskId);
-      if (!pt) throw new Error('Parent task not found: ' + spec.parentTaskId);
-      container = pt.ending;
-    } else if (spec.projectId) {
-      let proj = Project.byIdentifier(spec.projectId);
-      if (!proj) proj = flattenedProjects.find(x => x.name === spec.projectId) || null;
-      if (!proj) throw new Error('Project not found: ' + spec.projectId);
-      container = proj.ending;
-    }
-    if (container) moveTasks([task], container);
-
-    if (spec.tags && spec.tags.length) {
-      for (let t = 0; t < spec.tags.length; t++) {
-        const tagName = spec.tags[t];
-        const segs = parseTagPath(tagName);
-        let tag;
-        if (segs) {
-          tag = resolveOrCreateTagByPath(segs);
-        } else {
-          tag = flattenedTags.find(x => x.name === tagName) || new Tag(tagName, null);
-        }
-        task.addTag(tag);
-      }
-    }
-
-    byTempId[spec.tempId] = task;
-    results.push({ tempId: spec.tempId, taskId: task.id.primaryKey, success: true });
-  } catch (e) {
-    results.push({ tempId: spec.tempId, taskId: null, success: false, error: String(e && e.message ? e.message : e) });
-    if (${stopOnError}) break;
-  }
-}
-return JSON.stringify({ results: results });`;
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  try {
-    const specs = ${JSON.stringify(specs)};
-    const omniSource =
-      '(() => {' +
-      'const specs = ' + JSON.stringify(specs) + ';' +
-      ${JSON.stringify(omniBody)} +
-      '})()';
-    // Return the OmniJS payload RAW ({results:[...]}). OmniAutomation.executeJson
-    // wraps raw output into a ScriptResult ({success, data}); pre-wrapping here
-    // would double-wrap and hide data.results from callers.
-    return app.evaluateJavascript(omniSource);
-  } catch (e) {
-    return JSON.stringify({ error: true, message: String(e && e.message ? e.message : e), context: 'batch_create_tasks' });
-  }
-})();
-`;
-
+): Promise<GeneratedMutationScript> {
+  // Emit from the mutation AST: ONE unrolled OmniJS program (per-item
+  // lowerTaskCreate statements under batchItem try/capture, parentTempId
+  // chains resolved at BUILD time to earlier items' bindings — the runtime
+  // byTempId map is gone, OMN-128). dispatchMutation runs the build-time
+  // sandbox guard (validateBatchTaskSpecs) BEFORE building, so the batch path
+  // honors the same guard as single creates (OMN-119 non-bypass); async for
+  // that same guard. Launcher shape: wrapInLauncher returns the
+  // app.evaluateJavascript payload RAW ({results:[...]}) — same as the legacy
+  // launcher, whose comment warned that pre-wrapping would double-wrap under
+  // OmniAutomation.executeJson and hide data.results from callers.
+  const program = await dispatchMutation('batch-create/tasks', { specs, stopOnError: options.stopOnError === true });
+  validateMutationProgram(program);
+  const omnijs = emitProgram(program);
   return {
-    script: script.trim(),
+    script: wrapInLauncher(omnijs, program.context),
     operation: 'create',
     target: 'task',
     description: `Batch-create ${specs.length} task(s)`,
@@ -937,14 +611,15 @@ return JSON.stringify({ results: results });`;
 /**
  * Build a JXA script for creating a project
  */
-export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMutationScript {
+export async function buildCreateProjectScript(data: ProjectCreateData): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
   // (validateProjectCreate) BEFORE building, so it can never be bypassed; the
   // emitter produces ONE OmniJS program (native `new Project(...)`, no JXA
   // app.Project / folder push) wrapped in a data-free JXA launcher. The old
   // template-string body — multiple evaluateJavascript round-trips for folder,
-  // status, reviewInterval, and tags — is gone (OMN-128).
-  const program = dispatchMutation('create/project', data);
+  // status, reviewInterval, and tags — is gone (OMN-128). Async because
+  // dispatchMutation awaits its (possibly async) sandbox guard — spec §1/§5.
+  const program = await dispatchMutation('create/project', data);
   validateMutationProgram(program);
   const omnijs = emitProgram(program);
   const script = wrapInLauncher(omnijs, program.context);
@@ -2038,45 +1713,6 @@ export async function buildBulkDeleteScript(target: MutationTarget, ids: string[
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-/**
- * Build task data object for script embedding
- */
-function buildTaskDataObject(data: TaskCreateData): Record<string, unknown> {
-  // Exhaustiveness guard: compile error if TaskCreateData gains a field not listed here.
-  // Add the new key below AND a corresponding `if (data.X)` line above the return.
-  const _allKeys: Record<keyof TaskCreateData, true> = {
-    name: true,
-    note: true,
-    project: true,
-    parentTaskId: true,
-    tags: true,
-    dueDate: true,
-    deferDate: true,
-    plannedDate: true,
-    flagged: true,
-    estimatedMinutes: true,
-    repetitionRule: true,
-  };
-  void _allKeys;
-
-  const obj: Record<string, unknown> = {
-    name: data.name,
-  };
-
-  if (data.note !== undefined) obj.note = data.note;
-  if (data.project !== undefined) obj.projectId = data.project;
-  if (data.parentTaskId !== undefined) obj.parentTaskId = data.parentTaskId;
-  if (data.tags !== undefined) obj.tags = data.tags;
-  if (data.dueDate !== undefined) obj.dueDate = data.dueDate;
-  if (data.deferDate !== undefined) obj.deferDate = data.deferDate;
-  if (data.plannedDate !== undefined) obj.plannedDate = data.plannedDate;
-  if (data.flagged !== undefined) obj.flagged = data.flagged;
-  if (data.estimatedMinutes !== undefined) obj.estimatedMinutes = data.estimatedMinutes;
-  if (data.repetitionRule !== undefined) obj.repetitionRule = data.repetitionRule;
-
-  return obj;
-}
 
 /**
  * Build update changes object for script embedding

@@ -1,6 +1,19 @@
 // tests/unit/contracts/ast/mutation/types.test.ts
 import { describe, it, expect } from 'vitest';
-import { json, ref, member, setProp, return_, resolveFolder } from '../../../../../src/contracts/ast/mutation/types.js';
+import {
+  json,
+  ref,
+  member,
+  setProp,
+  return_,
+  resolveFolder,
+  constructTask,
+  resolveProject,
+  resolveParentTask,
+  batchItem,
+  guard,
+  assignTags,
+} from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('mutation node factories', () => {
   it('json() wraps a value', () => {
@@ -30,5 +43,45 @@ describe('mutation node factories', () => {
       type: 'return',
       envelope: { created: { type: 'json', value: true } },
     });
+  });
+});
+
+describe('slice-2 node factories', () => {
+  it('resolveProject / resolveParentTask carry bind + ref', () => {
+    expect(resolveProject('p', 'Work')).toEqual({ type: 'resolveProject', bind: 'p', ref: 'Work' });
+    expect(resolveParentTask('pt', 'abc')).toEqual({ type: 'resolveParentTask', bind: 'pt', ref: 'abc' });
+  });
+
+  it('constructTask carries a typed ContainerResolution', () => {
+    expect(constructTask('t', json('X'), { kind: 'inbox' })).toEqual({
+      type: 'constructTask',
+      bind: 't',
+      name: json('X'),
+      container: { kind: 'inbox' },
+    });
+    expect(constructTask('t', json('X'), { kind: 'project', var: 'p' }).container).toEqual({
+      kind: 'project',
+      var: 'p',
+    });
+  });
+
+  it('guard supports throw mode (default return)', () => {
+    expect(guard('x === null', { message: json('nope') }).mode).toBeUndefined();
+    expect(guard('x === null', { message: json('nope') }, 'throw').mode).toBe('throw');
+  });
+
+  it('setProp / assignTags accept a warnings label', () => {
+    expect(setProp(ref('t'), 'repetitionRule', json(1), 'direct', true, 'repetitionRule').label).toBe('repetitionRule');
+    expect(assignTags(ref('t'), json(['a']), 'applied_0', true, 'tags').label).toBe('tags');
+  });
+
+  it('batchItem wraps statements with tempId, taskVar, index, stopOnError', () => {
+    const node = batchItem('tmp1', 0, '_t0', [constructTask('_t0', json('X'), { kind: 'inbox' })], true);
+    expect(node.type).toBe('batchItem');
+    expect(node.tempId).toBe('tmp1');
+    expect(node.index).toBe(0);
+    expect(node.taskVar).toBe('_t0');
+    expect(node.stopOnError).toBe(true);
+    expect(node.statements).toHaveLength(1);
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OmniFocusWriteTool } from '../../../../src/tools/unified/OmniFocusWriteTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
+import * as scriptBuilder from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 /**
  * Integration tests for task CRUD operations through OmniFocusWriteTool.
@@ -89,19 +90,19 @@ describe('OmniFocusWriteTool task operations', () => {
       );
     });
 
-    it('applies repetition rule post-creation via a second update script', async () => {
-      // First call: create task. Second call: apply repeat rule.
-      execJsonSpy
-        .mockResolvedValueOnce(
-          createScriptSuccess({
-            ok: true,
-            v: '3',
-            data: { id: 'task-rep', name: 'Repeat Task', taskId: 'task-rep' },
-          }),
-        )
-        .mockResolvedValueOnce(createScriptSuccess({ ok: true, v: '3', data: { updated: true } }));
+    it('OMN-128: lowers repetitionRule in-program — ONE script, rule passed to the builder', async () => {
+      // Call through to the real builder so the generated script is the real
+      // artifact; the spy just records the data arg.
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript');
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { id: 'task-rep', name: 'Repeat Task', taskId: 'task-rep', warnings: [] },
+        }),
+      );
 
-      await tool.execute({
+      const result = (await tool.execute({
         mutation: {
           operation: 'create',
           target: 'task',
@@ -110,10 +111,52 @@ describe('OmniFocusWriteTool task operations', () => {
             repetitionRule: { frequency: 'daily', interval: 1 },
           },
         },
-      });
+      })) as any;
 
-      // Should have called execJson twice: once for create, once for repeat rule update
-      expect(execJsonSpy).toHaveBeenCalledTimes(2);
+      expect(result.success).toBe(true);
+      // The rule rides the create script itself (no second post-create update).
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      expect(buildSpy).toHaveBeenCalledTimes(1);
+      expect(buildSpy.mock.calls[0][0]).toMatchObject({
+        repetitionRule: { frequency: 'daily', interval: 1 },
+      });
+      // metadata stays truthful about the rule
+      expect(result.metadata.input_params.has_repeat_rule).toBe(true);
+      buildSpy.mockRestore();
+    });
+
+    it('OMN-137: surfaces script warnings in the create response data', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'task-w', name: 'Warned', warnings: ['tags: boom'] },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'Warned' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.warnings).toEqual(['tags: boom']);
+    });
+
+    it('OMN-137: omits the warnings key when the script reports none', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'task-nw', name: 'Clean', warnings: [] },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'Clean' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('warnings' in result.data).toBe(false);
     });
 
     it('returns error when script fails', async () => {
@@ -539,6 +582,204 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(true);
       expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('OMN-137: surfaces script warnings in the project create response data', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ projectId: 'proj-w', name: 'Warned Project', warnings: ['status: boom'] }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'project', data: { name: 'Warned Project' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.warnings).toEqual(['status: boom']);
+    });
+
+    it('OMN-137: omits the warnings key when the project script reports none', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ projectId: 'proj-nw', name: 'Clean Project', warnings: [] }));
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'project', data: { name: 'Clean Project' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('warnings' in result.data).toBe(false);
+    });
+  });
+
+  // ─── BATCH WARNINGS PASS-THROUGH (OMN-137) ──────────────────────────
+
+  describe('batch create warnings pass-through', () => {
+    it('fast path: per-item script warnings survive into the flattened batch results', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          results: [
+            { tempId: 't1', taskId: 'real-1', success: true, warnings: ['tags: boom'] },
+            { tempId: 't2', taskId: 'real-2', success: true, warnings: [] },
+          ],
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const items = result.data.results as Array<Record<string, unknown>>;
+      expect(items[0].tempId).toBe('t1');
+      expect(items[0].warnings).toEqual(['tags: boom']);
+      // empty warnings stay omitted — no noise
+      expect('warnings' in items[1]).toBe(false);
+      buildSpy.mockRestore();
+    });
+
+    it('slow path: per-item warnings from project and task creates survive the result mapping', async () => {
+      // A mixed project+task batch is fast-path ineligible → per-item loop.
+      const projSpy = vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockResolvedValue({
+        script: 'mock project script',
+        operation: 'create',
+        target: 'project',
+        description: 'mock',
+      });
+      const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+        script: 'mock task script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: { projectId: 'proj-1', name: 'P', warnings: ['reviewInterval: boom'] },
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: { taskId: 'task-1', name: 'T', warnings: ['repetitionRule: boom'] },
+        });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [
+            { operation: 'create', target: 'project', data: { tempId: 'p1', name: 'P' } },
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'T', parentTempId: 'p1' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const items = result.data.results as Array<Record<string, unknown>>;
+      expect(items[0].tempId).toBe('p1');
+      expect(items[0].warnings).toEqual(['reviewInterval: boom']);
+      expect(items[1].tempId).toBe('t1');
+      expect(items[1].warnings).toEqual(['repetitionRule: boom']);
+      projSpy.mockRestore();
+      taskSpy.mockRestore();
+    });
+
+    it('slow path: failure branches (no ID returned) still carry degraded-item warnings', async () => {
+      // Mixed project+task batch → per-item loop. Both scripts "succeed" but
+      // return no ID — the failure returns must keep the script warnings,
+      // matching the fast path (Task-10 review symmetry item).
+      const projSpy = vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockResolvedValue({
+        script: 'mock project script',
+        operation: 'create',
+        target: 'project',
+        description: 'mock',
+      });
+      const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+        script: 'mock task script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: { name: 'P', warnings: ['status: boom'] }, // no projectId
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: { name: 'T', warnings: ['tags: boom'] }, // no taskId
+        });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          stopOnError: false, // keep failed items in the flattened results
+          operations: [
+            { operation: 'create', target: 'project', data: { tempId: 'p1', name: 'P' } },
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'T' } },
+          ],
+        },
+      })) as any;
+
+      const items = result.data.results as Array<Record<string, unknown>>;
+      expect(items[0].tempId).toBe('p1');
+      expect(items[0].success).toBe(false);
+      expect(items[0].error).toBe('No project ID returned from script');
+      expect(items[0].warnings).toEqual(['status: boom']);
+      expect(items[1].tempId).toBe('t1');
+      expect(items[1].success).toBe(false);
+      expect(items[1].error).toBe('No task ID returned from script');
+      expect(items[1].warnings).toEqual(['tags: boom']);
+      projSpy.mockRestore();
+      taskSpy.mockRestore();
+    });
+
+    it('slow path: batch task create passes repetitionRule to the builder with NO second script', async () => {
+      // repetitionRule on an item forces the per-item path; the rule must ride
+      // the create script itself (applyRepetitionRuleSilently is gone).
+      const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+        script: 'mock task script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: { taskId: 'task-rep', name: 'R', warnings: [] },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          operations: [
+            {
+              operation: 'create',
+              target: 'task',
+              data: { tempId: 't1', name: 'R', repetitionRule: { frequency: 'weekly', interval: 1 } },
+            },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1); // create only — no post-create repeat update
+      expect(taskSpy).toHaveBeenCalledTimes(1);
+      expect(taskSpy.mock.calls[0][0]).toMatchObject({
+        repetitionRule: { frequency: 'weekly', interval: 1 },
+      });
+      taskSpy.mockRestore();
     });
   });
 

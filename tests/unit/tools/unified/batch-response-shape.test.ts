@@ -8,7 +8,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { flattenBatchResults, type FlatBatchResult } from '../../../../src/tools/unified/batch-response-flatten.js';
+import {
+  flattenBatchResults,
+  liftWarnings,
+  type FlatBatchResult,
+} from '../../../../src/tools/unified/batch-response-flatten.js';
 
 // ── flattenBatchResults() ────────────────────────────────────────────
 
@@ -248,6 +252,47 @@ describe('flattenBatchResults', () => {
       type: 'task',
       error: 'Script error',
     });
+  });
+
+  it('OMN-137: should pass per-item warnings through the create projection, omitting empty ones', () => {
+    const nestedResults = {
+      created: [
+        {
+          success: true,
+          created: 2,
+          failed: 0,
+          totalItems: 2,
+          results: [
+            { tempId: 't1', realId: 'real1', success: true, type: 'task' as const, warnings: ['tags: boom'] },
+            { tempId: 't2', realId: 'real2', success: true, type: 'task' as const },
+          ],
+        },
+      ],
+      updated: [],
+      completed: [],
+      deleted: [],
+      errors: [],
+    };
+
+    const flat = flattenBatchResults(nestedResults);
+
+    expect(flat).toHaveLength(2);
+    expect(flat[0].warnings).toEqual(['tags: boom']);
+    expect('warnings' in flat[1]).toBe(false);
+  });
+
+  it('OMN-137: liftWarnings drops non-string elements and omits the key when nothing survives', () => {
+    // Mixed array: only the strings survive.
+    expect(liftWarnings({ warnings: ['tags: boom', 42, null, { msg: 'nope' }] })).toEqual({
+      warnings: ['tags: boom'],
+    });
+    // All non-string → key omitted entirely.
+    expect(liftWarnings({ warnings: [42, null] })).toEqual({});
+    // Empty / missing / non-array / nullish source → key omitted.
+    expect(liftWarnings({ warnings: [] })).toEqual({});
+    expect(liftWarnings({})).toEqual({});
+    expect(liftWarnings({ warnings: 'not-an-array' })).toEqual({});
+    expect(liftWarnings(undefined)).toEqual({});
   });
 
   it('should handle minimalResponse update results (no nested data.task envelope)', () => {

@@ -28,6 +28,13 @@ export function emitExpr(node: Expr): string {
   }
 }
 
+// OMN-137 (no-silent-failures): a best-effort failure executes the partial
+// success but loudly announces what failed — the catch records a labeled
+// warning into the program-scope `_warnings` array instead of swallowing.
+function bestEffortCatch(label: string): string {
+  return `catch (e) { _warnings.push(${JSON.stringify(label)} + ': ' + (e && e.message ? e.message : String(e))); }`;
+}
+
 export function emitEnvelope(env: Envelope): string {
   const entries = Object.entries(env).map(([key, value]) => `${key}: ${emitExpr(value)}`);
   return `{ ${entries.join(', ')} }`;
@@ -39,8 +46,21 @@ export function emitStmt(node: Stmt): string {
       return `const ${node.name} = ${emitExpr(node.expr)};`;
     case 'resolveFolder':
       return `const ${node.bind} = resolveFolderFlexible(${JSON.stringify(node.ref)});`;
-    case 'guard':
+    case 'guard': {
+      if (node.mode === 'throw') {
+        // Batch items fail per-item: the throw is caught by the enclosing
+        // batchItem try/capture. LOUD build-time failure when `message` is
+        // absent — emitting `throw new Error(undefined)` would silently degrade
+        // the per-item error text. (The validator enforces presence too —
+        // belt and suspenders; this keeps the emitter safe standalone.)
+        const message = node.envelope.message;
+        if (!message) {
+          throw new Error('guard with mode="throw" requires an envelope.message (it becomes the thrown Error text)');
+        }
+        return `if (${node.cond}) throw new Error(${emitExpr(message)});`;
+      }
       return `if (${node.cond}) return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    }
     case 'constructProject': {
       const name = emitExpr(node.name);
       switch (node.folder.kind) {
@@ -61,13 +81,17 @@ export function emitStmt(node: Stmt): string {
     case 'setProp': {
       const target = emitExpr(node.target);
       // `bestEffort` wraps the block in try/catch so a failure does not fail the
-      // surrounding mutation. The dateExpr strategy ALREADY self-wraps, so it is
-      // never double-wrapped here.
-      const wrap = (block: string): string => (node.bestEffort ? `try { ${block} } catch (e) {}` : block);
+      // surrounding mutation — and the catch records a labeled warning (OMN-137).
+      // The dateExpr strategy ALREADY self-wraps, so it is never double-wrapped here.
+      const wrap = (block: string): string =>
+        node.bestEffort ? `try { ${block} } ${bestEffortCatch(node.label ?? node.prop)}` : block;
       switch (node.strategy) {
         case 'direct':
           return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
         case 'dateExpr':
+          // Deliberate SWALLOW (spec §3.1), not a bestEffortCatch: an invalid date
+          // string produces Invalid Date rather than a throw, so a warning here
+          // would be theater — the catch only shields exotic host-object errors.
           return `try { ${target}.${node.prop} = ${emitExpr(node.value as Expr)}; } catch (e) {}`;
         case 'enum':
           return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
@@ -102,12 +126,56 @@ export function emitStmt(node: Stmt): string {
         '}',
       ].join('\n');
       // `bestEffort` wraps only the LOOP so a tag failure does not fail the surrounding
-      // mutation (original best-effort tag bridge semantics) — the binding survives.
-      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} catch (e) {}` : loop;
+      // mutation (original best-effort tag bridge semantics) — the binding survives,
+      // and the catch records a labeled warning (OMN-137).
+      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} ${bestEffortCatch(node.label ?? 'tags')}` : loop;
       return `${decl}\n${guardedLoop}`;
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    case 'resolveProject':
+      return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
+    case 'resolveParentTask':
+      return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'constructTask': {
+      // `new Task(name)` lands in the inbox; non-inbox containers are placed via
+      // moveTasks([t], container.ending). Container resolution failures are
+      // guard-handled BEFORE construct (ContainerResolution has no notFound
+      // kind), so there is nothing to enforce here.
+      // `var`, NOT `const`: inside a batchItem the bind lives in that item's try block,
+      // but a later item's tempIdRef (parentTempId chain) must still see it. `var` hoists
+      // to the program IIFE scope — same lesson as the assignTags hoist (slice 1).
+      const construct = `var ${node.bind} = new Task(${emitExpr(node.name)});`;
+      if (node.container.kind === 'inbox') return construct;
+      return `${construct}\nmoveTasks([${node.bind}], ${node.container.var}.ending);`;
+    }
+    case 'batchItem': {
+      // Ownership split (batch composition):
+      // - `let _aborted = false;` is DECLARED at the emitProgram level
+      //   (alongside `let _warnings`) when the program contains a stopOnError
+      //   batchItem — NOT via a bind statement: the validator reserves
+      //   `_aborted`, and bind emits `const` anyway. The per-item gating
+      //   (`if (!_aborted) { ... }`) is ALSO owned by emitProgram, which wraps
+      //   each batchItem's emission when any stopOnError batchItem exists.
+      //   This case only SETS `_aborted = true` in its catch when stopOnError.
+      // - `results` IS declared by the program builder via a bind statement
+      //   (deliberately unreserved); batchItem just pushes to it.
+      const wVar = `_w${node.index}`;
+      const body = node.statements.map(emitStmt).join('\n');
+      const ok = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: ${node.taskVar}.id.primaryKey, success: true, warnings: _warnings.slice(${wVar}) });`;
+      const fail = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: null, success: false, error: String(e && e.message ? e.message : e), warnings: _warnings.slice(${wVar}) });`;
+      // Binding invalidation on failure: the item's `var <taskVar>` may already
+      // be assigned (constructTask succeeded, a LATER statement threw — e.g.
+      // moveTasks). Because the bind hoists for cross-item tempIdRef chains, a
+      // later child's pre-construct guard (`!_t<j>`, prepended by the batch
+      // program builder) would otherwise read the stale live binding and the
+      // child would silently nest under a FAILED parent while reporting
+      // success:true — the silent-partial-failure class. Clearing the binding
+      // here makes that guard fire as a loud per-item failure.
+      const invalidate = `\n  ${node.taskVar} = undefined;`;
+      const abort = node.stopOnError ? '\n  _aborted = true;' : '';
+      return `const ${wVar} = _warnings.length;\ntry {\n${body}\n${ok}\n} catch (e) {\n${fail}${invalidate}${abort}\n}`;
+    }
     default: {
       const _x: never = node;
       throw new Error(`Unknown stmt node: ${JSON.stringify(_x)}`);
@@ -115,10 +183,32 @@ export function emitStmt(node: Stmt): string {
   }
 }
 
+// OmniJS bridge limit is 261KB measured (docs/dev/SCRIPT_SIZE_LIMITS.md); 200KB
+// leaves launcher + JSON-escape headroom. Loud failure, never silent truncation.
+export const EMITTED_PROGRAM_SIZE_LIMIT = 200_000;
+
 export function emitProgram(program: Program): string {
   const snippets = program.snippetDeps.length > 0 ? collectSnippets(program.snippetDeps) : '';
-  const body = program.statements.map(emitStmt).join('\n');
-  const inner = [snippets, body].filter((s) => s.length > 0).join('\n');
+  // Batch scaffolding (owned HERE, not by the program builder): when any
+  // batchItem has stopOnError, emitProgram declares `let _aborted = false;`
+  // (batchItem's catch assigns it — without the declaration every stopOnError
+  // batch program would assign an undeclared variable) and gates EVERY
+  // batchItem's emission behind `if (!_aborted) { ... }` so items after a
+  // failed stopOnError item never execute. Gating every item (not just
+  // stopOnError ones) is the simplest correct shape: `_aborted` only ever
+  // flips when a stopOnError item fails, so the gate is a no-op until then.
+  const hasStopOnError = program.statements.some((s) => s.type === 'batchItem' && s.stopOnError);
+  const body = program.statements
+    .map((s) => {
+      const emitted = emitStmt(s);
+      return hasStopOnError && s.type === 'batchItem' ? `if (!_aborted) {\n${emitted}\n}` : emitted;
+    })
+    .join('\n');
+  // `_warnings` is declared UNCONDITIONALLY as the first body line (OMN-137).
+  // Conditional declaration would recreate the `appliedTags` ReferenceError class
+  // (a later consumer referencing an undeclared binding); one dead `let` is free.
+  const decls = hasStopOnError ? 'let _warnings = [];\nlet _aborted = false;' : 'let _warnings = [];';
+  const inner = [decls, snippets, body].filter((s) => s.length > 0).join('\n');
 
   // Snippet-dependency coverage guard (replaces the plan's original validator
   // Rule 4 — enforced HERE because helper usage is implicit in emission, not in
@@ -131,7 +221,18 @@ export function emitProgram(program: Program): string {
     }
   }
 
-  return `(() => {\n${inner}\n})()`;
+  const assembled = `(() => {\n${inner}\n})()`;
+
+  // Size guard: a program over the bridge limit would be silently truncated or
+  // rejected at the OmniFocus seam — fail LOUDLY at build time instead.
+  if (assembled.length > EMITTED_PROGRAM_SIZE_LIMIT) {
+    throw new Error(
+      `Emitted program is ${assembled.length} characters, exceeding the ${EMITTED_PROGRAM_SIZE_LIMIT}-character ` +
+        'limit — split the batch into smaller chunks.',
+    );
+  }
+
+  return assembled;
 }
 
 // Wraps an OmniJS program string in a JXA launcher. The OmniJS body crosses the

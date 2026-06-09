@@ -29,8 +29,9 @@ describe('Batch create project field', () => {
     // OMN-113: an all-task batch takes the single-script fast path, so the
     // project field flows into buildBatchCreateTasksScript as spec.projectId
     // (not buildCreateTaskScript). The regression guard — "project must not be
-    // silently dropped" — is unchanged; only the seam moved.
-    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockReturnValue({
+    // silently dropped" — is unchanged; only the seam moved. (OMN-128: the
+    // builder is async now, hence mockResolvedValue.)
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
       script: 'mock script',
       operation: 'create',
       target: 'task',
@@ -80,7 +81,7 @@ describe('Batch create project field', () => {
     });
 
     // Mock buildCreateProjectScript for the parent project
-    vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockReturnValue({
+    vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockResolvedValue({
       script: 'mock project script',
       operation: 'create',
       target: 'project',
@@ -138,7 +139,8 @@ describe('Batch create project field', () => {
 
     // OMN-113: all-task batch → single-script fast path; parentTaskId flows in
     // as spec.parentTaskId (resolved via Task.byIdentifier inside the script).
-    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockReturnValue({
+    // OMN-128: the builder is async now, hence mockResolvedValue.
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
       script: 'mock script',
       operation: 'create',
       target: 'task',
