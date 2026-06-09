@@ -106,7 +106,7 @@ export function buildCreateProjectProgram(data: ProjectCreateData): Program {
   // Status: only non-active is emitted, best-effort (a status failure must NOT
   // fail project creation — original swallowed errors in a separate bridge).
   if (data.status && data.status !== 'active') {
-    statements.push(setProp(ref('proj'), 'status', enumRef(STATUS_ENUM[data.status]), 'enum', true));
+    statements.push(setProp(ref('proj'), 'status', enumRef(STATUS_ENUM[data.status]), 'enum', true, 'status'));
   }
 
   // reviewInterval: read-modify-reassign the typed instance, best-effort.
@@ -121,13 +121,14 @@ export function buildCreateProjectProgram(data: ProjectCreateData): Program {
           { prop: 'unit', value: json(unit) },
         ],
         true,
+        'reviewInterval',
       ),
     );
   }
 
   // Tags: create-or-find, best-effort (tag failures must NOT fail creation).
   if (data.tags && data.tags.length) {
-    statements.push(assignTags(ref('proj'), json(data.tags), 'appliedTags', true));
+    statements.push(assignTags(ref('proj'), json(data.tags), 'appliedTags', true, 'tags'));
     snippetDeps.push('resolveOrCreateTagByPath');
   }
 
@@ -142,6 +143,8 @@ export function buildCreateProjectProgram(data: ProjectCreateData): Program {
     plannedDate: raw('proj.plannedDate ? proj.plannedDate.toISOString() : null'),
     folder: data.folder ? raw('targetFolder.name') : json(null),
     tags: data.tags && data.tags.length ? ref('appliedTags') : json([]),
+    // OMN-137: best-effort failures (status/reviewInterval/tags) surface here.
+    warnings: ref('_warnings'),
     created: json(true),
   };
   statements.push(return_(envelope));

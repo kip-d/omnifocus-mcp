@@ -1,6 +1,6 @@
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
-import { emitExpr, emitProgram, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import { emitExpr, emitProgram, emitStmt, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
 import {
   ref,
   member,
@@ -74,13 +74,13 @@ describe('emitProgram', () => {
     expect(out).toContain('proj.reviewInterval = _rmr;');
   });
 
-  it('bestEffort setProp (enum) wraps the assignment in try/catch', () => {
+  it('bestEffort setProp (enum) wraps the assignment in try/catch with a labeled warning (OMN-137)', () => {
     const out = emitProgram({
       context: 'create_project',
       snippetDeps: [],
       statements: [setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true)],
     });
-    expect(out).toContain('try { proj.status = Project.Status.OnHold; } catch (e) {}');
+    expect(out).toContain('try { proj.status = Project.Status.OnHold; } catch (e) { _warnings.push(');
   });
 
   it('non-bestEffort enum setProp is NOT wrapped', () => {
@@ -93,13 +93,15 @@ describe('emitProgram', () => {
     expect(out).not.toContain('try { proj.status');
   });
 
-  it('bestEffort readModifyReassign wraps the read-mutate-reassign block in try/catch', () => {
+  it('bestEffort readModifyReassign wraps the read-mutate-reassign block in try/catch with a labeled warning (OMN-137)', () => {
     const out = emitProgram({
       context: 'create_project',
       snippetDeps: [],
       statements: [readModifyReassign(ref('proj'), 'reviewInterval', [{ prop: 'steps', value: json(1) }], true)],
     });
-    expect(out).toMatch(/try \{ \{ const _rmr = proj\.reviewInterval;.*\} catch \(e\) \{\}/s);
+    expect(out).toMatch(
+      /try \{ \{ const _rmr = proj\.reviewInterval;.*\} catch \(e\) \{ _warnings\.push\("reviewInterval"/s,
+    );
   });
 
   it('bestEffort dateExpr is NOT double-wrapped (already self-wraps)', () => {
@@ -120,7 +122,7 @@ describe('emitProgram', () => {
     });
     expect(out).toContain('try {');
     expect(out).toContain('proj.addTag(_tag);');
-    expect(out).toContain('} catch (e) {}');
+    expect(out).toContain('} catch (e) { _warnings.push(');
     // OMN-128 regression: the `let appliedTags = []` declaration MUST be hoisted OUTSIDE the
     // try (a later statement, e.g. the return envelope, consumes it). If it were trapped in
     // the try, a thrown best-effort block leaves the consumer with a ReferenceError.
@@ -191,6 +193,77 @@ describe('emitProgram', () => {
       statements: [assignTags(ref('proj'), json(['work']), 'appliedTags')],
     };
     expect(() => emitProgram(program)).not.toThrow();
+  });
+});
+
+// OMN-137: best-effort failures must surface as labeled envelope warnings, not be
+// swallowed. The dateExpr swallow is the ONE deliberate exception (spec §3.1: an
+// invalid date string yields Invalid Date, not a throw — a warning there is theater).
+describe('OMN-137 warnings infrastructure', () => {
+  it('every program declares _warnings at program scope', () => {
+    const program = emitProgram({ statements: [return_({ ok: json(true) })], context: 'x', snippetDeps: [] });
+    expect(program).toContain('let _warnings = [];');
+  });
+
+  it('bestEffort setProp failure pushes a labeled warning instead of swallowing', () => {
+    const stmt = setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true, 'status');
+    const out = emitStmt(stmt);
+    expect(out).toContain('catch (e)');
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"status"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort readModifyReassign failure pushes a labeled warning (explicit label)', () => {
+    const out = emitStmt(
+      readModifyReassign(ref('proj'), 'reviewInterval', [{ prop: 'steps', value: json(1) }], true, 'reviewInterval'),
+    );
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"reviewInterval"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort assignTags guarded loop pushes a labeled warning (explicit label)', () => {
+    const out = emitStmt(assignTags(ref('proj'), json(['t']), 'appliedTags', true, 'projectTags'));
+    expect(out).toContain('_warnings.push');
+    expect(out).toContain('"projectTags"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort assignTags label falls back to "tags" when absent', () => {
+    const out = emitStmt(assignTags(ref('proj'), json(['t']), 'appliedTags', true));
+    expect(out).toContain('_warnings.push("tags"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  it('bestEffort setProp label falls back to node.prop when absent', () => {
+    const out = emitStmt(setProp(ref('proj'), 'status', enumRef('Project.Status.OnHold'), 'enum', true));
+    expect(out).toContain('_warnings.push("status"');
+    expect(out).not.toContain('catch (e) {}');
+  });
+
+  // EXECUTE the warning path: a throwing property setter must NOT fail the program —
+  // it must record a labeled warning the return envelope can carry out.
+  it('a throwing best-effort setProp records a labeled warning and the program still returns ok (vm)', () => {
+    const program = emitProgram({
+      context: 'x',
+      snippetDeps: [],
+      statements: [
+        setProp(ref('obj'), 'status', json('on_hold'), 'direct', true, 'status'),
+        return_({ warnings: ref('_warnings'), ok: json(true) }),
+      ],
+    });
+    const obj: Record<string, unknown> = {};
+    Object.defineProperty(obj, 'status', {
+      set() {
+        throw new Error('boom');
+      },
+    });
+    const sandbox: Record<string, unknown> = { obj };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings).toEqual(['status: boom']);
   });
 });
 

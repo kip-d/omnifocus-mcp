@@ -28,6 +28,13 @@ export function emitExpr(node: Expr): string {
   }
 }
 
+// OMN-137 (no-silent-failures): a best-effort failure executes the partial
+// success but loudly announces what failed — the catch records a labeled
+// warning into the program-scope `_warnings` array instead of swallowing.
+function bestEffortCatch(label: string): string {
+  return `catch (e) { _warnings.push(${JSON.stringify(label)} + ': ' + (e && e.message ? e.message : String(e))); }`;
+}
+
 export function emitEnvelope(env: Envelope): string {
   const entries = Object.entries(env).map(([key, value]) => `${key}: ${emitExpr(value)}`);
   return `{ ${entries.join(', ')} }`;
@@ -61,13 +68,17 @@ export function emitStmt(node: Stmt): string {
     case 'setProp': {
       const target = emitExpr(node.target);
       // `bestEffort` wraps the block in try/catch so a failure does not fail the
-      // surrounding mutation. The dateExpr strategy ALREADY self-wraps, so it is
-      // never double-wrapped here.
-      const wrap = (block: string): string => (node.bestEffort ? `try { ${block} } catch (e) {}` : block);
+      // surrounding mutation — and the catch records a labeled warning (OMN-137).
+      // The dateExpr strategy ALREADY self-wraps, so it is never double-wrapped here.
+      const wrap = (block: string): string =>
+        node.bestEffort ? `try { ${block} } ${bestEffortCatch(node.label ?? node.prop)}` : block;
       switch (node.strategy) {
         case 'direct':
           return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
         case 'dateExpr':
+          // Deliberate SWALLOW (spec §3.1), not a bestEffortCatch: an invalid date
+          // string produces Invalid Date rather than a throw, so a warning here
+          // would be theater — the catch only shields exotic host-object errors.
           return `try { ${target}.${node.prop} = ${emitExpr(node.value as Expr)}; } catch (e) {}`;
         case 'enum':
           return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
@@ -102,8 +113,9 @@ export function emitStmt(node: Stmt): string {
         '}',
       ].join('\n');
       // `bestEffort` wraps only the LOOP so a tag failure does not fail the surrounding
-      // mutation (original best-effort tag bridge semantics) — the binding survives.
-      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} catch (e) {}` : loop;
+      // mutation (original best-effort tag bridge semantics) — the binding survives,
+      // and the catch records a labeled warning (OMN-137).
+      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} ${bestEffortCatch(node.label ?? 'tags')}` : loop;
       return `${decl}\n${guardedLoop}`;
     }
     case 'return':
@@ -130,7 +142,10 @@ export function emitStmt(node: Stmt): string {
 export function emitProgram(program: Program): string {
   const snippets = program.snippetDeps.length > 0 ? collectSnippets(program.snippetDeps) : '';
   const body = program.statements.map(emitStmt).join('\n');
-  const inner = [snippets, body].filter((s) => s.length > 0).join('\n');
+  // `_warnings` is declared UNCONDITIONALLY as the first body line (OMN-137).
+  // Conditional declaration would recreate the `appliedTags` ReferenceError class
+  // (a later consumer referencing an undeclared binding); one dead `let` is free.
+  const inner = ['let _warnings = [];', snippets, body].filter((s) => s.length > 0).join('\n');
 
   // Snippet-dependency coverage guard (replaces the plan's original validator
   // Rule 4 — enforced HERE because helper usage is implicit in emission, not in

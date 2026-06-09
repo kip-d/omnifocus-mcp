@@ -46,6 +46,28 @@ describe('buildCreateProjectProgram', () => {
     );
   });
 
+  // OMN-137: every best-effort site carries a warnings label, and the envelope
+  // surfaces the program-scope _warnings array.
+  it('best-effort sites carry OMN-137 labels and the envelope carries warnings', () => {
+    const p = buildCreateProjectProgram({
+      name: 'P',
+      tags: ['t'],
+      status: 'on_hold',
+      reviewInterval: 7,
+    });
+    const status = p.statements.find((s) => s.type === 'setProp' && (s as any).prop === 'status') as any;
+    expect(status.bestEffort).toBe(true);
+    expect(status.label).toBe('status');
+    const ri = p.statements.find((s) => s.type === 'setProp' && (s as any).prop === 'reviewInterval') as any;
+    expect(ri.bestEffort).toBe(true);
+    expect(ri.label).toBe('reviewInterval');
+    const tags = p.statements.find((s) => s.type === 'assignTags') as any;
+    expect(tags.bestEffort).toBe(true);
+    expect(tags.label).toBe('tags');
+    const ret = p.statements.at(-1) as any;
+    expect(ret.envelope.warnings).toEqual({ type: 'ref', name: '_warnings' });
+  });
+
   it('produced program passes the validator and emits a runnable-looking OmniJS program', () => {
     const p = buildCreateProjectProgram({
       name: 'P',
@@ -59,6 +81,16 @@ describe('buildCreateProjectProgram', () => {
     const out = emitProgram(p);
     expect(out).toContain('new Project(');
     expect(out).toContain('resolveFolderFlexible(');
+    // OMN-137: program-scope warnings declaration, labeled best-effort catches,
+    // and the warnings key in the return envelope.
+    expect(out).toContain('let _warnings = [];');
+    expect(out).toContain('_warnings.push("status"');
+    expect(out).toContain('_warnings.push("reviewInterval"');
+    expect(out).toContain('_warnings.push("tags"');
+    expect(out).toContain('warnings: _warnings');
+    // The ONLY remaining swallow is the deliberate dateExpr one (spec §3.1).
+    const swallows = out.match(/catch \(e\) \{\}/g) ?? [];
+    expect(swallows).toHaveLength(1); // the dueDate dateExpr arm
   });
 });
 
