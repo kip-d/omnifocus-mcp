@@ -885,7 +885,7 @@ export interface BatchCreateTasksData {
 export function buildBatchCreateTasksProgram(data: BatchCreateTasksData): Program {
   // Exhaustiveness guard over BatchTaskSpec keys (tempId, name, note, flagged, tags,
   // dueDate, deferDate, plannedDate, estimatedMinutes, parentTempId, parentTaskId, projectId).
-  const statements: Stmt[] = [bind('results', raw_array()), …];
+  const statements: Stmt[] = [bind('results', raw('[]')), …]; // slice-1 idiom for builder-internal literals
   // const results = []; let _aborted = false; (raw/bind nodes as in slice-1 idiom)
   const tempIdToVar = new Map<string, string>();
   data.specs.forEach((spec, i) => {
