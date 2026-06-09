@@ -90,12 +90,24 @@ function buildCreateErrorRecovery(errorMessage: string): string[] {
   return ['Check that all required parameters are provided', 'Verify OmniFocus is running and not showing dialogs'];
 }
 
+/**
+ * OMN-137: lift non-empty script warnings off an envelope into a spreadable
+ * fragment. Empty or missing warnings produce {} so the response key stays
+ * omitted entirely (no noise on clean creates).
+ */
+function liftWarnings(source: unknown): { warnings?: string[] } {
+  const w = (source as { warnings?: unknown } | null | undefined)?.warnings;
+  return Array.isArray(w) && w.length > 0 ? { warnings: w as string[] } : {};
+}
+
 interface BatchItemCreationResult {
   tempId: string;
   realId: string | null;
   success: boolean;
   error?: string;
   type: 'project' | 'task';
+  /** OMN-137: best-effort failures from the create script (tags, repetitionRule, …). Present only when non-empty. */
+  warnings?: string[];
 }
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
@@ -425,19 +437,19 @@ SAFETY:
     if (data.tags) createArgs.tags = data.tags;
     if (data.sequential !== undefined) createArgs.sequential = data.sequential;
 
-    // Handle repetition rules - prefer unified API format (repetitionRule) over legacy format
-    let repetitionRuleForCreate: RepetitionRule | undefined;
-    if (data.repetitionRule && typeof data.repetitionRule === 'object') {
-      repetitionRuleForCreate = data.repetitionRule as RepetitionRule;
-      this.logger.debug('Using unified API repetitionRule for creation', {
-        repetitionRule: repetitionRuleForCreate,
-      });
-    }
-
     // Convert local dates to UTC for OmniFocus
     const dateResult = this.convertTaskDates(createArgs, timer);
     if ('isError' in dateResult) return dateResult.response;
     const convertedTaskData = dateResult.data;
+
+    // OMN-128: repetitionRule rides the create script itself (lowered in-program
+    // by the AST builder) — no post-create second script. It bypasses
+    // convertTaskDates deliberately: it needs NO date conversion
+    // (RepetitionRule.endDate stays YYYY-MM-DD, lowered to an RRULE UNTIL at
+    // build time).
+    if (data.repetitionRule && typeof data.repetitionRule === 'object') {
+      convertedTaskData.repetitionRule = data.repetitionRule;
+    }
 
     this.logger.debug('Converted task data for script execution', { convertedTaskData });
 
@@ -451,9 +463,6 @@ SAFETY:
 
     const { parsedResult, createdTaskId } = parseResult;
 
-    // Apply repetition rule post-creation if needed
-    await this.applyRepetitionRulePostCreate(repetitionRuleForCreate, createdTaskId);
-
     // Smart cache invalidation after successful task creation
     this.cache.invalidateForTaskChange({
       operation: 'create',
@@ -465,29 +474,30 @@ SAFETY:
 
     this.logger.debug('Returning success response', { parsedResult });
 
-    return createSuccessResponseV2(
-      'omnifocus_write',
-      {
-        task: parsedResult,
-        id: createdTaskId,
-        name: (parsedResult as Record<string, unknown>).name,
-        operation: 'create' as const,
+    // OMN-137: best-effort failures inside the create script (tags,
+    // repetitionRule) surface on the envelope as `warnings` — lifted to the
+    // response data when non-empty, omitted entirely when none.
+    const responseData: Record<string, unknown> = {
+      task: parsedResult,
+      id: createdTaskId,
+      name: (parsedResult as Record<string, unknown>).name,
+      operation: 'create' as const,
+      ...liftWarnings(parsedResult),
+    };
+
+    return createSuccessResponseV2('omnifocus_write', responseData, undefined, {
+      ...timer.toMetadata(),
+      created_id: createdTaskId,
+      project_id: createArgs.projectId || null,
+      input_params: {
+        name: createArgs.name,
+        has_project: !!createArgs.projectId,
+        has_due_date: !!createArgs.dueDate,
+        has_planned_date: !!createArgs.plannedDate,
+        has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
+        has_repeat_rule: !!data.repetitionRule,
       },
-      undefined,
-      {
-        ...timer.toMetadata(),
-        created_id: createdTaskId,
-        project_id: createArgs.projectId || null,
-        input_params: {
-          name: createArgs.name,
-          has_project: !!createArgs.projectId,
-          has_due_date: !!createArgs.dueDate,
-          has_planned_date: !!createArgs.plannedDate,
-          has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
-          has_repeat_rule: !!repetitionRuleForCreate,
-        },
-      },
-    );
+    });
   }
 
   /**
@@ -665,30 +675,6 @@ SAFETY:
     (parsedResult as Record<string, unknown>).taskId ??= createdTaskId;
 
     return { parsedResult, createdTaskId };
-  }
-
-  /**
-   * Apply a repetition rule to a newly created task via an update script.
-   */
-  private async applyRepetitionRulePostCreate(
-    repetitionRule: RepetitionRule | undefined,
-    taskId: string | null,
-  ): Promise<void> {
-    if (!repetitionRule || !taskId) return;
-
-    try {
-      this.logger.debug('Applying repeat rule via update', { repetitionRule });
-      const repeatOnlyScript = (await buildUpdateTaskScript(taskId, { repetitionRule })).script;
-      const repeatUpdateResult = await this.execJson(repeatOnlyScript);
-      this.logger.debug('Repeat rule update result', { repeatUpdateResult });
-      if (isScriptError(repeatUpdateResult)) {
-        this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
-      } else {
-        this.logger.info('Repeat rule applied post-creation for task', { taskId });
-      }
-    } catch (repeatError) {
-      this.logger.warn('Exception applying repeat rule post-creation', repeatError);
-    }
   }
 
   // ─── Task Update ────────────────────────────────────────────────────
@@ -1229,7 +1215,16 @@ SAFETY:
     // Invalidate cache
     this.cache.invalidate('projects');
 
-    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'create' }, undefined, {
+    // OMN-137: best-effort failures inside the create script (status,
+    // reviewInterval, tags) surface on the envelope as `warnings` — lifted to
+    // the response data when non-empty, omitted entirely when none.
+    const projectResponseData: Record<string, unknown> = {
+      project: result.data,
+      operation: 'create',
+      ...liftWarnings(result.data),
+    };
+
+    return createSuccessResponseV2('omnifocus_write', projectResponseData, undefined, {
       ...timer.toMetadata(),
       operation: 'create',
     });
@@ -1767,10 +1762,11 @@ SAFETY:
 
   /**
    * OMN-113: a batch qualifies for the single-script fast path when every item
-   * is a task with no repetition rule (repetition is applied via a separate
-   * post-create update, kept on the per-item path). When any item references an
-   * in-batch parent (parentTempId), the items must already be in dependency
-   * order — guaranteed only when createSequentially produced the ordering.
+   * is a task with no repetition rule (BatchTaskSpec carries no repetitionRule;
+   * items with one take the per-item path, where the rule is lowered in-program
+   * by the AST builder — OMN-128). When any item references an in-batch parent
+   * (parentTempId), the items must already be in dependency order — guaranteed
+   * only when createSequentially produced the ordering.
    */
   private isBatchCreateFastPathEligible(items: BatchItem[], options: { createSequentially: boolean }): boolean {
     const allSimpleTasks = items.every((item) => item.type === 'task' && !item.repetitionRule);
@@ -1829,19 +1825,29 @@ SAFETY:
     }
 
     const data = (isScriptSuccess(result) ? result.data : undefined) as
-      | { results?: Array<{ tempId: string; taskId: string | null; success: boolean; error?: string }> }
+      | {
+          results?: Array<{
+            tempId: string;
+            taskId: string | null;
+            success: boolean;
+            error?: string;
+            warnings?: string[];
+          }>;
+        }
       | undefined;
     const scriptResults = data?.results ?? [];
 
     for (const r of scriptResults) {
+      // OMN-137: per-item best-effort failures ride along; empty stays omitted.
+      const warnings = liftWarnings(r);
       if (r.success && r.taskId) {
         resolver.resolve(r.tempId, r.taskId);
         markTaskAsValidated(r.taskId);
-        batchResults.push({ tempId: r.tempId, realId: r.taskId, success: true, type: 'task' });
+        batchResults.push({ tempId: r.tempId, realId: r.taskId, success: true, type: 'task', ...warnings });
       } else {
         const error = r.error || 'Creation failed';
         resolver.markFailed(r.tempId, error);
-        batchResults.push({ tempId: r.tempId, realId: null, success: false, error, type: 'task' });
+        batchResults.push({ tempId: r.tempId, realId: null, success: false, error, type: 'task', ...warnings });
       }
     }
   }
@@ -1955,7 +1961,7 @@ SAFETY:
     }
 
     if (isScriptSuccess(result) && result.data) {
-      const data = result.data as { projectId?: string; project?: { id: string } };
+      const data = result.data as { projectId?: string; project?: { id: string }; warnings?: string[] };
       const realId = data.projectId || data.project?.id;
 
       if (realId) {
@@ -1966,6 +1972,8 @@ SAFETY:
           realId,
           success: true,
           type: 'project',
+          // OMN-137: non-empty script warnings ride the per-item result.
+          ...liftWarnings(data),
         };
       }
     }
@@ -1997,8 +2005,6 @@ SAFETY:
       taskName: item.name,
     });
 
-    const repetitionRuleForBatch = item.repetitionRule as RepetitionRule | undefined;
-
     const taskData: TaskCreateData = {
       name: item.name,
       note: item.note || '',
@@ -2010,7 +2016,10 @@ SAFETY:
       deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
       plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
       estimatedMinutes: item.estimatedMinutes,
-      // repetitionRule applied post-create below (same pattern as handleTaskCreate)
+      // OMN-128: lowered in-program by the AST builder (no post-create second
+      // script); a repetition failure surfaces as an OMN-137 warning instead of
+      // a silent log line. No date conversion — endDate stays YYYY-MM-DD.
+      repetitionRule: item.repetitionRule as RepetitionRule | undefined,
     };
 
     const generatedScript = await buildCreateTaskScript(taskData);
@@ -2031,10 +2040,16 @@ SAFETY:
       };
     }
 
-    await this.applyRepetitionRuleSilently(realId, repetitionRuleForBatch);
     markTaskAsValidated(realId);
 
-    return { tempId: item.tempId, realId, success: true, type: 'task' };
+    return {
+      tempId: item.tempId,
+      realId,
+      success: true,
+      type: 'task',
+      // OMN-137: non-empty script warnings ride the per-item result.
+      ...liftWarnings(result.data),
+    };
   }
 
   /**
@@ -2099,20 +2114,6 @@ SAFETY:
     if (!result.success || !result.data) return null;
     const data = result.data as { taskId?: string };
     return data.taskId || null;
-  }
-
-  /**
-   * Apply a repetition rule post-create, logging warnings on failure.
-   */
-  private async applyRepetitionRuleSilently(taskId: string, repetitionRule: RepetitionRule | undefined): Promise<void> {
-    if (!repetitionRule) return;
-
-    try {
-      const repeatScript = (await buildUpdateTaskScript(taskId, { repetitionRule })).script;
-      await this.execJson(repeatScript);
-    } catch {
-      this.logger.warn('Failed to apply repeat rule in batch task creation', { taskId });
-    }
   }
 
   /**

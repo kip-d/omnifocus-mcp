@@ -250,6 +250,33 @@ describe('flattenBatchResults', () => {
     });
   });
 
+  it('OMN-137: should pass per-item warnings through the create projection, omitting empty ones', () => {
+    const nestedResults = {
+      created: [
+        {
+          success: true,
+          created: 2,
+          failed: 0,
+          totalItems: 2,
+          results: [
+            { tempId: 't1', realId: 'real1', success: true, type: 'task' as const, warnings: ['tags: boom'] },
+            { tempId: 't2', realId: 'real2', success: true, type: 'task' as const },
+          ],
+        },
+      ],
+      updated: [],
+      completed: [],
+      deleted: [],
+      errors: [],
+    };
+
+    const flat = flattenBatchResults(nestedResults);
+
+    expect(flat).toHaveLength(2);
+    expect(flat[0].warnings).toEqual(['tags: boom']);
+    expect('warnings' in flat[1]).toBe(false);
+  });
+
   it('should handle minimalResponse update results (no nested data.task envelope)', () => {
     // When minimalResponse is true, handleTaskUpdate returns a flat object
     // instead of createSuccessResponseV2 envelope
