@@ -80,7 +80,7 @@ describe('Batch create project field', () => {
     });
 
     // Mock buildCreateProjectScript for the parent project
-    vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockReturnValue({
+    vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockResolvedValue({
       script: 'mock project script',
       operation: 'create',
       target: 'project',

@@ -1208,7 +1208,7 @@ SAFETY:
       reviewInterval: data.reviewInterval,
     };
 
-    const generatedScript = buildCreateProjectScript(projectData);
+    const generatedScript = await buildCreateProjectScript(projectData);
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
@@ -1941,7 +1941,7 @@ SAFETY:
       reviewInterval: item.reviewInterval,
     };
 
-    const generatedScript = buildCreateProjectScript(projectData);
+    const generatedScript = await buildCreateProjectScript(projectData);
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {

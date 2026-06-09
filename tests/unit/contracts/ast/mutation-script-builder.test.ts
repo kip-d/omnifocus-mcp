@@ -210,8 +210,8 @@ describe('buildCreateTaskScript', () => {
 });
 
 describe('buildCreateProjectScript', () => {
-  it('generates valid script for project creation', () => {
-    const result = buildCreateProjectScript({
+  it('generates valid script for project creation', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Test Project',
     });
 
@@ -225,8 +225,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('new Project(');
   });
 
-  it('includes sequential flag', () => {
-    const result = buildCreateProjectScript({
+  it('includes sequential flag', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Sequential Project',
       sequential: true,
     });
@@ -235,8 +235,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('true');
   });
 
-  it('includes folder assignment', () => {
-    const result = buildCreateProjectScript({
+  it('includes folder assignment', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Folder Project',
       folder: 'Work Folder',
     });
@@ -245,8 +245,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Work Folder');
   });
 
-  it('includes status', () => {
-    const result = buildCreateProjectScript({
+  it('includes status', async () => {
+    const result = await buildCreateProjectScript({
       name: 'On Hold Project',
       status: 'on_hold',
     });
@@ -257,8 +257,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Project.Status.OnHold');
   });
 
-  it('includes review interval', () => {
-    const result = buildCreateProjectScript({
+  it('includes review interval', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Reviewed Project',
       reviewInterval: 7,
     });
@@ -281,8 +281,8 @@ describe('buildCreateProjectScript', () => {
   // Create path runs in JXA, so the in-place mutation happens inside an
   // app.evaluateJavascript() bridge. (Update path is already in OmniJS — see below.)
   describe('reviewInterval script generation (OMN-38 regression guards)', () => {
-    it('does NOT multiply by 24*60*60 (broken seconds-conversion attempt)', () => {
-      const result = buildCreateProjectScript({
+    it('does NOT multiply by 24*60*60 (broken seconds-conversion attempt)', async () => {
+      const result = await buildCreateProjectScript({
         name: 'No Seconds',
         reviewInterval: 7,
       });
@@ -290,8 +290,8 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).not.toContain('*24*60*60');
     });
 
-    it('does NOT assign a plain object literal (broken plain-object attempt)', () => {
-      const result = buildCreateProjectScript({
+    it('does NOT assign a plain object literal (broken plain-object attempt)', async () => {
+      const result = await buildCreateProjectScript({
         name: 'No Plain Object',
         reviewInterval: 7,
       });
@@ -299,24 +299,24 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*steps:/);
     });
 
-    it('does NOT call new Project.ReviewInterval() (broken constructor attempt)', () => {
-      const result = buildCreateProjectScript({
+    it('does NOT call new Project.ReviewInterval() (broken constructor attempt)', async () => {
+      const result = await buildCreateProjectScript({
         name: 'No Constructor',
         reviewInterval: 7,
       });
       expect(result.script).not.toContain('new Project.ReviewInterval');
     });
 
-    it('does NOT assign reviewInterval directly in JXA (JXA cannot construct the typed value)', () => {
-      const result = buildCreateProjectScript({
+    it('does NOT assign reviewInterval directly in JXA (JXA cannot construct the typed value)', async () => {
+      const result = await buildCreateProjectScript({
         name: 'No JXA Direct Assign',
         reviewInterval: 7,
       });
       expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
     });
 
-    it('routes reviewInterval through the OmniJS bridge with read-modify-reassign', () => {
-      const result = buildCreateProjectScript({
+    it('routes reviewInterval through the OmniJS bridge with read-modify-reassign', async () => {
+      const result = await buildCreateProjectScript({
         name: 'Bridged',
         reviewInterval: 7,
       });
@@ -336,7 +336,7 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*_rmr\b/);
     });
 
-    it('emits the build-time-converted (unit, steps) pair for the requested interval', () => {
+    it('emits the build-time-converted (unit, steps) pair for the requested interval', async () => {
       // The old JXA body embedded the full days→{unit, steps} conversion as RUNTIME
       // logic (covering years/months/weeks/days), so all four unit literals appeared
       // in every script. The mutation-AST body computes the natural unit at BUILD
@@ -344,15 +344,15 @@ describe('buildCreateProjectScript', () => {
       // result for a few canonical inputs lands in the generated body.
       // (The algorithm itself is exercised in 'conversion logic produces correct
       // results' below.)
-      const weekly = buildCreateProjectScript({ name: 'Weekly', reviewInterval: 7 });
+      const weekly = await buildCreateProjectScript({ name: 'Weekly', reviewInterval: 7 });
       expect(weekly.script).toContain('weeks');
       expect(weekly.script).toMatch(/_rmr\.steps\s*=\s*1\b/);
 
-      const monthly = buildCreateProjectScript({ name: 'Monthly', reviewInterval: 30 });
+      const monthly = await buildCreateProjectScript({ name: 'Monthly', reviewInterval: 30 });
       expect(monthly.script).toContain('months');
       expect(monthly.script).toMatch(/_rmr\.steps\s*=\s*1\b/);
 
-      const daily = buildCreateProjectScript({ name: 'Daily', reviewInterval: 5 });
+      const daily = await buildCreateProjectScript({ name: 'Daily', reviewInterval: 5 });
       expect(daily.script).toContain('days');
       expect(daily.script).toMatch(/_rmr\.steps\s*=\s*5\b/);
     });
@@ -392,8 +392,8 @@ describe('buildCreateProjectScript', () => {
   });
 
   // Fix 3B: plannedDate was missing from buildProjectDataObject
-  it('includes plannedDate in project creation script', () => {
-    const result = buildCreateProjectScript({
+  it('includes plannedDate in project creation script', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Project with Planned Date',
       plannedDate: '2026-04-01',
     });
@@ -402,8 +402,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('2026-04-01');
   });
 
-  it('includes deferDate in project creation script', () => {
-    const result = buildCreateProjectScript({
+  it('includes deferDate in project creation script', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Project with Defer Date',
       deferDate: '2026-03-01 08:00',
     });
@@ -412,8 +412,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('2026-03-01');
   });
 
-  it('uses OmniJS bridge for folder lookup instead of JXA .id()', () => {
-    const result = buildCreateProjectScript({
+  it('uses OmniJS bridge for folder lookup instead of JXA .id()', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Project in Folder',
       folder: 'some-folder-id',
     });
@@ -424,8 +424,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).not.toMatch(/folders\[i\]\.id\(\)/);
   });
 
-  it('supports " : " folder path syntax for nested folders (OMN-15)', () => {
-    const result = buildCreateProjectScript({
+  it('supports " : " folder path syntax for nested folders (OMN-15)', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Deep Project',
       folder: 'Work : Engineering : Backend',
     });
@@ -435,8 +435,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Work : Engineering : Backend');
   });
 
-  it('supports "/" folder path syntax matching read-side folderPath format', () => {
-    const result = buildCreateProjectScript({
+  it('supports "/" folder path syntax matching read-side folderPath format', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Slash Project',
       folder: 'Work/Engineering/Backend',
     });
@@ -446,8 +446,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Work/Engineering/Backend');
   });
 
-  it('returns a loud error instead of silent root fallback when a requested folder is unresolved (OMN-127 #1)', () => {
-    const result = buildCreateProjectScript({
+  it('returns a loud error instead of silent root fallback when a requested folder is unresolved (OMN-127 #1)', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Misfiled Project',
       folder: 'Personal : Other Games : Shop Titans',
     });
@@ -462,8 +462,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toMatch(/context:\s*\\?"create_project\\?"/);
   });
 
-  it('falls back to leaf name matching for simple folder names', () => {
-    const result = buildCreateProjectScript({
+  it('falls back to leaf name matching for simple folder names', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Simple Folder Project',
       folder: 'Work',
     });
@@ -473,8 +473,8 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('.name');
   });
 
-  it('returns OmniJS id.primaryKey instead of JXA .id() for created project', () => {
-    const result = buildCreateProjectScript({
+  it('returns OmniJS id.primaryKey instead of JXA .id() for created project', async () => {
+    const result = await buildCreateProjectScript({
       name: 'Test Project',
     });
 

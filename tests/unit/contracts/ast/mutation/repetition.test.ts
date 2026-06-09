@@ -72,6 +72,21 @@ describe('lowerRepetitionRule', () => {
     );
   });
 
+  it('explicit scheduleType from-completion maps to FromCompletion', () => {
+    expect(
+      lowerRepetitionRule({ frequency: 'weekly', interval: 1, scheduleType: 'from-completion' }).scheduleTypePath,
+    ).toBe('Task.RepetitionScheduleType.FromCompletion');
+  });
+
+  it('explicit anchorDateKey due-date and defer-date map to their enum paths', () => {
+    expect(lowerRepetitionRule({ frequency: 'weekly', interval: 1, anchorDateKey: 'due-date' }).anchorPath).toBe(
+      'Task.AnchorDateKey.DueDate',
+    );
+    expect(lowerRepetitionRule({ frequency: 'weekly', interval: 1, anchorDateKey: 'defer-date' }).anchorPath).toBe(
+      'Task.AnchorDateKey.DeferDate',
+    );
+  });
+
   it('catchUpAutomatically false is honored; default is true', () => {
     expect(lowerRepetitionRule({ frequency: 'weekly', interval: 1, catchUpAutomatically: false }).catchUp).toBe(false);
     expect(lowerRepetitionRule({ frequency: 'weekly', interval: 1 }).catchUp).toBe(true);

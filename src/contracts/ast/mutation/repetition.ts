@@ -13,7 +13,9 @@ export interface LoweredRepetitionRule {
   catchUp: boolean;
 }
 
-const FREQ_MAP: Record<string, string> = {
+// Total Records over the contract unions: adding a union member without a map
+// entry is a COMPILE error, so the maps can never silently lag the contract.
+const FREQ_MAP: Record<RepetitionRule['frequency'], string> = {
   minutely: 'MINUTELY',
   hourly: 'HOURLY',
   daily: 'DAILY',
@@ -22,13 +24,13 @@ const FREQ_MAP: Record<string, string> = {
   yearly: 'YEARLY',
 };
 
-const SCHEDULE_MAP: Record<string, string> = {
+const SCHEDULE_MAP: Record<NonNullable<RepetitionRule['scheduleType']>, string> = {
   regularly: 'Task.RepetitionScheduleType.Regularly',
   'from-completion': 'Task.RepetitionScheduleType.FromCompletion',
   none: 'Task.RepetitionScheduleType.None',
 };
 
-const ANCHOR_MAP: Record<string, string> = {
+const ANCHOR_MAP: Record<NonNullable<RepetitionRule['anchorDateKey']>, string> = {
   'due-date': 'Task.AnchorDateKey.DueDate',
   'defer-date': 'Task.AnchorDateKey.DeferDate',
   'planned-date': 'Task.AnchorDateKey.PlannedDate',
@@ -36,6 +38,9 @@ const ANCHOR_MAP: Record<string, string> = {
 
 export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule {
   const freq = FREQ_MAP[rule.frequency];
+  // Runtime check kept DESPITE the total Record: input can arrive as never-cast
+  // garbage from JS callers (the MCP boundary is untyped) — fail loud at build
+  // time, not as `FREQ=undefined` inside evaluateJavascript.
   if (!freq) throw new Error(`Invalid repetition frequency: ${String(rule.frequency)}`);
 
   // Build ICS RRULE string — order matches legacy: FREQ, INTERVAL, BYDAY, BYMONTHDAY,
@@ -57,7 +62,8 @@ export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule
   // method='due-after-completion' | 'defer-after-completion' → FromCompletion
   let scheduleTypePath: string;
   if (rule.scheduleType) {
-    scheduleTypePath = SCHEDULE_MAP[rule.scheduleType] ?? 'Task.RepetitionScheduleType.Regularly';
+    // Total Record over the union — the lookup cannot miss, no fallback needed.
+    scheduleTypePath = SCHEDULE_MAP[rule.scheduleType];
   } else if (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion') {
     scheduleTypePath = 'Task.RepetitionScheduleType.FromCompletion';
   } else {
@@ -67,7 +73,8 @@ export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule
   // anchorDateKey: explicit field wins; 'defer-after-completion' implies DeferDate anchor.
   let anchorPath: string;
   if (rule.anchorDateKey) {
-    anchorPath = ANCHOR_MAP[rule.anchorDateKey] ?? 'Task.AnchorDateKey.DueDate';
+    // Total Record over the union — the lookup cannot miss, no fallback needed.
+    anchorPath = ANCHOR_MAP[rule.anchorDateKey];
   } else if (rule.method === 'defer-after-completion') {
     anchorPath = 'Task.AnchorDateKey.DeferDate';
   } else {

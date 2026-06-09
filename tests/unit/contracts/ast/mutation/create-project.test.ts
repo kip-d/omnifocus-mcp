@@ -95,12 +95,12 @@ describe('buildCreateProjectProgram', () => {
 });
 
 describe('dispatchMutation guard (OMN-119/120 non-bypass)', () => {
-  it('calls the sandbox guard before building', () => {
+  it('calls the sandbox guard before building (async since slice 2)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      expect(() => dispatchMutation('create/project', { name: 'P', folder: 'NotSandbox' } as any)).toThrow(
+      await expect(dispatchMutation('create/project', { name: 'P', folder: 'NotSandbox' } as any)).rejects.toThrow(
         /TEST GUARD/,
       );
     } finally {

@@ -260,7 +260,7 @@ function validateFolderCreate(data: FolderCreateData): void {
 /**
  * Validate that a task creation is in sandbox or has __TEST__ prefix for inbox
  */
-async function validateTaskCreate(data: TaskCreateData): Promise<void> {
+export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
   // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox
@@ -937,14 +937,15 @@ return JSON.stringify({ results: results });`;
 /**
  * Build a JXA script for creating a project
  */
-export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMutationScript {
+export async function buildCreateProjectScript(data: ProjectCreateData): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
   // (validateProjectCreate) BEFORE building, so it can never be bypassed; the
   // emitter produces ONE OmniJS program (native `new Project(...)`, no JXA
   // app.Project / folder push) wrapped in a data-free JXA launcher. The old
   // template-string body — multiple evaluateJavascript round-trips for folder,
-  // status, reviewInterval, and tags — is gone (OMN-128).
-  const program = dispatchMutation('create/project', data);
+  // status, reviewInterval, and tags — is gone (OMN-128). Async because
+  // dispatchMutation awaits its (possibly async) sandbox guard — spec §1/§5.
+  const program = await dispatchMutation('create/project', data);
   validateMutationProgram(program);
   const omnijs = emitProgram(program);
   const script = wrapInLauncher(omnijs, program.context);
