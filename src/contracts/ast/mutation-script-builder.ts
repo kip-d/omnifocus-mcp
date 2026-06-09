@@ -323,6 +323,11 @@ function validateTestTags(tags?: string[]): void {
  * IS fully validated here), so only its tags need checking; every other spec
  * goes through the full validateTaskCreate (container + name + tags). No-op
  * outside test mode.
+ *
+ * NOTE: the transitive parentTempId skip is sound ONLY because dispatchMutation
+ * runs guard-then-build and buildBatchCreateTasksProgram rejects self, forward,
+ * missing, and duplicate tempId references at build time — this guard is not
+ * standalone-sufficient against a malformed chain.
  */
 export async function validateBatchTaskSpecs(specs: ReadonlyArray<BatchTaskSpec>): Promise<void> {
   if (!isTestMode()) return;

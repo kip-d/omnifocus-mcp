@@ -164,8 +164,17 @@ export function emitStmt(node: Stmt): string {
       const body = node.statements.map(emitStmt).join('\n');
       const ok = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: ${node.taskVar}.id.primaryKey, success: true, warnings: _warnings.slice(${wVar}) });`;
       const fail = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: null, success: false, error: String(e && e.message ? e.message : e), warnings: _warnings.slice(${wVar}) });`;
+      // Binding invalidation on failure: the item's `var <taskVar>` may already
+      // be assigned (constructTask succeeded, a LATER statement threw — e.g.
+      // moveTasks). Because the bind hoists for cross-item tempIdRef chains, a
+      // later child's pre-construct guard (`!_t<j>`, prepended by the batch
+      // program builder) would otherwise read the stale live binding and the
+      // child would silently nest under a FAILED parent while reporting
+      // success:true — the silent-partial-failure class. Clearing the binding
+      // here makes that guard fire as a loud per-item failure.
+      const invalidate = `\n  ${node.taskVar} = undefined;`;
       const abort = node.stopOnError ? '\n  _aborted = true;' : '';
-      return `const ${wVar} = _warnings.length;\ntry {\n${body}\n${ok}\n} catch (e) {\n${fail}${abort}\n}`;
+      return `const ${wVar} = _warnings.length;\ntry {\n${body}\n${ok}\n} catch (e) {\n${fail}${invalidate}${abort}\n}`;
     }
     default: {
       const _x: never = node;

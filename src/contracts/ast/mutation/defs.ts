@@ -413,7 +413,14 @@ export function buildBatchCreateTasksProgram(data: BatchCreateTasksData): Progra
   const tempIdToVar = new Map<string, string>();
 
   data.specs.forEach((spec, i) => {
-    let containerOverride: ContainerResolution | undefined;
+    // Duplicate tempIds are a build-time error (legacy silently overwrote the
+    // map entry; forward/missing refs below are already loud build-time
+    // errors — this is the consistent completion of that set).
+    if (tempIdToVar.has(spec.tempId)) {
+      throw new Error(`Duplicate tempId in batch: ${spec.tempId}`);
+    }
+
+    let containerOverride: Extract<ContainerResolution, { kind: 'tempIdRef' }> | undefined;
     if (spec.parentTempId) {
       const parentVar = tempIdToVar.get(spec.parentTempId);
       if (!parentVar) {
@@ -432,6 +439,24 @@ export function buildBatchCreateTasksProgram(data: BatchCreateTasksData): Progra
       },
       containerOverride,
     );
+    if (containerOverride) {
+      // RUNTIME half of the chain contract (the build-time half — forward /
+      // missing refs — threw above): a parent that CONSTRUCTED but then
+      // failed (e.g. its moveTasks threw under stopOnError=false) would
+      // otherwise leave its hoisted `var _t<j>` binding live, and this child
+      // would silently nest under a failed parent while reporting
+      // success:true — the silent-partial-failure class. batchItem's catch
+      // invalidates the binding (`_t<j> = undefined;`, emitter); this
+      // PRE-CONSTRUCT guard turns that into a loud per-item failure,
+      // mirroring the legacy byTempId runtime check and its exact message.
+      itemStmts.unshift(
+        guard(
+          `!${containerOverride.var}`,
+          { message: json('Parent not created in batch: ' + spec.parentTempId) },
+          'throw',
+        ),
+      );
+    }
     for (const dep of itemDeps) snippetDeps.add(dep);
     statements.push(batchItem(spec.tempId, i, `_t${i}`, itemStmts, data.stopOnError === true));
     tempIdToVar.set(spec.tempId, `_t${i}`);

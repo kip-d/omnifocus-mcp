@@ -114,11 +114,28 @@ describe('buildBatchCreateTasksProgram', () => {
     expect(item1.type).toBe('batchItem');
     const ct = item1.statements.find((s) => s.type === 'constructTask') as { container: unknown };
     expect(ct.container).toEqual({ kind: 'tempIdRef', var: '_t0' });
+    // The chained item's FIRST statement is the prepended pre-construct guard
+    // (throw mode): a parent whose binding was invalidated at runtime fails
+    // the child LOUD instead of letting it nest under a failed parent.
+    expect(item1.statements[0]).toMatchObject({ type: 'guard', cond: '!_t0', mode: 'throw' });
 
     const out = emitProgram(p);
+    expect(out).toContain('if (!_t0) throw new Error("Parent not created in batch: p1");');
     expect(out).toContain('moveTasks([_t1], _t0.ending);');
+    // Every item's catch invalidates its hoisted binding for later chain consumers.
+    expect(out).toContain('_t0 = undefined;');
+    expect(out).toContain('_t1 = undefined;');
     // The legacy runtime map is gone — chains are wired at build time.
     expect(out).not.toContain('byTempId');
+  });
+
+  it('duplicate tempId throws at build time', () => {
+    expect(() =>
+      build([
+        { tempId: 'a', name: 'First' },
+        { tempId: 'a', name: 'Shadow' },
+      ]),
+    ).toThrow('Duplicate tempId in batch: a');
   });
 
   it('FORWARD parentTempId reference throws at build time, naming tempId and item index', () => {
@@ -233,6 +250,39 @@ describe('emitted batch program executes (vm)', () => {
     expect((moveCalls[0] as unknown[][])[0]).toEqual([taskInstances[1]]);
     // THE identity assertion: destination is item 0's task object's .ending.
     expect((moveCalls[0] as unknown[])[1]).toBe(taskInstances[0].ending);
+  });
+
+  // FAILED-parent chain (review fix): the parent CONSTRUCTS but then fails
+  // (moveTasks throws, stopOnError=false). Without binding invalidation + the
+  // child's pre-construct guard, the stale `var _t0` would let the child
+  // silently nest under the failed parent while reporting success:true — the
+  // silent-partial-failure class the legacy byTempId runtime check prevented.
+  it('vm: parent constructs then FAILS — chained child fails loud and is never constructed', () => {
+    const POISON = { marker: 'poison-ending' };
+    const program = emitProgram(
+      build(
+        [
+          { tempId: 'p1', name: 'Parent', parentTaskId: 'ext-parent' },
+          { tempId: 'c1', name: 'Child', parentTempId: 'p1' },
+        ],
+        false,
+      ),
+    );
+    const { sandbox, taskCalls } = makeSandbox({
+      parentTasksById: { 'ext-parent': { ending: POISON } },
+      moveThrowsForEnding: POISON,
+    });
+    const { results } = runBatch(program, sandbox);
+
+    expect(results.map((r) => [r.tempId, r.success])).toEqual([
+      ['p1', false],
+      ['c1', false],
+    ]);
+    expect(results[1].error).toContain('Parent not created in batch: p1');
+    expect(results[1].taskId).toBeNull();
+    // The pre-construct guard runs BEFORE the child's constructTask: the child
+    // Task is never even constructed (constructor spy, not just absent result).
+    expect(taskCalls).toEqual(['Parent']);
   });
 
   // Plan test 6: middle item throws (moveTasks stubbed to throw for its container).
