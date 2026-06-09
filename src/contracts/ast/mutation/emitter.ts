@@ -108,6 +108,18 @@ export function emitStmt(node: Stmt): string {
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    // TODO(OMN-128 Task 5/6): implemented in a later plan task
+    case 'resolveProject':
+      throw new Error('not implemented: resolveProject');
+    // TODO(OMN-128 Task 5/6): implemented in a later plan task
+    case 'resolveParentTask':
+      throw new Error('not implemented: resolveParentTask');
+    // TODO(OMN-128 Task 5/6): implemented in a later plan task
+    case 'constructTask':
+      throw new Error('not implemented: constructTask');
+    // TODO(OMN-128 Task 5/6): implemented in a later plan task
+    case 'batchItem':
+      throw new Error('not implemented: batchItem');
     default: {
       const _x: never = node;
       throw new Error(`Unknown stmt node: ${JSON.stringify(_x)}`);
