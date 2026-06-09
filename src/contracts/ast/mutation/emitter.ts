@@ -105,3 +105,18 @@ export function emitProgram(program: Program): string {
   const inner = [snippets, body].filter((s) => s.length > 0).join('\n');
   return `(() => {\n${inner}\n})()`;
 }
+
+// Wraps an OmniJS program string in a JXA launcher. The OmniJS body crosses the
+// JXA→OmniJS boundary as a single JSON.stringify'd string literal — no template
+// interpolation, no concatenation — which is what kills the OMN-111/113
+// backtick/injection class outright.
+export function wrapInLauncher(omnijsProgram: string, context: string): string {
+  return `(() => {
+  const app = Application('OmniFocus');
+  try {
+    return app.evaluateJavascript(${JSON.stringify(omnijsProgram)});
+  } catch (e) {
+    return JSON.stringify({ error: true, message: String(e), context: ${JSON.stringify(context)} });
+  }
+})()`;
+}

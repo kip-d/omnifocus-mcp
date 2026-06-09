@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emitExpr, emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import { emitExpr, emitProgram, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
 import {
   ref,
   member,
@@ -78,5 +78,21 @@ describe('emitProgram', () => {
     expect(out).toContain('parseTagPath(_tagName)');
     expect(out).toContain('proj.addTag(_tag);');
     expect(out).toContain('appliedTags.push(_tag.name);');
+  });
+});
+
+describe('wrapInLauncher (JXA boundary)', () => {
+  it('produces a self-contained IIFE with app init (skips OmniAutomation.wrapScript)', () => {
+    const jxa = wrapInLauncher('return JSON.stringify({ok:true});', 'create_project');
+    expect(jxa).toContain('(() =>');
+    expect(jxa).toContain("Application('OmniFocus')");
+    expect(jxa).toContain('app.evaluateJavascript(');
+  });
+  it('a hostile OmniJS program survives the boundary intact (injection-proof)', () => {
+    const hostile = 'const x = `a${b}` + "\\" ); evil()"; \n return JSON.stringify({x});';
+    const jxa = wrapInLauncher(hostile, 'create_project');
+    const m = jxa.match(/app\.evaluateJavascript\((".*?")\);/s);
+    expect(m).not.toBeNull();
+    expect(JSON.parse(m![1])).toBe(hostile);
   });
 });
