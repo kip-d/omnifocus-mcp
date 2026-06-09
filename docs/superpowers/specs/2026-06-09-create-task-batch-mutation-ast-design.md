@@ -15,8 +15,10 @@ Migrate two builders in `src/contracts/ast/mutation-script-builder.ts` to the Om
 | `buildCreateTaskScript`       | JXA shell + 5 `evaluateJavascript` islands (project lookup, OMN-29 nonce id-bridge, OMN-31 parent move, tags, repetition) | one OmniJS program from `dispatchMutation('create/task', …)`                             |
 | `buildBatchCreateTasksScript` | already OmniJS-native, but template-string codegen with a runtime spec loop                                               | one OmniJS program from `dispatchMutation('batch-create/tasks', …)`, build-time unrolled |
 
-Both builders keep their exported signatures and `GeneratedMutationScript` return shape — callers
-(`OmniFocusWriteTool.handleTaskCreate`, batch orchestration) do not change except to pass through the new `warnings`
+Both builders keep their `GeneratedMutationScript` return shape, but awaiting the async sandbox guard at dispatch (§5)
+forces `buildBatchCreateTasksScript` and `buildCreateProjectScript` from sync to **async** (`buildCreateTaskScript`
+already is). Call sites in `OmniFocusWriteTool` add `await` accordingly; `validateTaskCreate` (currently module-private)
+gets exported for `MUTATION_DEFS` registration. Beyond that, callers change only to pass through the new `warnings`
 envelope field (§5).
 
 Out of scope: create-folder, update-task/project, complete, delete, bulk-delete, tag builders (later slices); read-side
@@ -100,10 +102,11 @@ implies `AnchorDateKey.DeferDate`; `catchUpAutomatically` defaults true. Invalid
 
 ### 2.4 Parameterized `assignTags` internals (slice-1 carry-over, now forced)
 
-`assignTags` currently hard-codes its loop internals and `let <bind> = []` declaration. A batch program emits N
-occurrences, and a second `let appliedTags` is a redeclaration SyntaxError. Parameterize the bind (caller already
-supplies it — use `appliedTags_<i>` per batch item) and derive loop-internal names from the bind (`_tagName_<i>` etc.,
-or scope the loop body in a block) so any number of occurrences coexist in one program.
+The `assignTags` bind is already caller-supplied (`let ${node.bind} = []`), but every call site passes the same name — a
+batch program emits N occurrences, and a second `let appliedTags` is a redeclaration SyntaxError. The hard requirement
+is exactly this: **distinct bind names per batch item** (`appliedTags_<i>`). The loop internals are already safe
+(`for (const _tagName …)` is per-loop scoped; `var _segs`/`var _tag` redeclare legally); wrapping the loop body in a
+block suffices if anything tightens later. No larger rework needed.
 
 ## 3. Lowering (`mutation/defs.ts` + new shared lowering)
 
@@ -114,6 +117,9 @@ task", consumed by both program builders. `names` parameterizes bindings (`task`
 Statement order (mirrors legacy semantics): resolve container (+ guard) → `constructTask` → `note`, `flagged` setProps →
 date setProps (`dueDate`/`deferDate`/`plannedDate`, `dateExpr` strategy, self-wrapped) → `estimatedMinutes` (emitted
 only when set — legacy used a falsy check, preserved) → `assignTags` (best-effort) → repetition `setProp` (best-effort).
+
+Container selection preserves legacy batch priority, now applied uniformly to both paths: exactly one of `parentTempId`
+(batch-only, intra-batch ref) → `parentTaskId` → `projectId`/`project` → inbox, checked in that order.
 
 Field coverage gets the same compile-time exhaustiveness guard as `ProjectCreateData` got in slice 1
 (`Record<keyof TaskCreateData, true>` and `Record<keyof BatchTaskSpec, true>`), so a new schema field cannot be silently
@@ -141,7 +147,7 @@ throw, so a warning there would be theater; tightening date validation is schema
 Build-time **unrolled** program; the runtime `byTempId` map deletes:
 
 ```text
-let _warnings = [];            // shared; per-item capture snapshots+resets around each item
+let _warnings = [];            // shared; per item: record _warnings.length at item start, slice() at item end
 const results = [];
 // per spec i, wrapped by batchItem(tempId_i, stmts_i):
 try {
