@@ -62,8 +62,13 @@ export interface SetPropNode {
   type: 'setProp';
   target: Expr;
   prop: string;
-  value: Expr;
+  // `value` is optional: the readModifyReassign strategy reads the existing typed
+  // instance and mutates sub-props instead of assigning a single new value.
+  value?: Expr;
   strategy: SetPropStrategy;
+  // Only used by the readModifyReassign strategy: sub-property mutations applied
+  // to the read-back typed instance before reassignment.
+  mutations?: Array<{ prop: string; value: Expr }>;
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
 // path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
@@ -123,6 +128,11 @@ export const setProp = (
   value: Expr,
   strategy: SetPropStrategy = 'direct',
 ): SetPropNode => ({ type: 'setProp', target, prop, value, strategy });
+export const readModifyReassign = (
+  target: Expr,
+  prop: string,
+  mutations: { prop: string; value: Expr }[],
+): SetPropNode => ({ type: 'setProp', target, prop, strategy: 'readModifyReassign', mutations });
 export const assignTags = (target: Expr, tags: Expr, bindVar: string): AssignTagsNode => ({
   type: 'assignTags',
   target,
