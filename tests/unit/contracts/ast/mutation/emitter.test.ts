@@ -114,7 +114,7 @@ describe('emitProgram', () => {
   it('bestEffort assignTags wraps the tag block in try/catch', () => {
     const out = emitProgram({
       context: 'create_project',
-      snippetDeps: [],
+      snippetDeps: ['resolveOrCreateTagByPath'],
       statements: [assignTags(ref('proj'), json(['t']), 'appliedTags', true)],
     });
     expect(out).toContain('try {');
@@ -125,7 +125,7 @@ describe('emitProgram', () => {
   it('emits assignTags as a resolve-or-create loop with addTag', () => {
     const program = {
       context: 'create_project',
-      snippetDeps: [],
+      snippetDeps: ['resolveOrCreateTagByPath'],
       statements: [assignTags(ref('proj'), json(['work', 'home']), 'appliedTags')],
     };
     const out = emitProgram(program);
@@ -133,6 +133,25 @@ describe('emitProgram', () => {
     expect(out).toContain('parseTagPath(_tagName)');
     expect(out).toContain('proj.addTag(_tag);');
     expect(out).toContain('appliedTags.push(_tag.name);');
+  });
+
+  it('throws if the body calls a helper not declared in snippetDeps', () => {
+    const program = {
+      context: 'create_project',
+      // BUG: assignTags emits parseTagPath(...) + resolveOrCreateTagByPath(...) but no dep declared
+      snippetDeps: [],
+      statements: [assignTags(ref('proj'), json(['work']), 'appliedTags')],
+    };
+    expect(() => emitProgram(program)).toThrow(/(parseTagPath|resolveOrCreateTagByPath).*snippetDeps/i);
+  });
+
+  it('does NOT throw when the helper IS declared in snippetDeps', () => {
+    const program = {
+      context: 'create_project',
+      snippetDeps: ['resolveOrCreateTagByPath'],
+      statements: [assignTags(ref('proj'), json(['work']), 'appliedTags')],
+    };
+    expect(() => emitProgram(program)).not.toThrow();
   });
 });
 

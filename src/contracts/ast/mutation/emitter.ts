@@ -3,7 +3,7 @@
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
 import type { Envelope, Expr, Program, Stmt } from './types.js';
-import { collectSnippets } from './snippets.js';
+import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
   switch (node.type) {
@@ -112,6 +112,18 @@ export function emitProgram(program: Program): string {
   const snippets = program.snippetDeps.length > 0 ? collectSnippets(program.snippetDeps) : '';
   const body = program.statements.map(emitStmt).join('\n');
   const inner = [snippets, body].filter((s) => s.length > 0).join('\n');
+
+  // Snippet-dependency coverage guard (replaces the plan's original validator
+  // Rule 4 — enforced HERE because helper usage is implicit in emission, not in
+  // the typed tree). If a statement emits a CALL to a known OmniJS helper but
+  // its definition is absent from the assembled program, the reference would be
+  // undefined at OmniFocus runtime. Catch that at build time instead.
+  for (const name of Object.keys(SNIPPETS)) {
+    if (body.includes(`${name}(`) && !inner.includes(`function ${name}`)) {
+      throw new Error(`Emitted program calls helper "${name}" not present in snippetDeps — declare it`);
+    }
+  }
+
   return `(() => {\n${inner}\n})()`;
 }
 
@@ -125,7 +137,7 @@ export function wrapInLauncher(omnijsProgram: string, context: string): string {
   try {
     return app.evaluateJavascript(${JSON.stringify(omnijsProgram)});
   } catch (e) {
-    return JSON.stringify({ error: true, message: String(e), context: ${JSON.stringify(context)} });
+    return JSON.stringify({ error: true, message: e && e.message ? e.message : String(e), context: ${JSON.stringify(context)} });
   }
 })()`;
 }

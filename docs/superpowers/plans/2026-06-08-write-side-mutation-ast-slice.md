@@ -588,6 +588,11 @@ string) — enforced by the type system, but the validator guards against hand-b
 `constructProject` with `folder.kind === 'notFound'` must be preceded by a `guard` (notFound is unconstructable); (4)
 program declares snippet deps actually used.
 
+> **Implementation note (Rule 4 swap):** the planned Rule 4 (snippet-dep coverage) was kept but moved to an emit-time
+> guard in `emitProgram` (helper usage is implicit in emission, not in the typed tree). The validator's Rule 4 is
+> instead the `setProp` value/mutations invariant (non-`readModifyReassign` requires `value`; `readModifyReassign`
+> requires `mutations`).
+
 - [ ] **Step 1: failing test**
 
 ```typescript

@@ -9,7 +9,7 @@ const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
 /**
  * Validate a mutation Program. Throws on the first structural violation.
  *
- * Rules:
+ * Structural rules (enforced here):
  *  1. The last statement must be a `return`.
  *  2. Every `constructProject`'s `folder` must be a typed FolderResolution
  *     object (kind ∈ {resolved, none, notFound}) — never a string / missing kind.
@@ -17,6 +17,10 @@ const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
  *     not-found case must be handled by a preceding `guard` that returns.
  *  4. A `setProp` with strategy !== 'readModifyReassign' MUST have a `value`;
  *     a `setProp` with strategy === 'readModifyReassign' MUST have `mutations`.
+ *
+ * NOT enforced here: snippet-dependency coverage (a statement that emits a call
+ * to an OmniJS helper must declare that helper in `snippetDeps`). That check is
+ * implicit in EMISSION, so it lives in `emitProgram` (emitter.ts), not here.
  */
 export function validateMutationProgram(program: Program): void {
   const { statements } = program;

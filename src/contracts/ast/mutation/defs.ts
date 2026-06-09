@@ -151,6 +151,7 @@ export const MUTATION_DEFS = {
  * The guard cannot be skipped for a registered op — this is the non-bypass
  * property that batch / bulk paths previously violated (OMN-119/120).
  */
+// TODO(op #2): widen — data type is per-key (e.g. ProjectUpdateData), not always ProjectCreateData
 export function dispatchMutation(key: keyof typeof MUTATION_DEFS, data: ProjectCreateData): Program {
   const def = MUTATION_DEFS[key] as MutationDef<ProjectCreateData>;
   def.guard(data); // build-time sandbox guard — cannot be skipped for a registered op
