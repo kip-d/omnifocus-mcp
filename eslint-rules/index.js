@@ -242,6 +242,44 @@ const plugin = {
         };
       },
     },
+
+    'no-whose-where': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description:
+            'Ban JXA .whose() / .where(): each predicate is serialized as a separate Apple Event round-trip, causing 25s+ timeouts on large databases. Iterate flattenedTasks directly instead. See docs/dev/LESSONS_LEARNED.md.',
+        },
+        schema: [],
+        messages: {
+          noWhoseWhere:
+            "JXA '.{{method}}()' serializes one Apple Event per item and hangs 25s+ on large databases. Iterate flattenedTasks directly (e.g. .filter on the array) instead — see docs/dev/LESSONS_LEARNED.md.",
+        },
+      },
+      // Intentionally carries no monitored-identifier annotation. This rule
+      // flags a banned AST shape (.whose / .where) that must have ZERO
+      // occurrences in src/ — the live-occurrence meta-check would (correctly)
+      // fail on absence. The rule depends on no renamable codebase symbol.
+      create(context) {
+        // Double-gate (cf. export-zod-schema): eslint.config.js scopes this to
+        // src/omnifocus/scripts/**, and the body re-checks the path so the rule
+        // stays correct if ever applied via a broader config. `.where` can be a
+        // legitimate method name in general TS; inside the OmniJS/JXA script
+        // layer it is only ever the JXA timeout footgun.
+        if (!context.filename.includes('/omnifocus/scripts/')) return {};
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== 'MemberExpression' || callee.computed) return;
+            const prop = callee.property;
+            if (!prop || prop.type !== 'Identifier') return;
+            if (prop.name === 'whose' || prop.name === 'where') {
+              context.report({ node: prop, messageId: 'noWhoseWhere', data: { method: prop.name } });
+            }
+          },
+        };
+      },
+    },
   },
 };
 
