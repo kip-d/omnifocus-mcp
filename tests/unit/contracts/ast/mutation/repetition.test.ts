@@ -95,4 +95,13 @@ describe('lowerRepetitionRule', () => {
   it('throws loud on invalid frequency (build time, not runtime)', () => {
     expect(() => lowerRepetitionRule({ frequency: 'fortnightly' as never, interval: 1 })).toThrow(/frequency/i);
   });
+
+  it('throws loud on never-cast garbage scheduleType / anchorDateKey', () => {
+    expect(() => lowerRepetitionRule({ frequency: 'weekly', interval: 1, scheduleType: 'sometimes' as never })).toThrow(
+      /scheduleType/i,
+    );
+    expect(() =>
+      lowerRepetitionRule({ frequency: 'weekly', interval: 1, anchorDateKey: 'start-date' as never }),
+    ).toThrow(/anchorDateKey/i);
+  });
 });

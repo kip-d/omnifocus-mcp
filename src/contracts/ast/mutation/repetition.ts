@@ -62,8 +62,10 @@ export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule
   // method='due-after-completion' | 'defer-after-completion' → FromCompletion
   let scheduleTypePath: string;
   if (rule.scheduleType) {
-    // Total Record over the union — the lookup cannot miss, no fallback needed.
     scheduleTypePath = SCHEDULE_MAP[rule.scheduleType];
+    // Same never-cast-garbage rationale as the frequency throw: an unmapped value
+    // would otherwise emit a literal `undefined` token into the OmniJS program.
+    if (!scheduleTypePath) throw new Error(`Invalid repetition scheduleType: ${String(rule.scheduleType)}`);
   } else if (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion') {
     scheduleTypePath = 'Task.RepetitionScheduleType.FromCompletion';
   } else {
@@ -73,8 +75,9 @@ export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule
   // anchorDateKey: explicit field wins; 'defer-after-completion' implies DeferDate anchor.
   let anchorPath: string;
   if (rule.anchorDateKey) {
-    // Total Record over the union — the lookup cannot miss, no fallback needed.
     anchorPath = ANCHOR_MAP[rule.anchorDateKey];
+    // Same never-cast-garbage rationale as the frequency throw.
+    if (!anchorPath) throw new Error(`Invalid repetition anchorDateKey: ${String(rule.anchorDateKey)}`);
   } else if (rule.method === 'defer-after-completion') {
     anchorPath = 'Task.AnchorDateKey.DeferDate';
   } else {

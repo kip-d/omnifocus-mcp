@@ -309,6 +309,8 @@ export function buildCreateTaskProgram(data: TaskCreateData): Program {
     guardMode: 'return',
   });
 
+  // The raw() fragments below hardcode `task.` — they assume taskVar === 'task'
+  // (true for this single-create wrapper; the batch wrapper builds its own results).
   const envelope: Envelope = {
     taskId: member(ref('task'), 'id.primaryKey'),
     name: member(ref('task'), 'name'),
