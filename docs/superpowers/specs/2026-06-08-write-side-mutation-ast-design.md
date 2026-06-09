@@ -92,9 +92,25 @@ used directly (`new Project(name, folder)`, `new Tag(name, parent)`, `addTag`, `
 `try/catch`). The OMN-28 `.id()` transient-id dance **deletes** — `obj.id.primaryKey` reads correctly on a
 freshly-created object in OmniJS.
 
-> Decision (escape mechanism): `JSON.stringify(program)` over base64+atob. Base64 is maximally quote-free at the JXA
-> boundary but inflates ~33% (matters near the 261 KB OmniJS-bridge limit for batch ops) and renders the emitted JXA
-> opaque. `JSON.stringify` is already the repo's proven safe pattern and stays debuggable.
+> Decision (escape mechanism): `JSON.stringify(program)` over (a) base64+atob and (b) the read side's current mechanism.
+> Base64 is maximally quote-free but inflates ~33% (matters near the 261 KB OmniJS-bridge limit for batch ops) and
+> renders the emitted JXA opaque. `JSON.stringify` is the proven safe pattern for **data leaves** and stays debuggable.
+>
+> **The read side is NOT the model to mirror at this boundary — it is the cautionary tale.** The read path
+> (`list-tasks-ast.ts`) crosses the same JXA→OmniJS boundary via a **nested backtick template literal** escaped by a
+> hand-rolled 3-replace helper, `escapeTemplateString` (`bridge-escape.ts`): `s.replace(/\\/g,'\\\\').replace(/` +
+> "`" + `/g,'\\` + "`" + `').replace(/\${/g,'\\${')`. That is the exact nested-backtick + hand-escaper mechanism behind
+> OMN-111/113. Its own sibling comment warns it **does not handle newlines** — requiring a separate
+> `sanitizeForScriptComment` patch for control chars. The read side has avoided the bug only because its program body
+> carries no newline-bearing user data; the exposure is **latent, not absent**.
+>
+> `JSON.stringify(program)` deletes the nested backtick entirely (no `escapeTemplateString` dependency) and escapes
+> every quote / backslash / newline / control char / unicode per the JS spec. So "mirror the read side" applies to the
+> AST _layering_ (§3), not to this boundary, where we deliberately diverge to a strictly safer mechanism.
+>
+> _Follow-up (out of scope here):_ the read side still carries the latent `escapeTemplateString` exposure. Once this
+> write-side boundary is proven, a separate ticket should retrofit the read path to the same `JSON.stringify` boundary
+> and retire `escapeTemplateString`.
 
 ## 5. The node set (substrate)
 
