@@ -24,6 +24,7 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
+import { SNIPPETS } from './mutation/snippets.js';
 
 // =============================================================================
 // TEST SANDBOX GUARD
@@ -447,78 +448,20 @@ export interface BatchOperation {
 // =============================================================================
 
 /** OmniJS: parse ` : ` separated tag path into segments, or null for plain names */
-const OMNIJS_PARSE_TAG_PATH = `
-function parseTagPath(input) {
-  if (input.indexOf(' : ') === -1) return null;
-  var segs = input.split(' : ');
-  for (var i = 0; i < segs.length; i++) {
-    segs[i] = segs[i].trim();
-    if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
-  }
-  return segs;
-}`;
+const OMNIJS_PARSE_TAG_PATH = SNIPPETS.parseTagPath.source;
 
 /** OmniJS: walk tag tree creating missing segments (mkdir -p semantics) */
-const OMNIJS_RESOLVE_OR_CREATE_TAG_PATH = `
-function resolveOrCreateTagByPath(segments) {
-  var parent = null;
-  var current = null;
-  for (var i = 0; i < segments.length; i++) {
-    current = null;
-    var children = parent ? parent.children : tags;
-    for (var j = 0; j < children.length; j++) {
-      if (children[j].name === segments[i]) { current = children[j]; break; }
-    }
-    if (!current) {
-      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i], null);
-    }
-    parent = current;
-  }
-  return current;
-}`;
+const OMNIJS_RESOLVE_OR_CREATE_TAG_PATH = SNIPPETS.resolveOrCreateTagByPath.source;
 
 // =============================================================================
 // OMNIJS FOLDER PATH HELPERS (interpolated into evaluateJavascript blocks)
 // =============================================================================
 
 /** OmniJS: parse ` : ` or `/` separated folder path into segments, or null for plain names */
-const OMNIJS_PARSE_FOLDER_PATH = `
-function parseFolderPath(input) {
-  if (input.indexOf(' : ') !== -1) {
-    var segs = input.split(' : ');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i] = segs[i].trim();
-      if (segs[i].length === 0) return null;
-    }
-    return segs;
-  }
-  if (input.indexOf('/') !== -1) {
-    var segs = input.split('/');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i] = segs[i].trim();
-      if (segs[i].length === 0) return null;
-    }
-    return segs;
-  }
-  return null;
-}`;
+const OMNIJS_PARSE_FOLDER_PATH = SNIPPETS.parseFolderPath.source;
 
 /** OmniJS: walk folder hierarchy by segments (read-only, no creation) */
-const OMNIJS_RESOLVE_FOLDER_PATH = `
-function resolveFolderPath(segments) {
-  var parent = null;
-  var current = null;
-  for (var i = 0; i < segments.length; i++) {
-    current = null;
-    var children = parent ? parent.children : folders;
-    for (var j = 0; j < children.length; j++) {
-      if (children[j].name === segments[i]) { current = children[j]; break; }
-    }
-    if (!current) return null;
-    parent = current;
-  }
-  return current;
-}`;
+const OMNIJS_RESOLVE_FOLDER_PATH = SNIPPETS.resolveFolderPath.source;
 
 /**
  * OmniJS: ONE flexible folder resolver shared by every write site that places a
@@ -528,23 +471,7 @@ function resolveFolderPath(segments) {
  * to be injected alongside it. Consolidating here (OMN-127) stops the three sites from
  * drifting apart again — they previously had three different resolution behaviors.
  */
-const OMNIJS_RESOLVE_FOLDER_FLEXIBLE = `
-function resolveFolderFlexible(target) {
-  // 1. Try parsing as a path (" : " or "/")
-  var pathSegs = parseFolderPath(target);
-  if (pathSegs) {
-    var found = resolveFolderPath(pathSegs);
-    if (found) return found;
-  }
-  // 2. Try by identifier (id.primaryKey)
-  var byId = Folder.byIdentifier(target);
-  if (byId) return byId;
-  // 3. Fall back to leaf name match
-  for (var i = 0; i < flattenedFolders.length; i++) {
-    if (flattenedFolders[i].name === target) return flattenedFolders[i];
-  }
-  return null;
-}`;
+const OMNIJS_RESOLVE_FOLDER_FLEXIBLE = SNIPPETS.resolveFolderFlexible.source;
 
 /** OmniJS: walk tag tree returning null if any segment missing (read-only) */
 const OMNIJS_RESOLVE_TAG_PATH = `
