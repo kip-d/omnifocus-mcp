@@ -14,6 +14,11 @@ import {
   return_,
   readModifyReassign,
   assignTags,
+  resolveProject,
+  resolveParentTask,
+  constructTask,
+  batchItem,
+  guard,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
@@ -264,6 +269,126 @@ describe('OMN-137 warnings infrastructure', () => {
     const parsed = JSON.parse(result);
     expect(parsed.ok).toBe(true);
     expect(parsed.warnings).toEqual(['status: boom']);
+  });
+});
+
+describe('slice-2 statement emission', () => {
+  it('resolveProject emits a resolveProjectFlexible call with JSON-escaped ref', () => {
+    expect(emitStmt(resolveProject('p', 'My "Q" Project'))).toBe(
+      'const p = resolveProjectFlexible("My \\"Q\\" Project");',
+    );
+  });
+
+  it('resolveParentTask emits Task.byIdentifier with null fallback', () => {
+    expect(emitStmt(resolveParentTask('pt', 'abc123'))).toBe('const pt = Task.byIdentifier("abc123") || null;');
+  });
+
+  it('constructTask: inbox has no move; resolved containers move to <var>.ending', () => {
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'inbox' }))).toBe('const t = new Task("X");');
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'project', var: 'p' }))).toBe(
+      'const t = new Task("X");\nmoveTasks([t], p.ending);',
+    );
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'parentTask', var: 'pt' }))).toBe(
+      'const t = new Task("X");\nmoveTasks([t], pt.ending);',
+    );
+    expect(emitStmt(constructTask('t', json('X'), { kind: 'tempIdRef', var: '_t0' }))).toBe(
+      'const t = new Task("X");\nmoveTasks([t], _t0.ending);',
+    );
+  });
+
+  it('guard throw-mode emits a throw, not a return', () => {
+    const g = guard('p === null', { message: json('Project not found: X') }, 'throw');
+    expect(emitStmt(g)).toBe('if (p === null) throw new Error("Project not found: X");');
+  });
+
+  it('guard throw-mode without a message fails LOUDLY at build time', () => {
+    expect(() => emitStmt(guard('p === null', { error: json(true) }, 'throw'))).toThrow(/message/);
+  });
+
+  it('guard return-mode is unchanged (default mode)', () => {
+    expect(emitStmt(guard('p === null', { error: json(true) }))).toBe(
+      'if (p === null) return JSON.stringify({ error: true });',
+    );
+  });
+
+  it('batchItem emits try/capture with per-item warnings slice and results push', () => {
+    const node = batchItem('tmp1', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], false);
+    const out = emitStmt(node);
+    expect(out).toContain('const _w0 = _warnings.length;');
+    expect(out).toContain(
+      'results.push({ tempId: "tmp1", taskId: _t0.id.primaryKey, success: true, warnings: _warnings.slice(_w0) });',
+    );
+    expect(out).toContain('catch (e)');
+    expect(out).toContain('success: false');
+    expect(out).not.toContain('_aborted'); // stopOnError false
+    const stop = emitStmt(batchItem('tmp1', 0, '_t0', [constructTask('_t0', json('A'), { kind: 'inbox' })], true));
+    expect(stop).toContain('_aborted = true;');
+  });
+
+  // VM execution: drive the WHOLE emitProgram output through a stubbed OmniJS
+  // sandbox — shape-only string assertions cannot catch wiring bugs (OMN-128 lesson).
+  const singleCreateProgram = () => ({
+    context: 'create_task',
+    snippetDeps: ['resolveProjectFlexible'],
+    statements: [
+      resolveProject('p', 'Work'),
+      guard('p === null', {
+        error: json(true),
+        message: json('Project not found: Work'),
+        context: json('create_task'),
+      }),
+      constructTask('task', json('Hello'), { kind: 'project' as const, var: 'p' }),
+      return_({ taskId: member(ref('task'), 'id.primaryKey'), warnings: ref('_warnings'), created: json(true) }),
+    ],
+  });
+
+  it('emitted single-create program EXECUTES: resolves project, constructs, moves to <project>.ending (vm)', () => {
+    const program = emitProgram(singleCreateProgram());
+    const fakeProject = { name: 'Work', ending: { marker: 'end' } };
+    const moveCalls: unknown[][] = [];
+    const taskCalls: unknown[] = [];
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => null },
+      flattenedProjects: [fakeProject],
+      moveTasks: (...args: unknown[]) => {
+        moveCalls.push(args);
+      },
+      Task: function (this: Record<string, unknown>, name: string) {
+        taskCalls.push(name);
+        this.id = { primaryKey: 'fake-id' };
+        this.name = name;
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed.taskId).toBe('fake-id');
+    expect(parsed.created).toBe(true);
+    expect(parsed.warnings).toEqual([]);
+    expect(taskCalls).toEqual(['Hello']);
+    expect(moveCalls).toHaveLength(1);
+    const [moved, destination] = moveCalls[0] as [Array<{ id: { primaryKey: string } }>, unknown];
+    expect(moved).toHaveLength(1);
+    expect(moved[0].id.primaryKey).toBe('fake-id');
+    expect(destination).toBe(fakeProject.ending);
+  });
+
+  it('emitted single-create program EXECUTES: guard fires on missing project, Task NEVER constructed (vm)', () => {
+    const program = emitProgram(singleCreateProgram());
+    const taskCalls: unknown[] = [];
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => null },
+      flattenedProjects: [],
+      moveTasks: () => {
+        throw new Error('moveTasks must not be called when the guard fires');
+      },
+      Task: function (this: Record<string, unknown>, name: string) {
+        taskCalls.push(name);
+      },
+    };
+    const result = vm.runInNewContext(program, sandbox) as string;
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({ error: true, message: 'Project not found: Work', context: 'create_task' });
+    expect(taskCalls).toHaveLength(0);
   });
 });
 

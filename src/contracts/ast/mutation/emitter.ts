@@ -46,8 +46,21 @@ export function emitStmt(node: Stmt): string {
       return `const ${node.name} = ${emitExpr(node.expr)};`;
     case 'resolveFolder':
       return `const ${node.bind} = resolveFolderFlexible(${JSON.stringify(node.ref)});`;
-    case 'guard':
+    case 'guard': {
+      if (node.mode === 'throw') {
+        // Batch items fail per-item: the throw is caught by the enclosing
+        // batchItem try/capture. LOUD build-time failure when `message` is
+        // absent — emitting `throw new Error(undefined)` would silently degrade
+        // the per-item error text. (The validator will also enforce presence in
+        // a later task; this keeps the emitter safe standalone.)
+        const message = node.envelope.message;
+        if (!message) {
+          throw new Error('guard with mode="throw" requires an envelope.message (it becomes the thrown Error text)');
+        }
+        return `if (${node.cond}) throw new Error(${emitExpr(message)});`;
+      }
       return `if (${node.cond}) return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    }
     case 'constructProject': {
       const name = emitExpr(node.name);
       switch (node.folder.kind) {
@@ -120,18 +133,34 @@ export function emitStmt(node: Stmt): string {
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
-    // TODO(OMN-128 Task 5/6): implemented in a later plan task
     case 'resolveProject':
-      throw new Error('not implemented: resolveProject');
-    // TODO(OMN-128 Task 5/6): implemented in a later plan task
+      return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveParentTask':
-      throw new Error('not implemented: resolveParentTask');
-    // TODO(OMN-128 Task 5/6): implemented in a later plan task
-    case 'constructTask':
-      throw new Error('not implemented: constructTask');
-    // TODO(OMN-128 Task 5/6): implemented in a later plan task
-    case 'batchItem':
-      throw new Error('not implemented: batchItem');
+      return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'constructTask': {
+      // `new Task(name)` lands in the inbox; non-inbox containers are placed via
+      // moveTasks([t], container.ending). Container resolution failures are
+      // guard-handled BEFORE construct (ContainerResolution has no notFound
+      // kind), so there is nothing to enforce here.
+      const construct = `const ${node.bind} = new Task(${emitExpr(node.name)});`;
+      if (node.container.kind === 'inbox') return construct;
+      return `${construct}\nmoveTasks([${node.bind}], ${node.container.var}.ending);`;
+    }
+    case 'batchItem': {
+      // Ownership split (batch composition):
+      // - `_aborted` GATING is owned by the batch PROGRAM BUILDER (a later task):
+      //   it declares `let _aborted = false;` and wraps each item in
+      //   `if (!_aborted) { ... }`. This case only SETS `_aborted = true` in its
+      //   catch when stopOnError.
+      // - `results` is likewise declared by the program builder (via a bind
+      //   statement); batchItem just pushes to it.
+      const wVar = `_w${node.index}`;
+      const body = node.statements.map(emitStmt).join('\n');
+      const ok = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: ${node.taskVar}.id.primaryKey, success: true, warnings: _warnings.slice(${wVar}) });`;
+      const fail = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: null, success: false, error: String(e && e.message ? e.message : e), warnings: _warnings.slice(${wVar}) });`;
+      const abort = node.stopOnError ? '\n  _aborted = true;' : '';
+      return `const ${wVar} = _warnings.length;\ntry {\n${body}\n${ok}\n} catch (e) {\n${fail}${abort}\n}`;
+    }
     default: {
       const _x: never = node;
       throw new Error(`Unknown stmt node: ${JSON.stringify(_x)}`);

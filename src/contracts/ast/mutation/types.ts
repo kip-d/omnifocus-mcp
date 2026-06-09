@@ -123,7 +123,7 @@ export interface SetPropNode {
   bestEffort?: boolean;
   // Warnings attribution (OMN-137): when set, a best-effort failure is recorded
   // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
-  // Consumed by the emitter in a later task.
+  // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
   label?: string;
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
@@ -141,7 +141,7 @@ export interface AssignTagsNode {
   bestEffort?: boolean;
   // Warnings attribution (OMN-137): when set, a best-effort failure is recorded
   // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
-  // Consumed by the emitter in a later task.
+  // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
   label?: string;
 }
 export interface ReturnNode {
