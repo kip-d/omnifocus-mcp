@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { emitExpr } from '../../../../../src/contracts/ast/mutation/emitter.js';
-import { ref, member, newExpr, enumRef, dateExpr, json } from '../../../../../src/contracts/ast/mutation/types.js';
+import { emitExpr, emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import {
+  ref,
+  member,
+  newExpr,
+  enumRef,
+  dateExpr,
+  json,
+  constructProject,
+  setProp,
+  return_,
+  readModifyReassign,
+  assignTags,
+} from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
   it('ref → bare name', () => expect(emitExpr(ref('proj'))).toBe('proj'));
@@ -15,5 +27,56 @@ describe('emitExpr', () => {
     const emitted = emitExpr(json(hostile));
 
     expect(eval(emitted)).toBe(hostile);
+  });
+});
+
+describe('emitProgram', () => {
+  it('emitProgram assembles an OmniJS IIFE with statements', () => {
+    const program = {
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [
+        constructProject('proj', json('P'), { kind: 'none' as const }),
+        setProp(ref('proj'), 'flagged', json(true)),
+        return_({ projectId: member(ref('proj'), 'id.primaryKey'), created: json(true) }),
+      ],
+    };
+    const out = emitProgram(program);
+    expect(out).toContain('const proj = new Project("P");');
+    expect(out).toContain('proj.flagged = true;');
+    expect(out).toContain('return JSON.stringify({ projectId: proj.id.primaryKey, created: true });');
+    expect(out.trim().startsWith('(() => {')).toBe(true);
+    expect(out.trim().endsWith('})()')).toBe(true);
+  });
+
+  it('emits setProp readModifyReassign as read → mutate → reassign', () => {
+    const program = {
+      context: 'update_project',
+      snippetDeps: [],
+      statements: [
+        readModifyReassign(ref('proj'), 'reviewInterval', [
+          { prop: 'steps', value: json(1) },
+          { prop: 'unit', value: json('weeks') },
+        ]),
+      ],
+    };
+    const out = emitProgram(program);
+    expect(out).toContain('const _rmr = proj.reviewInterval;');
+    expect(out).toContain('_rmr.steps = 1;');
+    expect(out).toContain('_rmr.unit = "weeks";');
+    expect(out).toContain('proj.reviewInterval = _rmr;');
+  });
+
+  it('emits assignTags as a resolve-or-create loop with addTag', () => {
+    const program = {
+      context: 'create_project',
+      snippetDeps: [],
+      statements: [assignTags(ref('proj'), json(['work', 'home']), 'appliedTags')],
+    };
+    const out = emitProgram(program);
+    expect(out).toContain('const appliedTags = [];');
+    expect(out).toContain('parseTagPath(_tagName)');
+    expect(out).toContain('proj.addTag(_tag);');
+    expect(out).toContain('appliedTags.push(_tag.name);');
   });
 });
