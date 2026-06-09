@@ -48,6 +48,25 @@ function reviewIntervalUnit(days: number): { unit: string; steps: number } {
  * scalar props, dates, status, reviewInterval, tags, return).
  */
 export function buildCreateProjectProgram(data: ProjectCreateData): Program {
+  // Compile-time exhaustiveness guard (ported from the deleted buildProjectDataObject):
+  // forces a build error if ProjectCreateData gains a field this lowering doesn't handle,
+  // so a new schema field can't be silently dropped. When this stops compiling, add the
+  // field below AND emit the statement that lowers it.
+  const _exhaustive: Record<keyof ProjectCreateData, true> = {
+    name: true,
+    note: true,
+    folder: true,
+    tags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    flagged: true,
+    sequential: true,
+    status: true,
+    reviewInterval: true,
+  };
+  void _exhaustive;
+
   const statements: Stmt[] = [];
   const snippetDeps: string[] = [];
 
