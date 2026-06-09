@@ -1,6 +1,6 @@
 // src/contracts/ast/mutation/types.ts
 // Mutation AST — node set for the create/project vertical slice (OMN-128).
-// Mirrors the read-side types.ts: node union + type guards + factory functions.
+// Mirrors the read-side types.ts: node union + factory functions.
 
 export type SetPropStrategy = 'direct' | 'dateExpr' | 'enum' | 'readModifyReassign';
 
@@ -65,6 +65,10 @@ export interface SetPropNode {
   value: Expr;
   strategy: SetPropStrategy;
 }
+// OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
+// path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
+// can never receive a missing tag. A typed TagResolution union (mirroring FolderResolution) is
+// deferred until a read-only ResolveTag node is needed (spec §5).
 export interface AssignTagsNode {
   type: 'assignTags';
   target: Expr;
