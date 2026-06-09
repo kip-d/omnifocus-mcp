@@ -566,7 +566,10 @@ case 'resolveProject':
 case 'resolveParentTask':
   return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
 case 'constructTask': {
-  const construct = `const ${node.bind} = new Task(${emitExpr(node.name)});`;
+  // `var`, NOT `const`: inside a batchItem the bind lives in that item's try block,
+  // but a later item's tempIdRef (parentTempId chain) must still see it. `var` hoists
+  // to the program IIFE scope — same lesson as the assignTags hoist (OMN-128 slice 1).
+  const construct = `var ${node.bind} = new Task(${emitExpr(node.name)});`;
   if (node.container.kind === 'inbox') return construct;
   return `${construct}\nmoveTasks([${node.bind}], ${node.container.var}.ending);`;
 }
@@ -865,10 +868,13 @@ git commit -m "refactor(OMN-128): buildCreateTaskScript emits from the mutation 
 3. stopOnError=true → `_aborted` flag + `if (!_aborted)` item gating; false → no gating.
 4. vm: 2-item batch with tags on both runs to `{results:[…,…]}` with both `success:true` (proves the collision fix at
    runtime, not just by string assert).
-5. vm: middle item throws (stub `moveTasks` to throw for a chosen container) → stopOnError=false yields
+5. vm: a 2-item `parentTempId` chain executes END-TO-END — item 1 genuinely nests under item 0 (assert the `moveTasks`
+   spy received item 0's task object's `.ending`). Guards the cross-item `var`-hoist contract in `constructTask` (a
+   `const` bind inside item 0's try would be invisible to item 1 — caught in Task 5 review).
+6. vm: middle item throws (stub `moveTasks` to throw for a chosen container) → stopOnError=false yields
    `[ok, fail, ok]`; true yields `[ok, fail]` only.
-6. Per-item warnings isolation: item 0's best-effort failure lands in item 0's `warnings`, not item 1's.
-7. Guard non-bypass for `'batch-create/tasks'` (sandbox negative test).
+7. Per-item warnings isolation: item 0's best-effort failure lands in item 0's `warnings`, not item 1's.
+8. Guard non-bypass for `'batch-create/tasks'` (sandbox negative test).
 
 - [ ] **Step 2: Run to verify failure.**
 
