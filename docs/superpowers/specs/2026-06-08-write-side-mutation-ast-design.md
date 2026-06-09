@@ -75,6 +75,11 @@ Each mutation emits **one OmniJS program**, wrapped in a fixed, **data-free** JX
 })()
 ```
 
+The `<<< … >>>` is a placeholder the emitter fills with `JSON.stringify(programString)`. The OmniJS program is a
+**string**; that string is `JSON.stringify`'d into a JXA string literal which `evaluateJavascript` receives — a single,
+deliberate double-encoding (data is already JSON _inside_ the program; the program is JSON _again_ into JXA). The
+pseudocode is not passing an object.
+
 Two boundaries, both owned by the emitter, both `JSON.stringify`:
 
 | Boundary                        | Mechanism                                                      | Property                                                                                            |
@@ -119,6 +124,18 @@ A `Program` is an ordered list of statements emitted into one OmniJS IIFE.
 `ResolveFolder` yields three **named** states; "no folder requested" (`NoneRequested`) and "requested but missing"
 (`NotFound`) are distinct constructor inputs. OMN-127's conflated `else` cannot be expressed.
 
+Tag resolution carries the same discipline, split by intent:
+
+| Node                             | Result type            | On missing                        |
+| -------------------------------- | ---------------------- | --------------------------------- |
+| `ResolveOrCreateTag { ref }`     | always `Tag` (mkdir-p) | cannot fail — creates the segment |
+| `ResolveTag { ref }` (read-only) | `Tag \| NotFound`      | surfaced to the build site        |
+
+`AssignTags` consumes resolved `Tag` results only. For the current create-or-find behavior (project/task create) every
+entry resolves via `ResolveOrCreateTag`, so `AssignTags` can never receive a missing tag. Where a read-only `ResolveTag`
+is used, the `NotFound` policy (skip-with-warning vs. fail-loud) is declared **at the `MUTATION_DEFS` build site**, not
+buried in the node — the policy stays visible, mirroring §5's folder rule.
+
 ## 6. Lowering registry (mirror of `FILTER_DEFS`)
 
 `MUTATION_DEFS`, keyed by `(operation, target)` → `build(data) → Program` (e.g.
@@ -146,6 +163,11 @@ Static checks on each program before emit:
 
 **Slice:** `buildCreateProjectScript` end-to-end (it exercises folder resolution + setters + status enum +
 reviewInterval read-modify-reassign + tags + id read-back). The OMN-28 `.id()`-matching loop deletes.
+
+The **snippet registry (§7) is stood up during this slice** — the create/project program is the first consumer of
+`parseFolderPath` / `resolveFolderFlexible` / `parseTagPath` / `resolveOrCreateTagByPath`. The later tag-builder
+migration (`tag-mutation-script-builder.ts`, a separate file with its own snippet copies) **reuses** the registry rather
+than re-introducing it; collapsing that duplication is part of the tag-builder PR, not the slice.
 
 **Acceptance for the slice**
 
