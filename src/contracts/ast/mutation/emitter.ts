@@ -151,12 +151,15 @@ export function emitStmt(node: Stmt): string {
     }
     case 'batchItem': {
       // Ownership split (batch composition):
-      // - `_aborted` GATING is owned by the batch PROGRAM BUILDER (a later task):
-      //   it declares `let _aborted = false;` and wraps each item in
-      //   `if (!_aborted) { ... }`. This case only SETS `_aborted = true` in its
-      //   catch when stopOnError.
-      // - `results` is likewise declared by the program builder (via a bind
-      //   statement); batchItem just pushes to it.
+      // - `let _aborted = false;` is DECLARED at the emitProgram level
+      //   (alongside `let _warnings`) when the program contains a stopOnError
+      //   batchItem — NOT via a bind statement: the validator reserves
+      //   `_aborted`, and bind emits `const` anyway. The per-item gating
+      //   (`if (!_aborted) { ... }`) is owned by the batch PROGRAM BUILDER
+      //   (Task 9). This case only SETS `_aborted = true` in its catch when
+      //   stopOnError.
+      // - `results` IS declared by the program builder via a bind statement
+      //   (deliberately unreserved); batchItem just pushes to it.
       const wVar = `_w${node.index}`;
       const body = node.statements.map(emitStmt).join('\n');
       const ok = `results.push({ tempId: ${JSON.stringify(node.tempId)}, taskId: ${node.taskVar}.id.primaryKey, success: true, warnings: _warnings.slice(${wVar}) });`;

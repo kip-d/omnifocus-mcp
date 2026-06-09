@@ -211,6 +211,20 @@ describe('resolution-guard discipline', () => {
     expect(() => validateMutationProgram(bad)).toThrow(/guard/i);
   });
 
+  it('rejects a between-guard that mentions only a DIFFERENT longer-named var (word boundary, not substring)', () => {
+    // `proj === null` must NOT satisfy bind `p` — substring matching would.
+    const bad = {
+      ...ok,
+      statements: [
+        resolveProject('p', 'Work'),
+        guard('proj === null', { error: json(true), message: json('nf') }),
+        constructTask('t', json('X'), { kind: 'project' as const, var: 'p' }),
+        done,
+      ],
+    };
+    expect(() => validateMutationProgram(bad)).toThrow(/guard/i);
+  });
+
   it('rejects a between-guard whose cond does NOT mention the bind', () => {
     const bad = {
       ...ok,
@@ -321,6 +335,41 @@ describe('batchItem recursion + exemptions', () => {
       ),
     ]);
     expect(() => validateMutationProgram(bad)).toThrow(/guard/i);
+  });
+
+  // taskVar↔constructTask coupling: the emitted results push reads
+  // `<taskVar>.id.primaryKey` — without a matching constructTask the item
+  // throws ReferenceError, swallowed by the catch as a FALSE per-item failure.
+  it('rejects a batchItem whose taskVar matches NO inner constructTask bind (mismatch)', () => {
+    const bad = batchProgram([
+      batchItem('a', 0, '_t9', [constructTask('_t0', json('A'), { kind: 'inbox' as const })], false),
+    ]);
+    expect(() => validateMutationProgram(bad)).toThrow(/taskVar/);
+  });
+
+  it('rejects a batchItem with EMPTY statements (no constructTask at all)', () => {
+    const bad = batchProgram([batchItem('a', 0, '_t0', [], false)]);
+    expect(() => validateMutationProgram(bad)).toThrow(/taskVar/);
+  });
+
+  it('accepts a batchItem whose taskVar matches an inner constructTask bind among other statements', () => {
+    const good = batchProgram([
+      batchItem(
+        'a',
+        0,
+        '_t0',
+        [constructTask('_t0', json('A'), { kind: 'inbox' as const }), setProp(ref('_t0'), 'flagged', json(true))],
+        false,
+      ),
+    ]);
+    expect(() => validateMutationProgram(good)).not.toThrow();
+  });
+
+  it('rejects a batchItem whose taskVar is itself a reserved emitter identifier', () => {
+    const bad = batchProgram([
+      batchItem('a', 0, '_aborted', [constructTask('_aborted', json('A'), { kind: 'inbox' as const })], false),
+    ]);
+    expect(() => validateMutationProgram(bad)).toThrow(/taskVar.*reserved|reserved.*taskVar/i);
   });
 });
 

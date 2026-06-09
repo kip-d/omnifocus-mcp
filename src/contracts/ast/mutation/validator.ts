@@ -22,7 +22,7 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  * Exported so the batch program builder (Task 9) can keep its generated names
  * clear of the same set.
  */
-export const RESERVED_EMITTER_IDENTIFIERS = ['_warnings', '_aborted'];
+export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted'];
 const RESERVED_ITEM_VAR_PATTERN = /^_w\d+$/;
 
 function assertNotReserved(name: string, where: string): void {
@@ -53,7 +53,8 @@ function assertNotReserved(name: string, where: string): void {
  *     emitter also throws — belt and suspenders at the validation seam).
  *  7. Resolution-guard discipline: a `resolveProject`/`resolveParentTask` bind
  *     consumed by a later `constructTask` container `var` must have a `guard`
- *     BETWEEN them whose `cond` mentions that bind. String-level check on
+ *     BETWEEN them whose `cond` mentions that bind (word-boundary match, not
+ *     substring). String-level check on
  *     `cond` — same trust model as GuardNode.cond generally. Applies at each
  *     statement-list level independently (resolve/guard/construct triplets
  *     stay within one list in practice).
@@ -67,7 +68,11 @@ function assertNotReserved(name: string, where: string): void {
  *     (SyntaxError at runtime); and since constructTask binds emit as `var`
  *     for cross-item tempIdRef visibility (commit 88fb2e5), a duplicate
  *     taskVar would SILENTLY SHADOW an earlier item's task — the worst kind
- *     of wrong.
+ *     of wrong. Additionally, each batchItem's statements MUST contain a
+ *     constructTask whose bind === taskVar (the item's results push reads
+ *     `<taskVar>.id.primaryKey` — without it, a ReferenceError is swallowed
+ *     by the item catch as a FALSE per-item failure with an opaque message),
+ *     and taskVar itself must not be a reserved identifier.
  * 10. No binding statement (bind, resolveFolder, resolveProject,
  *     resolveParentTask, constructProject, constructTask, assignTags) may use
  *     a reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
@@ -198,6 +203,19 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         );
       }
       ctx.batchTaskVars.add(stmt.taskVar);
+      // Rule 9 (cont.): taskVar feeds the emitted results push verbatim — it
+      // must stay clear of emitter-internal names too.
+      assertNotReserved(stmt.taskVar, 'batchItem taskVar');
+      // Rule 9 (cont.): the item MUST construct the task its results push
+      // reads. Without a constructTask binding taskVar, the emitted
+      // `results.push({ taskId: <taskVar>.id.primaryKey, ... })` references an
+      // undeclared variable → ReferenceError swallowed by the item's catch →
+      // a FALSE per-item failure with an opaque message.
+      if (!stmt.statements.some((s) => s.type === 'constructTask' && s.bind === stmt.taskVar)) {
+        throw new Error(
+          `Invalid batchItem "${stmt.tempId}": statements must contain a constructTask whose bind matches taskVar "${stmt.taskVar}".`,
+        );
+      }
       // Rule 8: recurse all per-statement rules into the item's statements.
       validateStatementList(stmt.statements, { ...ctx, insideBatchItem: true });
     }
@@ -218,13 +236,14 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
   for (let ri = 0; ri < statements.length; ri++) {
     const resolve = statements[ri];
     if (resolve.type !== 'resolveProject' && resolve.type !== 'resolveParentTask') continue;
+    // Word-boundary match, not substring: a guard on `proj` must not satisfy
+    // bind `p`. Regex-escaped for safety even though binds are identifiers.
+    const bindPattern = new RegExp(`\\b${resolve.bind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
     for (let ci = 0; ci < statements.length; ci++) {
       const construct = statements[ci];
       if (construct.type !== 'constructTask') continue;
       if (construct.container.kind === 'inbox' || construct.container.var !== resolve.bind) continue;
-      const guarded = statements.some(
-        (s, si) => si > ri && si < ci && s.type === 'guard' && s.cond.includes(resolve.bind),
-      );
+      const guarded = statements.some((s, si) => si > ri && si < ci && s.type === 'guard' && bindPattern.test(s.cond));
       if (!guarded) {
         throw new Error(
           `Invalid mutation program: constructTask consumes resolution bind "${resolve.bind}" ` +
