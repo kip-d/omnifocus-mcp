@@ -14,55 +14,117 @@ import {
   type GeneratedMutationScript,
 } from '../../../../src/contracts/ast/mutation-script-builder.js';
 
+/**
+ * Decode the OmniJS program back out of a wrapInLauncher script. The launcher
+ * carries the program as a single JSON string literal argument to
+ * app.evaluateJavascript(...) — locate it, scan to the unescaped closing quote,
+ * and JSON.parse. Throws loudly when the script is not the launcher shape, so a
+ * regression to template assembly fails these tests at the extraction step.
+ */
+function extractOmniJsProgram(script: string): string {
+  const marker = 'app.evaluateJavascript(';
+  const start = script.indexOf(marker);
+  if (start === -1) throw new Error('script is not the JXA launcher shape (no app.evaluateJavascript call)');
+  const rest = script.slice(start + marker.length);
+  if (!rest.startsWith('"')) throw new Error('evaluateJavascript argument is not a JSON string literal');
+  let end = -1;
+  for (let i = 1; i < rest.length; i++) {
+    if (rest[i] === '\\') {
+      i += 1; // skip the escaped character
+      continue;
+    }
+    if (rest[i] === '"') {
+      end = i;
+      break;
+    }
+  }
+  if (end === -1) throw new Error('unterminated JSON string literal in evaluateJavascript argument');
+  return JSON.parse(rest.slice(0, end + 1)) as string;
+}
+
+// OMN-128 slice 2: buildCreateTaskScript emits ONE OmniJS program from the
+// mutation AST (dispatchMutation → emitProgram → wrapInLauncher). The program
+// crosses the JXA→OmniJS boundary as a single JSON string literal, so these
+// tests decode it back out (extractOmniJsProgram) and assert on the decoded
+// OmniJS source. Runtime behavior (vm execution, guard short-circuits) is
+// covered in tests/unit/contracts/ast/mutation/create-task.test.ts.
 describe('buildCreateTaskScript', () => {
-  it('generates valid JXA script for basic task creation', async () => {
+  it('emits the JXA launcher around a JSON-encoded OmniJS program', async () => {
     const result = await buildCreateTaskScript({
       name: 'Test Task',
     });
 
     expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('Test Task');
+    expect(result.script).toContain('app.evaluateJavascript(');
     expect(result.operation).toBe('create');
     expect(result.target).toBe('task');
+    expect(result.description).toBe('Create task: Test Task');
+
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('new Task("Test Task")');
   });
 
-  it('includes note in task creation', async () => {
+  it('contains NO backtick characters — the nested-template island class (OMN-111/113) is dead', async () => {
+    // A fully loaded create exercises every emission path: container resolve,
+    // note/flagged, all three dates, estimate, tags, repetition. The legacy
+    // template carried four nested-backtick OmniJS islands; zero backticks in
+    // the emitted script proves there is no template left for data to break.
+    const result = await buildCreateTaskScript({
+      name: 'Loaded Task',
+      note: 'a note',
+      flagged: true,
+      project: 'Work Project',
+      tags: ['work', 'Deep : Tag : Path'],
+      dueDate: '2025-12-31',
+      deferDate: '2025-12-01 08:00',
+      plannedDate: '2025-12-15',
+      estimatedMinutes: 45,
+      repetitionRule: { frequency: 'weekly', interval: 1, daysOfWeek: [{ day: 'MO' }] },
+    });
+
+    expect(result.script).not.toContain('`');
+  });
+
+  it('carries no legacy template artifacts: nonce bridge, index bridge, JXA app.Task, inbox push', async () => {
+    const result = await buildCreateTaskScript({
+      name: 'Legacy-Free Task',
+      project: 'Work Project',
+      tags: ['work'],
+    });
+
+    // OMN-29 note-nonce id bridge: gone (the OmniJS program reads id.primaryKey directly).
+    expect(result.script).not.toContain('__BRIDGE_');
+    // OMN-28 index bridge from OmniJS lookup into the JXA projects array: gone.
+    expect(result.script).not.toContain('doc.flattenedProjects()[');
+    // JXA-side construction: gone (native OmniJS `new Task(...)`).
+    expect(result.script).not.toContain('app.Task({');
+    expect(result.script).not.toContain('inboxTasks');
+  });
+
+  it('includes note and flagged in task creation', async () => {
     const result = await buildCreateTaskScript({
       name: 'Task with Note',
       note: 'This is a detailed note',
-    });
-
-    expect(result.script).toContain('This is a detailed note');
-  });
-
-  it('includes flagged status', async () => {
-    const result = await buildCreateTaskScript({
-      name: 'Flagged Task',
       flagged: true,
     });
 
-    // Check the JSON-embedded data contains flagged:true
-    expect(result.script).toContain('"flagged":true');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('task.note = "This is a detailed note";');
+    expect(program).toContain('task.flagged = true;');
   });
 
-  it('includes due date', async () => {
+  it('converts dueDate/deferDate/plannedDate into swallow-guarded Date assignments', async () => {
     const result = await buildCreateTaskScript({
-      name: 'Task with Due Date',
+      name: 'Dated Task',
       dueDate: '2025-12-31',
-    });
-
-    expect(result.script).toContain('2025-12-31');
-    expect(result.script).toContain('dueDate');
-  });
-
-  it('includes defer date', async () => {
-    const result = await buildCreateTaskScript({
-      name: 'Deferred Task',
       deferDate: '2025-12-01 08:00',
+      plannedDate: '2025-12-15',
     });
 
-    expect(result.script).toContain('2025-12-01');
-    expect(result.script).toContain('deferDate');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('task.dueDate = new Date("2025-12-31")');
+    expect(program).toContain('task.deferDate = new Date("2025-12-01 08:00")');
+    expect(program).toContain('task.plannedDate = new Date("2025-12-15")');
   });
 
   it('includes estimated minutes', async () => {
@@ -71,19 +133,22 @@ describe('buildCreateTaskScript', () => {
       estimatedMinutes: 45,
     });
 
-    expect(result.script).toContain('estimatedMinutes');
-    expect(result.script).toContain('45');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('task.estimatedMinutes = 45;');
   });
 
-  it('includes tags array', async () => {
+  it('assigns tags in-program via addTag with the appliedTags binding hoisted', async () => {
     const result = await buildCreateTaskScript({
       name: 'Tagged Task',
       tags: ['work', 'urgent'],
     });
 
-    expect(result.script).toContain('tags');
-    expect(result.script).toContain('work');
-    expect(result.script).toContain('urgent');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('["work","urgent"]');
+    expect(program).toContain('let appliedTags = [];');
+    expect(program).toContain('.addTag(');
+    // Envelope reports the actually-applied tag names, not the input echo.
+    expect(program).toContain('tags: appliedTags');
   });
 
   it('includes resolveOrCreateTagByPath for tag assignment', async () => {
@@ -91,67 +156,54 @@ describe('buildCreateTaskScript', () => {
       name: 'Task with Nested Tags',
       tags: ['Work : Projects : Active'],
     });
-    expect(result.script).toContain('resolveOrCreateTagByPath');
+
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('function resolveOrCreateTagByPath');
+    expect(program).toContain('function parseTagPath');
   });
 
-  it('includes project assignment', async () => {
+  it('resolves project via resolveProjectFlexible with a LOUD not-found guard (no silent inbox fallback)', async () => {
     const result = await buildCreateTaskScript({
       name: 'Project Task',
       project: 'Work Project',
     });
 
-    expect(result.script).toContain('projectId');
-    expect(result.script).toContain('Work Project');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('resolveProjectFlexible("Work Project")');
+    // DELIBERATE delta from the legacy template (spec §3.1.1): a missed project
+    // lookup returns a loud error envelope instead of silently filing to inbox.
+    expect(program).toContain('Project not found: Work Project');
+    expect(program).toContain('context: "create_task"');
+    expect(program).toContain('moveTasks([task], targetProject.ending);');
   });
 
-  it('uses OmniJS bridge for project lookup instead of JXA .id()', async () => {
-    const result = await buildCreateTaskScript({
-      name: 'Project Task',
-      project: 'some-project-id',
-    });
-
-    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
-    expect(result.script).toContain('Project.byIdentifier');
-    // Should NOT use JXA .id() comparison which returns a different value
-    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
-  });
-
-  it('handles null project (inbox)', async () => {
+  it('handles null project (inbox): plain new Task, no resolve, no move', async () => {
     const result = await buildCreateTaskScript({
       name: 'Inbox Task',
       project: null,
     });
 
-    expect(result.script).toContain('inboxTasks');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('new Task("Inbox Task")');
+    expect(program).not.toContain('resolveProjectFlexible');
+    expect(program).not.toContain('moveTasks');
   });
 
-  it('includes parent task ID for subtasks', async () => {
-    const result = await buildCreateTaskScript({
-      name: 'Subtask',
-      parentTaskId: 'parent-123',
-    });
-
-    expect(result.script).toContain('parentTaskId');
-    expect(result.script).toContain('parent-123');
-  });
-
-  it('uses post-creation OmniJS moveTasks for parentTaskId nesting (OMN-31)', async () => {
+  it('nests under parentTaskId via Task.byIdentifier + moveTasks with a loud guard', async () => {
     const result = await buildCreateTaskScript({
       name: 'Subtask',
       parentTaskId: 'parent-pk-456',
     });
 
-    // Should use moveTasks in OmniJS (reliable primaryKey lookup) instead of
-    // pre-creation index bridge (broken: JXA/OmniJS arrays have different ordering)
-    expect(result.script).toContain('moveTasks');
-    expect(result.script).toContain('parent-pk-456');
-
-    // Should NOT use the broken index-bridge pattern for parent lookup
-    // (index from OmniJS flattenedTasks doesn't match JXA doc.flattenedTasks())
-    expect(result.script).not.toMatch(/flattenedTasks\.indexOf.*parentTaskId|parentTask.*flattenedTasks\(\)\[/);
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('Task.byIdentifier("parent-pk-456")');
+    expect(program).toContain('Parent task not found: parent-pk-456');
+    expect(program).toContain('moveTasks([task], parentTask.ending);');
+    // No broken index-bridge pattern for parent lookup.
+    expect(program).not.toMatch(/flattenedTasks\.indexOf|flattenedTasks\(\)\[/);
   });
 
-  it('includes repetition rule with DayOfWeek objects', async () => {
+  it('lowers the repetition rule at BUILD time into Task.RepetitionRule literals', async () => {
     const result = await buildCreateTaskScript({
       name: 'Recurring Task',
       repetitionRule: {
@@ -161,26 +213,28 @@ describe('buildCreateTaskScript', () => {
       },
     });
 
-    expect(result.script).toContain('repetitionRule');
-    expect(result.script).toContain('weekly');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('new Task.RepetitionRule("FREQ=WEEKLY;BYDAY=MO,WE,FR", null,');
+    expect(program).toContain('Task.RepetitionScheduleType.Regularly');
+    expect(program).toContain('Task.AnchorDateKey.DueDate');
+    // The legacy runtime freq/schedule mapping tables are gone — lowering happened here.
+    expect(program).not.toContain('freqMap');
   });
 
-  it('escapes special characters in name', async () => {
-    const result = await buildCreateTaskScript({
-      name: 'Task with \'quotes\' and "double quotes"',
-    });
+  it('special characters in the name survive the JSON boundary (injection-safety proof)', async () => {
+    const name = 'Task with `backticks`, "double", \'single\' and ${interpolation}';
+    const result = await buildCreateTaskScript({ name });
 
-    // Should not break script structure
-    expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('quotes');
+    // The launcher still parses as JavaScript — hostile data cannot break the script.
+    expect(() => Function(result.script)).not.toThrow();
+    // And the name crosses the boundary intact as a JSON literal.
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain(`new Task(${JSON.stringify(name)})`);
   });
 
   it('returns IIFE structure', async () => {
     const result = await buildCreateTaskScript({ name: 'Test' });
 
-    // The script wraps the body in an IIFE: `(() => { ... })();`
-    // Trim trailing whitespace, then match a fixed pattern at each end —
-    // this avoids the backtracking-prone `\s*` runs the previous version had.
     const trimmed = result.script.trim();
     expect(trimmed.startsWith('(() => {')).toBe(true);
     expect(trimmed.endsWith('})();') || trimmed.endsWith('})()')).toBe(true);
@@ -193,19 +247,23 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('catch');
   });
 
-  it('returns JSON stringified response', async () => {
+  it('returns a JSON stringified envelope with warnings + created', async () => {
     const result = await buildCreateTaskScript({ name: 'Test' });
 
-    expect(result.script).toContain('JSON.stringify');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('return JSON.stringify(');
+    // OMN-137: best-effort failures surface as labeled warnings in the envelope.
+    expect(program).toContain('warnings: _warnings');
+    expect(program).toContain('created: true');
   });
 
   it('returns OmniJS id.primaryKey instead of JXA .id() for created task', async () => {
     const result = await buildCreateTaskScript({ name: 'Test Task' });
 
-    // Should bridge to OmniJS to get id.primaryKey for the response
-    expect(result.script).toContain('id.primaryKey');
-    // Should NOT use bare `const taskId = task.id();` as the final response ID
-    expect(result.script).not.toMatch(/const taskId = task\.id\(\);/);
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('taskId: task.id.primaryKey');
+    // No JXA .id() anywhere — the whole program is OmniJS now.
+    expect(result.script).not.toMatch(/task\.id\(\)/);
   });
 });
 
