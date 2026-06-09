@@ -1,5 +1,6 @@
 // src/contracts/ast/mutation/types.ts
-// Mutation AST — node set for the create/project vertical slice (OMN-128).
+// Mutation AST — node set for the write-side create operations (OMN-128:
+// create/project slice 1; create/task + batch-create slice 2).
 // Mirrors the read-side types.ts: node union + factory functions.
 
 export type SetPropStrategy = 'direct' | 'dateExpr' | 'enum' | 'readModifyReassign';
