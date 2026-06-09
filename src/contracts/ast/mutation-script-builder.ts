@@ -24,6 +24,10 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
+import { SNIPPETS } from './mutation/snippets.js';
+import { dispatchMutation } from './mutation/defs.js';
+import { emitProgram, wrapInLauncher } from './mutation/emitter.js';
+import { validateMutationProgram } from './mutation/validator.js';
 
 // =============================================================================
 // TEST SANDBOX GUARD
@@ -218,7 +222,7 @@ async function isTaskInSandbox(taskId: string): Promise<boolean> {
 /**
  * Validate that a project creation is inside the sandbox
  */
-function validateProjectCreate(data: ProjectCreateData): void {
+export function validateProjectCreate(data: ProjectCreateData): void {
   if (!isTestMode()) return;
 
   if (data.folder !== SANDBOX_FOLDER_NAME) {
@@ -447,78 +451,20 @@ export interface BatchOperation {
 // =============================================================================
 
 /** OmniJS: parse ` : ` separated tag path into segments, or null for plain names */
-const OMNIJS_PARSE_TAG_PATH = `
-function parseTagPath(input) {
-  if (input.indexOf(' : ') === -1) return null;
-  var segs = input.split(' : ');
-  for (var i = 0; i < segs.length; i++) {
-    segs[i] = segs[i].trim();
-    if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
-  }
-  return segs;
-}`;
+const OMNIJS_PARSE_TAG_PATH = SNIPPETS.parseTagPath.source;
 
 /** OmniJS: walk tag tree creating missing segments (mkdir -p semantics) */
-const OMNIJS_RESOLVE_OR_CREATE_TAG_PATH = `
-function resolveOrCreateTagByPath(segments) {
-  var parent = null;
-  var current = null;
-  for (var i = 0; i < segments.length; i++) {
-    current = null;
-    var children = parent ? parent.children : tags;
-    for (var j = 0; j < children.length; j++) {
-      if (children[j].name === segments[i]) { current = children[j]; break; }
-    }
-    if (!current) {
-      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i], null);
-    }
-    parent = current;
-  }
-  return current;
-}`;
+const OMNIJS_RESOLVE_OR_CREATE_TAG_PATH = SNIPPETS.resolveOrCreateTagByPath.source;
 
 // =============================================================================
 // OMNIJS FOLDER PATH HELPERS (interpolated into evaluateJavascript blocks)
 // =============================================================================
 
 /** OmniJS: parse ` : ` or `/` separated folder path into segments, or null for plain names */
-const OMNIJS_PARSE_FOLDER_PATH = `
-function parseFolderPath(input) {
-  if (input.indexOf(' : ') !== -1) {
-    var segs = input.split(' : ');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i] = segs[i].trim();
-      if (segs[i].length === 0) return null;
-    }
-    return segs;
-  }
-  if (input.indexOf('/') !== -1) {
-    var segs = input.split('/');
-    for (var i = 0; i < segs.length; i++) {
-      segs[i] = segs[i].trim();
-      if (segs[i].length === 0) return null;
-    }
-    return segs;
-  }
-  return null;
-}`;
+const OMNIJS_PARSE_FOLDER_PATH = SNIPPETS.parseFolderPath.source;
 
 /** OmniJS: walk folder hierarchy by segments (read-only, no creation) */
-const OMNIJS_RESOLVE_FOLDER_PATH = `
-function resolveFolderPath(segments) {
-  var parent = null;
-  var current = null;
-  for (var i = 0; i < segments.length; i++) {
-    current = null;
-    var children = parent ? parent.children : folders;
-    for (var j = 0; j < children.length; j++) {
-      if (children[j].name === segments[i]) { current = children[j]; break; }
-    }
-    if (!current) return null;
-    parent = current;
-  }
-  return current;
-}`;
+const OMNIJS_RESOLVE_FOLDER_PATH = SNIPPETS.resolveFolderPath.source;
 
 /**
  * OmniJS: ONE flexible folder resolver shared by every write site that places a
@@ -528,23 +474,7 @@ function resolveFolderPath(segments) {
  * to be injected alongside it. Consolidating here (OMN-127) stops the three sites from
  * drifting apart again — they previously had three different resolution behaviors.
  */
-const OMNIJS_RESOLVE_FOLDER_FLEXIBLE = `
-function resolveFolderFlexible(target) {
-  // 1. Try parsing as a path (" : " or "/")
-  var pathSegs = parseFolderPath(target);
-  if (pathSegs) {
-    var found = resolveFolderPath(pathSegs);
-    if (found) return found;
-  }
-  // 2. Try by identifier (id.primaryKey)
-  var byId = Folder.byIdentifier(target);
-  if (byId) return byId;
-  // 3. Fall back to leaf name match
-  for (var i = 0; i < flattenedFolders.length; i++) {
-    if (flattenedFolders[i].name === target) return flattenedFolders[i];
-  }
-  return null;
-}`;
+const OMNIJS_RESOLVE_FOLDER_FLEXIBLE = SNIPPETS.resolveFolderFlexible.source;
 
 /** OmniJS: walk tag tree returning null if any segment missing (read-only) */
 const OMNIJS_RESOLVE_TAG_PATH = `
@@ -1008,227 +938,16 @@ return JSON.stringify({ results: results });`;
  * Build a JXA script for creating a project
  */
 export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMutationScript {
-  // Test sandbox guard
-  validateProjectCreate(data);
-
-  const projectData = buildProjectDataObject(data);
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
-  const projectData = ${JSON.stringify(projectData)};
-
-  try {
-    // Find folder if specified — use OmniJS bridge for id.primaryKey + path syntax
-    let targetFolder = null;
-    if (projectData.folder) {
-      const findFolderScript = \`
-        (() => {
-          ${OMNIJS_PARSE_FOLDER_PATH}
-          ${OMNIJS_RESOLVE_FOLDER_PATH}
-          ${OMNIJS_RESOLVE_FOLDER_FLEXIBLE}
-
-          var target = \${JSON.stringify(projectData.folder)};
-          var folder = resolveFolderFlexible(target);
-          if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
-          return JSON.stringify({ found: false });
-        })()
-      \`;
-      const findFolderResult = JSON.parse(app.evaluateJavascript(findFolderScript));
-      if (findFolderResult.found && findFolderResult.index >= 0) {
-        targetFolder = doc.flattenedFolders()[findFolderResult.index];
-      } else {
-        // OMN-127 #1: a folder WAS requested but did not resolve. Never silently
-        // file the project at the database root — that was the silent-success bug.
-        // Fail loudly so typos / partial paths surface instead of misfiling.
-        return JSON.stringify({
-          error: true,
-          message: 'Folder not found: ' + projectData.folder,
-          context: 'create_project'
-        });
-      }
-    }
-
-    // Create project
-    const project = app.Project({
-      name: projectData.name,
-      note: projectData.note || '',
-      flagged: projectData.flagged || false,
-      sequential: projectData.sequential || false
-    });
-
-    // Add to folder or root
-    if (targetFolder) {
-      targetFolder.projects.push(project);
-    } else {
-      doc.projects.push(project);
-    }
-
-    // Set dates
-    if (projectData.dueDate) {
-      try { project.dueDate = new Date(projectData.dueDate); } catch (e) {}
-    }
-    if (projectData.deferDate) {
-      try { project.deferDate = new Date(projectData.deferDate); } catch (e) {}
-    }
-    if (projectData.plannedDate) {
-      try { project.plannedDate = new Date(projectData.plannedDate); } catch (e) {}
-    }
-
-    // reviewInterval is set later, via OmniJS bridge — see the block after
-    // projectId resolution. JXA's setter rejects plain JS objects (requires
-    // typed Project.ReviewInterval), and constructing that type from JXA isn't
-    // available, so the bridge is the only working path.
-
-    const jxaProjectId = project.id();
-
-    // Bridge to get OmniJS id.primaryKey for the response.
-    // JXA .id() returns a transient internal ID that byIdentifier() cannot resolve
-    // for freshly created objects (OMN-28). Use JXA .id() matching to find the exact
-    // object's index in flattenedProjects(), then read primaryKey from OmniJS at that index.
-    // This handles duplicate project names correctly since JXA IDs are unique per object.
-    let projectId = jxaProjectId;
-    try {
-      const allProjects = doc.flattenedProjects();
-      let projectIndex = -1;
-      for (let i = 0; i < allProjects.length; i++) {
-        try { if (allProjects[i].id() === jxaProjectId) { projectIndex = i; break; } } catch (e) {}
-      }
-      if (projectIndex >= 0) {
-        const idScript = \`
-          (() => {
-            var p = flattenedProjects[\${projectIndex}];
-            if (p) return JSON.stringify({ pk: p.id.primaryKey });
-            return JSON.stringify({ pk: null });
-          })()
-        \`;
-        const idResult = JSON.parse(app.evaluateJavascript(idScript));
-        if (idResult.pk) projectId = idResult.pk;
-      }
-    } catch (e) {}
-
-    // SETTER-PATTERNS row 3 (Project.status — OmniJS, direct assign of enum constant).
-    // Set status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
-    if (projectData.status && projectData.status !== 'active') {
-      try {
-        const statusScript = \`
-          (() => {
-            const proj = Project.byIdentifier('\${projectId}');
-            if (!proj) return JSON.stringify({success: false});
-
-            const statusMap = {
-              'active': Project.Status.Active,
-              'on_hold': Project.Status.OnHold,
-              'completed': Project.Status.Done,
-              'dropped': Project.Status.Dropped
-            };
-            const targetStatus = statusMap['\${projectData.status}'];
-            if (targetStatus) {
-              proj.status = targetStatus;
-            }
-            return JSON.stringify({success: true});
-          })()
-        \`;
-        app.evaluateJavascript(statusScript);
-      } catch (e) {}
-    }
-
-    // SETTER-PATTERNS row 1 (Project.reviewInterval — OmniJS read-modify-reassign).
-    // Set reviewInterval via OmniJS bridge — strictly typechecked.
-    // The class is non-constructible from user code (zero-arg construction
-    // fails with a CallbackObject error). Plain objects and Numbers are also
-    // rejected. In-place mutation also silently no-ops (the getter returns
-    // a snapshot). The working pattern: read the existing typed instance,
-    // mutate the local reference, then re-assign it back.
-    // Convert the schema-normalized days value to the most natural unit first.
-    if (projectData.reviewInterval) {
-      try {
-        const _riDays = projectData.reviewInterval;
-        let _riUnit, _riSteps;
-        if (_riDays % 365 === 0) { _riUnit = "years"; _riSteps = _riDays / 365; }
-        else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
-        else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
-        else { _riUnit = "days"; _riSteps = _riDays; }
-        const riScript = \`
-          (() => {
-            const proj = Project.byIdentifier('\${projectId}');
-            if (!proj) return JSON.stringify({success: false});
-            const ri = proj.reviewInterval;
-            if (!ri) return JSON.stringify({success: false});
-            ri.steps = \${_riSteps};
-            ri.unit = "\${_riUnit}";
-            proj.reviewInterval = ri;
-            return JSON.stringify({success: true});
-          })()
-        \`;
-        app.evaluateJavascript(riScript);
-      } catch (e) {}
-    }
-
-    // Set tags via bridge using reliable O(1) lookup
-    let appliedTags = [];
-    if (projectData.tags && projectData.tags.length > 0) {
-      try {
-        const tagScript = \`
-          (() => {
-            ${OMNIJS_PARSE_TAG_PATH}
-            ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
-
-            const proj = Project.byIdentifier('\${projectId}');
-            if (!proj) return JSON.stringify({success: false, error: 'Project not found by ID: ' + '\${projectId}'});
-
-            const tagNames = \${JSON.stringify(projectData.tags)};
-            const appliedTags = [];
-
-            for (const tagName of tagNames) {
-              var pathSegs = parseTagPath(tagName);
-              var tag;
-              if (pathSegs) {
-                tag = resolveOrCreateTagByPath(pathSegs);
-              } else {
-                tag = flattenedTags.find(t => t.name === tagName);
-                if (!tag) tag = new Tag(tagName, null);
-              }
-              proj.addTag(tag);
-              appliedTags.push(tag.name);
-            }
-
-            return JSON.stringify({success: true, tags: appliedTags});
-          })()
-        \`;
-        const result = JSON.parse(app.evaluateJavascript(tagScript));
-        if (result.success) {
-          appliedTags = result.tags;
-        }
-      } catch (e) {
-        // Tag assignment errors don't fail project creation - tags can be added later
-      }
-    }
-
-    return JSON.stringify({
-      projectId: projectId,
-      name: project.name(),
-      note: project.note() || '',
-      flagged: project.flagged(),
-      sequential: project.sequential(),
-      dueDate: project.dueDate() ? project.dueDate().toISOString() : null,
-      deferDate: project.deferDate() ? project.deferDate().toISOString() : null,
-      plannedDate: project.plannedDate() ? project.plannedDate().toISOString() : null,
-      folder: targetFolder ? targetFolder.name() : null,
-      tags: appliedTags,
-      created: true
-    });
-
-  } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'create_project'
-    });
-  }
-})();
-`;
+  // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
+  // (validateProjectCreate) BEFORE building, so it can never be bypassed; the
+  // emitter produces ONE OmniJS program (native `new Project(...)`, no JXA
+  // app.Project / folder push) wrapped in a data-free JXA launcher. The old
+  // template-string body — multiple evaluateJavascript round-trips for folder,
+  // status, reviewInterval, and tags — is gone (OMN-128).
+  const program = dispatchMutation('create/project', data);
+  validateMutationProgram(program);
+  const omnijs = emitProgram(program);
+  const script = wrapInLauncher(omnijs, program.context);
 
   return {
     script: script.trim(),
@@ -2355,45 +2074,6 @@ function buildTaskDataObject(data: TaskCreateData): Record<string, unknown> {
   if (data.flagged !== undefined) obj.flagged = data.flagged;
   if (data.estimatedMinutes !== undefined) obj.estimatedMinutes = data.estimatedMinutes;
   if (data.repetitionRule !== undefined) obj.repetitionRule = data.repetitionRule;
-
-  return obj;
-}
-
-/**
- * Build project data object for script embedding
- */
-function buildProjectDataObject(data: ProjectCreateData): Record<string, unknown> {
-  // Exhaustiveness guard: compile error if ProjectCreateData gains a field not listed here.
-  // Add the new key below AND a corresponding `if (data.X)` line above the return.
-  const _allKeys: Record<keyof ProjectCreateData, true> = {
-    name: true,
-    note: true,
-    folder: true,
-    tags: true,
-    dueDate: true,
-    deferDate: true,
-    plannedDate: true,
-    flagged: true,
-    sequential: true,
-    status: true,
-    reviewInterval: true,
-  };
-  void _allKeys;
-
-  const obj: Record<string, unknown> = {
-    name: data.name,
-  };
-
-  if (data.note !== undefined) obj.note = data.note;
-  if (data.folder !== undefined) obj.folder = data.folder;
-  if (data.tags !== undefined) obj.tags = data.tags;
-  if (data.dueDate !== undefined) obj.dueDate = data.dueDate;
-  if (data.deferDate !== undefined) obj.deferDate = data.deferDate;
-  if (data.plannedDate !== undefined) obj.plannedDate = data.plannedDate;
-  if (data.flagged !== undefined) obj.flagged = data.flagged;
-  if (data.sequential !== undefined) obj.sequential = data.sequential;
-  if (data.status !== undefined) obj.status = data.status;
-  if (data.reviewInterval !== undefined) obj.reviewInterval = data.reviewInterval;
 
   return obj;
 }

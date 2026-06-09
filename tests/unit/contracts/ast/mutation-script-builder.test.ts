@@ -219,6 +219,10 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('Test Project');
     expect(result.operation).toBe('create');
     expect(result.target).toBe('project');
+    // The script is now a JXA launcher around a JSON-encoded OmniJS program that
+    // constructs the project natively (was: JXA app.Project({...}) + folder push).
+    expect(result.script).toContain('app.evaluateJavascript(');
+    expect(result.script).toContain('new Project(');
   });
 
   it('includes sequential flag', () => {
@@ -248,7 +252,9 @@ describe('buildCreateProjectScript', () => {
     });
 
     expect(result.script).toContain('status');
-    expect(result.script).toContain('on_hold');
+    // The mutation-AST body emits the typed OmniJS enum constant, not the raw
+    // 'on_hold' string the old JXA body carried as an embedded data value.
+    expect(result.script).toContain('Project.Status.OnHold');
   });
 
   it('includes review interval', () => {
@@ -258,7 +264,11 @@ describe('buildCreateProjectScript', () => {
     });
 
     expect(result.script).toContain('reviewInterval');
-    expect(result.script).toContain('7');
+    // The mutation-AST body converts the "days" value to the natural (unit, steps)
+    // pair at BUILD time, so 7 days emits as steps:1 / unit:"weeks" — the raw 7 no
+    // longer appears. (The conversion algorithm itself is verified in the
+    // 'conversion logic produces correct results' test below.)
+    expect(result.script).toContain('weeks');
   });
 
   // OMN-38 follow-up: full history of broken approaches the regression guards block.
@@ -310,31 +320,41 @@ describe('buildCreateProjectScript', () => {
         name: 'Bridged',
         reviewInterval: 7,
       });
-      // Bridge: Project.byIdentifier inside app.evaluateJavascript.
-      // Read-modify-reassign: read proj.reviewInterval into a local, mutate
-      // it, then assign back. Direct in-place mutation silently no-ops
-      // because the getter returns a snapshot.
-      expect(result.script).toContain('Project.byIdentifier');
+      // The mutation-AST body creates the project with `new Project(...)` directly
+      // inside the single app.evaluateJavascript bridge — no Project.byIdentifier
+      // re-lookup (the project is already in hand). The OMN-38 read-modify-reassign
+      // intent is preserved: read proj.reviewInterval into a local (_rmr), mutate
+      // it, then assign back. Direct in-place mutation silently no-ops because the
+      // getter returns a snapshot.
       expect(result.script).toContain('app.evaluateJavascript');
       // Local snapshot read
-      expect(result.script).toMatch(/(?:const|let|var)\s+ri\s*=\s*proj\.reviewInterval/);
+      expect(result.script).toMatch(/(?:const|let|var)\s+_rmr\s*=\s*proj\.reviewInterval/);
       // Mutation on the local
-      expect(result.script).toMatch(/\bri\.steps\s*=/);
-      expect(result.script).toMatch(/\bri\.unit\s*=/);
+      expect(result.script).toMatch(/\b_rmr\.steps\s*=/);
+      expect(result.script).toMatch(/\b_rmr\.unit\s*=/);
       // Re-assignment back
-      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*ri\b/);
+      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*_rmr\b/);
     });
 
-    it('embeds the days→{unit, steps} conversion logic for all natural units', () => {
-      const result = buildCreateProjectScript({
-        name: 'Conversion',
-        reviewInterval: 7,
-      });
-      // The runtime conversion must cover years, months, weeks, days.
-      expect(result.script).toContain('"years"');
-      expect(result.script).toContain('"months"');
-      expect(result.script).toContain('"weeks"');
-      expect(result.script).toContain('"days"');
+    it('emits the build-time-converted (unit, steps) pair for the requested interval', () => {
+      // The old JXA body embedded the full days→{unit, steps} conversion as RUNTIME
+      // logic (covering years/months/weeks/days), so all four unit literals appeared
+      // in every script. The mutation-AST body computes the natural unit at BUILD
+      // time, so only the selected unit + steps are emitted. Verify the conversion
+      // result for a few canonical inputs lands in the generated body.
+      // (The algorithm itself is exercised in 'conversion logic produces correct
+      // results' below.)
+      const weekly = buildCreateProjectScript({ name: 'Weekly', reviewInterval: 7 });
+      expect(weekly.script).toContain('weeks');
+      expect(weekly.script).toMatch(/_rmr\.steps\s*=\s*1\b/);
+
+      const monthly = buildCreateProjectScript({ name: 'Monthly', reviewInterval: 30 });
+      expect(monthly.script).toContain('months');
+      expect(monthly.script).toMatch(/_rmr\.steps\s*=\s*1\b/);
+
+      const daily = buildCreateProjectScript({ name: 'Daily', reviewInterval: 5 });
+      expect(daily.script).toContain('days');
+      expect(daily.script).toMatch(/_rmr\.steps\s*=\s*5\b/);
     });
 
     it('conversion logic produces correct results for canonical inputs', () => {
@@ -436,7 +456,10 @@ describe('buildCreateProjectScript', () => {
     // database root with success:true. The generated script must emit a loud error
     // return for the folder-requested-but-not-found case (cf. buildCreateFolderScript).
     expect(result.script).toContain('Folder not found');
-    expect(result.script).toContain("context: 'create_project'");
+    // The mutation-AST body emits the error envelope inside the JSON-encoded OmniJS
+    // program, so the context tag appears double-quoted (and the JXA launcher also
+    // carries its own context: "create_project" catch-arm).
+    expect(result.script).toMatch(/context:\s*\\?"create_project\\?"/);
   });
 
   it('falls back to leaf name matching for simple folder names', () => {
