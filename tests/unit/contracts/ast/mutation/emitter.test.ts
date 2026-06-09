@@ -1,6 +1,12 @@
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
-import { emitExpr, emitProgram, emitStmt, wrapInLauncher } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import {
+  emitExpr,
+  emitProgram,
+  emitStmt,
+  wrapInLauncher,
+  EMITTED_PROGRAM_SIZE_LIMIT,
+} from '../../../../../src/contracts/ast/mutation/emitter.js';
 import {
   ref,
   member,
@@ -432,6 +438,39 @@ describe('slice-2 statement emission', () => {
     expect(moveCalls).toHaveLength(1);
     expect(created).toHaveLength(2);
     expect((moveCalls[0] as unknown[])[1]).toBe(created[0].ending);
+  });
+});
+
+describe('emitted-program size guard', () => {
+  it('throws LOUDLY when the assembled program exceeds the limit, naming both numbers', () => {
+    // Many bind statements with long raw strings — built programmatically so the
+    // test source stays tiny and the runtime cost is just string assembly.
+    const big = 'x'.repeat(10_000);
+    const statements = [
+      ...Array.from({ length: 25 }, (_, i) => bind(`b${i}`, raw(`"${big}"`))),
+      return_({ ok: json(true) }),
+    ];
+    let err: Error | undefined;
+    try {
+      emitProgram({ context: 'batch_create', snippetDeps: [], statements });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    expect(err!.message).toContain(String(EMITTED_PROGRAM_SIZE_LIMIT));
+    expect(err!.message).toMatch(/split the batch into smaller chunks/i);
+    // The ACTUAL size must be named too — and it must exceed the limit.
+    const sizes = (err!.message.match(/\d[\d_]*/g) ?? []).map((s) => Number(s.replace(/_/g, '')));
+    expect(Math.max(...sizes)).toBeGreaterThan(EMITTED_PROGRAM_SIZE_LIMIT);
+  });
+
+  it('a normal program is far under the limit (happy path, no throw)', () => {
+    const out = emitProgram({
+      context: 'create_task',
+      snippetDeps: [],
+      statements: [constructTask('t', json('Hello'), { kind: 'inbox' }), return_({ ok: json(true) })],
+    });
+    expect(out.length).toBeLessThan(EMITTED_PROGRAM_SIZE_LIMIT / 10);
   });
 });
 

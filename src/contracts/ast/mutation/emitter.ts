@@ -171,6 +171,10 @@ export function emitStmt(node: Stmt): string {
   }
 }
 
+// OmniJS bridge limit is 261KB measured (docs/dev/SCRIPT_SIZE_LIMITS.md); 200KB
+// leaves launcher + JSON-escape headroom. Loud failure, never silent truncation.
+export const EMITTED_PROGRAM_SIZE_LIMIT = 200_000;
+
 export function emitProgram(program: Program): string {
   const snippets = program.snippetDeps.length > 0 ? collectSnippets(program.snippetDeps) : '';
   const body = program.statements.map(emitStmt).join('\n');
@@ -190,7 +194,18 @@ export function emitProgram(program: Program): string {
     }
   }
 
-  return `(() => {\n${inner}\n})()`;
+  const assembled = `(() => {\n${inner}\n})()`;
+
+  // Size guard: a program over the bridge limit would be silently truncated or
+  // rejected at the OmniFocus seam — fail LOUDLY at build time instead.
+  if (assembled.length > EMITTED_PROGRAM_SIZE_LIMIT) {
+    throw new Error(
+      `Emitted program is ${assembled.length} characters, exceeding the ${EMITTED_PROGRAM_SIZE_LIMIT}-character ` +
+        'limit — split the batch into smaller chunks.',
+    );
+  }
+
+  return assembled;
 }
 
 // Wraps an OmniJS program string in a JXA launcher. The OmniJS body crosses the
