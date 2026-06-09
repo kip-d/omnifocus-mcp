@@ -18,3 +18,15 @@ describe('snippet registry', () => {
     expect(out.match(/function resolveFolderFlexible/g)).toHaveLength(1);
   });
 });
+
+describe('resolveProjectFlexible', () => {
+  it('is registered with no deps and resolves byIdentifier then by name', () => {
+    expect(SNIPPETS.resolveProjectFlexible).toBeDefined();
+    expect(SNIPPETS.resolveProjectFlexible.deps).toEqual([]);
+    const src = SNIPPETS.resolveProjectFlexible.source;
+    expect(src).toContain('function resolveProjectFlexible');
+    expect(src).toContain('Project.byIdentifier');
+    expect(src).toContain('flattenedProjects');
+    expect(src).toContain('return null'); // not-found is null — guard handles loudness
+  });
+});

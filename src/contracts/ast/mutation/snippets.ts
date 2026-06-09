@@ -93,12 +93,23 @@ function resolveOrCreateTagByPath(segments) {
   return current;
 }`;
 
+const resolveProjectFlexible = `
+function resolveProjectFlexible(target) {
+  var byId = Project.byIdentifier(target);
+  if (byId) return byId;
+  for (var i = 0; i < flattenedProjects.length; i++) {
+    if (flattenedProjects[i].name === target) return flattenedProjects[i];
+  }
+  return null;
+}`;
+
 export const SNIPPETS: Record<string, Snippet> = {
   parseFolderPath: { source: parseFolderPath, deps: [] },
   resolveFolderPath: { source: resolveFolderPath, deps: [] },
   resolveFolderFlexible: { source: resolveFolderFlexible, deps: ['parseFolderPath', 'resolveFolderPath'] },
   parseTagPath: { source: parseTagPath, deps: [] },
   resolveOrCreateTagByPath: { source: resolveOrCreateTagByPath, deps: ['parseTagPath'] },
+  resolveProjectFlexible: { source: resolveProjectFlexible, deps: [] },
 };
 
 export function collectSnippets(keys: readonly string[]): string {
