@@ -57,6 +57,8 @@
 - **[docs/dev/JXA-VS-OMNIJS-PATTERNS.md](dev/JXA-VS-OMNIJS-PATTERNS.md)** - When to use JXA vs OmniJS bridge
 - **[docs/dev/OMNIJS-FIRST-PATTERN.md](dev/OMNIJS-FIRST-PATTERN.md)** - OmniJS-first script pattern for new development
 - **[docs/dev/GIT_WORKTREES.md](dev/GIT_WORKTREES.md)** - Using git worktrees for parallel development
+- **[docs/dev/LOCAL_MCP_DEV_SERVER.md](dev/LOCAL_MCP_DEV_SERVER.md)** - Run a guarded local dev MCP server (test
+  in-progress code without endangering real data; why prod stays a separate checkout)
 
 ### Technical Deep Dives
 
