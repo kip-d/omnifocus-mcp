@@ -21,6 +21,22 @@ export interface FlatBatchResult {
   warnings?: string[];
 }
 
+/**
+ * OMN-137: lift non-empty script warnings off an envelope into a spreadable
+ * fragment. Non-string elements are dropped (scripts only ever emit strings;
+ * anything else is a malformed envelope). Empty or missing warnings produce {}
+ * so the response key stays omitted entirely (no noise on clean creates).
+ *
+ * Canonical omit-when-empty implementation — shared by OmniFocusWriteTool
+ * (single create + batch slow path) and flattenCreateItem below.
+ */
+export function liftWarnings(source: unknown): { warnings?: string[] } {
+  const w = (source as { warnings?: unknown } | null | undefined)?.warnings;
+  if (!Array.isArray(w)) return {};
+  const strings = w.filter((x): x is string => typeof x === 'string');
+  return strings.length > 0 ? { warnings: strings } : {};
+}
+
 /** Shape of the nested results object from routeToBatch() */
 interface NestedBatchResults {
   created: unknown[];
@@ -111,9 +127,7 @@ function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
     entry.error = item.error;
   }
   // OMN-137: per-item script warnings survive the projection (non-empty only).
-  if (item.warnings && item.warnings.length > 0) {
-    entry.warnings = item.warnings;
-  }
+  Object.assign(entry, liftWarnings(item));
   return entry;
 }
 

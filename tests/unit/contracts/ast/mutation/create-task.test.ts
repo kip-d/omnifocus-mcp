@@ -1,13 +1,15 @@
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
+// Imports go through the barrel deliberately — this file is the test that
+// exercises the public surface of src/contracts/ast/mutation/index.ts.
 import {
   buildCreateTaskProgram,
   lowerTaskCreate,
   dispatchMutation,
+  validateMutationProgram,
+  emitProgram,
   type TaskLoweringNames,
-} from '../../../../../src/contracts/ast/mutation/defs.js';
-import { validateMutationProgram } from '../../../../../src/contracts/ast/mutation/validator.js';
-import { emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
+} from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskCreateData } from '../../../../../src/contracts/mutations.js';
 
 /** A TaskCreateData exercising every field (project container variant). */

@@ -694,6 +694,57 @@ describe('OmniFocusWriteTool task operations', () => {
       taskSpy.mockRestore();
     });
 
+    it('slow path: failure branches (no ID returned) still carry degraded-item warnings', async () => {
+      // Mixed project+task batch → per-item loop. Both scripts "succeed" but
+      // return no ID — the failure returns must keep the script warnings,
+      // matching the fast path (Task-10 review symmetry item).
+      const projSpy = vi.spyOn(scriptBuilder, 'buildCreateProjectScript').mockResolvedValue({
+        script: 'mock project script',
+        operation: 'create',
+        target: 'project',
+        description: 'mock',
+      });
+      const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+        script: 'mock task script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: { name: 'P', warnings: ['status: boom'] }, // no projectId
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: { name: 'T', warnings: ['tags: boom'] }, // no taskId
+        });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          stopOnError: false, // keep failed items in the flattened results
+          operations: [
+            { operation: 'create', target: 'project', data: { tempId: 'p1', name: 'P' } },
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'T' } },
+          ],
+        },
+      })) as any;
+
+      const items = result.data.results as Array<Record<string, unknown>>;
+      expect(items[0].tempId).toBe('p1');
+      expect(items[0].success).toBe(false);
+      expect(items[0].error).toBe('No project ID returned from script');
+      expect(items[0].warnings).toEqual(['status: boom']);
+      expect(items[1].tempId).toBe('t1');
+      expect(items[1].success).toBe(false);
+      expect(items[1].error).toBe('No task ID returned from script');
+      expect(items[1].warnings).toEqual(['tags: boom']);
+      projSpy.mockRestore();
+      taskSpy.mockRestore();
+    });
+
     it('slow path: batch task create passes repetitionRule to the builder with NO second script', async () => {
       // repetitionRule on an item forces the per-item path; the rule must ride
       // the create script itself (applyRepetitionRuleSilently is gone).

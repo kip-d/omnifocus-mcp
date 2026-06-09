@@ -58,7 +58,7 @@ import {
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import { flattenBatchResults } from './batch-response-flatten.js';
+import { flattenBatchResults, liftWarnings } from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -88,16 +88,6 @@ function buildCreateErrorRecovery(errorMessage: string): string[] {
     return ['Use list_tasks to find valid parent task IDs', 'Ensure the parent task exists and can have subtasks'];
   }
   return ['Check that all required parameters are provided', 'Verify OmniFocus is running and not showing dialogs'];
-}
-
-/**
- * OMN-137: lift non-empty script warnings off an envelope into a spreadable
- * fragment. Empty or missing warnings produce {} so the response key stays
- * omitted entirely (no noise on clean creates).
- */
-function liftWarnings(source: unknown): { warnings?: string[] } {
-  const w = (source as { warnings?: unknown } | null | undefined)?.warnings;
-  return Array.isArray(w) && w.length > 0 ? { warnings: w as string[] } : {};
 }
 
 interface BatchItemCreationResult {
@@ -1984,6 +1974,8 @@ SAFETY:
       success: false,
       error: 'No project ID returned from script',
       type: 'project',
+      // OMN-137: a failed item can still carry degraded-write warnings.
+      ...liftWarnings(isScriptSuccess(result) ? result.data : undefined),
     };
   }
 
@@ -2037,6 +2029,8 @@ SAFETY:
         success: false,
         error: 'No task ID returned from script',
         type: 'task',
+        // OMN-137: a failed item can still carry degraded-write warnings.
+        ...liftWarnings(result.data),
       };
     }
 

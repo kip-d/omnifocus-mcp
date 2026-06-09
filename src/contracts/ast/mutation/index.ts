@@ -1,7 +1,24 @@
 // src/contracts/ast/mutation/index.ts
 // Public surface of the mutation-AST vertical slice (OMN-128).
 export * from './types.js';
-export { emitExpr, emitEnvelope, emitStmt, emitProgram, wrapInLauncher } from './emitter.js';
-export { validateMutationProgram } from './validator.js';
-export { buildCreateProjectProgram, MUTATION_DEFS, dispatchMutation } from './defs.js';
+export {
+  emitExpr,
+  emitEnvelope,
+  emitStmt,
+  emitProgram,
+  wrapInLauncher,
+  EMITTED_PROGRAM_SIZE_LIMIT,
+} from './emitter.js';
+export { validateMutationProgram, RESERVED_EMITTER_IDENTIFIERS } from './validator.js';
+export {
+  buildCreateProjectProgram,
+  buildCreateTaskProgram,
+  buildBatchCreateTasksProgram,
+  lowerTaskCreate,
+  MUTATION_DEFS,
+  dispatchMutation,
+} from './defs.js';
+export type { TaskLoweringNames, BatchCreateTasksData } from './defs.js';
+export { lowerRepetitionRule } from './repetition.js';
+export type { LoweredRepetitionRule } from './repetition.js';
 export { SNIPPETS, collectSnippets } from './snippets.js';
