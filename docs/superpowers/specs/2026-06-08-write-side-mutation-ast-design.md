@@ -108,9 +108,9 @@ freshly-created object in OmniJS.
 > every quote / backslash / newline / control char / unicode per the JS spec. So "mirror the read side" applies to the
 > AST _layering_ (§3), not to this boundary, where we deliberately diverge to a strictly safer mechanism.
 >
-> _Follow-up (out of scope here):_ the read side still carries the latent `escapeTemplateString` exposure. Once this
-> write-side boundary is proven, a separate ticket should retrofit the read path to the same `JSON.stringify` boundary
-> and retire `escapeTemplateString`.
+> _Follow-up (out of scope here) — filed as **OMN-129**:_ the read side still carries the latent `escapeTemplateString`
+> exposure. Once this write-side boundary is proven, OMN-129 retrofits the read path to the same `JSON.stringify`
+> boundary and retires `escapeTemplateString`.
 
 ## 5. The node set (substrate)
 
