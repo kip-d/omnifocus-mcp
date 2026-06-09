@@ -459,7 +459,6 @@ describe('buildCreateProjectScript', () => {
     // The mutation-AST body emits the error envelope inside the JSON-encoded OmniJS
     // program, so the context tag appears double-quoted (and the JXA launcher also
     // carries its own context: "create_project" catch-arm).
-    expect(result.script).toContain('create_project');
     expect(result.script).toMatch(/context:\s*\\?"create_project\\?"/);
   });
 
