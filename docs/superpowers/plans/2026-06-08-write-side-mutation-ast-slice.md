@@ -744,6 +744,13 @@ describe('dispatchMutation guard (OMN-119/120 non-bypass)', () => {
       `target==='project'` (unchanged). Add: the script contains `app.evaluateJavascript(` and `new Project(`. Remove
       any assertion that depended on the old JXA `app.Project({...})` literal.
 
+      > Review **all six** `buildCreateProjectScript` sub-tests, not just the first. Most survive because their data
+      > now appears inside the JSON-encoded program (`toContain('on_hold')`, `toContain('reviewInterval')`,
+      > `toContain('Work Folder')`). But `includes sequential flag` (asserts `toContain('sequential')`) and the OMN-38
+      > regression guards (which assert the **absence** of specific JXA patterns) target the old scaffolding — re-read
+      > each and adjust any whose assertion was about removed JXA, keeping the OMN-38 *intent* (no
+      > seconds-conversion / plain-object / constructor reviewInterval patterns) expressed against the new OmniJS body.
+
 ```typescript
 // adjust within describe('buildCreateProjectScript', ...)
 it('emits an OmniJS-native create via the launcher boundary', () => {
@@ -801,6 +808,8 @@ registry).
 - [ ] **Step 2:** Through the live MCP (OmniFocus running, sandbox configured), create a project that exercises every
       branch, **inside the sandbox folder** the guard requires:
   - `omnifocus_write { mutation: { operation: 'create', target: 'project', data: { name: '__test- AST slice', folder: '<SANDBOX_FOLDER_NAME>', tags: ['__test-ast'], dueDate: '2026-06-30', flagged: true, sequential: true, status: 'on_hold', reviewInterval: 7 } } }`
+  - Also run a second case with `reviewInterval: 1` (and no other review-bearing fields) to exercise the `days` fallback
+    branch — `reviewInterval: 7` only covers the `% 7 === 0` weekly branch.
 - [ ] **Step 3: Confirm by reading back** (not by trusting the success envelope):
   - project exists in the sandbox folder (folder placement correct);
   - tags applied; due date set; flagged + sequential; status on-hold; review interval = weekly;
