@@ -51,8 +51,8 @@ export function emitStmt(node: Stmt): string {
         // Batch items fail per-item: the throw is caught by the enclosing
         // batchItem try/capture. LOUD build-time failure when `message` is
         // absent — emitting `throw new Error(undefined)` would silently degrade
-        // the per-item error text. (The validator will also enforce presence in
-        // a later task; this keeps the emitter safe standalone.)
+        // the per-item error text. (The validator enforces presence too —
+        // belt and suspenders; this keeps the emitter safe standalone.)
         const message = node.envelope.message;
         if (!message) {
           throw new Error('guard with mode="throw" requires an envelope.message (it becomes the thrown Error text)');

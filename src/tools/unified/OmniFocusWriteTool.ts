@@ -131,6 +131,9 @@ PROJECT FOLDER PLACEMENT (data.folder on create / changes.folder on update):
 - An unresolvable folder returns an error; the project is NEVER silently filed at the root
 - On update, folder: null moves the project to the database root
 
+TASK CONTAINER PLACEMENT (data.project / data.parentTaskId on create):
+- An unresolvable project or parent task returns an error; the task is NEVER silently filed to the inbox
+
 BATCH OPERATIONS:
 - operations: Array of create, update, complete, and delete operations
 - Execution order: creates first, then updates, completes, deletes last
