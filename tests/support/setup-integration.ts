@@ -16,7 +16,12 @@
 
 import { shutdownSharedClient } from '../integration/helpers/shared-server.js';
 import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
-import { acquireIntegrationLock, releaseIntegrationLock, startOrphanWatchdog } from './integration-guard.js';
+import {
+  acquireIntegrationLock,
+  DEFAULT_LOCK_PATH,
+  releaseIntegrationLock,
+  startOrphanWatchdog,
+} from './integration-guard.js';
 
 // OMN-143: watchdog stop handle, cleared in teardown().
 let stopOrphanWatchdog: (() => void) | undefined;
@@ -37,9 +42,9 @@ export async function setup() {
   const lock = acquireIntegrationLock();
   if (!lock.acquired) {
     throw new Error(
-      `[Integration Guard] Another integration run (PID ${lock.holderPid}) holds the lock — ` +
-        'refusing to run concurrently (OMN-143). Wait for it, or if it is dead, the lock ' +
-        'self-clears on the next attempt.',
+      `[Integration Guard] Another integration run (PID ${lock.holderPid}) holds ${DEFAULT_LOCK_PATH} — ` +
+        'refusing to run concurrently (OMN-143). Wait for it; a dead holder self-clears on the next ' +
+        'attempt. (If the PID was recycled by an unrelated process, remove the lock file manually.)',
     );
   }
   if (lock.stale) {

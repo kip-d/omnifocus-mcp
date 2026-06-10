@@ -117,11 +117,22 @@ describe('startOrphanWatchdog', () => {
   });
 
   it('stop() handle cancels the watchdog before it ever fires', () => {
+    const ppids = [4242, 1, 1, 1];
     const onOrphan = vi.fn();
-    const stop = startOrphanWatchdog({ getPpid: () => 1, onOrphan, intervalMs: 100 });
+    const stop = startOrphanWatchdog({ getPpid: () => ppids.shift() ?? 1, onOrphan, intervalMs: 100 });
     stop();
     vi.advanceTimersByTime(1000);
     expect(onOrphan).not.toHaveBeenCalled();
+  });
+
+  it('born at ppid 1 (container init / launchd) NEVER arms — value is not the signal, the transition is', () => {
+    const onOrphan = vi.fn();
+    const getPpid = vi.fn(() => 1);
+    const stop = startOrphanWatchdog({ getPpid, onOrphan, intervalMs: 100 });
+    expect(stop).toBeTypeOf('function');
+    vi.advanceTimersByTime(1000);
+    expect(onOrphan).not.toHaveBeenCalled();
+    expect(getPpid).toHaveBeenCalledTimes(1); // baseline probe only — no interval was ever started
   });
 });
 
@@ -129,19 +140,31 @@ describe('startWorkerOrphanGuard (forked-worker gate)', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('no-ops without an IPC channel (thread-pool unit workers)', () => {
+  it('no-ops without an IPC channel (worker-thread pools — no orphan signal there)', () => {
+    const ppids = [4242, 1, 1];
     const onOrphan = vi.fn();
-    const stop = startWorkerOrphanGuard({ hasIpcChannel: false, getPpid: () => 1, onOrphan, intervalMs: 100 });
+    const stop = startWorkerOrphanGuard({
+      hasIpcChannel: false,
+      getPpid: () => ppids.shift() ?? 1,
+      onOrphan,
+      intervalMs: 100,
+    });
     expect(stop).toBeUndefined();
     vi.advanceTimersByTime(1000);
     expect(onOrphan).not.toHaveBeenCalled();
   });
 
-  it('guards forked workers (IPC present): fires when orphaned', () => {
+  it('guards forked workers (IPC present): fires on the ppid transition to 1', () => {
+    const ppids = [4242, 4242, 1];
     const onOrphan = vi.fn();
-    const stop = startWorkerOrphanGuard({ hasIpcChannel: true, getPpid: () => 1, onOrphan, intervalMs: 100 });
+    const stop = startWorkerOrphanGuard({
+      hasIpcChannel: true,
+      getPpid: () => ppids.shift() ?? 1,
+      onOrphan,
+      intervalMs: 100,
+    });
     expect(stop).toBeTypeOf('function');
-    vi.advanceTimersByTime(150);
+    vi.advanceTimersByTime(250);
     expect(onOrphan).toHaveBeenCalledTimes(1);
   });
 });

@@ -33,12 +33,21 @@ Wiring in `tests/support/setup-integration.ts`:
 Behavior notes: the lock also serializes `test:smoke`/`test:ci` paths that share this globalSetup — desirable, they
 touch the same OmniFocus DB.
 
-**Kill-test amendment (found during live verification):** the main-process watchdog alone is INSUFFICIENT — the live
-kill-test showed vitest main dying ~1s after its parent was killed, while the forked pool worker (which runs the test
-files and their destructive `afterAll` teardowns) survived at ppid 1. Fix: `startWorkerOrphanGuard`, loaded via vitest
-`setupFiles` (`tests/support/setup-worker-guard.ts`, runs in EVERY worker), self-gated to forked workers by IPC-channel
-presence (`typeof process.send === 'function'`) — a no-op in thread-pool unit workers. Integration runs use
-`pool: forks, singleFork: true`, so this covers exactly the surviving process class.
+**Kill-test amendments (found during live verification):**
+
+1. The main-process watchdog alone is INSUFFICIENT — round 2 showed vitest main dying ~1s after its parent was killed
+   while the forked pool worker (which runs the test files and their destructive `afterAll` teardowns) survived at
+   ppid 1. Fix: `startWorkerOrphanGuard`, loaded via vitest `setupFiles` (`tests/support/setup-worker-guard.ts`, runs in
+   EVERY worker), gated on IPC-channel presence (`typeof process.send === 'function'`). NOTE: vitest 3's default pool is
+   forks, so the guard also arms in unit workers — deliberate and harmless (transition-gated, below); worker-thread
+   pools (no orphan signal) no-op.
+2. A plain `process.exit(130)` did NOT kill a vitest fork worker (vitest patches `process.exit` inside workers). The
+   default `onOrphan` escalates: EPIPE-safe log → `process.exit(130)` → unconditional self-`SIGKILL` fallthrough, which
+   nothing can intercept. Round-4 verdict: main AND worker dead ~1s after the parent kill.
+3. The orphan trigger is the ppid TRANSITION to 1, not the value: a process born under PID 1 (container init /
+   launchd-launched) never arms — eliminating the false-positive class for that environment outright.
+4. Live run-B evidence: stale lock from the kill-test reclaimed with the dead PID named; full suite green (106 passed /
+   0 failed); lock released after teardown.
 
 ## Out of scope
 

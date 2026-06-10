@@ -61,7 +61,21 @@ export function acquireIntegrationLock(
     if ((e as { code?: string }).code !== 'EEXIST') throw e;
   }
 
-  const raw = fs.readFileSync(lockPath, 'utf8').trim();
+  let raw: string;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8').trim();
+  } catch (e) {
+    // The holder released (unlinked) between our EEXIST and this read — retry
+    // the atomic create once; a second EEXIST means a new holder won the race.
+    if ((e as { code?: string }).code !== 'ENOENT') throw e;
+    try {
+      fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
+      return { acquired: true };
+    } catch (e2) {
+      if ((e2 as { code?: string }).code !== 'EEXIST') throw e2;
+      raw = fs.readFileSync(lockPath, 'utf8').trim();
+    }
+  }
   const holder = Number.parseInt(raw, 10);
   const holderValid = Number.isFinite(holder) && holder > 0;
 
@@ -69,10 +83,21 @@ export function acquireIntegrationLock(
     return { acquired: false, holderPid: holder };
   }
 
-  // Dead holder or garbage content → stale lock. Reclaim by overwrite. (A
-  // race between two reclaiming processes is acceptable: both believe the
-  // prior holder is dead, and the lock's purpose is refusing LIVE overlap.)
-  fs.writeFileSync(lockPath, String(pid));
+  // Dead holder or garbage content → stale lock. Unlink-then-recreate so the
+  // atomic `wx` decides between two concurrent reclaimers: exactly one wins;
+  // the loser sees the winner's live PID and refuses.
+  try {
+    fs.unlinkSync(lockPath);
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'ENOENT') throw e;
+  }
+  try {
+    fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'EEXIST') throw e;
+    const winner = Number.parseInt(fs.readFileSync(lockPath, 'utf8').trim(), 10);
+    return { acquired: false, ...(Number.isFinite(winner) && winner > 0 ? { holderPid: winner } : {}) };
+  }
   return { acquired: true, stale: true, ...(holderValid ? { holderPid: holder } : {}) };
 }
 
@@ -99,21 +124,17 @@ export function releaseIntegrationLock(
 }
 
 /**
- * Abort the process when its parent dies. On macOS/Linux an orphaned process
- * is reparented to PID 1, so `process.ppid === 1` is the orphan signature.
- * The interval is unref'd: the watchdog never keeps the process alive.
- *
- * Returns a stop() handle for clean teardown.
- */
-/**
  * Worker-side orphan guard. Vitest's globalSetup (where startOrphanWatchdog
  * runs) executes ONLY in the vitest main process — forked pool workers, which
  * run the test files AND their destructive afterAll teardowns, outlive a dead
  * main (kill-test 2026-06-09: main died in ~1s, the fork survived at ppid 1).
  *
- * Forked workers have an IPC channel (`process.send`); thread-pool workers do
- * not. Gating on IPC presence makes this a no-op in unit thread runs and
- * active exactly where orphan survival was observed.
+ * Gating: forked workers have an IPC channel (`process.send`); worker-thread
+ * pools do not. NOTE vitest 3's DEFAULT pool is forks, so in this repo the
+ * guard arms in unit-test workers too — deliberate and harmless: it only acts
+ * on a ppid TRANSITION to 1 (see startOrphanWatchdog), and reaping an orphaned
+ * unit worker is also correct. The gate's job is merely to no-op where the
+ * orphan signal doesn't exist (threads share their host process).
  */
 export function startWorkerOrphanGuard(
   opts: {
@@ -128,6 +149,16 @@ export function startWorkerOrphanGuard(
   return startOrphanWatchdog(opts);
 }
 
+/**
+ * Abort the process when its parent dies. On macOS/Linux an orphaned process
+ * is reparented to PID 1 — but the trigger is the TRANSITION to ppid 1, not
+ * the value itself: a process legitimately BORN under PID 1 (e.g. node as a
+ * container's init launching the suite) must never be treated as orphaned.
+ * When the initial ppid is already 1, the watchdog never arms.
+ * The interval is unref'd: the watchdog never keeps the process alive.
+ *
+ * Returns a stop() handle for clean teardown.
+ */
 export function startOrphanWatchdog(
   opts: {
     getPpid?: () => number;
@@ -161,6 +192,12 @@ export function startOrphanWatchdog(
       process.kill(process.pid, 'SIGKILL');
     });
   const intervalMs = opts.intervalMs ?? 2000;
+
+  // Transition baseline: born-at-ppid-1 is NOT an orphan (container init /
+  // launchd-launched invocations) — never arm in that case.
+  if (getPpid() === 1) {
+    return (): void => undefined;
+  }
 
   const interval = setInterval(() => {
     if (getPpid() === 1) {
