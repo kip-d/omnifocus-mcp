@@ -78,4 +78,5 @@ export {
   buildDeleteScript,
   buildBatchScript,
   buildBulkDeleteScript,
+  buildBulkDeleteTasksScript,
 } from './mutation-script-builder.js';

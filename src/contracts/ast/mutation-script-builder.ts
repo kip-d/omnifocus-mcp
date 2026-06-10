@@ -659,74 +659,25 @@ export async function buildUpdateProjectScript(
 }
 
 /**
- * Build a JXA script for completing a task or project
+ * Build a JXA script for completing a task or project.
+ * Emits from the mutation AST. dispatchMutation runs the build-time sandbox
+ * guard BEFORE building (covers the previously unguarded single-op task path,
+ * spec §2.1); the emitter produces ONE OmniJS program — strict byIdentifier
+ * resolve, live completionDate read-back — wrapped in a data-free JXA
+ * launcher. The old template body is gone (OMN-128 slice 5).
  */
 export async function buildCompleteScript(
   target: MutationTarget,
   id: string,
   completionDate?: string,
 ): Promise<GeneratedMutationScript> {
-  // Test sandbox guard
-  if (target === 'task') {
-    await validateTaskInSandbox(id, 'complete');
-  } else {
-    await validateProjectInSandbox(id, 'complete');
-  }
-
-  const isTask = target === 'task';
-  const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
-  const idField = isTask ? 'taskId' : 'projectId';
-
-  // Build the markComplete call argument
-  const markCompleteArg = completionDate ? `new Date('${completionDate}')` : '';
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
-  const targetId = ${JSON.stringify(id)};
-
-  try {
-    // Find and complete via bridge (OmniJS-only for correct id.primaryKey lookup)
-    const completeScript = '(' +
-      '() => {' +
-        'const item = ${flattenedCollection}.find(i => i.id.primaryKey === "' + targetId + '");' +
-        'if (!item) return JSON.stringify({success: false, error: "Not found"});' +
-        'const name = item.name;' +
-        'item.markComplete(${markCompleteArg});' +
-        'return JSON.stringify({' +
-          'success: true,' +
-          '${idField}: item.id.primaryKey,' +
-          'name: name,' +
-          'completed: true,' +
-          'completionDate: item.completionDate ? item.completionDate.toISOString() : null' +
-        '});' +
-      '}' +
-    ')()';
-
-    const result = JSON.parse(app.evaluateJavascript(completeScript));
-
-    if (!result.success) {
-      return JSON.stringify({
-        error: true,
-        message: result.error || "${target} not found: " + targetId
-      });
-    }
-
-    return JSON.stringify(result);
-
-  } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'complete_${target}'
-    });
-  }
-})();
-`;
-
+  const program =
+    target === 'task'
+      ? await dispatchMutation('complete/task', { taskId: id, completionDate })
+      : await dispatchMutation('complete/project', { projectId: id, completionDate });
+  validateMutationProgram(program);
   return {
-    script: script.trim(),
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
     operation: 'complete',
     target,
     description: `Complete ${target}: ${id}`,
@@ -734,69 +685,47 @@ export async function buildCompleteScript(
 }
 
 /**
- * Build a JXA script for deleting a task or project
+ * Build a JXA script for deleting a task or project.
+ * Emits from the mutation AST. dispatchMutation runs the build-time sandbox
+ * guard BEFORE building; the emitter produces ONE OmniJS program — strict
+ * byIdentifier resolve, name captured pre-delete — wrapped in a data-free JXA
+ * launcher. The old template body is gone (OMN-128 slice 5).
  */
 export async function buildDeleteScript(target: MutationTarget, id: string): Promise<GeneratedMutationScript> {
-  // Test sandbox guard
-  if (target === 'task') {
-    await validateTaskInSandbox(id, 'delete');
-  } else {
-    await validateProjectInSandbox(id, 'delete');
-  }
-
-  const isTask = target === 'task';
-  const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
-  const idField = isTask ? 'taskId' : 'projectId';
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
-  const targetId = ${JSON.stringify(id)};
-
-  try {
-    // Find and delete via bridge
-    const deleteScript = '(' +
-      '() => {' +
-        'const item = ${flattenedCollection}.find(i => i.id.primaryKey === "' + targetId + '");' +
-        'if (!item) return JSON.stringify({success: false, error: "Not found"});' +
-        'const name = item.name;' +
-        'deleteObject(item);' +
-        'return JSON.stringify({' +
-          'success: true,' +
-          '${idField}: "' + targetId + '",' +
-          'name: name,' +
-          'deleted: true' +
-        '});' +
-      '}' +
-    ')()';
-
-    const result = JSON.parse(app.evaluateJavascript(deleteScript));
-
-    if (!result.success) {
-      return JSON.stringify({
-        error: true,
-        message: result.error || "${target} not found: " + targetId
-      });
-    }
-
-    return JSON.stringify(result);
-
-  } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'delete_${target}'
-    });
-  }
-})();
-`;
-
+  const program =
+    target === 'task'
+      ? await dispatchMutation('delete/task', { taskId: id })
+      : await dispatchMutation('delete/project', { projectId: id });
+  validateMutationProgram(program);
   return {
-    script: script.trim(),
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
     operation: 'delete',
     target,
     description: `Delete ${target}: ${id}`,
+  };
+}
+
+/**
+ * Build a JXA script for bulk-deleting tasks by ID.
+ * Emits from the mutation AST via 'bulk_delete/task' dispatch. The sandbox
+ * guard pre-flights ALL ids before any delete executes (spec §2.1);
+ * the emitter produces ONE unrolled OmniJS program — per-item byIdentifier
+ * resolve, deleteObject, accumulated results — wrapped in a data-free JXA
+ * launcher (OMN-128 slice 5).
+ *
+ * NOTE: A different legacy buildBulkDeleteTasksScript in
+ * src/omnifocus/scripts/tasks/delete-tasks-bulk.ts returns a plain string.
+ * This export returns GeneratedMutationScript and will replace it once
+ * Tasks 7–8 rewire the tool layer and delete the legacy file.
+ */
+export async function buildBulkDeleteTasksScript(input: { taskIds: string[] }): Promise<GeneratedMutationScript> {
+  const program = await dispatchMutation('bulk_delete/task', { taskIds: input.taskIds });
+  validateMutationProgram(program);
+  return {
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
+    operation: 'bulk_delete',
+    target: 'task',
+    description: `Bulk delete ${input.taskIds.length} task(s)`,
   };
 }
 
