@@ -691,7 +691,7 @@ export async function buildDeleteScript(target: MutationTarget, id: string): Pro
  * launcher (OMN-128 slice 5).
  *
  * NOTE: The legacy buildBulkDeleteTasksScript in
- * src/omnifocus/scripts/tasks/delete-tasks-bulk.ts returned a plain string.
+ * src/omnifocus/scripts/tasks/delete-tasks-bulk.ts (deleted in this slice) returned a plain string.
  * This export returns GeneratedMutationScript and replaces it (OMN-128 slice 5).
  */
 export async function buildBulkDeleteTasksScript(input: { taskIds: string[] }): Promise<GeneratedMutationScript> {

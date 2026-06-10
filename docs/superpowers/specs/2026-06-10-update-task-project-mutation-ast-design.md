@@ -26,8 +26,8 @@ program contains ONLY the statements for fields actually being changed — a ren
 one `setProp`, and a return.
 
 **Out of scope:** complete, delete, batch-mixed `buildBatchScript` (last `batchNonce` standing, OMN-134 residue),
-bulk-delete, tag builders (slice 5+); OMN-129 read-side retrofit; OMN-141 (batch stopOnError flattening); OMN-142 (name
-filter matches notes).
+bulk-delete (slice 5), tag builders (slice 6); OMN-129 read-side retrofit; OMN-141 (batch stopOnError flattening);
+OMN-142 (name filter matches notes).
 
 ## 2. Behavior deltas (deliberate, recorded)
 
@@ -147,7 +147,7 @@ Date/scalar applies and the null-assignments for clears reuse the existing `setP
 
 `resolveTagByPath` (resolve-only walk, no create) joins the registry with `deps: ['parseTagPath']`, lifted verbatim from
 the legacy `OMNIJS_RESOLVE_TAG_PATH` const. The remove-mode emission depends on it; the legacy const survives only until
-the tag builders migrate (slice 5+).
+the tag builders migrate (slice 6).
 
 ### 4.3 Lowerings (`mutation/defs.ts`)
 
