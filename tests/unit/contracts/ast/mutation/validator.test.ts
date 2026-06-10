@@ -20,6 +20,7 @@ import {
   raw,
   json,
   deleteObject,
+  bulkDeleteItem,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
@@ -425,6 +426,24 @@ describe('batchItem uniqueness', () => {
   it('rejects duplicate batchItem taskVar values', () => {
     expect(() => validateMutationProgram(batchProgram([item('a', 0, '_t0'), item('b', 1, '_t0')]))).toThrow(
       /duplicate.*taskVar/i,
+    );
+  });
+});
+
+describe('bulkDeleteItem uniqueness (rule 9)', () => {
+  const bulkProgram = (items: ReturnType<typeof bulkDeleteItem>[]): Program => ({
+    context: 'bulk_delete_tasks',
+    snippetDeps: [],
+    statements: [...items, return_({ deleted: ref('_deleted'), errors: ref('_errors') })],
+  });
+
+  it('accepts distinct bulkDeleteItem indexes', () => {
+    expect(() => validateMutationProgram(bulkProgram([bulkDeleteItem('a', 0), bulkDeleteItem('b', 1)]))).not.toThrow();
+  });
+
+  it('rejects duplicate bulkDeleteItem index values', () => {
+    expect(() => validateMutationProgram(bulkProgram([bulkDeleteItem('a', 0), bulkDeleteItem('b', 0)]))).toThrow(
+      /duplicate.*index/i,
     );
   });
 });

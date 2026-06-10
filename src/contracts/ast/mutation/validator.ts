@@ -12,6 +12,7 @@ import type {
   ConstructTaskNode,
   GuardNode,
   BatchItemNode,
+  BulkDeleteItemNode,
   MoveTaskNode,
   MoveProjectNode,
   CallMethodNode,
@@ -109,7 +110,10 @@ function assertNotReserved(name: string, where: string): void {
  *     constructTask whose bind === taskVar (the item's results push reads
  *     `<taskVar>.id.primaryKey` — without it, a ReferenceError is swallowed
  *     by the item catch as a FALSE per-item failure with an opaque message),
- *     and taskVar itself must not be a reserved identifier.
+ *     and taskVar itself must not be a reserved identifier. The same
+ *     duplicate-index rule applies across a program's bulkDeleteItem nodes:
+ *     a duplicate index would double-declare `const _d<i>` / `const _n<i>`
+ *     (SyntaxError at runtime).
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
  *     resolveProjectById, constructProject, constructTask, constructFolder,
  *     assignTags) may use a reserved emitter identifier — see
@@ -145,6 +149,7 @@ export function validateMutationProgram(program: Program): void {
     insideBatchItem: false,
     batchIndexes: new Set<number>(),
     batchTaskVars: new Set<string>(),
+    bulkDeleteIndexes: new Set<number>(),
   });
 }
 
@@ -153,6 +158,9 @@ interface ValidationContext {
   // Program-wide batchItem uniqueness tracking (rule 9) — shared across levels.
   batchIndexes: Set<number>;
   batchTaskVars: Set<string>;
+  // Program-wide bulkDeleteItem index uniqueness (rule 9, slice 5) — a
+  // duplicate index would double-declare `const _d<i>` / `const _n<i>`.
+  bulkDeleteIndexes: Set<number>;
 }
 
 // Rules 2/3/10 for constructProject.
@@ -277,6 +285,16 @@ function validateBatchItemStmt(stmt: BatchItemNode, ctx: ValidationContext): voi
   }
   // Rule 8: recurse all per-statement rules into the item's statements.
   validateStatementList(stmt.statements, { ...ctx, insideBatchItem: true });
+}
+
+// Rule 9 (bulkDeleteItem altitude): program-wide index uniqueness. A duplicate
+// index double-declares `const _d<i>` / `const _n<i>` (SyntaxError at runtime)
+// — the same hazard the batchItem _w<i> check above guards against.
+function validateBulkDeleteItemStmt(stmt: BulkDeleteItemNode, ctx: ValidationContext): void {
+  if (ctx.bulkDeleteIndexes.has(stmt.index)) {
+    throw new Error(`Invalid bulkDeleteItem: duplicate index ${stmt.index} — per-item _d<i>/_n<i> vars would collide.`);
+  }
+  ctx.bulkDeleteIndexes.add(stmt.index);
 }
 
 // Rule 10 catch-all: reserved emitter identifiers on the remaining binding statements.
@@ -510,6 +528,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'batchItem':
         validateBatchItemStmt(stmt, ctx);
+        break;
+      case 'bulkDeleteItem':
+        validateBulkDeleteItemStmt(stmt, ctx);
         break;
       default:
         break;
