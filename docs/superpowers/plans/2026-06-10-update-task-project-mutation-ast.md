@@ -1279,7 +1279,10 @@ const FIELD_EVIDENCE: Record<keyof ProjectUpdateData, string> = {
   clearPlannedDate: 'proj.plannedDate = null;',
   flagged: 'proj.flagged = true;',
   sequential: 'proj.sequential = true;',
-  status: 'Project.Status.OnHold',
+  // Assignment form, NOT the bare constant: the envelope's read-back ternary names
+  // all four Project.Status constants in EVERY program, so the bare constant would be
+  // vacuously satisfied. The `=` (vs the ternary's `===`) makes it a real tripwire.
+  status: 'proj.status = Project.Status.OnHold',
   reviewInterval: 'reviewInterval',
 };
 // per field: expect(extractOmniJsProgram(script)).toContain(FIELD_EVIDENCE[field]);
