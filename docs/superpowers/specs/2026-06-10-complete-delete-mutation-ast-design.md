@@ -105,16 +105,18 @@ pre-delete):
 **Deltas:** (a) task complete/delete envelopes rename `id` → `taskId` (consistency with every other migrated envelope);
 the handler wraps them under `task:` in the MCP response, so client-visible key paths are `task.taskId` instead of
 `task.id` — recorded, and the handlers' own response assembly is updated in the same change. (b) project complete/delete
-response data loses the redundant inner `success: true` key (§ above). (c) bulk keeps its legacy shape
-(`collectBulkDeleteResults` consumes `deleted[]`/`errors[]` unchanged) minus the same inner `success` key. (d)
-**`completionDate` now reaches project completes:** the write schema accepts it for `complete` on either target, but
-`handleProjectComplete(projectId)` silently drops it today (both call sites pass only the id). The lowering input
-carries `completionDate?` and the handler wires `compiled.completionDate` through with the same `localToUTC` conversion
-the task path uses — fixing a pre-existing silent drop (`feedback_no_silent_failures`) rather than preserving it;
-recorded here because a client that passed the field and relied on it being ignored would see a behavior change. Handler
-simplification rides along: the `'success' in res ? … : {success: true, data: res}` re-wrapping dance in
-`handleTaskComplete`/`handleTaskDelete` collapses to the uniform `isScriptError` + `result.data` pattern the project
-handlers use.
+response data loses the redundant inner `success: true` key (§ above) — and `handleProjectDelete`, which today discards
+`result.data` and returns a hardcoded `{ project: { deleted: true } }`, now passes the envelope through, so delete
+responses gain `projectId`/`name` (recorded delta; keeps the §7 read-back assertion non-vacuous on that path). (c) bulk
+keeps its legacy shape (`collectBulkDeleteResults` consumes `deleted[]`/`errors[]` unchanged) minus the same inner
+`success` key. (d) **`completionDate` now reaches project completes:** the write schema accepts it for `complete` on
+either target, but `handleProjectComplete(projectId)` silently drops it today (both call sites pass only the id). The
+lowering input carries `completionDate?` and the handler wires `compiled.completionDate` through with the same
+`localToUTC` conversion the task path uses — fixing a pre-existing silent drop (`feedback_no_silent_failures`) rather
+than preserving it; recorded here because a client that passed the field and relied on it being ignored would see a
+behavior change. Handler simplification rides along: the `'success' in res ? … : {success: true, data: res}` re-wrapping
+dance in `handleTaskComplete`/`handleTaskDelete` collapses to the uniform `isScriptError` + `result.data` pattern the
+project handlers use.
 
 ### 2.4 OMN-137 posture — nothing left to swallow on these paths
 
@@ -222,6 +224,8 @@ verifies of not-found and non-sandbox probes need the bounded unguarded window (
   `.script`; `collectBulkDeleteResults` unchanged.
 - `handleProjectComplete`: accept and forward `compiled.completionDate` (converted via `localToUTC(date, 'completion')`)
   to `buildCompleteScript('project', id, date)` — both call sites pass only the id today (§2.3d).
+- `handleProjectDelete`: return `{ project: result.data }` instead of the hardcoded `{ project: { deleted: true } }`
+  (§2.3b).
 - Delete `src/omnifocus/scripts/tasks/complete-task.ts`, `delete-task.ts`, `delete-tasks-bulk.ts` and their re-exports
   in `src/omnifocus/scripts/tasks.ts`; delete `buildBatchScript` + `buildBulkDeleteScript` + their tests + orphaned
   exports in `src/contracts/ast/index.ts`. Expect one ts-prune cascade round.
