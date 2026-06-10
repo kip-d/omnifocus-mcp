@@ -1318,7 +1318,7 @@ SAFETY:
       parentFolder: data.parentFolder,
     };
 
-    const generatedScript = buildCreateFolderScript(folderData);
+    const generatedScript = await buildCreateFolderScript(folderData);
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {

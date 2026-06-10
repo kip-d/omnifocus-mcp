@@ -1143,60 +1143,51 @@ describe('script structure consistency', () => {
   });
 });
 
-describe('buildCreateFolderScript', () => {
-  it('generates valid JXA script for top-level folder creation', () => {
-    const result = buildCreateFolderScript({
-      name: 'Home',
-    });
+// OMN-128 slice 3: buildCreateFolderScript emits ONE OmniJS program from the
+// mutation AST (dispatchMutation → emitProgram → wrapInLauncher) — the legacy
+// JXA shell and both its evaluateJavascript islands (parent lookup + the
+// JXA→OmniJS id bridge) are gone. Runtime behavior (vm execution, guard
+// short-circuits) is covered in tests/unit/contracts/ast/mutation/create-folder.test.ts.
+describe('buildCreateFolderScript (OMN-128 AST emission)', () => {
+  it('emits the JXA launcher around a JSON-encoded OmniJS program', async () => {
+    const result = await buildCreateFolderScript({ name: 'Home' });
 
     expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('Home');
+    expect(result.script).toContain('app.evaluateJavascript(');
     expect(result.operation).toBe('create');
     expect(result.target).toBe('folder');
     expect(result.description).toBe('Create folder: Home');
+
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('const folder = new Folder("Home");');
+    expect(program).toContain('folderId: folder.id.primaryKey');
   });
 
-  it('generates valid JXA script for nested folder creation', () => {
-    const result = buildCreateFolderScript({
-      name: 'Home',
-      parentFolder: 'Personal',
-    });
+  it('nested create resolves the parent in-program via the shared flexible resolver', async () => {
+    const result = await buildCreateFolderScript({ name: 'Sub', parentFolder: 'Personal' });
 
-    expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('Home');
-    expect(result.script).toContain('Personal');
-    expect(result.script).toContain('parseFolderPath');
-    expect(result.script).toContain('resolveFolderPath');
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('const targetParent = resolveFolderFlexible("Personal");');
+    expect(program).toContain('function parseFolderPath');
+    expect(program).toContain('function resolveFolderPath');
+    expect(program).toContain('const folder = new Folder("Sub", targetParent);');
   });
 
-  it('generates syntactically valid JavaScript', () => {
-    const result = buildCreateFolderScript({
-      name: 'Test Folder',
-      parentFolder: 'Parent : Child',
-    });
+  it('parent-not-found is a loud in-program guard with the legacy message', async () => {
+    const result = await buildCreateFolderScript({ name: 'Orphan', parentFolder: 'NonExistent' });
 
-    // Syntax-only validation: Function(body) parses but does not execute.
-    // The bare call form (no `new`) is equivalent for parsing purposes but
-    // doesn't trigger sonarjs/constructor-for-side-effects.
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('Parent folder not found: NonExistent');
+    expect(program).toContain('if (targetParent === null) return JSON.stringify(');
+  });
+
+  it('generates syntactically valid JavaScript', async () => {
+    const result = await buildCreateFolderScript({ name: 'Test Folder', parentFolder: 'Parent : Child' });
+
+    // Syntax-only validation: Function(body) parses but does not execute — for
+    // both the launcher and the decoded OmniJS program.
     expect(() => Function(result.script)).not.toThrow();
-  });
-
-  it('includes folder ID bridging logic', () => {
-    const result = buildCreateFolderScript({
-      name: 'Bridged Folder',
-    });
-
-    expect(result.script).toContain('primaryKey');
-    expect(result.script).toContain('flattenedFolders');
-  });
-
-  it('handles parent folder not found with error response', () => {
-    const result = buildCreateFolderScript({
-      name: 'Orphan',
-      parentFolder: 'NonExistent',
-    });
-
-    expect(result.script).toContain('Parent folder not found');
+    expect(() => Function(extractOmniJsProgram(result.script))).not.toThrow();
   });
 });
 

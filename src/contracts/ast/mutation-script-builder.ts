@@ -638,95 +638,19 @@ export async function buildCreateProjectScript(data: ProjectCreateData): Promise
  * - Top-level folders (no parentFolder)
  * - Nested folders (parentFolder by name, path " : " or "/", or ID)
  */
-export function buildCreateFolderScript(data: FolderCreateData): GeneratedMutationScript {
-  // Test sandbox guard
-  validateFolderCreate(data);
-
-  const folderData = { name: data.name, parentFolder: data.parentFolder };
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
-  const folderData = ${JSON.stringify(folderData)};
-
-  try {
-    // Find parent folder if specified — use OmniJS bridge for id.primaryKey + path syntax
-    let targetParent = null;
-    if (folderData.parentFolder) {
-      const findFolderScript = \`
-        (() => {
-          ${OMNIJS_PARSE_FOLDER_PATH}
-          ${OMNIJS_RESOLVE_FOLDER_PATH}
-          ${OMNIJS_RESOLVE_FOLDER_FLEXIBLE}
-
-          var target = \${JSON.stringify(folderData.parentFolder)};
-          var folder = resolveFolderFlexible(target);
-          if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
-          return JSON.stringify({ found: false });
-        })()
-      \`;
-      const findFolderResult = JSON.parse(app.evaluateJavascript(findFolderScript));
-      if (findFolderResult.found && findFolderResult.index >= 0) {
-        targetParent = doc.flattenedFolders()[findFolderResult.index];
-      } else {
-        return JSON.stringify({
-          error: true,
-          message: 'Parent folder not found: ' + folderData.parentFolder,
-          context: 'create_folder'
-        });
-      }
-    }
-
-    // Create folder
-    const folder = app.Folder({ name: folderData.name });
-
-    // Add to parent or root
-    if (targetParent) {
-      targetParent.folders.push(folder);
-    } else {
-      doc.folders.push(folder);
-    }
-
-    const jxaFolderId = folder.id();
-
-    // Bridge to get OmniJS id.primaryKey
-    let folderId = jxaFolderId;
-    try {
-      const allFolders = doc.flattenedFolders();
-      let folderIndex = -1;
-      for (let i = 0; i < allFolders.length; i++) {
-        try { if (allFolders[i].id() === jxaFolderId) { folderIndex = i; break; } } catch (e) {}
-      }
-      if (folderIndex >= 0) {
-        const idScript = \`
-          (() => {
-            var f = flattenedFolders[\${folderIndex}];
-            if (f) return JSON.stringify({ pk: f.id.primaryKey });
-            return JSON.stringify({ pk: null });
-          })()
-        \`;
-        const idResult = JSON.parse(app.evaluateJavascript(idScript));
-        if (idResult.pk) folderId = idResult.pk;
-      }
-    } catch (e) {}
-
-    return JSON.stringify({
-      folderId: folderId,
-      name: folder.name(),
-      parentFolder: targetParent ? targetParent.name() : null,
-      created: true
-    });
-
-  } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'create_folder'
-    });
-  }
-})();
-`;
+export async function buildCreateFolderScript(data: FolderCreateData): Promise<GeneratedMutationScript> {
+  // Emit from the mutation AST. dispatchMutation runs the build-time sandbox
+  // guard (validateFolderCreate) BEFORE building, so it can never be bypassed;
+  // the emitter produces ONE OmniJS program (native `new Folder(...)`, parent
+  // resolved in-program with a loud not-found guard) wrapped in a data-free JXA
+  // launcher. The old template-string body — a JXA shell with two
+  // evaluateJavascript islands (parent lookup + the JXA→OmniJS id bridge) — is
+  // gone (OMN-128). Async because dispatchMutation awaits its (possibly async)
+  // sandbox guard.
+  const program = await dispatchMutation('create/folder', data);
+  validateMutationProgram(program);
+  const omnijs = emitProgram(program);
+  const script = wrapInLauncher(omnijs, program.context);
 
   return {
     script: script.trim(),
