@@ -1340,10 +1340,15 @@ SAFETY:
     this.cache.invalidate('projects');
     this.cache.invalidate('folders');
 
-    return createSuccessResponseV2('omnifocus_write', { folder: result.data, operation: 'create_folder' }, undefined, {
-      ...timer.toMetadata(),
-      operation: 'create_folder',
-    });
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      { folder: result.data, operation: 'create_folder', ...liftWarnings(result.data) },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'create_folder',
+      },
+    );
   }
 
   /**

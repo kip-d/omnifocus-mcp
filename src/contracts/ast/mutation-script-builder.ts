@@ -646,7 +646,7 @@ export async function buildCreateFolderScript(data: FolderCreateData): Promise<G
   // launcher. The old template-string body — a JXA shell with two
   // evaluateJavascript islands (parent lookup + the JXA→OmniJS id bridge) — is
   // gone (OMN-128). Async because dispatchMutation awaits its (possibly async)
-  // sandbox guard.
+  // sandbox guard — spec §1/§4.
   const program = await dispatchMutation('create/folder', data);
   validateMutationProgram(program);
   const omnijs = emitProgram(program);
