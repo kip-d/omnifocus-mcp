@@ -295,6 +295,73 @@ describe('flattenBatchResults', () => {
     expect(liftWarnings(undefined)).toEqual({});
   });
 
+  it('OMN-137: should lift update-envelope warnings into the flattened entry, omitting empty ones', () => {
+    // Task 9 lifted builder warnings onto update responses (data.warnings);
+    // the batch flatten layer must carry them through, not silently drop them.
+    const nestedResults = {
+      created: [],
+      updated: [
+        {
+          success: true,
+          data: {
+            task: { id: 'u-warn', name: 'Warned update', updated: true, changes: { status: 'on_hold' } },
+            warnings: ['status: boom'],
+          },
+          metadata: {},
+        },
+        {
+          success: true,
+          data: {
+            task: { id: 'u-clean', name: 'Clean update', updated: true, changes: { flagged: true } },
+          },
+          metadata: {},
+        },
+      ],
+      completed: [],
+      deleted: [],
+      errors: [],
+    };
+
+    const flat = flattenBatchResults(nestedResults);
+
+    expect(flat).toHaveLength(2);
+    expect(flat[0].warnings).toEqual(['status: boom']);
+    expect('warnings' in flat[1]).toBe(false);
+  });
+
+  it('OMN-137: should lift warnings from minimalResponse update results too', () => {
+    // minimalResponse updates carry warnings at the top level of the flat object.
+    const nestedResults = {
+      created: [],
+      updated: [
+        {
+          success: true,
+          id: 'task-min-w',
+          operation: 'update_task',
+          task_id: 'task-min-w',
+          fields_updated: ['status'],
+          warnings: ['status: boom'],
+        },
+        {
+          success: true,
+          id: 'task-min-c',
+          operation: 'update_task',
+          task_id: 'task-min-c',
+          fields_updated: ['flagged'],
+        },
+      ],
+      completed: [],
+      deleted: [],
+      errors: [],
+    };
+
+    const flat = flattenBatchResults(nestedResults);
+
+    expect(flat).toHaveLength(2);
+    expect(flat[0].warnings).toEqual(['status: boom']);
+    expect('warnings' in flat[1]).toBe(false);
+  });
+
   it('should handle minimalResponse update results (no nested data.task envelope)', () => {
     // When minimalResponse is true, handleTaskUpdate returns a flat object
     // instead of createSuccessResponseV2 envelope

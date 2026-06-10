@@ -1394,7 +1394,7 @@ SAFETY:
     // Smart cache invalidation
     this.cache.invalidateProject(projectId);
 
-    const { warnings: _envelopeWarnings, ...projectData } = result.data as Record<string, unknown>; // eslint-disable-line sonarjs/no-unused-vars
+    const { warnings: _envelopeWarnings, ...projectData } = (result.data ?? {}) as Record<string, unknown>; // eslint-disable-line sonarjs/no-unused-vars
     return createSuccessResponseV2(
       'omnifocus_write',
       {
