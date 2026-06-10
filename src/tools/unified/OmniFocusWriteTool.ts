@@ -747,6 +747,7 @@ SAFETY:
         operation: 'update_task',
         task_id: taskId, // Keep for backwards compatibility
         fields_updated: Object.keys(safeUpdates),
+        ...liftWarnings(parsedUpdateResult),
       };
     }
 
@@ -827,21 +828,26 @@ SAFETY:
       ),
     };
 
-    return createSuccessResponseV2('omnifocus_write', { task: transformedResult }, undefined, {
-      ...timer.toMetadata(),
-      updated_id: taskId,
-      input_params: {
-        taskId,
-        fields_updated: Object.keys(safeUpdates),
-        has_date_changes: !!(
-          safeUpdates.dueDate ||
-          safeUpdates.deferDate ||
-          safeUpdates.clearDueDate ||
-          safeUpdates.clearDeferDate
-        ),
-        has_project_change: safeUpdates.project !== undefined,
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      { task: transformedResult, ...liftWarnings(parsedUpdateResult) },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        updated_id: taskId,
+        input_params: {
+          taskId,
+          fields_updated: Object.keys(safeUpdates),
+          has_date_changes: !!(
+            safeUpdates.dueDate ||
+            safeUpdates.deferDate ||
+            safeUpdates.clearDueDate ||
+            safeUpdates.clearDeferDate
+          ),
+          has_project_change: safeUpdates.project !== undefined,
+        },
       },
-    });
+    );
   }
 
   // ─── Task Complete ──────────────────────────────────────────────────
@@ -1388,12 +1394,14 @@ SAFETY:
     // Smart cache invalidation
     this.cache.invalidateProject(projectId);
 
+    const { warnings: _envelopeWarnings, ...projectData } = result.data as Record<string, unknown>; // eslint-disable-line sonarjs/no-unused-vars
     return createSuccessResponseV2(
       'omnifocus_write',
       {
         operation: 'update',
         target: 'project',
-        ...(result.data as Record<string, unknown>),
+        ...projectData,
+        ...liftWarnings(result.data),
       },
       undefined,
       timer.toMetadata(),
