@@ -16,6 +16,7 @@ export {
   buildCreateTaskProgram,
   buildBatchCreateTasksProgram,
   buildUpdateTaskProgram,
+  buildUpdateProjectProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
   dispatchMutation,

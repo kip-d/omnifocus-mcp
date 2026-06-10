@@ -14,6 +14,7 @@ import {
   validateBatchTaskSpecs,
   validateFolderCreate,
   validateProjectCreate,
+  validateProjectInSandbox,
   validateTagChanges,
   validateTaskCreate,
   validateTaskInSandbox,
@@ -33,6 +34,7 @@ import {
   guard,
   json,
   member,
+  moveProject,
   moveTask,
   newExpr,
   raw,
@@ -41,6 +43,7 @@ import {
   resolveFolder,
   resolveParentTask,
   resolveProject,
+  resolveProjectById,
   resolveTask,
   return_,
   setProp,
@@ -48,6 +51,7 @@ import {
   type Envelope,
   type Expr,
   type Program,
+  type ProjectMovePosition,
   type Stmt,
   type TaskMovePosition,
 } from './types.js';
@@ -556,8 +560,12 @@ type DateChanges = Pick<
 >;
 
 /** Set-vs-clear date lowering shared by both update targets (spec §3): clear
- * flag or explicit null → null assignment; string → dateExpr. Clear WINS over
- * a simultaneous value (legacy applied the clear after the set). */
+ * flag, explicit null, OR empty string → null assignment; non-empty string →
+ * dateExpr. Clear WINS over a simultaneous value (legacy applied the clear
+ * after the set). The empty-string case is legacy-faithful: the old builder's
+ * falsy check lowered '' to null, and the task-path sanitizer normalizes ''
+ * away before the builder — but the builder is the public contract, so it
+ * must not depend on that upstream sanitization. */
 function lowerDateSetClear(targetVar: string, changes: DateChanges): Stmt[] {
   const stmts: Stmt[] = [];
   const fields = [
@@ -566,7 +574,7 @@ function lowerDateSetClear(targetVar: string, changes: DateChanges): Stmt[] {
     { field: 'plannedDate', clear: 'clearPlannedDate' },
   ] as const;
   for (const { field, clear } of fields) {
-    if (changes[clear] === true || changes[field] === null) {
+    if (changes[clear] === true || changes[field] === null || changes[field] === '') {
       stmts.push(setProp(ref(targetVar), field, json(null), 'direct'));
     } else if (changes[field] !== undefined) {
       stmts.push(setProp(ref(targetVar), field, dateExpr(json(changes[field])), 'dateExpr'));
@@ -741,6 +749,134 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
   return { statements, context: 'update_task', snippetDeps };
 }
 
+// Update-side status map: unlike create's STATUS_ENUM (which deliberately skips
+// 'active' — a fresh project already IS active), update supports setting a
+// project BACK to active. Kept separate so the create lowering's "only
+// non-active is emitted" invariant stays expressed in its own map.
+const PROJECT_STATUS_UPDATE_ENUM: Record<string, string> = {
+  active: 'Project.Status.Active',
+  on_hold: 'Project.Status.OnHold',
+  completed: 'Project.Status.Done',
+  dropped: 'Project.Status.Dropped',
+};
+
+/** Live status read-back for the update envelope (spec §2.4) — builder-internal
+ * raw (no user data), mapping Project.Status constants to the legacy lowercase
+ * strings so the envelope key keeps its shape. The legacy envelope ECHOED
+ * `changes.status || 'active'` while the actual set could have silently failed. */
+const PROJECT_STATUS_READBACK =
+  "proj.status === Project.Status.Active ? 'active' : " +
+  "proj.status === Project.Status.OnHold ? 'on_hold' : " +
+  "proj.status === Project.Status.Done ? 'completed' : 'dropped'";
+
+/**
+ * Lower a project-update request into a typed mutation Program (OMN-128 slice 4).
+ * Build-time conditional: the program contains ONLY statements for fields
+ * actually being changed. Statement shape: target resolve (STRICT byIdentifier
+ * — the legacy name fallback is dead, spec §2.1) + guard → folder destination
+ * resolve + guard → applies in legacy order (scalars → reviewInterval → dates →
+ * status → folder move → tags) → read-back envelope.
+ */
+export function buildUpdateProjectProgram(input: UpdateProjectInput): Program {
+  const { projectId, changes } = input;
+  // Compile-time exhaustiveness guard (same discipline as the create lowerings):
+  // a new ProjectUpdateData field cannot be silently dropped. When this stops
+  // compiling, add the field below AND emit the statement that lowers it.
+  const _exhaustive: Record<keyof ProjectUpdateData, true> = {
+    name: true,
+    note: true,
+    folder: true,
+    tags: true,
+    addTags: true,
+    removeTags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    clearDueDate: true,
+    clearDeferDate: true,
+    clearPlannedDate: true,
+    flagged: true,
+    sequential: true,
+    status: true,
+    reviewInterval: true,
+  };
+  void _exhaustive;
+
+  const statements: Stmt[] = [];
+  const snippetDeps: string[] = [];
+  const errEnv = (message: string): Envelope => ({
+    error: json(true),
+    message: json(message),
+    context: json('update_project'),
+  });
+
+  // Resolve-first (spec §2.2): target, then the folder destination, each
+  // guarded — a not-found reference fails LOUD with zero mutations applied.
+  statements.push(resolveProjectById('proj', projectId));
+  statements.push(guard('proj === null', errEnv('Project not found: ' + projectId)));
+
+  let folderMove: ProjectMovePosition | undefined;
+  if (changes.folder !== undefined) {
+    if (changes.folder === null) {
+      folderMove = { kind: 'libraryBeginning' };
+    } else {
+      // Destination keeps flexible resolution (path / id / leaf name, OMN-127 #2);
+      // the §2.2 delta is the MESSAGE: create-family wording replaces legacy's
+      // 'Failed to move project: folder_not_found:' wrapper.
+      statements.push(resolveFolder('targetFolder', changes.folder));
+      statements.push(guard('targetFolder === null', errEnv('Folder not found: ' + changes.folder)));
+      snippetDeps.push('resolveFolderFlexible');
+      folderMove = { kind: 'folderBeginning', var: 'targetFolder' };
+    }
+  }
+
+  // Applies in legacy order: scalars → reviewInterval → dates → status → folder move → tags.
+  statements.push(...lowerUpdateScalars('proj', changes));
+
+  if (changes.reviewInterval !== undefined) {
+    const { unit, steps } = reviewIntervalUnit(changes.reviewInterval);
+    statements.push(
+      readModifyReassign(
+        ref('proj'),
+        'reviewInterval',
+        [
+          { prop: 'steps', value: json(steps) },
+          { prop: 'unit', value: json(unit) },
+        ],
+        true,
+        'reviewInterval',
+      ),
+    );
+  }
+
+  statements.push(...lowerDateSetClear('proj', changes));
+
+  if (changes.status) {
+    statements.push(
+      setProp(ref('proj'), 'status', enumRef(PROJECT_STATUS_UPDATE_ENUM[changes.status]), 'enum', true, 'status'),
+    );
+  }
+
+  if (folderMove) statements.push(moveProject(ref('proj'), folderMove, true, 'folder'));
+
+  const tagLowering = lowerTagChanges('proj', changes);
+  statements.push(...tagLowering.statements);
+  snippetDeps.push(...tagLowering.snippetDeps);
+
+  statements.push(
+    return_({
+      projectId: member(ref('proj'), 'id.primaryKey'),
+      name: member(ref('proj'), 'name'),
+      flagged: member(ref('proj'), 'flagged'),
+      status: raw(PROJECT_STATUS_READBACK),
+      updated: json(true),
+      warnings: ref('_warnings'),
+    }),
+  );
+
+  return { statements, context: 'update_project', snippetDeps };
+}
+
 // =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
@@ -776,6 +912,13 @@ export const MUTATION_DEFS = {
     },
     build: buildUpdateTaskProgram,
   } as MutationDef<UpdateTaskInput>,
+  'update/project': {
+    guard: async (d) => {
+      await validateProjectInSandbox(d.projectId, 'update');
+      validateTagChanges(d.changes);
+    },
+    build: buildUpdateProjectProgram,
+  } as MutationDef<UpdateProjectInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =

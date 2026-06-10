@@ -385,7 +385,7 @@ export async function validateTaskInSandbox(taskId: string, operation: string): 
 /**
  * Validate that a project update/delete is on a project inside the sandbox
  */
-async function validateProjectInSandbox(projectId: string, operation: string): Promise<void> {
+export async function validateProjectInSandbox(projectId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
   const inSandbox = await isProjectInSandbox(projectId);

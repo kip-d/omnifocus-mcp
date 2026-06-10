@@ -74,6 +74,8 @@ export interface GuardNode {
   // per-item — the throw is caught by the item's try/capture wrapper).
   mode?: 'return' | 'throw';
 }
+/** Flexible: id-then-name fallback via resolveProjectFlexible — for create-time/
+ *  move-destination refs; update targets use ResolveProjectByIdNode (strict). */
 export interface ResolveProjectNode {
   type: 'resolveProject';
   bind: string;
