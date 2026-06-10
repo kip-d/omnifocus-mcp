@@ -609,6 +609,34 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  // ─── FOLDER CREATE WARNINGS PASS-THROUGH (OMN-137) ──────────────────
+
+  describe('folder create warnings pass-through', () => {
+    it('OMN-137: surfaces script warnings in the folder create response data', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ folderId: 'folder-w', name: 'Warned Folder', warnings: ['parent: boom'] }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create_folder', data: { name: 'Warned Folder' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.warnings).toEqual(['parent: boom']);
+    });
+
+    it('OMN-137: omits the warnings key when the folder script reports none', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ folderId: 'folder-nw', name: 'Clean Folder', warnings: [] }));
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create_folder', data: { name: 'Clean Folder' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('warnings' in result.data).toBe(false);
+    });
+  });
+
   // ─── BATCH WARNINGS PASS-THROUGH (OMN-137) ──────────────────────────
 
   describe('batch create warnings pass-through', () => {

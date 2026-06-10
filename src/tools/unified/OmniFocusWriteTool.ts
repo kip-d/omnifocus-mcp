@@ -1342,7 +1342,13 @@ SAFETY:
 
     return createSuccessResponseV2(
       'omnifocus_write',
-      { folder: result.data, operation: 'create_folder', ...liftWarnings(result.data) },
+      {
+        folder: result.data,
+        operation: 'create_folder',
+        // OMN-137: lifted when non-empty, omitted when none (folder creates have no
+        // best-effort steps today — uniformity plumbing, see buildCreateFolderProgram).
+        ...liftWarnings(result.data),
+      },
       undefined,
       {
         ...timer.toMetadata(),
