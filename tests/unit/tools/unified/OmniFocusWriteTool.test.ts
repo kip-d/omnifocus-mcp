@@ -908,8 +908,8 @@ describe('OmniFocusWriteTool task operations', () => {
         },
       });
 
-      // Verify completionDate was forwarded (as localToUTC-converted string or undefined)
-      expect(buildSpy).toHaveBeenCalledWith('project', 'proj-cd', expect.any(String));
+      // Verify completionDate was forwarded (as localToUTC-converted string containing the date)
+      expect(buildSpy).toHaveBeenCalledWith('project', 'proj-cd', expect.stringContaining('2026-01-15'));
       buildSpy.mockRestore();
     });
 
