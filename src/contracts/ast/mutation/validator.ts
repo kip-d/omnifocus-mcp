@@ -11,6 +11,9 @@ import type {
   ConstructTaskNode,
   GuardNode,
   BatchItemNode,
+  MoveTaskNode,
+  MoveProjectNode,
+  CallMethodNode,
 } from './types.js';
 
 const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
@@ -90,6 +93,14 @@ function assertNotReserved(name: string, where: string): void {
  *     resolveProjectById, constructProject, constructTask, constructFolder,
  *     assignTags) may use a reserved emitter identifier — see
  *     RESERVED_EMITTER_IDENTIFIERS.
+ * 11. A `moveTask` node's `position` must be a typed TaskMovePosition object
+ *     with kind ∈ {inboxBeginning, projectBeginning, parentEnding, containerRoot}.
+ *     projectBeginning and parentEnding require a non-empty string `var`;
+ *     containerRoot requires a non-empty string `taskVar`. A `moveProject` node's
+ *     `position` must be a typed ProjectMovePosition with kind ∈
+ *     {libraryBeginning, folderBeginning}; folderBeginning requires non-empty `var`.
+ * 12. A `callMethod` node's `method` must be in CALL_METHOD_ALLOWLIST. The
+ *     allowlist is deliberately minimal (markComplete, drop) — extend per slice.
  *
  * NOT enforced here: snippet-dependency coverage (a statement that emits a call
  * to an OmniJS helper must declare that helper in `snippetDeps`). That check is
@@ -253,6 +264,67 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
 }
 
+const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 'parentEnding', 'containerRoot']);
+const PROJECT_MOVE_POSITION_KINDS = new Set(['libraryBeginning', 'folderBeginning']);
+
+/**
+ * Allowlist of OmniJS task methods callable via callMethod (Rule 12).
+ * Deliberately minimal — extend per slice as new lowerings land.
+ * Exported so callers (batch program builder, tool layer) can reference it.
+ */
+export const CALL_METHOD_ALLOWLIST: readonly string[] = ['markComplete', 'drop'];
+
+// Rule 11 for moveTask: typed TaskMovePosition with kind in the expected set;
+// var-requiring kinds must carry a non-empty string var / taskVar.
+function validateMoveTaskStmt(stmt: MoveTaskNode): void {
+  const pos = stmt.position as unknown;
+  if (typeof pos !== 'object' || pos === null || !TASK_MOVE_POSITION_KINDS.has((pos as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid moveTask: position must be a typed TaskMovePosition object ' +
+        'with kind in {inboxBeginning, projectBeginning, parentEnding, containerRoot}, not a string or untyped value.',
+    );
+  }
+  const typed = pos as { kind: string; var?: unknown; taskVar?: unknown };
+  if (
+    (typed.kind === 'projectBeginning' || typed.kind === 'parentEnding') &&
+    (typeof typed.var !== 'string' || typed.var.length === 0)
+  ) {
+    throw new Error(`Invalid moveTask: position kind "${typed.kind}" requires a non-empty string "var".`);
+  }
+  if (typed.kind === 'containerRoot' && (typeof typed.taskVar !== 'string' || typed.taskVar.length === 0)) {
+    throw new Error('Invalid moveTask: position kind "containerRoot" requires a non-empty string "taskVar".');
+  }
+}
+
+// Rule 11 for moveProject: typed ProjectMovePosition; folderBeginning requires var.
+function validateMoveProjectStmt(stmt: MoveProjectNode): void {
+  const pos = stmt.position as unknown;
+  if (
+    typeof pos !== 'object' ||
+    pos === null ||
+    !PROJECT_MOVE_POSITION_KINDS.has((pos as { kind?: string }).kind ?? '')
+  ) {
+    throw new Error(
+      'Invalid moveProject: position must be a typed ProjectMovePosition object ' +
+        'with kind in {libraryBeginning, folderBeginning}, not a string or untyped value.',
+    );
+  }
+  const typed = pos as { kind: string; var?: unknown };
+  if (typed.kind === 'folderBeginning' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
+    throw new Error('Invalid moveProject: position kind "folderBeginning" requires a non-empty string "var".');
+  }
+}
+
+// Rule 12: method must be in CALL_METHOD_ALLOWLIST.
+function validateCallMethodStmt(stmt: CallMethodNode): void {
+  if (!CALL_METHOD_ALLOWLIST.includes(stmt.method)) {
+    throw new Error(
+      `Invalid callMethod: method "${stmt.method}" is not in the allowlist ` +
+        `(${CALL_METHOD_ALLOWLIST.join(', ')}). Add it to CALL_METHOD_ALLOWLIST in validator.ts when its lowering lands.`,
+    );
+  }
+}
+
 // Rule 7: resolution-guard discipline (list-level check).
 // A failed resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
 // moveTasks explodes with an opaque runtime TypeError instead of a typed
@@ -301,6 +373,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
     if (stmt.type === 'setProp') validateSetPropStmt(stmt);
     if (stmt.type === 'constructTask') validateConstructTaskStmt(stmt);
     if (stmt.type === 'guard') validateGuardStmt(stmt, ctx);
+    if (stmt.type === 'moveTask') validateMoveTaskStmt(stmt);
+    if (stmt.type === 'moveProject') validateMoveProjectStmt(stmt);
+    if (stmt.type === 'callMethod') validateCallMethodStmt(stmt);
 
     // Rule 8 (return inside batchItem): same IIFE-escape hazard as the return-mode guard above.
     if (stmt.type === 'return' && ctx.insideBatchItem) {

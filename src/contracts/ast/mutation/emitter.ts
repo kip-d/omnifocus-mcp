@@ -2,7 +2,7 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, Stmt } from './types.js';
+import type { Envelope, Expr, Program, Stmt, TaskMovePosition } from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -33,6 +33,25 @@ export function emitExpr(node: Expr): string {
 // warning into the program-scope `_warnings` array instead of swallowing.
 function bestEffortCatch(label: string): string {
   return `catch (e) { _warnings.push(${JSON.stringify(label)} + ': ' + (e && e.message ? e.message : String(e))); }`;
+}
+
+// Exhaustive switch with never default — TypeScript enforces completeness as the
+// TaskMovePosition union grows (same pattern as FolderResolution handling above).
+function emitTaskMovePosition(p: TaskMovePosition): string {
+  switch (p.kind) {
+    case 'inboxBeginning':
+      return 'inbox.beginning';
+    case 'projectBeginning':
+      return `${p.var}.beginning`;
+    case 'parentEnding':
+      return `${p.var}.ending`;
+    case 'containerRoot':
+      return `${p.taskVar}.containingProject ? ${p.taskVar}.containingProject.beginning : inbox.beginning`;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown task move position: ${JSON.stringify(_x)}`);
+    }
+  }
 }
 
 export function emitEnvelope(env: Envelope): string {
@@ -155,6 +174,20 @@ export function emitStmt(node: Stmt): string {
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    case 'moveTask': {
+      const pos = emitTaskMovePosition(node.position);
+      const stmt = `moveTasks([${emitExpr(node.task)}], ${pos});`;
+      return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'move')}` : stmt;
+    }
+    case 'moveProject': {
+      const pos = node.position.kind === 'libraryBeginning' ? 'library.beginning' : `${node.position.var}.beginning`;
+      const stmt = `moveSections([${emitExpr(node.project)}], ${pos});`;
+      return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'folder')}` : stmt;
+    }
+    case 'callMethod': {
+      const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
+      return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
+    }
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':
