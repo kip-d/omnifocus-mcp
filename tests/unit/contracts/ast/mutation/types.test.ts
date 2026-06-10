@@ -49,7 +49,8 @@ describe('mutation node factories', () => {
 describe('slice-2 node factories', () => {
   it('resolveProject / resolveParentTask carry bind + ref', () => {
     expect(resolveProject('p', 'Work')).toEqual({ type: 'resolveProject', bind: 'p', ref: 'Work' });
-    expect(resolveParentTask('pt', 'abc')).toEqual({ type: 'resolveParentTask', bind: 'pt', ref: 'abc' });
+    // resolveParentTask is an alias for resolveTask — produces type 'resolveTask'
+    expect(resolveParentTask('pt', 'abc')).toEqual({ type: 'resolveTask', bind: 'pt', ref: 'abc' });
   });
 
   it('constructTask carries a typed ContainerResolution', () => {

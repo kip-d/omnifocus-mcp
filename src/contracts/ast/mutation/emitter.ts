@@ -157,8 +157,10 @@ export function emitStmt(node: Stmt): string {
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
-    case 'resolveParentTask':
+    case 'resolveTask':
       return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'resolveProjectById':
+      return `const ${node.bind} = Project.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
     case 'constructTask': {
       // `new Task(name)` lands in the inbox; non-inbox containers are placed via
       // moveTasks([t], container.ending). Container resolution failures are

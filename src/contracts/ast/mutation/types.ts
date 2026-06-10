@@ -79,8 +79,19 @@ export interface ResolveProjectNode {
   bind: string;
   ref: string;
 }
-export interface ResolveParentTaskNode {
-  type: 'resolveParentTask';
+/** Resolves a task by identifier — general-purpose (create parent-task chain and
+ *  update target). Strict byIdentifier-only: no name fallback. */
+export interface ResolveTaskNode {
+  type: 'resolveTask';
+  bind: string;
+  ref: string;
+}
+/** Resolves a project strictly by identifier only — spec §2.1 deliberate
+ *  contrast with ResolveProjectNode (flexible, id-then-name fallback). Used
+ *  for update targets where the caller owns the id and name fallback would be
+ *  ambiguous. */
+export interface ResolveProjectByIdNode {
+  type: 'resolveProjectById';
   bind: string;
   ref: string;
 }
@@ -159,7 +170,8 @@ export type Stmt =
   | BindNode
   | ResolveFolderNode
   | ResolveProjectNode
-  | ResolveParentTaskNode
+  | ResolveTaskNode
+  | ResolveProjectByIdNode
   | GuardNode
   | ConstructProjectNode
   | ConstructTaskNode
@@ -197,8 +209,15 @@ export const resolveProject = (bindVar: string, refStr: string): ResolveProjectN
   bind: bindVar,
   ref: refStr,
 });
-export const resolveParentTask = (bindVar: string, refStr: string): ResolveParentTaskNode => ({
-  type: 'resolveParentTask',
+export const resolveTask = (bindVar: string, refStr: string): ResolveTaskNode => ({
+  type: 'resolveTask',
+  bind: bindVar,
+  ref: refStr,
+});
+/** Alias retained for the slice-2 create lowerings' readability (same node). */
+export const resolveParentTask = resolveTask;
+export const resolveProjectById = (bindVar: string, refStr: string): ResolveProjectByIdNode => ({
+  type: 'resolveProjectById',
   bind: bindVar,
   ref: refStr,
 });

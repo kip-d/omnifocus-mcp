@@ -61,16 +61,16 @@ function assertNotReserved(name: string, where: string): void {
  *     require a non-empty string `var`.
  *  6. A guard with mode 'throw' must have `envelope.message` defined (the
  *     emitter also throws — belt and suspenders at the validation seam).
- *  7. Resolution-guard discipline: a `resolveProject`/`resolveParentTask`/
- *     `resolveFolder` bind consumed by a later `constructTask` container `var`,
- *     `constructProject` folder `var`, or `constructFolder` parent `var` must
- *     have a `guard` BETWEEN them whose `cond` mentions that bind
- *     (word-boundary match, not substring). String-level check on `cond` —
- *     same trust model as GuardNode.cond generally. Applies at each
- *     statement-list level independently (resolve/guard/construct triplets
- *     stay within one list in practice). (Slice 3 widened this from
- *     constructTask-only to all three constructs — resolveFolder →
- *     constructProject was a pre-existing enforcement gap.)
+ *  7. Resolution-guard discipline: a `resolveProject`/`resolveTask`/
+ *     `resolveProjectById`/`resolveFolder` bind consumed by a later
+ *     `constructTask` container `var`, `constructProject` folder `var`, or
+ *     `constructFolder` parent `var` must have a `guard` BETWEEN them whose
+ *     `cond` mentions that bind (word-boundary match, not substring).
+ *     String-level check on `cond` — same trust model as GuardNode.cond
+ *     generally. Applies at each statement-list level independently
+ *     (resolve/guard/construct triplets stay within one list in practice).
+ *     (Slice 3 widened this from constructTask-only to all three constructs
+ *     — resolveFolder → constructProject was a pre-existing enforcement gap.)
  *  8. Inside `batchItem.statements`: all per-statement rules recurse, but a
  *     `return` statement is ILLEGAL (it would return from the whole program
  *     IIFE, skipping remaining items and the results envelope — Task 5 review
@@ -86,8 +86,8 @@ function assertNotReserved(name: string, where: string): void {
  *     `<taskVar>.id.primaryKey` — without it, a ReferenceError is swallowed
  *     by the item catch as a FALSE per-item failure with an opaque message),
  *     and taskVar itself must not be a reserved identifier.
- * 10. No binding statement (bind, resolveFolder, resolveProject,
- *     resolveParentTask, constructProject, constructTask, constructFolder,
+ * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
+ *     resolveProjectById, constructProject, constructTask, constructFolder,
  *     assignTags) may use a reserved emitter identifier — see
  *     RESERVED_EMITTER_IDENTIFIERS.
  *
@@ -248,7 +248,8 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'bind') assertNotReserved(stmt.name, 'bind statement');
   if (stmt.type === 'resolveFolder') assertNotReserved(stmt.bind, 'resolveFolder bind');
   if (stmt.type === 'resolveProject') assertNotReserved(stmt.bind, 'resolveProject bind');
-  if (stmt.type === 'resolveParentTask') assertNotReserved(stmt.bind, 'resolveParentTask bind');
+  if (stmt.type === 'resolveTask') assertNotReserved(stmt.bind, 'resolveTask bind');
+  if (stmt.type === 'resolveProjectById') assertNotReserved(stmt.bind, 'resolveProjectById bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
 }
 
@@ -269,7 +270,12 @@ function validateResolutionGuardDiscipline(statements: Stmt[]): void {
   };
   for (let ri = 0; ri < statements.length; ri++) {
     const resolve = statements[ri];
-    if (resolve.type !== 'resolveProject' && resolve.type !== 'resolveParentTask' && resolve.type !== 'resolveFolder')
+    if (
+      resolve.type !== 'resolveProject' &&
+      resolve.type !== 'resolveTask' &&
+      resolve.type !== 'resolveProjectById' &&
+      resolve.type !== 'resolveFolder'
+    )
       continue;
     // Word-boundary match, not substring: a guard on `proj` must not satisfy
     // bind `p`. Regex-escaped for safety even though binds are identifiers.
