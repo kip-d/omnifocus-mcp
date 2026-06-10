@@ -951,6 +951,10 @@ describe('buildBulkDeleteTasksScript (AST)', () => {
     expect(() => Function(script)).not.toThrow();
     expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
   });
+
+  it('throws when taskIds is empty (defense-in-depth: emitter accumulators require at least one id)', async () => {
+    await expect(buildBulkDeleteTasksScript({ taskIds: [] })).rejects.toThrow(/at least one/);
+  });
 });
 
 describe('buildBatchScript', () => {

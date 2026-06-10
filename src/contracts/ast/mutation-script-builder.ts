@@ -661,10 +661,10 @@ export async function buildUpdateProjectScript(
 /**
  * Build a JXA script for completing a task or project.
  * Emits from the mutation AST. dispatchMutation runs the build-time sandbox
- * guard BEFORE building (covers the previously unguarded single-op task path,
- * spec §2.1); the emitter produces ONE OmniJS program — strict byIdentifier
- * resolve, live completionDate read-back — wrapped in a data-free JXA
- * launcher. The old template body is gone (OMN-128 slice 5).
+ * guard BEFORE building (covers the single-op task path, previously unguarded
+ * at the tool layer — rewired to this builder in the same slice, spec §2.1);
+ * the emitter produces ONE OmniJS program — strict byIdentifier resolve, live
+ * completionDate read-back — wrapped in a data-free JXA launcher.
  */
 export async function buildCompleteScript(
   target: MutationTarget,
@@ -713,12 +713,14 @@ export async function buildDeleteScript(target: MutationTarget, id: string): Pro
  * resolve, deleteObject, accumulated results — wrapped in a data-free JXA
  * launcher (OMN-128 slice 5).
  *
- * NOTE: A different legacy buildBulkDeleteTasksScript in
- * src/omnifocus/scripts/tasks/delete-tasks-bulk.ts returns a plain string.
- * This export returns GeneratedMutationScript and will replace it once
- * Tasks 7–8 rewire the tool layer and delete the legacy file.
+ * NOTE: The legacy buildBulkDeleteTasksScript in
+ * src/omnifocus/scripts/tasks/delete-tasks-bulk.ts returned a plain string.
+ * This export returns GeneratedMutationScript and replaces it (OMN-128 slice 5).
  */
 export async function buildBulkDeleteTasksScript(input: { taskIds: string[] }): Promise<GeneratedMutationScript> {
+  if (input.taskIds.length === 0) {
+    throw new Error('bulk_delete requires at least one taskId');
+  }
   const program = await dispatchMutation('bulk_delete/task', { taskIds: input.taskIds });
   validateMutationProgram(program);
   return {
