@@ -144,6 +144,17 @@ describe('assignTags modes', () => {
     expect(emitted).toContain('task.clearTags();');
     // clearTags participates in the same try as the loop (legacy: whole tag block best-effort)
     expect(emitted.indexOf('try {')).toBeLessThan(emitted.indexOf('task.clearTags()'));
+    // ... and PRECEDES the loop (a mutant emitting clearTags after the block must fail)
+    expect(emitted.indexOf('task.clearTags()')).toBeLessThan(emitted.indexOf('for (const _tagName'));
+    // ... and the loop is the create-or-find ADD loop, not the remove loop
+    expect(emitted).toContain('resolveOrCreateTagByPath');
+    expect(emitted).toContain('.addTag(');
+  });
+
+  it("explicit 'add' mode emits identically to the absent-mode form", () => {
+    const explicit = emitStmt(assignTags(ref('task'), json(['a']), 'applied', false, undefined, 'add'));
+    const absent = emitStmt(assignTags(ref('task'), json(['a']), 'applied'));
+    expect(explicit).toBe(absent);
   });
 
   it('replace with [] emits clearTags and an empty loop (truthy-empty-array legacy semantics)', () => {
@@ -176,7 +187,7 @@ describe('assignTags modes', () => {
       context: 'x',
       snippetDeps: [], // missing resolveTagByPath (and its parseTagPath dep)
     };
-    expect(() => emitProgram(program)).toThrow(/not present in snippetDeps/);
+    expect(() => emitProgram(program)).toThrow(/(parseTagPath|resolveTagByPath).*not present in snippetDeps/);
   });
 
   it('emitProgram succeeds for remove mode when resolveTagByPath is declared (deps pull parseTagPath)', () => {
