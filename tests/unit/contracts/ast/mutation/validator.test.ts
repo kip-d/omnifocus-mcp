@@ -20,6 +20,7 @@ import {
   raw,
   json,
   deleteObject,
+  type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -430,7 +431,7 @@ describe('batchItem uniqueness', () => {
 
 describe('reserved emitter identifiers', () => {
   it('exports the reserved list for the batch program builder', () => {
-    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted']);
+    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors']);
   });
 
   it('rejects a bind statement named _warnings', () => {
@@ -487,5 +488,16 @@ describe('reserved emitter identifiers', () => {
       statements: [bind('_warning', raw('1')), bind('_w', raw('1')), bind('_wx1', raw('1')), done],
     };
     expect(() => validateMutationProgram(good)).not.toThrow();
+  });
+
+  it('rule 10: _deleted/_errors and _d<i>/_n<i> are reserved emitter identifiers', () => {
+    for (const name of ['_deleted', '_errors', '_d0', '_n12']) {
+      const program: Program = {
+        statements: [bind(name, raw('[]')), return_({ ok: json(true) })],
+        context: 'x',
+        snippetDeps: [],
+      };
+      expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
+    }
   });
 });

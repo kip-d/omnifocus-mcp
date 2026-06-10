@@ -27,8 +27,15 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  *  - `_warnings`: the OMN-137 program-scope warnings array (Task 4 review:
  *    it briefly joined the unreserved namespace — this rule closes that gap).
  *  - `_aborted`: the batch stop-on-error flag set by batchItem's catch.
+ *  - `_deleted`: the bulk-delete success accumulator declared by emitProgram
+ *    when any bulkDeleteItem is present (mirrors the _aborted ownership pattern).
+ *  - `_errors`: the bulk-delete failure accumulator, same ownership.
  *  - `_w<i>` (pattern, see RESERVED_ITEM_VAR_PATTERN): per-item warning
  *    watermarks declared by batchItem emission.
+ *  - `_d<i>` (pattern, see RESERVED_DELETE_RESOLVE_PATTERN): per-item task
+ *    resolution vars declared by bulkDeleteItem emission.
+ *  - `_n<i>` (pattern, see RESERVED_DELETE_NAME_PATTERN): per-item name
+ *    capture vars declared by bulkDeleteItem emission.
  *
  * `results` is deliberately NOT reserved: the batch program builder
  * legitimately binds it via a bind statement.
@@ -36,14 +43,21 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  * Exported so the batch program builder (Task 9) can keep its generated names
  * clear of the same set.
  */
-export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted'];
+export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted', '_deleted', '_errors'];
 const RESERVED_ITEM_VAR_PATTERN = /^_w\d+$/;
+const RESERVED_DELETE_RESOLVE_PATTERN = /^_d\d+$/;
+const RESERVED_DELETE_NAME_PATTERN = /^_n\d+$/;
 
 function assertNotReserved(name: string, where: string): void {
-  if (RESERVED_EMITTER_IDENTIFIERS.includes(name) || RESERVED_ITEM_VAR_PATTERN.test(name)) {
+  if (
+    RESERVED_EMITTER_IDENTIFIERS.includes(name) ||
+    RESERVED_ITEM_VAR_PATTERN.test(name) ||
+    RESERVED_DELETE_RESOLVE_PATTERN.test(name) ||
+    RESERVED_DELETE_NAME_PATTERN.test(name)
+  ) {
     throw new Error(
       `Invalid ${where}: "${name}" is a reserved emitter identifier ` +
-        `(reserved: ${RESERVED_EMITTER_IDENTIFIERS.join(', ')}, and the _w<digits> pattern).`,
+        `(reserved: ${RESERVED_EMITTER_IDENTIFIERS.join(', ')}, and the _w<digits>, _d<digits>, _n<digits> patterns).`,
     );
   }
 }

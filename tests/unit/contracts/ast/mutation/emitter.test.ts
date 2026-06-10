@@ -27,6 +27,8 @@ import {
   guard,
   bind,
   deleteObject,
+  bulkDeleteItem,
+  type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
@@ -492,5 +494,33 @@ describe('wrapInLauncher (JXA boundary)', () => {
     const m = jxa.match(/app\.evaluateJavascript\((".*?")\);/s);
     expect(m).not.toBeNull();
     expect(JSON.parse(m![1])).toBe(hostile);
+  });
+});
+
+describe('bulkDeleteItem emission (slice 5)', () => {
+  it('emits bulkDeleteItem as a per-id resolve/capture/delete block with per-item error capture', () => {
+    const out = emitStmt(bulkDeleteItem('t1', 0));
+    expect(out).toContain('const _d0 = Task.byIdentifier("t1") || null;');
+    expect(out).toContain('_errors.push({ taskId: "t1", error: "Task not found" });'); // legacy bulk wording
+    expect(out).toContain('const _n0 = _d0.name;'); // name captured BEFORE deleteObject
+    expect(out.indexOf('const _n0')).toBeLessThan(out.indexOf('deleteObject(_d0);'));
+    expect(out.indexOf('deleteObject(_d0);')).toBeLessThan(out.indexOf('_deleted.push({ id: "t1", name: _n0 });'));
+    expect(out).toContain('catch (e)'); // continue-on-error: per-item try, no rethrow
+  });
+
+  it('emitProgram declares _deleted/_errors when the program contains bulkDeleteItem nodes', () => {
+    const program: Program = {
+      statements: [bulkDeleteItem('t1', 0), return_({ deleted: ref('_deleted'), errors: ref('_errors') })],
+      context: 'bulk_delete_tasks',
+      snippetDeps: [],
+    };
+    const omnijs = emitProgram(program);
+    expect(omnijs).toContain('let _deleted = [];');
+    expect(omnijs).toContain('let _errors = [];');
+  });
+
+  it('emitProgram does NOT declare _deleted/_errors for non-bulk programs', () => {
+    const omnijs = emitProgram({ statements: [return_({ ok: json(true) })], context: 'x', snippetDeps: [] });
+    expect(omnijs).not.toContain('_deleted');
   });
 });

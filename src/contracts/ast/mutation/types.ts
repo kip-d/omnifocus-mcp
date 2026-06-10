@@ -227,6 +227,19 @@ export interface DeleteObjectNode {
   target: Expr;
 }
 
+/** One id's delete attempt inside a bulk program (spec §4.2): resolve →
+ *  not-found else capture-name → deleteObject → push to _deleted, with a
+ *  per-item catch pushing to _errors (continue-on-error, legacy-faithful).
+ *  Self-contained: consumes no external binds (its own resolve is internal),
+ *  so rule 7 does not apply to it. The _deleted/_errors accumulators are
+ *  DECLARED by emitProgram when any bulkDeleteItem is present — the _aborted
+ *  ownership pattern, not a builder bind. */
+export interface BulkDeleteItemNode {
+  type: 'bulkDeleteItem';
+  id: string;
+  index: number;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -248,6 +261,7 @@ export type Stmt =
   | MoveProjectNode
   | CallMethodNode
   | DeleteObjectNode
+  | BulkDeleteItemNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -403,3 +417,8 @@ export const callMethod = (
   ...(label ? { label } : {}),
 });
 export const deleteObject = (target: Expr): DeleteObjectNode => ({ type: 'deleteObject', target });
+export const bulkDeleteItem = (id: string, index: number): BulkDeleteItemNode => ({
+  type: 'bulkDeleteItem',
+  id,
+  index,
+});
