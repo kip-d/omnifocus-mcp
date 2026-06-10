@@ -69,13 +69,15 @@ Guard messages (legacy-exact where the legacy message existed):
 
 ### 2.3 OMN-137 — update paths stop swallowing
 
-Legacy swallowed: project status set (`catch (e) {}` around a whole bridge island), project tags
-(`catch (e) { /* tag errors don't fail the update */ }`), and reported nothing for repetition failures. New: every
-post-resolution apply that can fail is `bestEffort` with a **label**, so failures surface as
-`_warnings.push('<label>: <message>')` and lift through the existing tool-layer `liftWarnings`. Labels: `status`,
-`reviewInterval`, `tags`, `repetitionRule`, `move` (task project/parent moves), `folder` (project folder move).
-Scalar/date `setProp`s keep their existing strategies (dateExpr self-wraps; direct setProps on a resolved target are not
-wrapped — same posture as the create lowerings).
+Legacy swallowed: project status set (`catch (e) {}` around a whole bridge island) and project tags
+(`catch (e) { /* tag errors don't fail the update */ }`). Legacy repetition failures were NOT silent but worse: a
+`new Task.RepetitionRule(...)` throw propagated to the outer JXA catch and returned a total-failure envelope AFTER
+earlier changes had persisted — the §2.2 partial-apply class. (Legacy's mid-script `Invalid frequency` error also moves
+strictly earlier: `lowerRepetitionRule` throws at build time.) New: every post-resolution apply that can fail is
+`bestEffort` with a **label**, so failures surface as `_warnings.push('<label>: <message>')` and lift through the
+existing tool-layer `liftWarnings`. Labels: `status`, `reviewInterval`, `tags`, `repetitionRule`, `move` (task
+project/parent moves), `folder` (project folder move). Scalar/date `setProp`s keep their existing strategies (dateExpr
+self-wraps; direct setProps on a resolved target are not wrapped — same posture as the create lowerings).
 
 ### 2.4 Read-back envelopes (kills the status echo)
 
@@ -111,9 +113,19 @@ trust model). Envelope keys are unchanged plus `warnings`, so existing clients k
 | Move project to root | `changes.folder: null` → `moveSections([proj], library.beginning)`                                                                                     |
 | Apply order          | task: scalars → dates → estimatedMinutes → moves → tags → repetition → status; project: scalars → reviewInterval → dates → status → folder move → tags |
 
-**Suspected dead code, verify during planning:** the legacy task script checks `changes.sequential`, but
-`TaskUpdateData` has no `sequential` field. If the Zod schema confirms it can never arrive, it is dead code — dropped,
-recorded as a non-delta. (Project-update `sequential` is real and migrates.)
+**Task `sequential` is LIVE — `TaskUpdateData` gains the field (non-delta).** The legacy task script checks
+`changes.sequential` and the field genuinely arrives: the shared `UpdateChangesSchema` accepts it for both targets, and
+`sanitizeTaskUpdates` (`src/tools/unified/utils/task-sanitizer.ts`) deliberately coerces and forwards it — only the
+`TaskUpdateData` TS interface is missing it. Setting `sequential` on a task is meaningful (action groups) and works
+today. Fix the type, not the behavior: add `sequential?: boolean` to `TaskUpdateData` and lower it alongside the other
+scalars (the exhaustiveness guard then counts 19 keys). Dropping it would be a silent behavior regression — exactly the
+silent-drop class the exhaustiveness guards exist to prevent.
+
+**Plan note (tool-layer seam):** `sanitizeTaskUpdates` normalizes `clearDueDate` → `dueDate: null` (stripping the clear
+flags and converting dates) BEFORE the task builder, while `handleProjectUpdateDirect` passes clear flags through
+untouched. The builder-level clear-wins semantics above are therefore load-bearing on the project path but reachable on
+the task path only via direct builder calls — and the builder is the public contract, so the task-update golden tests
+must exercise BOTH representations (`clearDueDate: true` and `dueDate: null`).
 
 ## 4. Substrate additions
 
@@ -153,17 +165,18 @@ export interface UpdateProjectInput {
 ```
 
 `buildUpdateTaskProgram` / `buildUpdateProjectProgram`, each with a compile-time exhaustiveness guard over its changes
-type (`Record<keyof TaskUpdateData, true>` — 18 keys; `Record<keyof ProjectUpdateData, true>` — 16 keys), per the
-established discipline: a new schema field cannot be silently dropped.
+type (`Record<keyof TaskUpdateData, true>` — 19 keys once `sequential` lands, §3;
+`Record<keyof ProjectUpdateData, true>` — 16 keys), per the established discipline: a new schema field cannot be
+silently dropped.
 
 **Shared update helpers** (the "paired" substrate — shared where the data shapes genuinely coincide, mirroring how slice
 2 shared `lowerTaskCreate` only because single/batch data was identical):
 
-| Helper              | Serves                                                            |
-| ------------------- | ----------------------------------------------------------------- |
-| `lowerDateSetClear` | dueDate/deferDate/plannedDate set-vs-clear, both targets          |
-| `lowerTagChanges`   | tags/addTags/removeTags → mode'd `assignTags` nodes, both targets |
-| scalar lowering     | name/note/flagged(/sequential project-side) `setProp`s            |
+| Helper              | Serves                                                                   |
+| ------------------- | ------------------------------------------------------------------------ |
+| `lowerDateSetClear` | dueDate/deferDate/plannedDate set-vs-clear, both targets                 |
+| `lowerTagChanges`   | tags/addTags/removeTags → mode'd `assignTags` nodes, both targets        |
+| scalar lowering     | name/note/flagged/sequential `setProp`s (sequential on both targets, §3) |
 
 Statement shape (both programs): target resolve + guard → destination resolves + guards → applies in legacy order →
 read-back envelope. Return-mode guards throughout (no batch path in this slice).
