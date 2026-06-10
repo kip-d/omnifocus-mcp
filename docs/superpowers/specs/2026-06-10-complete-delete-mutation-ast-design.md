@@ -72,18 +72,23 @@ task now **refuses loudly** where legacy would have executed it.
 
 All paths are strict-ID today (no name fallback anywhere in this family), so resolution semantics don't change — only
 the lookup cost and the message wording. Not-found messages unify on the slice-4 wording: `Task not found: <id>` /
-`Project not found: <id>`. **Delta:** the legacy `buildCompleteScript`/`buildDeleteScript` outer remap produced
-lowercase `task not found: <id>` / `project not found: <id>` (template-interpolated target); the task-side scripts
-already used the capitalized form. Bulk per-item errors keep the legacy `Task not found` (per-id entry in `errors[]`, no
-id echo in the message — the entry carries `taskId`).
+`Project not found: <id>`. **Delta:** the legacy `buildCompleteScript`/`buildDeleteScript` inner script returns
+`{success: false, error: "Not found"}`, and the outer remap's `result.error || "${target} not found: …"` fallback is
+dead code (`"Not found"` is always truthy) — so legacy clients of the project paths actually see bare `Not found`, with
+no id. The new wording adds the entity and the id. The task-side scripts already used the capitalized
+`Task not found: <id>` form (no delta there). Bulk per-item errors keep the legacy `Task not found` (per-id entry in
+`errors[]`, no id echo in the message — the entry carries `taskId`).
 
-### 2.3 Envelopes — no `success` key, and the project-complete response stops being empty
+### 2.3 Envelopes — no `success` key (the slice-4 convention)
 
-`execJson` (BaseTool) treats any script result carrying a `success` key as a `ScriptResult` itself — so the legacy
-project envelope `{success: true, projectId, …}` arrives with `result.data` **undefined**, and `handleProjectComplete`
-currently returns `{ project: undefined }` to clients. The slice-4 envelopes omit `success` precisely so `execJson`
-wraps them as data. New envelopes (read live where possible, never echoes — except the deleted-object id, which is
-unreadable after `deleteObject` by construction; `name` is captured pre-delete):
+`OmniAutomation.executeJson` wraps the parsed script output in its own `{success, data}` `ScriptResult` before
+`BaseTool.execJson` inspects it, so `result.data` is always the script envelope — including, today, the legacy project
+paths' redundant inner `success: true` key, which therefore reaches clients inside the response data. The migrated
+envelopes follow the slice-4 convention and omit `success`: the transport wrapper owns success/failure signaling, and an
+inner `success: false` would be remapped to a ScriptError by `isLegacyScriptError` rather than read as data — error
+signaling belongs to the `{error: true, message}` guard envelope alone. New envelopes (read live where possible, never
+echoes — except the deleted-object id, which is unreadable after `deleteObject` by construction; `name` is captured
+pre-delete):
 
 ```js
 // complete/task                                  // complete/project
@@ -99,12 +104,17 @@ unreadable after `deleteObject` by construction; `name` is captured pre-delete):
 
 **Deltas:** (a) task complete/delete envelopes rename `id` → `taskId` (consistency with every other migrated envelope);
 the handler wraps them under `task:` in the MCP response, so client-visible key paths are `task.taskId` instead of
-`task.id` — recorded, and the handlers' own response assembly is updated in the same change. (b) project complete
-responses now carry real data instead of `undefined`. (c) bulk keeps its legacy shape (`collectBulkDeleteResults`
-consumes `deleted[]`/`errors[]` unchanged); the legacy top-level `success: true` wrapper is dropped for the execJson
-reason above. Handler simplification rides along: the `'success' in res ? … : {success: true, data: res}` re-wrapping
-dance in `handleTaskComplete`/`handleTaskDelete` collapses to the uniform `isScriptError` + `result.data` pattern the
-project handlers use.
+`task.id` — recorded, and the handlers' own response assembly is updated in the same change. (b) project complete/delete
+response data loses the redundant inner `success: true` key (§ above). (c) bulk keeps its legacy shape
+(`collectBulkDeleteResults` consumes `deleted[]`/`errors[]` unchanged) minus the same inner `success` key. (d)
+**`completionDate` now reaches project completes:** the write schema accepts it for `complete` on either target, but
+`handleProjectComplete(projectId)` silently drops it today (both call sites pass only the id). The lowering input
+carries `completionDate?` and the handler wires `compiled.completionDate` through with the same `localToUTC` conversion
+the task path uses — fixing a pre-existing silent drop (`feedback_no_silent_failures`) rather than preserving it;
+recorded here because a client that passed the field and relied on it being ignored would see a behavior change. Handler
+simplification rides along: the `'success' in res ? … : {success: true, data: res}` re-wrapping dance in
+`handleTaskComplete`/`handleTaskDelete` collapses to the uniform `isScriptError` + `result.data` pattern the project
+handlers use.
 
 ### 2.4 OMN-137 posture — nothing left to swallow on these paths
 
@@ -112,11 +122,12 @@ Complete and delete are **single mutating calls** (`markComplete`, `deleteObject
 best-effort applies, so these programs emit **no `bestEffort` nodes and no `warnings` key** (omit-when-empty is
 vacuously satisfied; a thrown `markComplete`/`deleteObject` is a loud hard error, which is correct — there is no partial
 result to preserve). The slice's OMN-137 contribution is deletion: the dead `buildBatchScript` carried the last
-empty-`catch` swallows on a write path (`catch(e) {}` ×2 around the nonce bridge). After this slice the remaining
-swallowers are the two `catch(e) {}` blocks in `tag-mutation-script-builder.ts` (the `id:"unknown"` fallback class —
-slice 6) and OMN-137's codebase-audit item; whether the ticket closes now or at slice 6 is Kip's call, recorded in the
-ticket on merge. `rollbackBatchCreations` catches rollback failures and only logs — surfacing those into the batch error
-response is adjacent but **out of scope** (it's tool-layer policy, not builder migration; noted here so it isn't lost).
+empty-`catch` swallows on a write path (three in the nonce-bridge mechanism: two JXA-level plus one inside the bridge
+string). After this slice the remaining swallowers are the two `catch(e) {}` blocks in `tag-mutation-script-builder.ts`
+(the `id:"unknown"` fallback class — slice 6) and OMN-137's codebase-audit item; whether the ticket closes now or at
+slice 6 is Kip's call, recorded in the ticket on merge. `rollbackBatchCreations` catches rollback failures and only logs
+— surfacing those into the batch error response is adjacent but **out of scope** (it's tool-layer policy, not builder
+migration; noted here so it isn't lost).
 
 ## 3. Legacy-faithful semantics (preserved exactly)
 
@@ -209,6 +220,8 @@ verifies of not-found and non-sandbox probes need the bounded unguarded window (
   on this path; if dead, leave it (not this slice's cleanup).
 - `handleBulkDeleteTasks`: same-name builder now async returning `GeneratedMutationScript` — await it, execute
   `.script`; `collectBulkDeleteResults` unchanged.
+- `handleProjectComplete`: accept and forward `compiled.completionDate` (converted via `localToUTC(date, 'completion')`)
+  to `buildCompleteScript('project', id, date)` — both call sites pass only the id today (§2.3d).
 - Delete `src/omnifocus/scripts/tasks/complete-task.ts`, `delete-task.ts`, `delete-tasks-bulk.ts` and their re-exports
   in `src/omnifocus/scripts/tasks.ts`; delete `buildBatchScript` + `buildBulkDeleteScript` + their tests + orphaned
   exports in `src/contracts/ast/index.ts`. Expect one ts-prune cascade round.
@@ -220,7 +233,7 @@ verifies of not-found and non-sandbox probes need the bounded unguarded window (
 | Golden unit                                                 | `tests/unit/contracts/ast/mutation/complete.test.ts` + `delete.test.ts` (+ bulk): program shape per target; exact guard messages (§2.2 wording); `markComplete` arg with/without completionDate; name-capture-before-delete ordering; bulk per-item unroll + reserved accumulators; no `warnings`/`bestEffort` emission (§2.4)                                                                                                                     |
 | `node:vm` execution                                         | Stubbed `Task.byIdentifier`/`Project.byIdentifier`/`deleteObject`/`markComplete`: envelope correctness incl. live completionDate read-back; **zero mutation on not-found** (deleteObject stub never called); bulk continue-on-error (mix of found/not-found ids → both arrays correct); throwing `deleteObject` → hard error envelope                                                                                                              |
 | Validator unit                                              | `deleteObject` rule-7 positive/negative; reserved `_deleted`/`_errors`                                                                                                                                                                                                                                                                                                                                                                             |
-| Tool-layer unit                                             | Handler envelope adaptation (`taskId` key, project data no longer undefined); bulk response assembly unchanged                                                                                                                                                                                                                                                                                                                                     |
+| Tool-layer unit                                             | Handler envelope adaptation (`taskId` key; no inner `success` key in response data; project `completionDate` wired through with `localToUTC`, §2.3d); bulk response assembly unchanged                                                                                                                                                                                                                                                             |
 | Live integration (OMN-138 — closes the complete/delete gap) | Sandbox fixtures: complete a task (read back `completed` + `completionDate` via an `includeCompleted`-capable query), complete a project, delete task/project (read back **absence**), bulk delete (mixed sandbox ids + one bogus id → per-item results). Read-backs assert persisted state, never envelope echoes                                                                                                                                 |
 | Live `/verify` matrix                                       | Bounded unguarded window (of-call.mjs recreated in job tmp) for: not-found messages (task/project/bulk-item); **decoy-fixture guard probes** — uniquely-named non-sandbox task/project, attempt complete + delete through the guarded dev server, expect TEST GUARD refusal and decoys unharmed (this is the §2.1 keystone: legacy would have executed them); `pgrep -fl vitest` before probes; integration only via `run_in_background` (OMN-143) |
 
