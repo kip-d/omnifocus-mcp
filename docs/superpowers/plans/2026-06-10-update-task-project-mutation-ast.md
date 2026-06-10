@@ -32,23 +32,24 @@ deltas (§2) are deliberate and approved: ID-only targets, resolve-first orderin
 
 ## File map
 
-| File                                                         | Change                                                                                                                       |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `src/contracts/ast/mutation/validator.ts`                    | Task 1: per-rule extraction (behavior-preserving); Task 5: new-node rules + rule-7 generalization                            |
-| `src/contracts/ast/mutation/types.ts`                        | Tasks 2–4: `resolveTask` rename, `ResolveProjectByIdNode`, move nodes + position unions, `CallMethodNode`, `assignTags.mode` |
-| `src/contracts/ast/mutation/emitter.ts`                      | Tasks 2–4: new emit cases; assignTags mode branches                                                                          |
-| `src/contracts/ast/mutation/snippets.ts`                     | Task 4: `resolveTagByPath` snippet (verbatim lift of `OMNIJS_RESOLVE_TAG_PATH`)                                              |
-| `src/contracts/mutations.ts`                                 | Task 6: `sequential?: boolean` on `TaskUpdateData` (spec §3, live field)                                                     |
-| `src/contracts/ast/mutation/defs.ts`                         | Tasks 6–7: shared helpers, `UpdateTaskInput`/`UpdateProjectInput`, both lowerings, `MUTATION_DEFS` entries                   |
-| `src/contracts/ast/mutation/index.ts`                        | Tasks 6–7: barrel exports for the new lowerings                                                                              |
-| `src/contracts/ast/mutation-script-builder.ts`               | Task 8: export the 3 guards; thin async AST wrappers; delete legacy bodies, `OMNIJS_*` consts, `buildUpdateChangesObject`    |
-| `src/tools/unified/OmniFocusWriteTool.ts`                    | Task 9: `liftWarnings` on both update response paths                                                                         |
-| `tests/unit/contracts/ast/mutation/update-substrate.test.ts` | NEW (Tasks 2–5) — node/emitter/validator tests for the new substrate                                                         |
-| `tests/unit/contracts/ast/mutation/update-task.test.ts`      | NEW (Task 6) — golden + vm + dispatch-guard tests for update/task                                                            |
-| `tests/unit/contracts/ast/mutation/update-project.test.ts`   | NEW (Task 7) — golden + vm + dispatch-guard tests for update/project                                                         |
-| `tests/unit/contracts/ast/mutation-script-builder.test.ts`   | Task 8: rewrite both update describe blocks (launcher shape, async)                                                          |
-| `tests/unit/tools/unified/OmniFocusWriteTool.test.ts`        | Task 9: warnings lifted on update responses                                                                                  |
-| `tests/integration/tools/unified/update-paths.test.ts`       | NEW (Task 10) — OMN-138 live update coverage (sandbox-scoped, persisted read-backs)                                          |
+| File                                                             | Change                                                                                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `src/contracts/ast/mutation/validator.ts`                        | Task 1: per-rule extraction (behavior-preserving); Task 5: new-node rules + rule-7 generalization                            |
+| `src/contracts/ast/mutation/types.ts`                            | Tasks 2–4: `resolveTask` rename, `ResolveProjectByIdNode`, move nodes + position unions, `CallMethodNode`, `assignTags.mode` |
+| `src/contracts/ast/mutation/emitter.ts`                          | Tasks 2–4: new emit cases; assignTags mode branches                                                                          |
+| `src/contracts/ast/mutation/snippets.ts`                         | Task 4: `resolveTagByPath` snippet (verbatim lift of `OMNIJS_RESOLVE_TAG_PATH`)                                              |
+| `src/contracts/mutations.ts`                                     | Task 6: `sequential?: boolean` on `TaskUpdateData` (spec §3, live field)                                                     |
+| `src/contracts/ast/mutation/defs.ts`                             | Tasks 6–7: shared helpers, `UpdateTaskInput`/`UpdateProjectInput`, both lowerings, `MUTATION_DEFS` entries                   |
+| `src/contracts/ast/mutation/index.ts`                            | Tasks 6–7: barrel exports for the new lowerings                                                                              |
+| `src/contracts/ast/mutation-script-builder.ts`                   | Task 8: export the 3 guards; thin async AST wrappers; delete legacy bodies, `OMNIJS_*` consts, `buildUpdateChangesObject`    |
+| `src/tools/unified/OmniFocusWriteTool.ts`                        | Task 9: `liftWarnings` on both update response paths                                                                         |
+| `tests/unit/contracts/ast/mutation/update-substrate.test.ts`     | NEW (Tasks 2–5) — node/emitter/validator tests for the new substrate                                                         |
+| `tests/unit/contracts/ast/mutation/update-task.test.ts`          | NEW (Task 6) — golden + vm + dispatch-guard tests for update/task                                                            |
+| `tests/unit/contracts/ast/mutation/update-project.test.ts`       | NEW (Task 7) — golden + vm + dispatch-guard tests for update/project                                                         |
+| `tests/unit/contracts/ast/mutation-script-builder.test.ts`       | Task 8: rewrite both update describe blocks (launcher shape, async)                                                          |
+| `tests/unit/contracts/ast/project-update-field-coverage.test.ts` | Task 8: rewrite per-field substring checks to emission EVIDENCE (legacy check breaks on conditional lowering)                |
+| `tests/unit/tools/unified/OmniFocusWriteTool.test.ts`            | Task 9: warnings lifted on update responses                                                                                  |
+| `tests/integration/tools/unified/update-paths.test.ts`           | NEW (Task 10) — OMN-138 live update coverage (sandbox-scoped, persisted read-backs)                                          |
 
 Execution order note: Tasks 2–4 (substrate nodes) are independent of each other but all depend on Task 1 (extraction).
 Task 5 (rule-7 generalization) needs the new nodes. Tasks 6–7 need 2–5. Task 8 needs 6–7. Tasks 9–10 need 8.
@@ -116,8 +117,9 @@ git commit -m "refactor(OMN-128): extract validator per-rule functions (behavior
 - Modify: `src/contracts/ast/mutation/validator.ts`
 - Modify: `src/contracts/ast/mutation/defs.ts` (import only — see step 3)
 - Create: `tests/unit/contracts/ast/mutation/update-substrate.test.ts`
-- Modify (mechanical): `tests/unit/contracts/ast/mutation/create-task.test.ts` if it asserts the `'resolveParentTask'`
-  type string
+- Modify (mechanical): `tests/unit/contracts/ast/mutation/create-task.test.ts` AND
+  `tests/unit/contracts/ast/mutation/types.test.ts` — both assert the `'resolveParentTask'` type string (the Step 3 grep
+  catches any others)
 
 The rename is mechanical: node type string `'resolveParentTask'` → `'resolveTask'`; the `resolveParentTask` factory
 survives as an alias so slice-2 lowering code reads unchanged.
@@ -1036,7 +1038,9 @@ Registry (in `MUTATION_DEFS`; `validateTaskInSandbox` + `validateTagChanges` exp
 } as MutationDef<UpdateTaskInput>,
 ```
 
-Barrel (`index.ts`): export `buildUpdateTaskProgram` and the input types.
+Barrel (`index.ts`): export `buildUpdateTaskProgram` and the input types. NOTE: `MutationDef` is module-private to
+`defs.ts` — the registry snippet above compiles only because it lives in that file; do not try to import `MutationDef`
+elsewhere.
 
 - [ ] **Step 4: Verify green**
 
@@ -1224,6 +1228,7 @@ git commit -m "feat(OMN-128): update/project lowering — strict target, status 
 
 - Modify: `src/contracts/ast/mutation-script-builder.ts`
 - Modify: `tests/unit/contracts/ast/mutation-script-builder.test.ts`
+- Modify: `tests/unit/contracts/ast/project-update-field-coverage.test.ts` (see Step 1b)
 
 - [ ] **Step 1: Write failing tests** — rewrite the two update describe blocks in `mutation-script-builder.test.ts`
       following the slice-3 `buildCreateFolderScript` pattern (`extractOmniJsProgram` helper, launcher-shape
@@ -1246,9 +1251,45 @@ it('buildUpdateProjectScript has NO name fallback in the emitted program', async
 });
 ```
 
+- [ ] **Step 1b: Rewrite the project-update drift test to emission evidence.** The existing
+      `project-update-field-coverage.test.ts` asserts `script.toContain(field)` per field — true only because the legacy
+      builder embedded the whole `changes` object as JSON. Build-time conditional lowering breaks at least 5 of its 16
+      cases (`clearDueDate`/`clearDeferDate`/`clearPlannedDate` lower to `proj.dueDate = null;` etc. — the key string
+      never appears; `addTags`/`removeTags` lower to `addTag(`/`removeTag(`). Do NOT weaken the emission or delete the
+      test: its drift-protection intent is now carried structurally by the compile-time
+      `Record<keyof ProjectUpdateData, true>` exhaustiveness guard in `buildUpdateProjectProgram` (Task 7), and the
+      runtime half is preserved by rewriting the per-field assertion to field-specific EVIDENCE on the DECODED program
+      (reuse/duplicate the `extractOmniJsProgram` helper). Keep the compile-time
+      `Record<keyof ProjectUpdateData, unknown>` field list — that is the tripwire that forces this map to grow with the
+      type:
+
+```ts
+const FIELD_EVIDENCE: Record<keyof ProjectUpdateData, string> = {
+  name: 'proj.name = "Test Name";',
+  note: 'proj.note = "Test note";',
+  folder: 'Folder not found: Test Folder', // resolve+guard evidence
+  tags: 'clearTags',
+  addTags: '.addTag(',
+  removeTags: '.removeTag(',
+  dueDate: 'proj.dueDate = new Date("2026-01-01")',
+  deferDate: 'proj.deferDate = new Date("2026-01-01")',
+  plannedDate: 'proj.plannedDate = new Date("2026-01-01")',
+  clearDueDate: 'proj.dueDate = null;',
+  clearDeferDate: 'proj.deferDate = null;',
+  clearPlannedDate: 'proj.plannedDate = null;',
+  flagged: 'proj.flagged = true;',
+  sequential: 'proj.sequential = true;',
+  status: 'Project.Status.OnHold',
+  reviewInterval: 'reviewInterval',
+};
+// per field: expect(extractOmniJsProgram(script)).toContain(FIELD_EVIDENCE[field]);
+```
+
 - [ ] **Step 2: Run to verify failure**
 
-Run: `npx vitest run tests/unit/contracts/ast/mutation-script-builder.test.ts` Expected: FAIL (legacy script shape).
+Run:
+`npx vitest run tests/unit/contracts/ast/mutation-script-builder.test.ts tests/unit/contracts/ast/project-update-field-coverage.test.ts`
+Expected: FAIL (legacy script shape; evidence strings absent from the legacy runtime-check body).
 
 - [ ] **Step 3: Implement** — replace both builder bodies with thin AST wrappers (slice-3 pattern):
 
