@@ -105,6 +105,29 @@ export function releaseIntegrationLock(
  *
  * Returns a stop() handle for clean teardown.
  */
+/**
+ * Worker-side orphan guard. Vitest's globalSetup (where startOrphanWatchdog
+ * runs) executes ONLY in the vitest main process — forked pool workers, which
+ * run the test files AND their destructive afterAll teardowns, outlive a dead
+ * main (kill-test 2026-06-09: main died in ~1s, the fork survived at ppid 1).
+ *
+ * Forked workers have an IPC channel (`process.send`); thread-pool workers do
+ * not. Gating on IPC presence makes this a no-op in unit thread runs and
+ * active exactly where orphan survival was observed.
+ */
+export function startWorkerOrphanGuard(
+  opts: {
+    hasIpcChannel?: boolean;
+    getPpid?: () => number;
+    onOrphan?: () => void;
+    intervalMs?: number;
+  } = {},
+): (() => void) | undefined {
+  const hasIpc = opts.hasIpcChannel ?? typeof process.send === 'function';
+  if (!hasIpc) return undefined;
+  return startOrphanWatchdog(opts);
+}
+
 export function startOrphanWatchdog(
   opts: {
     getPpid?: () => number;

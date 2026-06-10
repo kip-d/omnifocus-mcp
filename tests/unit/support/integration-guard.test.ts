@@ -10,6 +10,7 @@ import {
   acquireIntegrationLock,
   releaseIntegrationLock,
   startOrphanWatchdog,
+  startWorkerOrphanGuard,
   pidIsAlive,
 } from '../../support/integration-guard.js';
 
@@ -121,5 +122,26 @@ describe('startOrphanWatchdog', () => {
     stop();
     vi.advanceTimersByTime(1000);
     expect(onOrphan).not.toHaveBeenCalled();
+  });
+});
+
+describe('startWorkerOrphanGuard (forked-worker gate)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('no-ops without an IPC channel (thread-pool unit workers)', () => {
+    const onOrphan = vi.fn();
+    const stop = startWorkerOrphanGuard({ hasIpcChannel: false, getPpid: () => 1, onOrphan, intervalMs: 100 });
+    expect(stop).toBeUndefined();
+    vi.advanceTimersByTime(1000);
+    expect(onOrphan).not.toHaveBeenCalled();
+  });
+
+  it('guards forked workers (IPC present): fires when orphaned', () => {
+    const onOrphan = vi.fn();
+    const stop = startWorkerOrphanGuard({ hasIpcChannel: true, getPpid: () => 1, onOrphan, intervalMs: 100 });
+    expect(stop).toBeTypeOf('function');
+    vi.advanceTimersByTime(150);
+    expect(onOrphan).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,7 +15,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['tests/support/setup-unit.ts'],
+    // setup-worker-guard (OMN-143) runs in every worker; it self-gates to
+    // forked workers (IPC present), so thread-pool unit runs are untouched.
+    setupFiles: ['tests/support/setup-unit.ts', 'tests/support/setup-worker-guard.ts'],
     // Global setup for integration test teardown - enable when any integration tests might run
     globalSetup: isUnitTestOnly ? undefined : ['tests/support/setup-integration.ts'],
     // Default timeouts accommodate integration tests; unit tests finish faster anyway

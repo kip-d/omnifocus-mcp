@@ -31,8 +31,14 @@ Wiring in `tests/support/setup-integration.ts`:
 - `teardown()`: existing teardown work, then stop the watchdog and release the lock **last**.
 
 Behavior notes: the lock also serializes `test:smoke`/`test:ci` paths that share this globalSetup — desirable, they
-touch the same OmniFocus DB. The watchdog lives in the vitest main process; its exit collapses the worker pool (IPC
-closure), stopping in-flight teardowns within seconds of orphaning.
+touch the same OmniFocus DB.
+
+**Kill-test amendment (found during live verification):** the main-process watchdog alone is INSUFFICIENT — the live
+kill-test showed vitest main dying ~1s after its parent was killed, while the forked pool worker (which runs the test
+files and their destructive `afterAll` teardowns) survived at ppid 1. Fix: `startWorkerOrphanGuard`, loaded via vitest
+`setupFiles` (`tests/support/setup-worker-guard.ts`, runs in EVERY worker), self-gated to forked workers by IPC-channel
+presence (`typeof process.send === 'function'`) — a no-op in thread-pool unit workers. Integration runs use
+`pool: forks, singleFork: true`, so this covers exactly the surviving process class.
 
 ## Out of scope
 
