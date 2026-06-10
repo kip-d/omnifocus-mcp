@@ -2,7 +2,16 @@
 // Structural validator for mutation-AST Programs. Throws on malformed programs
 // BEFORE they reach the emitter, so a bad lowering surfaces as a clear error at
 // the build seam rather than as broken OmniJS at runtime.
-import type { Program, Stmt } from './types.js';
+import type {
+  Program,
+  Stmt,
+  ConstructProjectNode,
+  ConstructFolderNode,
+  SetPropNode,
+  ConstructTaskNode,
+  GuardNode,
+  BatchItemNode,
+} from './types.js';
 
 const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
 const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef']);
@@ -110,159 +119,148 @@ interface ValidationContext {
   batchTaskVars: Set<string>;
 }
 
-function validateStatementList(statements: Stmt[], ctx: ValidationContext): void {
-  for (const stmt of statements) {
-    if (stmt.type === 'constructProject') {
-      const folder = stmt.folder as unknown;
-      // Rule 2: typed FolderResolution object.
-      if (
-        typeof folder !== 'object' ||
-        folder === null ||
-        !FOLDER_KINDS.has((folder as { kind?: string }).kind ?? '')
-      ) {
-        throw new Error(
-          'Invalid constructProject: folder must be a typed FolderResolution object ' +
-            'with kind in {resolved, none, notFound}, not a string or untyped value.',
-        );
-      }
-      // Rule 3: notFound is illegal here.
-      if ((folder as { kind: string }).kind === 'notFound') {
-        throw new Error(
-          'Invalid constructProject: folder.kind="notFound" is illegal — ' +
-            'the not-found case must be handled by a preceding guard that returns.',
-        );
-      }
-      // Rule 10: reserved emitter identifiers.
-      assertNotReserved(stmt.bind, 'constructProject bind');
-    }
-
-    if (stmt.type === 'constructFolder') {
-      const parent = stmt.parent as unknown;
-      // Rules 2/3 at the folder altitude: typed FolderResolution; notFound illegal.
-      if (
-        typeof parent !== 'object' ||
-        parent === null ||
-        !FOLDER_KINDS.has((parent as { kind?: string }).kind ?? '')
-      ) {
-        throw new Error(
-          'Invalid constructFolder: parent must be a typed FolderResolution object ' +
-            'with kind in {resolved, none, notFound}, not a string or untyped value.',
-        );
-      }
-      if ((parent as { kind: string }).kind === 'notFound') {
-        throw new Error(
-          'Invalid constructFolder: parent.kind="notFound" is illegal — ' +
-            'the not-found case must be handled by a preceding guard that returns.',
-        );
-      }
-      assertNotReserved(stmt.bind, 'constructFolder bind');
-    }
-
-    if (stmt.type === 'setProp') {
-      // Rule 4: value/mutations invariants.
-      if (stmt.strategy === 'readModifyReassign') {
-        if (stmt.mutations === undefined) {
-          throw new Error(`Invalid setProp on "${stmt.prop}": readModifyReassign strategy requires "mutations".`);
-        }
-      } else if (stmt.value === undefined) {
-        throw new Error(`Invalid setProp on "${stmt.prop}": strategy "${stmt.strategy}" requires a defined "value".`);
-      }
-    }
-
-    if (stmt.type === 'constructTask') {
-      const container = stmt.container as unknown;
-      // Rule 5: typed ContainerResolution object (mirrors constructProject's rule 2).
-      if (
-        typeof container !== 'object' ||
-        container === null ||
-        !CONTAINER_KINDS.has((container as { kind?: string }).kind ?? '')
-      ) {
-        throw new Error(
-          'Invalid constructTask: container must be a typed ContainerResolution object ' +
-            'with kind in {inbox, project, parentTask, tempIdRef}, not a string or untyped value.',
-        );
-      }
-      const typed = container as { kind: string; var?: unknown };
-      if (typed.kind !== 'inbox' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
-        throw new Error(`Invalid constructTask: container kind "${typed.kind}" requires a non-empty string "var".`);
-      }
-      assertNotReserved(stmt.bind, 'constructTask bind');
-    }
-
-    if (stmt.type === 'guard') {
-      // Rule 6: throw-mode guard needs a message (it becomes the thrown Error
-      // text). The emitter throws too — belt and suspenders at this seam.
-      if (stmt.mode === 'throw' && stmt.envelope.message === undefined) {
-        throw new Error('Invalid guard: mode "throw" requires envelope.message (it becomes the thrown Error text).');
-      }
-      // Rule 8: a return-mode guard inside a batchItem would return from the
-      // whole program IIFE, skipping remaining items and the results envelope
-      // (Task 5 review finding) — inner guards must be mode "throw".
-      if (ctx.insideBatchItem && stmt.mode !== 'throw') {
-        throw new Error(
-          'Invalid batchItem: a return-mode guard inside batchItem.statements would return from the whole ' +
-            'program IIFE, skipping remaining items and the results envelope — inner guards must be mode "throw".',
-        );
-      }
-    }
-
-    if (stmt.type === 'return' && ctx.insideBatchItem) {
-      // Rule 8: same IIFE-escape hazard as the return-mode guard above.
-      throw new Error(
-        'Invalid batchItem: a return statement inside batchItem.statements would return from the whole ' +
-          'program IIFE, skipping remaining items and the results envelope.',
-      );
-    }
-
-    if (stmt.type === 'batchItem') {
-      // Rule 9: program-wide uniqueness. A duplicate index double-declares
-      // `const _w<i>` (SyntaxError at runtime). A duplicate taskVar is worse:
-      // constructTask binds emit as `var` (cross-item tempIdRef visibility,
-      // commit 88fb2e5), so the later item would SILENTLY SHADOW the earlier
-      // item's task — the worst kind of wrong.
-      if (ctx.batchIndexes.has(stmt.index)) {
-        throw new Error(`Invalid batchItem: duplicate index ${stmt.index} — per-item _w<i> vars would collide.`);
-      }
-      ctx.batchIndexes.add(stmt.index);
-      if (ctx.batchTaskVars.has(stmt.taskVar)) {
-        throw new Error(
-          `Invalid batchItem: duplicate taskVar "${stmt.taskVar}" — a later item would silently shadow an earlier item's task.`,
-        );
-      }
-      ctx.batchTaskVars.add(stmt.taskVar);
-      // Rule 9 (cont.): taskVar feeds the emitted results push verbatim — it
-      // must stay clear of emitter-internal names too.
-      assertNotReserved(stmt.taskVar, 'batchItem taskVar');
-      // Rule 9 (cont.): the item MUST construct the task its results push
-      // reads. Without a constructTask binding taskVar, the emitted
-      // `results.push({ taskId: <taskVar>.id.primaryKey, ... })` references an
-      // undeclared variable → ReferenceError swallowed by the item's catch →
-      // a FALSE per-item failure with an opaque message.
-      if (!stmt.statements.some((s) => s.type === 'constructTask' && s.bind === stmt.taskVar)) {
-        throw new Error(
-          `Invalid batchItem "${stmt.tempId}": statements must contain a constructTask whose bind matches taskVar "${stmt.taskVar}".`,
-        );
-      }
-      // Rule 8: recurse all per-statement rules into the item's statements.
-      validateStatementList(stmt.statements, { ...ctx, insideBatchItem: true });
-    }
-
-    // Rule 10: reserved emitter identifiers on the remaining binding statements.
-    if (stmt.type === 'bind') assertNotReserved(stmt.name, 'bind statement');
-    if (stmt.type === 'resolveFolder') assertNotReserved(stmt.bind, 'resolveFolder bind');
-    if (stmt.type === 'resolveProject') assertNotReserved(stmt.bind, 'resolveProject bind');
-    if (stmt.type === 'resolveParentTask') assertNotReserved(stmt.bind, 'resolveParentTask bind');
-    if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
+// Rules 2/3/10 for constructProject.
+function validateConstructProjectStmt(stmt: ConstructProjectNode): void {
+  const folder = stmt.folder as unknown;
+  // Rule 2: typed FolderResolution object.
+  if (typeof folder !== 'object' || folder === null || !FOLDER_KINDS.has((folder as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid constructProject: folder must be a typed FolderResolution object ' +
+        'with kind in {resolved, none, notFound}, not a string or untyped value.',
+    );
   }
+  // Rule 3: notFound is illegal here.
+  if ((folder as { kind: string }).kind === 'notFound') {
+    throw new Error(
+      'Invalid constructProject: folder.kind="notFound" is illegal — ' +
+        'the not-found case must be handled by a preceding guard that returns.',
+    );
+  }
+  // Rule 10: reserved emitter identifiers.
+  assertNotReserved(stmt.bind, 'constructProject bind');
+}
 
-  // Rule 7: resolution-guard discipline, at THIS list level. A failed
-  // resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
-  // moveTasks explodes with an opaque runtime TypeError instead of a typed
-  // envelope — so every consumed resolution bind must be guarded between
-  // resolve and construct. The cond check is string-level: same trust model as
-  // GuardNode.cond generally. (Slice 3 widened this from constructTask-only to
-  // all three constructs — resolveFolder → constructProject was a pre-existing
-  // enforcement gap.)
+// Rules 2/3/10 for constructFolder.
+function validateConstructFolderStmt(stmt: ConstructFolderNode): void {
+  const parent = stmt.parent as unknown;
+  // Rules 2/3 at the folder altitude: typed FolderResolution; notFound illegal.
+  if (typeof parent !== 'object' || parent === null || !FOLDER_KINDS.has((parent as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid constructFolder: parent must be a typed FolderResolution object ' +
+        'with kind in {resolved, none, notFound}, not a string or untyped value.',
+    );
+  }
+  if ((parent as { kind: string }).kind === 'notFound') {
+    throw new Error(
+      'Invalid constructFolder: parent.kind="notFound" is illegal — ' +
+        'the not-found case must be handled by a preceding guard that returns.',
+    );
+  }
+  assertNotReserved(stmt.bind, 'constructFolder bind');
+}
+
+// Rule 4: value/mutations invariants for setProp.
+function validateSetPropStmt(stmt: SetPropNode): void {
+  if (stmt.strategy === 'readModifyReassign') {
+    if (stmt.mutations === undefined) {
+      throw new Error(`Invalid setProp on "${stmt.prop}": readModifyReassign strategy requires "mutations".`);
+    }
+  } else if (stmt.value === undefined) {
+    throw new Error(`Invalid setProp on "${stmt.prop}": strategy "${stmt.strategy}" requires a defined "value".`);
+  }
+}
+
+// Rule 5 + reserved bind check for constructTask.
+function validateConstructTaskStmt(stmt: ConstructTaskNode): void {
+  const container = stmt.container as unknown;
+  // Rule 5: typed ContainerResolution object (mirrors constructProject's rule 2).
+  if (
+    typeof container !== 'object' ||
+    container === null ||
+    !CONTAINER_KINDS.has((container as { kind?: string }).kind ?? '')
+  ) {
+    throw new Error(
+      'Invalid constructTask: container must be a typed ContainerResolution object ' +
+        'with kind in {inbox, project, parentTask, tempIdRef}, not a string or untyped value.',
+    );
+  }
+  const typed = container as { kind: string; var?: unknown };
+  if (typed.kind !== 'inbox' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
+    throw new Error(`Invalid constructTask: container kind "${typed.kind}" requires a non-empty string "var".`);
+  }
+  assertNotReserved(stmt.bind, 'constructTask bind');
+}
+
+// Rules 6/8 for guard statements.
+function validateGuardStmt(stmt: GuardNode, ctx: ValidationContext): void {
+  // Rule 6: throw-mode guard needs a message (it becomes the thrown Error
+  // text). The emitter throws too — belt and suspenders at this seam.
+  if (stmt.mode === 'throw' && stmt.envelope.message === undefined) {
+    throw new Error('Invalid guard: mode "throw" requires envelope.message (it becomes the thrown Error text).');
+  }
+  // Rule 8: a return-mode guard inside a batchItem would return from the
+  // whole program IIFE, skipping remaining items and the results envelope
+  // (Task 5 review finding) — inner guards must be mode "throw".
+  if (ctx.insideBatchItem && stmt.mode !== 'throw') {
+    throw new Error(
+      'Invalid batchItem: a return-mode guard inside batchItem.statements would return from the whole ' +
+        'program IIFE, skipping remaining items and the results envelope — inner guards must be mode "throw".',
+    );
+  }
+}
+
+// Rule 9 + recursion for batchItem statements.
+function validateBatchItemStmt(stmt: BatchItemNode, ctx: ValidationContext): void {
+  // Rule 9: program-wide uniqueness. A duplicate index double-declares
+  // `const _w<i>` (SyntaxError at runtime). A duplicate taskVar is worse:
+  // constructTask binds emit as `var` (cross-item tempIdRef visibility,
+  // commit 88fb2e5), so the later item would SILENTLY SHADOW the earlier
+  // item's task — the worst kind of wrong.
+  if (ctx.batchIndexes.has(stmt.index)) {
+    throw new Error(`Invalid batchItem: duplicate index ${stmt.index} — per-item _w<i> vars would collide.`);
+  }
+  ctx.batchIndexes.add(stmt.index);
+  if (ctx.batchTaskVars.has(stmt.taskVar)) {
+    throw new Error(
+      `Invalid batchItem: duplicate taskVar "${stmt.taskVar}" — a later item would silently shadow an earlier item's task.`,
+    );
+  }
+  ctx.batchTaskVars.add(stmt.taskVar);
+  // Rule 9 (cont.): taskVar feeds the emitted results push verbatim — it
+  // must stay clear of emitter-internal names too.
+  assertNotReserved(stmt.taskVar, 'batchItem taskVar');
+  // Rule 9 (cont.): the item MUST construct the task its results push
+  // reads. Without a constructTask binding taskVar, the emitted
+  // `results.push({ taskId: <taskVar>.id.primaryKey, ... })` references an
+  // undeclared variable → ReferenceError swallowed by the item's catch →
+  // a FALSE per-item failure with an opaque message.
+  if (!stmt.statements.some((s) => s.type === 'constructTask' && s.bind === stmt.taskVar)) {
+    throw new Error(
+      `Invalid batchItem "${stmt.tempId}": statements must contain a constructTask whose bind matches taskVar "${stmt.taskVar}".`,
+    );
+  }
+  // Rule 8: recurse all per-statement rules into the item's statements.
+  validateStatementList(stmt.statements, { ...ctx, insideBatchItem: true });
+}
+
+// Rule 10 catch-all: reserved emitter identifiers on the remaining binding statements.
+function validateReservedBinds(stmt: Stmt): void {
+  if (stmt.type === 'bind') assertNotReserved(stmt.name, 'bind statement');
+  if (stmt.type === 'resolveFolder') assertNotReserved(stmt.bind, 'resolveFolder bind');
+  if (stmt.type === 'resolveProject') assertNotReserved(stmt.bind, 'resolveProject bind');
+  if (stmt.type === 'resolveParentTask') assertNotReserved(stmt.bind, 'resolveParentTask bind');
+  if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
+}
+
+// Rule 7: resolution-guard discipline (list-level check).
+// A failed resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
+// moveTasks explodes with an opaque runtime TypeError instead of a typed
+// envelope — so every consumed resolution bind must be guarded between
+// resolve and construct. The cond check is string-level: same trust model as
+// GuardNode.cond generally. (Slice 3 widened this from constructTask-only to
+// all three constructs — resolveFolder → constructProject was a pre-existing
+// enforcement gap.)
+function validateResolutionGuardDiscipline(statements: Stmt[]): void {
   const consumedBind = (construct: Stmt): string | null => {
     if (construct.type === 'constructTask' && construct.container.kind !== 'inbox') return construct.container.var;
     if (construct.type === 'constructProject' && construct.folder.kind === 'resolved') return construct.folder.var;
@@ -288,4 +286,29 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
       }
     }
   }
+}
+
+function validateStatementList(statements: Stmt[], ctx: ValidationContext): void {
+  for (const stmt of statements) {
+    if (stmt.type === 'constructProject') validateConstructProjectStmt(stmt);
+    if (stmt.type === 'constructFolder') validateConstructFolderStmt(stmt);
+    if (stmt.type === 'setProp') validateSetPropStmt(stmt);
+    if (stmt.type === 'constructTask') validateConstructTaskStmt(stmt);
+    if (stmt.type === 'guard') validateGuardStmt(stmt, ctx);
+
+    // Rule 8 (return inside batchItem): same IIFE-escape hazard as the return-mode guard above.
+    if (stmt.type === 'return' && ctx.insideBatchItem) {
+      throw new Error(
+        'Invalid batchItem: a return statement inside batchItem.statements would return from the whole ' +
+          'program IIFE, skipping remaining items and the results envelope.',
+      );
+    }
+
+    if (stmt.type === 'batchItem') validateBatchItemStmt(stmt, ctx);
+
+    validateReservedBinds(stmt);
+  }
+
+  // Rule 7: resolution-guard discipline, at THIS list level.
+  validateResolutionGuardDiscipline(statements);
 }
