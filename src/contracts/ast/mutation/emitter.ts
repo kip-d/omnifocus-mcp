@@ -180,14 +180,15 @@ export function emitStmt(node: Stmt): string {
 
       let loop: string;
       if (mode === 'remove') {
-        // resolve-only: resolveTagByPath for path segments (inline path detection avoids
-        // a direct parseTagPath( call so the snippet-coverage guard fires on resolveTagByPath),
-        // flattenedTags.find for leaf names. Missing tags are silently skipped (legacy semantics).
+        // resolve-only: parseTagPath + resolveTagByPath for path names (shared single-source
+        // helpers — parseTagPath keeps its empty-segment validation), flattenedTags.find for
+        // leaf names. Missing tags are silently skipped (legacy update builder semantics).
         loop = [
           `for (const _tagName of ${tags}) {`,
-          "  var _tag = _tagName.indexOf(' : ') !== -1",
-          "    ? resolveTagByPath(_tagName.split(' : ').map(function(s) { return s.trim(); }))",
-          '    : flattenedTags.find(function(t) { return t.name === _tagName; });',
+          '  var _segs = parseTagPath(_tagName);',
+          '  var _tag;',
+          '  if (_segs) { _tag = resolveTagByPath(_segs); }',
+          '  else { _tag = flattenedTags.find(t => t.name === _tagName); }',
           `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
           '}',
         ].join('\n');

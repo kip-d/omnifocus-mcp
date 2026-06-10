@@ -167,16 +167,30 @@ describe('assignTags modes', () => {
     ).toThrow(/mode/i);
   });
 
-  it('emitProgram throws if remove mode is used without declaring resolveTagByPath', () => {
+  it('emitProgram throws if remove mode is used without declaring its snippets', () => {
     const program = {
       statements: [
         assignTags(ref('task'), json(['a']), 'removed', false, undefined, 'remove'),
         return_({ ok: json(true) }),
       ],
       context: 'x',
-      snippetDeps: [], // missing resolveTagByPath
+      snippetDeps: [], // missing resolveTagByPath (and its parseTagPath dep)
     };
-    expect(() => emitProgram(program)).toThrow(/resolveTagByPath/);
+    expect(() => emitProgram(program)).toThrow(/not present in snippetDeps/);
+  });
+
+  it('emitProgram succeeds for remove mode when resolveTagByPath is declared (deps pull parseTagPath)', () => {
+    const program = {
+      statements: [
+        assignTags(ref('task'), json(['a : b']), 'removed', false, undefined, 'remove'),
+        return_({ ok: json(true) }),
+      ],
+      context: 'x',
+      snippetDeps: ['resolveTagByPath'],
+    };
+    const emitted = emitProgram(program);
+    expect(emitted).toContain('function resolveTagByPath');
+    expect(emitted).toContain('function parseTagPath');
   });
 });
 
