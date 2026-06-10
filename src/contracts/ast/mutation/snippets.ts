@@ -93,6 +93,25 @@ function resolveOrCreateTagByPath(segments) {
   return current;
 }`;
 
+// Lifted verbatim from OMNIJS_RESOLVE_TAG_PATH const in mutation-script-builder.ts (OMN-128 slice 4).
+// Resolve-only walk: returns null on a missing segment rather than creating.
+// Used by the 'remove' mode of assignTags — resolves without creating tags.
+const resolveTagByPath = `
+function resolveTagByPath(segments) {
+  var parent = null;
+  var current = null;
+  for (var i = 0; i < segments.length; i++) {
+    current = null;
+    var children = parent ? parent.children : tags;
+    for (var j = 0; j < children.length; j++) {
+      if (children[j].name === segments[i]) { current = children[j]; break; }
+    }
+    if (!current) return null;
+    parent = current;
+  }
+  return current;
+}`;
+
 const resolveProjectFlexible = `
 function resolveProjectFlexible(target) {
   var byId = Project.byIdentifier(target);
@@ -109,6 +128,9 @@ export const SNIPPETS: Record<string, Snippet> = {
   resolveFolderFlexible: { source: resolveFolderFlexible, deps: ['parseFolderPath', 'resolveFolderPath'] },
   parseTagPath: { source: parseTagPath, deps: [] },
   resolveOrCreateTagByPath: { source: resolveOrCreateTagByPath, deps: ['parseTagPath'] },
+  // Resolve-only sibling of resolveOrCreateTagByPath: walk returns null on a missing
+  // segment instead of creating. Used by the assignTags 'remove' mode (OMN-128 slice 4).
+  resolveTagByPath: { source: resolveTagByPath, deps: ['parseTagPath'] },
   resolveProjectFlexible: { source: resolveProjectFlexible, deps: [] },
 };
 

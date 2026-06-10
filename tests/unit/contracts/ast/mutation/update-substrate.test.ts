@@ -6,15 +6,18 @@ import {
   resolveParentTask,
   resolveProjectById,
   emitStmt,
+  emitProgram,
   moveTask,
   moveProject,
   callMethod,
+  assignTags,
   json,
   ref,
   newExpr,
   return_,
   validateMutationProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { SNIPPETS } from '../../../../../src/contracts/ast/mutation/snippets.js';
 
 describe('resolveTask node (generalizes resolveParentTask)', () => {
   it('factory builds the typed node', () => {
@@ -126,5 +129,60 @@ describe('callMethod node', () => {
     expect(() =>
       validateMutationProgram({ statements: [node, return_({ ok: json(true) })], context: 'x', snippetDeps: [] }),
     ).toThrow(/typed.*position/i);
+  });
+});
+
+describe('assignTags modes', () => {
+  it('default (no mode) emits the create behavior unchanged — create-or-find, no clearTags', () => {
+    const emitted = emitStmt(assignTags(ref('task'), json(['a']), 'applied'));
+    expect(emitted).toContain('resolveOrCreateTagByPath');
+    expect(emitted).not.toContain('clearTags');
+  });
+
+  it('replace mode prepends clearTags() inside the best-effort wrap', () => {
+    const emitted = emitStmt(assignTags(ref('task'), json(['a']), 'applied', true, 'tags', 'replace'));
+    expect(emitted).toContain('task.clearTags();');
+    // clearTags participates in the same try as the loop (legacy: whole tag block best-effort)
+    expect(emitted.indexOf('try {')).toBeLessThan(emitted.indexOf('task.clearTags()'));
+  });
+
+  it('replace with [] emits clearTags and an empty loop (truthy-empty-array legacy semantics)', () => {
+    const emitted = emitStmt(assignTags(ref('task'), json([]), 'applied', true, 'tags', 'replace'));
+    expect(emitted).toContain('task.clearTags();');
+  });
+
+  it('remove mode resolves WITHOUT creating and calls removeTag', () => {
+    const emitted = emitStmt(assignTags(ref('task'), json(['a']), 'removed', true, 'tags', 'remove'));
+    expect(emitted).toContain('resolveTagByPath');
+    expect(emitted).not.toContain('resolveOrCreateTagByPath');
+    expect(emitted).not.toContain('new Tag(');
+    expect(emitted).toContain('removeTag');
+  });
+
+  it('validator rejects an unknown mode', () => {
+    const node = assignTags(ref('task'), json(['a']), 'b');
+    (node as unknown as { mode: unknown }).mode = 'merge';
+    expect(() =>
+      validateMutationProgram({ statements: [node, return_({ ok: json(true) })], context: 'x', snippetDeps: [] }),
+    ).toThrow(/mode/i);
+  });
+
+  it('emitProgram throws if remove mode is used without declaring resolveTagByPath', () => {
+    const program = {
+      statements: [
+        assignTags(ref('task'), json(['a']), 'removed', false, undefined, 'remove'),
+        return_({ ok: json(true) }),
+      ],
+      context: 'x',
+      snippetDeps: [], // missing resolveTagByPath
+    };
+    expect(() => emitProgram(program)).toThrow(/resolveTagByPath/);
+  });
+});
+
+describe('resolveTagByPath snippet', () => {
+  it('is registered with parseTagPath dep', () => {
+    expect(SNIPPETS.resolveTagByPath.deps).toEqual(['parseTagPath']);
+    expect(SNIPPETS.resolveTagByPath.source).toContain('function resolveTagByPath');
   });
 });

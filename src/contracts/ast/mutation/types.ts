@@ -161,6 +161,10 @@ export interface AssignTagsNode {
   // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
   // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
   label?: string;
+  // Tag application mode (slice 4): 'add' (absent = legacy create behavior,
+  // create-or-find + addTag), 'replace' (clearTags() first, then add), 'remove'
+  // (resolve WITHOUT create, removeTag, missing names silently skipped — legacy).
+  mode?: 'replace' | 'add' | 'remove';
 }
 
 /** Typed task-move destination (slice 4).
@@ -343,6 +347,7 @@ export const assignTags = (
   bindVar: string,
   bestEffort = false,
   label?: string,
+  mode?: 'replace' | 'add' | 'remove',
 ): AssignTagsNode => ({
   type: 'assignTags',
   target,
@@ -350,6 +355,7 @@ export const assignTags = (
   bind: bindVar,
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
+  ...(mode ? { mode } : {}),
 });
 export const return_ = (envelope: Envelope): ReturnNode => ({ type: 'return', envelope });
 export const moveTask = (task: Expr, position: TaskMovePosition, bestEffort = false, label?: string): MoveTaskNode => ({

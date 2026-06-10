@@ -14,6 +14,7 @@ import type {
   MoveTaskNode,
   MoveProjectNode,
   CallMethodNode,
+  AssignTagsNode,
 } from './types.js';
 
 const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
@@ -101,6 +102,10 @@ function assertNotReserved(name: string, where: string): void {
  *     {libraryBeginning, folderBeginning}; folderBeginning requires non-empty `var`.
  * 12. A `callMethod` node's `method` must be in CALL_METHOD_ALLOWLIST. The
  *     allowlist is deliberately minimal (markComplete, drop) — extend per slice.
+ * 13. An `assignTags` node's `mode`, when present, must be in {replace, add, remove}.
+ *     An unknown mode would silently fall through to the 'add' branch at emission time
+ *     (TypeScript type-safety only, not a JS runtime guarantee) — the validator enforces
+ *     this closed set explicitly so a mis-typed mode surfaces as a clear error.
  *
  * NOT enforced here: snippet-dependency coverage (a statement that emits a call
  * to an OmniJS helper must declare that helper in `snippetDeps`). That check is
@@ -325,6 +330,18 @@ function validateCallMethodStmt(stmt: CallMethodNode): void {
   }
 }
 
+const ASSIGN_TAGS_MODES = new Set(['replace', 'add', 'remove']);
+
+// Rule 13: assignTags.mode, when present, must be in {replace, add, remove}.
+function validateAssignTagsStmt(stmt: AssignTagsNode): void {
+  if (stmt.mode !== undefined && !ASSIGN_TAGS_MODES.has(stmt.mode)) {
+    throw new Error(
+      `Invalid assignTags: mode "${stmt.mode as string}" is not in the allowed set {replace, add, remove}. ` +
+        'Check the mode value — unknown modes silently fall through to "add" behavior at emission time.',
+    );
+  }
+}
+
 // Rule 7: resolution-guard discipline (list-level check).
 // A failed resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
 // moveTasks explodes with an opaque runtime TypeError instead of a typed
@@ -376,6 +393,7 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
     if (stmt.type === 'moveTask') validateMoveTaskStmt(stmt);
     if (stmt.type === 'moveProject') validateMoveProjectStmt(stmt);
     if (stmt.type === 'callMethod') validateCallMethodStmt(stmt);
+    if (stmt.type === 'assignTags') validateAssignTagsStmt(stmt);
 
     // Rule 8 (return inside batchItem): same IIFE-escape hazard as the return-mode guard above.
     if (stmt.type === 'return' && ctx.insideBatchItem) {

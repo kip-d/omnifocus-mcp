@@ -171,21 +171,50 @@ export function emitStmt(node: Stmt): string {
       // wrapped. (OMN-128: caught by live /verify. General rule: any bestEffort statement
       // whose binding is consumed later MUST hoist that declaration out of the try.)
       const decl = `let ${node.bind} = [];`;
-      const loop = [
-        `for (const _tagName of ${tags}) {`,
-        '  var _segs = parseTagPath(_tagName);',
-        '  var _tag;',
-        '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
-        '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
-        `  ${target}.addTag(_tag);`,
-        `  ${node.bind}.push(_tag.name);`,
-        '}',
-      ].join('\n');
-      // `bestEffort` wraps only the LOOP so a tag failure does not fail the surrounding
+
+      // Mode dispatch (slice 4):
+      //   absent / 'add':  legacy create-or-find + addTag (original behavior)
+      //   'replace':       clearTags() first (inside the best-effort wrap), then add
+      //   'remove':        resolve WITHOUT creating, removeTag; missing names silently skipped
+      const mode = node.mode;
+
+      let loop: string;
+      if (mode === 'remove') {
+        // resolve-only: resolveTagByPath for path segments (inline path detection avoids
+        // a direct parseTagPath( call so the snippet-coverage guard fires on resolveTagByPath),
+        // flattenedTags.find for leaf names. Missing tags are silently skipped (legacy semantics).
+        loop = [
+          `for (const _tagName of ${tags}) {`,
+          "  var _tag = _tagName.indexOf(' : ') !== -1",
+          "    ? resolveTagByPath(_tagName.split(' : ').map(function(s) { return s.trim(); }))",
+          '    : flattenedTags.find(function(t) { return t.name === _tagName; });',
+          `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
+          '}',
+        ].join('\n');
+      } else {
+        // 'add' or absent: original create-or-find loop
+        loop = [
+          `for (const _tagName of ${tags}) {`,
+          '  var _segs = parseTagPath(_tagName);',
+          '  var _tag;',
+          '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
+          '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
+          `  ${target}.addTag(_tag);`,
+          `  ${node.bind}.push(_tag.name);`,
+          '}',
+        ].join('\n');
+      }
+
+      // 'replace' mode: prepend clearTags() INSIDE the best-effort wrap (the whole tag block
+      // is best-effort, matching legacy update builder semantics — clearTags + add are one unit).
+      const clearLine = mode === 'replace' ? `${target}.clearTags();\n` : '';
+      const block = `${clearLine}${loop}`;
+
+      // `bestEffort` wraps only the BLOCK so a tag failure does not fail the surrounding
       // mutation (original best-effort tag bridge semantics) — the binding survives,
       // and the catch records a labeled warning (OMN-137).
-      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} ${bestEffortCatch(node.label ?? 'tags')}` : loop;
-      return `${decl}\n${guardedLoop}`;
+      const guardedBlock = node.bestEffort ? `try {\n${block}\n} ${bestEffortCatch(node.label ?? 'tags')}` : block;
+      return `${decl}\n${guardedBlock}`;
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
