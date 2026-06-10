@@ -410,13 +410,30 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
     // Clean create: no lifted warnings (OMN-137 lifts only when non-empty).
     expect(res.data.warnings, `unexpected create warnings: ${JSON.stringify(res.data.warnings)}`).toBeUndefined();
 
-    // Independent read-back — never trust the write response's own echo.
+    // Independent read-back — never trust the write response's own echo. The
+    // envelope's parentFolder above echoes the RESOLVED TARGET (the emitter's
+    // raw `targetParent.name`), NOT the created folder's actual parent — it
+    // would still read correctly if the emitter dropped the position argument
+    // and the folder landed at the library root (the OMN-127 silent-fallback
+    // class this test exists to catch). The read-back asserts the PERSISTED
+    // parent: buildFilteredFoldersScript emits parentId/parentName off
+    // `folder.parent` (omitted entirely for root folders) and a '/'-joined
+    // ancestor path.
     const read = await client.callTool('omnifocus_read', { query: { type: 'folders' } });
     expectOk(read, 'folders read-back');
     const folders = read.data?.folders ?? [];
     const created = folders.find((f: any) => f.id === folderId);
     expect(created, `folder ${folderId} not found on read-back`).toBeTruthy();
-    expect(created.path ?? created.name).toContain(FOLDER_NAME);
+    const sandbox = folders.find((f: any) => f.name === SANDBOX_FOLDER_NAME);
+    expect(sandbox, 'sandbox folder missing from read-back').toBeTruthy();
+    expect(
+      created.parentId,
+      `persisted parent is not the sandbox (root-placement regression?): ${JSON.stringify(created)}`,
+    ).toBe(sandbox.id);
+    expect(created.parentName).toBe(SANDBOX_FOLDER_NAME);
+    // Anchor on the sandbox's OWN path from the same payload (no assumption
+    // about where the sandbox itself lives).
+    expect(created.path).toBe(`${sandbox.path}/${FOLDER_NAME}`);
     // No per-id folder delete op exists; the folder lives inside the sandbox,
     // so afterAll's fullCleanup() cascade removes it (residue assertion guards).
   }, 120000);
@@ -433,6 +450,11 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
   // invalidated by writes from a DIFFERENT process, so a regression-created
   // ghost could hide behind it. The unguarded child is a fresh process with a
   // cold cache — its read is guaranteed straight from OmniFocus.
+  //
+  // Known read window: handleFolderQuery hardcodes limit:100, applied while
+  // iterating (BEFORE sorting) — in a database with >100 folders the ghost
+  // could fall outside the returned page and this check would silently
+  // false-pass. Fine today (a handful of folders); revisit if that grows.
   it('folder create with nonexistent parent errors loudly and creates nothing', async () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
