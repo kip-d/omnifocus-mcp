@@ -83,12 +83,15 @@ describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () =>
 });
 
 describe('dispatchMutation bulk_delete/task guard (OMN-119/120 non-bypass)', () => {
-  it('rejects dispatch when ANY id is non-sandbox, even if others would pass', async () => {
+  // In the unit env ALL three ids fail validation (the __TEST__ prefix check runs
+  // against a resolved task's NAME in live OmniFocus; these ids resolve not_found),
+  // so this can't distinguish all-ids pre-flight from a first-id-only guard — the
+  // true mixed-ids case needs real sandbox fixtures (Task 10 integration coverage).
+  it('rejects dispatch when an id fails sandbox validation (all-ids pre-flight proven live in integration)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      // One bad id among otherwise-good ids: all-ids pre-flight rejects the whole dispatch
       await expect(
         dispatchMutation('bulk_delete/task', {
           taskIds: ['__test__sandbox-id', 'not-a-sandbox-task-id', '__test__sandbox-id-2'],
