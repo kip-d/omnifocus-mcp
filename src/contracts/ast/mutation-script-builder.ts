@@ -349,7 +349,7 @@ export async function validateBatchTaskSpecs(specs: ReadonlyArray<BatchTaskSpec>
 /**
  * Validate that tag changes only use __test- prefixed tags
  */
-function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData): void {
+export function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData): void {
   if (!isTestMode()) return;
 
   const allTags: string[] = [];
@@ -370,7 +370,7 @@ function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData): void {
 /**
  * Validate that a task update/delete is on a task inside the sandbox
  */
-async function validateTaskInSandbox(taskId: string, operation: string): Promise<void> {
+export async function validateTaskInSandbox(taskId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
   const inSandbox = await isTaskInSandbox(taskId);

@@ -3,12 +3,20 @@
 // dispatch registry (MUTATION_DEFS) that runs the build-time sandbox guard
 // BEFORE building, so a registered op can never bypass it (the OMN-119/120
 // non-bypass property — batch & bulk paths previously skipped the guard).
-import type { FolderCreateData, ProjectCreateData, TaskCreateData } from '../../mutations.js';
+import type {
+  FolderCreateData,
+  ProjectCreateData,
+  ProjectUpdateData,
+  TaskCreateData,
+  TaskUpdateData,
+} from '../../mutations.js';
 import {
   validateBatchTaskSpecs,
   validateFolderCreate,
   validateProjectCreate,
+  validateTagChanges,
   validateTaskCreate,
+  validateTaskInSandbox,
   type BatchTaskSpec,
 } from '../mutation-script-builder.js';
 import { lowerRepetitionRule } from './repetition.js';
@@ -16,6 +24,7 @@ import {
   assignTags,
   batchItem,
   bind,
+  callMethod,
   constructFolder,
   constructProject,
   constructTask,
@@ -24,6 +33,7 @@ import {
   guard,
   json,
   member,
+  moveTask,
   newExpr,
   raw,
   readModifyReassign,
@@ -31,6 +41,7 @@ import {
   resolveFolder,
   resolveParentTask,
   resolveProject,
+  resolveTask,
   return_,
   setProp,
   type ContainerResolution,
@@ -38,6 +49,7 @@ import {
   type Expr,
   type Program,
   type Stmt,
+  type TaskMovePosition,
 } from './types.js';
 
 const STATUS_ENUM: Record<string, string> = {
@@ -526,6 +538,210 @@ export function buildBatchCreateTasksProgram(data: BatchCreateTasksData): Progra
 }
 
 // =============================================================================
+// UPDATE LOWERINGS (slice 4) — shared set-vs-clear / tag-mode / scalar helpers
+// =============================================================================
+
+export interface UpdateTaskInput {
+  taskId: string;
+  changes: TaskUpdateData;
+}
+export interface UpdateProjectInput {
+  projectId: string;
+  changes: ProjectUpdateData;
+}
+
+type DateChanges = Pick<
+  TaskUpdateData,
+  'dueDate' | 'deferDate' | 'plannedDate' | 'clearDueDate' | 'clearDeferDate' | 'clearPlannedDate'
+>;
+
+/** Set-vs-clear date lowering shared by both update targets (spec §3): clear
+ * flag or explicit null → null assignment; string → dateExpr. Clear WINS over
+ * a simultaneous value (legacy applied the clear after the set). */
+function lowerDateSetClear(targetVar: string, changes: DateChanges): Stmt[] {
+  const stmts: Stmt[] = [];
+  const fields = [
+    { field: 'dueDate', clear: 'clearDueDate' },
+    { field: 'deferDate', clear: 'clearDeferDate' },
+    { field: 'plannedDate', clear: 'clearPlannedDate' },
+  ] as const;
+  for (const { field, clear } of fields) {
+    if (changes[clear] === true || changes[field] === null) {
+      stmts.push(setProp(ref(targetVar), field, json(null), 'direct'));
+    } else if (changes[field] !== undefined) {
+      stmts.push(setProp(ref(targetVar), field, dateExpr(json(changes[field])), 'dateExpr'));
+    }
+  }
+  return stmts;
+}
+
+type TagChanges = Pick<TaskUpdateData, 'tags' | 'addTags' | 'removeTags'>;
+
+/** Tag lowering shared by both update targets: replace (clearTags + create-or-find),
+ * add (create-or-find), remove (resolve WITHOUT create). Presence-truthy like the
+ * legacy checks — `tags: []` clears all. Distinct binds per mode. */
+function lowerTagChanges(targetVar: string, changes: TagChanges): { statements: Stmt[]; snippetDeps: string[] } {
+  const statements: Stmt[] = [];
+  const snippetDeps: string[] = [];
+  if (changes.tags) {
+    statements.push(assignTags(ref(targetVar), json(changes.tags), 'replacedTags', true, 'tags', 'replace'));
+    snippetDeps.push('resolveOrCreateTagByPath');
+  }
+  if (changes.addTags) {
+    statements.push(assignTags(ref(targetVar), json(changes.addTags), 'addedTags', true, 'tags', 'add'));
+    snippetDeps.push('resolveOrCreateTagByPath');
+  }
+  if (changes.removeTags) {
+    statements.push(assignTags(ref(targetVar), json(changes.removeTags), 'removedTags', true, 'tags', 'remove'));
+    snippetDeps.push('resolveTagByPath');
+  }
+  return { statements, snippetDeps };
+}
+
+/** Scalar lowering shared by both update targets. */
+function lowerUpdateScalars(
+  targetVar: string,
+  changes: { name?: string; note?: string; flagged?: boolean; sequential?: boolean },
+): Stmt[] {
+  const stmts: Stmt[] = [];
+  if (changes.name !== undefined) stmts.push(setProp(ref(targetVar), 'name', json(changes.name)));
+  if (changes.note !== undefined) stmts.push(setProp(ref(targetVar), 'note', json(changes.note)));
+  if (changes.flagged !== undefined) stmts.push(setProp(ref(targetVar), 'flagged', json(changes.flagged)));
+  if (changes.sequential !== undefined) stmts.push(setProp(ref(targetVar), 'sequential', json(changes.sequential)));
+  return stmts;
+}
+
+/**
+ * Lower a task-update request into a typed mutation Program (OMN-128 slice 4).
+ * Build-time conditional: the program contains ONLY statements for fields
+ * actually being changed. Statement shape: target resolve + guard → destination
+ * resolves + guards → applies in legacy order (scalars → dates →
+ * estimatedMinutes → moves → tags → repetition → status) → read-back envelope.
+ */
+export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
+  const { taskId, changes } = input;
+  // Compile-time exhaustiveness guard (same discipline as the create lowerings):
+  // a new TaskUpdateData field cannot be silently dropped. When this stops
+  // compiling, add the field below AND emit the statement that lowers it.
+  const _exhaustive: Record<keyof TaskUpdateData, true> = {
+    name: true,
+    note: true,
+    project: true,
+    parentTaskId: true,
+    tags: true,
+    addTags: true,
+    removeTags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    clearDueDate: true,
+    clearDeferDate: true,
+    clearPlannedDate: true,
+    flagged: true,
+    sequential: true,
+    estimatedMinutes: true,
+    clearEstimatedMinutes: true,
+    repetitionRule: true,
+    status: true,
+  };
+  void _exhaustive;
+
+  const statements: Stmt[] = [];
+  const snippetDeps: string[] = [];
+  const errEnv = (message: string): Envelope => ({
+    error: json(true),
+    message: json(message),
+    context: json('update_task'),
+  });
+
+  // Resolve-first (spec §2.2): target, then every destination, each guarded —
+  // a not-found reference fails LOUD with zero mutations applied.
+  statements.push(resolveTask('task', taskId));
+  statements.push(guard('task === null', errEnv('Task not found: ' + taskId)));
+
+  let projectMove: TaskMovePosition | undefined;
+  if (changes.project !== undefined) {
+    if (changes.project === null) {
+      projectMove = { kind: 'inboxBeginning' };
+    } else {
+      statements.push(resolveProject('targetProject', changes.project));
+      statements.push(guard('targetProject === null', errEnv('Project not found: ' + changes.project)));
+      snippetDeps.push('resolveProjectFlexible');
+      projectMove = { kind: 'projectBeginning', var: 'targetProject' };
+    }
+  }
+
+  let parentMove: TaskMovePosition | undefined;
+  if (changes.parentTaskId !== undefined) {
+    if (changes.parentTaskId === null || changes.parentTaskId === '') {
+      parentMove = { kind: 'containerRoot', taskVar: 'task' }; // legacy: '' behaves like null
+    } else {
+      statements.push(resolveTask('parentTask', changes.parentTaskId));
+      statements.push(guard('parentTask === null', errEnv('Parent task not found: ' + changes.parentTaskId)));
+      parentMove = { kind: 'parentEnding', var: 'parentTask' };
+    }
+  }
+
+  // Applies in legacy order: scalars → dates → estimatedMinutes → moves → tags → repetition → status.
+  statements.push(...lowerUpdateScalars('task', changes));
+  statements.push(...lowerDateSetClear('task', changes));
+
+  if (changes.clearEstimatedMinutes) {
+    statements.push(setProp(ref('task'), 'estimatedMinutes', json(null), 'direct'));
+  } else if (changes.estimatedMinutes !== undefined) {
+    // !== undefined, NOT truthy: update sets 0 (legacy; create drops 0 — preserved asymmetry, spec §3).
+    statements.push(setProp(ref('task'), 'estimatedMinutes', json(changes.estimatedMinutes), 'direct'));
+  }
+
+  if (projectMove) statements.push(moveTask(ref('task'), projectMove, true, 'move'));
+  if (parentMove) statements.push(moveTask(ref('task'), parentMove, true, 'move'));
+
+  const tagLowering = lowerTagChanges('task', changes);
+  statements.push(...tagLowering.statements);
+  snippetDeps.push(...tagLowering.snippetDeps);
+
+  if (changes.repetitionRule === null) {
+    statements.push(setProp(ref('task'), 'repetitionRule', json(null), 'direct'));
+  } else if (changes.repetitionRule) {
+    const lowered = lowerRepetitionRule(changes.repetitionRule);
+    statements.push(
+      setProp(
+        ref('task'),
+        'repetitionRule',
+        newExpr('Task.RepetitionRule', [
+          json(lowered.rrule),
+          json(null),
+          enumRef(lowered.scheduleTypePath),
+          enumRef(lowered.anchorPath),
+          json(lowered.catchUp),
+        ]),
+        'direct',
+        true,
+        'repetitionRule',
+      ),
+    );
+  }
+
+  if (changes.status === 'completed') {
+    statements.push(callMethod(ref('task'), 'markComplete', [newExpr('Date', [])], true, 'status'));
+  } else if (changes.status === 'dropped') {
+    statements.push(callMethod(ref('task'), 'drop', [json(true), newExpr('Date', [])], true, 'status'));
+  }
+
+  statements.push(
+    return_({
+      taskId: member(ref('task'), 'id.primaryKey'),
+      name: member(ref('task'), 'name'),
+      flagged: member(ref('task'), 'flagged'),
+      updated: json(true),
+      warnings: ref('_warnings'),
+    }),
+  );
+
+  return { statements, context: 'update_task', snippetDeps };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -553,6 +769,13 @@ export const MUTATION_DEFS = {
     guard: (d) => validateBatchTaskSpecs(d.specs),
     build: buildBatchCreateTasksProgram,
   } as MutationDef<BatchCreateTasksData>,
+  'update/task': {
+    guard: async (d) => {
+      await validateTaskInSandbox(d.taskId, 'update');
+      validateTagChanges(d.changes);
+    },
+    build: buildUpdateTaskProgram,
+  } as MutationDef<UpdateTaskInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =
