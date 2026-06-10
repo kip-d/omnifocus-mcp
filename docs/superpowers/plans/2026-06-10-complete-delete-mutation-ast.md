@@ -452,7 +452,10 @@ export function buildCompleteProjectProgram(input: CompleteProjectInput): Progra
 }
 ```
 
-Add any newly used factories (`dateExpr`, `raw`, …) to the existing `types.js` import in `defs.ts`.
+Add any newly used factories (`dateExpr`, `raw`, …) to the existing `types.js` import in `defs.ts`. **Also add
+`buildCompleteTaskProgram`/`buildCompleteProjectProgram` (and their input interfaces) to
+`src/contracts/ast/mutation/index.ts`** — the barrel enumerates defs exports explicitly (the node factories ride
+`export * from './types.js'`, but defs exports do not), and this task's tests import through the barrel.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -650,6 +653,10 @@ export function buildBulkDeleteTasksProgram(input: BulkDeleteTasksInput): Progra
   return { statements, context: 'bulk_delete_tasks', snippetDeps: [] };
 }
 ```
+
+Add `buildDeleteTaskProgram`/`buildDeleteProjectProgram`/`buildBulkDeleteTasksProgram` (and their input interfaces) to
+the `src/contracts/ast/mutation/index.ts` barrel — same reason as Task 3 (defs exports are enumerated, and this task's
+tests import through the barrel).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -895,22 +902,26 @@ git commit -m "feat(OMN-128): slice 5 — write-tool handlers dispatch complete/
 **Files:**
 
 - Delete: `src/omnifocus/scripts/tasks/complete-task.ts`, `src/omnifocus/scripts/tasks/delete-task.ts`,
-  `src/omnifocus/scripts/tasks/delete-tasks-bulk.ts`
-- Modify: `src/omnifocus/scripts/tasks.ts` (drop the three re-exports)
+  `src/omnifocus/scripts/tasks/delete-tasks-bulk.ts`, AND `src/omnifocus/scripts/tasks/complete-tasks-bulk.ts`
+  (`buildBulkCompleteTasksScript` — a fourth legacy script in the same hazard class with ZERO callers beyond its
+  `tasks.ts` re-export; verified by grep, found in plan review)
+- Modify: `src/omnifocus/scripts/tasks.ts` (drop the four re-exports)
 - Modify: `src/contracts/ast/mutation-script-builder.ts` (delete `buildBatchScript`, `buildBulkDeleteScript`, and
   now-orphaned `BatchOperation`/`BatchOptions` IMPORTS if they lose their last use in this file — the types themselves
   live in `src/contracts/mutations.ts` and are still used by the batch envelope/compiler; verify with
   `grep -rn "BatchOperation\|BatchOptions" src/ | grep -v test`)
 - Modify: `src/contracts/ast/index.ts` (drop the two dead exports)
-- Modify: `tests/unit/contracts/ast/mutation-script-builder.test.ts` (delete the `buildBatchScript` +
-  `buildBulkDeleteScript` describe blocks)
+- Modify: `tests/unit/contracts/ast/mutation-script-builder.test.ts` — THREE touchpoints: the `buildBatchScript`
+  describe, the `buildBulkDeleteScript` describe, AND the `script structure consistency` describe (~line 1003), which
+  calls both builders directly; also drop both names from the file's imports. Missing any of these leaves a
+  non-compiling test file.
 
 - [ ] **Step 1: Delete the files and exports listed above**
 - [ ] **Step 2: Build + grep for stragglers**
 
 ```bash
 npm run build
-grep -rn "buildCompleteTaskScript\|buildDeleteTaskScript\|buildBatchScript\|buildBulkDeleteScript" src/ tests/
+grep -rn "buildCompleteTaskScript\|buildDeleteTaskScript\|buildBulkCompleteTasksScript\|buildBatchScript\|buildBulkDeleteScript" src/ tests/
 grep -rn "delete-tasks-bulk\|complete-task\|delete-task" src/ --include="*.ts" | grep -v "delete-task" | head
 ```
 
@@ -940,11 +951,13 @@ git commit -m "refactor(OMN-128): slice 5 — delete legacy complete/delete scri
 
 **Files:**
 
-- Modify: `docs/superpowers/specs/2026-06-10-update-task-project-mutation-ast-design.md` (§4.2: the
-  `OMNIJS_RESOLVE_TAG_PATH` "survives only until the tag builders migrate (slice 5+)" sentence — tag builders are slice
-  6; reword to "(slice 6)").
+- Modify: `docs/superpowers/specs/2026-06-10-update-task-project-mutation-ast-design.md` — TWO stale "slice 5+"
+  references: (a) §4.2's `OMNIJS_RESOLVE_TAG_PATH` "survives only until the tag builders migrate (slice 5+)" sentence
+  (~line 150) — tag builders are slice 6, reword to "(slice 6)"; (b) the §1 out-of-scope list's "bulk-delete, tag
+  builders (slice 5+)" (~line 29) — bulk-delete is THIS slice; reword to "bulk-delete (slice 5), tag builders (slice
+  6)".
 
-- [ ] **Step 1: Make the edit** (the `CALL_METHOD_ALLOWLIST` comment was already fixed in Task 1).
+- [ ] **Step 1: Make the edits** (the `CALL_METHOD_ALLOWLIST` comment was already fixed in Task 1).
 - [ ] **Step 2: Run the docs-path guard** — `npm run test:unit -- tests/unit/docs/` (CLAUDE.md/doc path-rot tests must
       still pass; the deleted script files must not be referenced by any guarded doc — if the guard fails, fix the
       referencing doc in the same commit).
@@ -1002,8 +1015,8 @@ git commit -m "test(OMN-128): slice 5 — OMN-138 live complete/delete/bulk cove
 
 - [ ] **Step 1:** `npm run build` — clean.
 - [ ] **Step 2:** `npm run test:unit` — all pass.
-- [ ] **Step 3:** `npx eslint src/ --max-warnings=1` (the one pre-existing `sonarjs/different-types-comparison` warning
-      in validator.ts is allowed; nothing new).
+- [ ] **Step 3:** `npm run lint` (the repo's standard invocation; the one pre-existing
+      `sonarjs/different-types-comparison` warning in validator.ts is allowed; nothing new).
 - [ ] **Step 4:** `npm run test:integration` via run_in_background — all pass; `pgrep -fl vitest` empty after.
 - [ ] **Step 5:** Emitted-size sanity: the 100-id bulk program is well under the 200 KB guard (the validator enforces
       it; no manual check needed — just confirm the validator test for the size rule still passes).

@@ -35,7 +35,9 @@ returning `GeneratedMutationScript` (async — dispatch awaits the guard); the h
 single-op handlers, and bulk delete uses `buildBulkDeleteTasksScript`/the per-project loop. Both are deleted with their
 unit tests and any exports/types that lose their last consumer (`BatchOperation`/`BatchOptions` stay if the batch
 envelope still uses them — check with grep; expect a ts-prune cascade round per `project_cascading_discovery_rule`). The
-last `batchNonce` dies with `buildBatchScript` — **OMN-134 residue closed by deletion, not migration.**
+last `batchNonce` dies with `buildBatchScript` — **OMN-134 residue closed by deletion, not migration.** Plan review
+found a fourth caller-less legacy script in the same hazard class: `buildBulkCompleteTasksScript`
+(`src/omnifocus/scripts/tasks/complete-tasks-bulk.ts`, re-exported but never invoked) — it rides the same deletion.
 
 **Ride-along B — bulk task delete migration (in scope, flagged for review).** The `ids` array is schema-capped at 100,
 so an unrolled per-id program is ~10–20 KB — far under the 200 KB emitted-size guard. Migrating it closes **OMN-120**
