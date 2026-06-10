@@ -16,6 +16,10 @@
 
 import { shutdownSharedClient } from '../integration/helpers/shared-server.js';
 import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
+import { acquireIntegrationLock, releaseIntegrationLock, startOrphanWatchdog } from './integration-guard.js';
+
+// OMN-143: watchdog stop handle, cleared in teardown().
+let stopOrphanWatchdog: (() => void) | undefined;
 
 /**
  * Global setup - runs BEFORE all tests
@@ -25,6 +29,29 @@ import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-man
  * which happens in the test process (not this global setup process).
  */
 export async function setup() {
+  // OMN-143: refuse concurrent suite runs BEFORE the startup cleanup sweep —
+  // the sweep below is itself destructive, and a second run's sweep firing
+  // while another run (or a live verify session) holds OmniFocus state is
+  // exactly the 2026-06-09 incident class. Throwing here aborts the run with
+  // nothing touched.
+  const lock = acquireIntegrationLock();
+  if (!lock.acquired) {
+    throw new Error(
+      `[Integration Guard] Another integration run (PID ${lock.holderPid}) holds the lock — ` +
+        'refusing to run concurrently (OMN-143). Wait for it, or if it is dead, the lock ' +
+        'self-clears on the next attempt.',
+    );
+  }
+  if (lock.stale) {
+    const deadHolder = lock.holderPid ? ` (dead PID ${lock.holderPid})` : '';
+    console.warn(`[Integration Guard] Reclaimed a stale lock${deadHolder} — a previous run did not shut down cleanly.`);
+  }
+
+  // OMN-143: if the process that launched this suite dies (killed shell,
+  // capped tool timeout), abort within seconds instead of running minutes of
+  // destructive teardowns as an orphan.
+  stopOrphanWatchdog = startOrphanWatchdog();
+
   console.log('[Integration Setup] Running startup cleanup sweep...');
 
   try {
@@ -111,7 +138,9 @@ export async function teardown() {
         }
       }
       console.error('');
-      console.error('  Run `npm run test:cleanup -- --apply` to purge, then investigate why the in-test teardown left these behind.');
+      console.error(
+        '  Run `npm run test:cleanup -- --apply` to purge, then investigate why the in-test teardown left these behind.',
+      );
       console.error('');
       process.exitCode = 1;
     }
@@ -124,4 +153,8 @@ export async function teardown() {
 
   // Shutdown shared client
   await shutdownSharedClient();
+
+  // OMN-143: release the single-instance guard LAST, after all teardown work.
+  stopOrphanWatchdog?.();
+  releaseIntegrationLock();
 }
