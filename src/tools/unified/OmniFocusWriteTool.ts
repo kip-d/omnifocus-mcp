@@ -1318,7 +1318,7 @@ SAFETY:
       parentFolder: data.parentFolder,
     };
 
-    const generatedScript = buildCreateFolderScript(folderData);
+    const generatedScript = await buildCreateFolderScript(folderData);
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
@@ -1340,10 +1340,21 @@ SAFETY:
     this.cache.invalidate('projects');
     this.cache.invalidate('folders');
 
-    return createSuccessResponseV2('omnifocus_write', { folder: result.data, operation: 'create_folder' }, undefined, {
-      ...timer.toMetadata(),
-      operation: 'create_folder',
-    });
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        folder: result.data,
+        operation: 'create_folder',
+        // OMN-137: lifted when non-empty, omitted when none (folder creates have no
+        // best-effort steps today — uniformity plumbing, see buildCreateFolderProgram).
+        ...liftWarnings(result.data),
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'create_folder',
+      },
+    );
   }
 
   /**

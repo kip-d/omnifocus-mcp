@@ -96,6 +96,12 @@ export interface ConstructTaskNode {
   name: Expr;
   container: ContainerResolution;
 }
+export interface ConstructFolderNode {
+  type: 'constructFolder';
+  bind: string;
+  name: Expr;
+  parent: FolderResolution;
+}
 // Batch composition: one item's statements wrapped in try/capture. Emits
 // results.push({tempId, taskId, success, warnings}) on success and
 // ({tempId, taskId:null, success:false, error, warnings}) on failure.
@@ -157,6 +163,7 @@ export type Stmt =
   | GuardNode
   | ConstructProjectNode
   | ConstructTaskNode
+  | ConstructFolderNode
   | BatchItemNode
   | SetPropNode
   | AssignTagsNode
@@ -212,6 +219,12 @@ export const constructTask = (bindVar: string, name: Expr, container: ContainerR
   bind: bindVar,
   name,
   container,
+});
+export const constructFolder = (bindVar: string, name: Expr, parent: FolderResolution): ConstructFolderNode => ({
+  type: 'constructFolder',
+  bind: bindVar,
+  name,
+  parent,
 });
 export const batchItem = (
   tempId: string,

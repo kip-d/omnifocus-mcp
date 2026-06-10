@@ -19,6 +19,12 @@
  *   3. Batch parentTempId chain: parent → child → grandchild in one batch op,
  *      real ids for all three, and the parent relationship persisted (read
  *      back via parentTaskId, not the write response's own echo).
+ *   4. Folder create (OMN-128 slice 3): a nested create under the sandbox
+ *      persists parentage in real OmniFocus (independent folders read-back),
+ *      clean envelope (no lifted warnings).
+ *   5. Folder loud not-found: a create naming a nonexistent parent folder
+ *      ERRORS — and creates nothing (ghost check on a fresh-cache server).
+ *      Same unguarded-child-server pattern as #2.
  *
  * Harness follows field-roundtrip.test.ts: own spawned server, run-scoped
  * `__TEST__` fixture names (OMN-84), per-id deletion in afterAll plus a
@@ -33,7 +39,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
-import { ensureSandboxFolder, fullCleanup } from '../../helpers/sandbox-manager.js';
+import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME } from '../../helpers/sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from '../../helpers/run-id.js';
 
 // Fixed, unambiguous future datetimes (same rationale as field-roundtrip: not
@@ -58,8 +64,11 @@ const CHAIN_B_NAME = runScopedName(`${OMN138_MARKER}_chain-b_${TS}`);
 const CHAIN_C_NAME = runScopedName(`${OMN138_MARKER}_chain-c_${TS}`);
 const SINGLE_TAG = runScopedTag(`omn138-${TS}`);
 const BOGUS_PROJECT = `__TEST__ Nonexistent Project ${OMN138_MARKER} ${TS}`;
+const FOLDER_NAME = runScopedName(`${OMN138_MARKER}_folder_${TS}`);
+const ORPHAN_FOLDER_NAME = `${FOLDER_NAME}-orphan`;
+const BOGUS_PARENT = `__TEST__ Nonexistent Parent ${OMN138_MARKER} ${TS}`;
 
-describe('OMN-138: live create paths (single + loud not-found + batch chain)', () => {
+describe('OMN-138: live create paths (single + loud not-found + batch chain + folder)', () => {
   let serverProcess: ChildProcess;
   let nextId = 1;
   const createdTaskIds: string[] = [];
@@ -380,5 +389,101 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain)', (
     expect(grandchildC, `chain grandchild ${idC} not found on read-back`).toBeTruthy();
     expect(grandchildC.parentTaskId).toBe(idB);
     expect(grandchildC.parentTaskName).toBe(CHAIN_B_NAME);
+  }, 120000);
+
+  // ── 4. Folder create (OMN-128 slice 3): nested create persists parentage ─
+  //
+  // Runs on the guarded main server: a sandbox parent passes
+  // validateFolderCreate's pre-flight. The successful create invalidates the
+  // server's 5-minute folders cache, so the read-back is guaranteed fresh.
+  it('creates a folder under the sandbox and the parentage persists on read-back', async () => {
+    const res = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'create_folder',
+        data: { name: FOLDER_NAME, parentFolder: SANDBOX_FOLDER_NAME },
+      },
+    });
+    expectOk(res, 'sandbox folder create');
+    const folderId = res.data?.folder?.folderId;
+    expect(folderId, `created folder id (response: ${JSON.stringify(res.data).slice(0, 300)})`).toBeTruthy();
+    expect(res.data.folder.parentFolder).toBe(SANDBOX_FOLDER_NAME);
+    // Clean create: no lifted warnings (OMN-137 lifts only when non-empty).
+    expect(res.data.warnings, `unexpected create warnings: ${JSON.stringify(res.data.warnings)}`).toBeUndefined();
+
+    // Independent read-back — never trust the write response's own echo. The
+    // envelope's parentFolder above echoes the RESOLVED TARGET (the emitter's
+    // raw `targetParent.name`), NOT the created folder's actual parent — it
+    // would still read correctly if the emitter dropped the position argument
+    // and the folder landed at the library root (the OMN-127 silent-fallback
+    // class this test exists to catch). The read-back asserts the PERSISTED
+    // parent: buildFilteredFoldersScript emits parentId/parentName off
+    // `folder.parent` (omitted entirely for root folders) and a '/'-joined
+    // ancestor path.
+    const read = await client.callTool('omnifocus_read', { query: { type: 'folders' } });
+    expectOk(read, 'folders read-back');
+    const folders = read.data?.folders ?? [];
+    const created = folders.find((f: any) => f.id === folderId);
+    expect(created, `folder ${folderId} not found on read-back`).toBeTruthy();
+    const sandbox = folders.find((f: any) => f.name === SANDBOX_FOLDER_NAME);
+    expect(sandbox, 'sandbox folder missing from read-back').toBeTruthy();
+    expect(
+      created.parentId,
+      `persisted parent is not the sandbox (root-placement regression?): ${JSON.stringify(created)}`,
+    ).toBe(sandbox.id);
+    expect(created.parentName).toBe(SANDBOX_FOLDER_NAME);
+    // Anchor on the sandbox's OWN path from the same payload (no assumption
+    // about where the sandbox itself lives).
+    expect(created.path).toBe(`${sandbox.path}/${FOLDER_NAME}`);
+    // No per-id folder delete op exists; the folder lives inside the sandbox,
+    // so afterAll's fullCleanup() cascade removes it (residue assertion guards).
+  }, 120000);
+
+  // ── 5. Folder create: loud parent-not-found, nothing created ─────────────
+  //
+  // Same GUARD INTERACTION as test 2: the guarded server's pre-flight rejects
+  // any non-sandbox parentFolder before the mutation script runs, masking the
+  // script-level loud not-found guard — so this probe needs a dedicated
+  // UNGUARDED server (killed in finally; correct behavior writes NOTHING).
+  //
+  // The ghost check also runs on the UNGUARDED server, not the main one: the
+  // main server's folders cache (5 min, primed by test 4's read-back) is never
+  // invalidated by writes from a DIFFERENT process, so a regression-created
+  // ghost could hide behind it. The unguarded child is a fresh process with a
+  // cold cache — its read is guaranteed straight from OmniFocus.
+  //
+  // Known read window: handleFolderQuery hardcodes limit:100, applied while
+  // iterating (BEFORE sorting) — in a database with >100 folders the ghost
+  // could fall outside the returned page and this check would silently
+  // false-pass. Fine today (a handful of folders); revisit if that grows.
+  it('folder create with nonexistent parent errors loudly and creates nothing', async () => {
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      NODE_ENV: 'development',
+      OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
+    };
+    delete env.SANDBOX_GUARD_ENABLED;
+    const serverPath = path.join(__dirname, '../../../../dist/index.js');
+    const unguarded = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'pipe'], env });
+
+    let res: any;
+    let read: any;
+    try {
+      await initializeServer(unguarded);
+      res = await callToolOn(unguarded, 'omnifocus_write', {
+        mutation: { operation: 'create_folder', data: { name: ORPHAN_FOLDER_NAME, parentFolder: BOGUS_PARENT } },
+      });
+      read = await callToolOn(unguarded, 'omnifocus_read', { query: { type: 'folders' } });
+    } finally {
+      unguarded.kill();
+    }
+
+    expect(res.success, `expected error, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(JSON.stringify(res.error)).toContain('Parent folder not found');
+
+    // Regression half: the orphan folder must not exist anywhere. Exact-name
+    // match (run-scoped + __TEST__-prefixed) — can never trip on real folders.
+    expectOk(read, 'folders read-back after not-found probe');
+    const ghost = (read.data?.folders ?? []).find((f: any) => f.name === ORPHAN_FOLDER_NAME);
+    expect(ghost, `not-found probe created a folder: ${JSON.stringify(ghost)}`).toBeUndefined();
   }, 120000);
 });

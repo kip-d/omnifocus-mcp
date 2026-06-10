@@ -11,6 +11,7 @@ export {
 } from './emitter.js';
 export { validateMutationProgram, RESERVED_EMITTER_IDENTIFIERS } from './validator.js';
 export {
+  buildCreateFolderProgram,
   buildCreateProjectProgram,
   buildCreateTaskProgram,
   buildBatchCreateTasksProgram,

@@ -78,6 +78,28 @@ export function emitStmt(node: Stmt): string {
         }
       }
     }
+    case 'constructFolder': {
+      // Near-clone of constructProject at the folder altitude. `new Folder(name,
+      // parentFolder)` appends inside the parent (OmniJS position param), matching
+      // the legacy `targetParent.folders.push(folder)`; omitted position = library
+      // root. `const`, not `var`: folders have no batch path, so no cross-item
+      // hoisting concern (contrast constructTask).
+      const name = emitExpr(node.name);
+      switch (node.parent.kind) {
+        case 'resolved':
+          return `const ${node.bind} = new Folder(${name}, ${node.parent.var});`;
+        case 'none':
+          return `const ${node.bind} = new Folder(${name});`;
+        case 'notFound':
+          throw new Error(
+            'constructFolder with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+          );
+        default: {
+          const _x: never = node.parent;
+          throw new Error(`Unknown folder resolution: ${JSON.stringify(_x)}`);
+        }
+      }
+    }
     case 'setProp': {
       const target = emitExpr(node.target);
       // `bestEffort` wraps the block in try/catch so a failure does not fail the
