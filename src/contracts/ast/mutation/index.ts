@@ -17,11 +17,20 @@ export {
   buildBatchCreateTasksProgram,
   buildUpdateTaskProgram,
   buildUpdateProjectProgram,
+  buildCompleteTaskProgram,
+  buildCompleteProjectProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
   dispatchMutation,
 } from './defs.js';
-export type { TaskLoweringNames, BatchCreateTasksData, UpdateTaskInput, UpdateProjectInput } from './defs.js';
+export type {
+  TaskLoweringNames,
+  BatchCreateTasksData,
+  UpdateTaskInput,
+  UpdateProjectInput,
+  CompleteTaskInput,
+  CompleteProjectInput,
+} from './defs.js';
 export { lowerRepetitionRule } from './repetition.js';
 export type { LoweredRepetitionRule } from './repetition.js';
 export { SNIPPETS, collectSnippets } from './snippets.js';

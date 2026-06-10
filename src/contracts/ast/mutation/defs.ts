@@ -880,6 +880,57 @@ export function buildUpdateProjectProgram(input: UpdateProjectInput): Program {
 }
 
 // =============================================================================
+// LIFECYCLE LOWERINGS (slice 5) — complete + delete, single and bulk
+// =============================================================================
+
+export interface CompleteTaskInput {
+  taskId: string;
+  completionDate?: string | null;
+}
+export interface CompleteProjectInput {
+  projectId: string;
+  completionDate?: string | null;
+}
+
+/** Shared complete lowering (spec §4.2) — task/project differ only in the
+ *  resolve node, guard message, and envelope id key. completionDate is already
+ *  UTC-converted by the tool layer; absent → bare markComplete() ("now"). */
+function lowerComplete(kind: 'task' | 'project', id: string, completionDate?: string | null): Program {
+  const isTask = kind === 'task';
+  const v = isTask ? 'task' : 'proj';
+  const context = isTask ? 'complete_task' : 'complete_project';
+  const statements: Stmt[] = [
+    isTask ? resolveTask(v, id) : resolveProjectById(v, id),
+    guard(`${v} === null`, {
+      error: json(true),
+      message: json(`${isTask ? 'Task' : 'Project'} not found: ${id}`),
+      context: json(context),
+    }),
+    callMethod(ref(v), 'markComplete', completionDate ? [dateExpr(json(completionDate))] : []),
+    return_({
+      [isTask ? 'taskId' : 'projectId']: member(ref(v), 'id.primaryKey'),
+      name: member(ref(v), 'name'),
+      completed: json(true),
+      // Live read-back, not an echo (spec §3). Builder-internal raw — no user data.
+      completionDate: raw(`${v}.completionDate ? ${v}.completionDate.toISOString() : null`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+export function buildCompleteTaskProgram(input: CompleteTaskInput): Program {
+  const _exhaustive: Record<keyof CompleteTaskInput, true> = { taskId: true, completionDate: true };
+  void _exhaustive;
+  return lowerComplete('task', input.taskId, input.completionDate);
+}
+
+export function buildCompleteProjectProgram(input: CompleteProjectInput): Program {
+  const _exhaustive: Record<keyof CompleteProjectInput, true> = { projectId: true, completionDate: true };
+  void _exhaustive;
+  return lowerComplete('project', input.projectId, input.completionDate);
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
