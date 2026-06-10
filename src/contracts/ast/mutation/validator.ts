@@ -5,6 +5,7 @@
 import type {
   Program,
   Stmt,
+  Expr,
   ConstructProjectNode,
   ConstructFolderNode,
   SetPropNode,
@@ -66,15 +67,20 @@ function assertNotReserved(name: string, where: string): void {
  *  6. A guard with mode 'throw' must have `envelope.message` defined (the
  *     emitter also throws — belt and suspenders at the validation seam).
  *  7. Resolution-guard discipline: a `resolveProject`/`resolveTask`/
- *     `resolveProjectById`/`resolveFolder` bind consumed by a later
- *     `constructTask` container `var`, `constructProject` folder `var`, or
- *     `constructFolder` parent `var` must have a `guard` BETWEEN them whose
- *     `cond` mentions that bind (word-boundary match, not substring).
- *     String-level check on `cond` — same trust model as GuardNode.cond
- *     generally. Applies at each statement-list level independently
- *     (resolve/guard/construct triplets stay within one list in practice).
- *     (Slice 3 widened this from constructTask-only to all three constructs
- *     — resolveFolder → constructProject was a pre-existing enforcement gap.)
+ *     `resolveProjectById`/`resolveFolder` bind consumed by ANY later
+ *     statement (setProp/moveTask/moveProject/callMethod/assignTags targets,
+ *     construct container/folder/parent vars, return envelopes, binds) must
+ *     have a `guard` BETWEEN them whose `cond` mentions that bind
+ *     (word-boundary match, not substring). String-level check on `cond` —
+ *     same trust model as GuardNode.cond generally. Applies at each
+ *     statement-list level independently (resolve/guard/consumer triplets
+ *     stay within one list in practice). Guards and resolve statements are
+ *     not themselves consumers; `raw()` fragments are deliberately opaque
+ *     (builder-internal trust, same model as GuardNode.cond). (Slice 3
+ *     widened this from constructTask-only to all three constructs; slice 4
+ *     widened it from constructs to ALL consumers — the update lowerings
+ *     consume resolve binds in setProp targets, moves, callMethod targets,
+ *     and envelopes.)
  *  8. Inside `batchItem.statements`: all per-statement rules recurse, but a
  *     `return` statement is ILLEGAL (it would return from the whole program
  *     IIFE, skipping remaining items and the results envelope — Task 5 review
@@ -342,40 +348,100 @@ function validateAssignTagsStmt(stmt: AssignTagsNode): void {
   }
 }
 
+/** Collect ref names from an Expr tree. raw/json/enumRef carry none by design —
+ * raw is builder-internal (same trust model as GuardNode.cond). */
+function exprRefs(expr: Expr): string[] {
+  switch (expr.type) {
+    case 'ref':
+      return [expr.name];
+    case 'member':
+      return exprRefs(expr.object);
+    case 'new':
+      return expr.args.flatMap(exprRefs);
+    case 'dateExpr':
+      return exprRefs(expr.value);
+    default:
+      return [];
+  }
+}
+
+/** The bind name a TaskMovePosition consumes, if any (rule-7 helper). */
+function taskMovePositionVars(position: MoveTaskNode['position']): string[] {
+  if (position.kind === 'projectBeginning' || position.kind === 'parentEnding') return [position.var];
+  if (position.kind === 'containerRoot') return [position.taskVar];
+  return [];
+}
+
+/** Refs a statement consumes (the rule-7 generalization, slice 4).
+ * Guards, resolve statements, and batchItem nodes are NOT consumers (default
+ * case): a guard mentioning the bind IS the guard; batchItem inner statements
+ * are validated by the per-list recursion. */
+function stmtConsumedRefs(stmt: Stmt): string[] {
+  switch (stmt.type) {
+    case 'setProp':
+      return [
+        ...exprRefs(stmt.target),
+        ...(stmt.value ? exprRefs(stmt.value) : []),
+        ...(stmt.mutations ?? []).flatMap((m) => exprRefs(m.value)),
+      ];
+    case 'assignTags':
+      return [...exprRefs(stmt.target), ...exprRefs(stmt.tags)];
+    case 'moveTask':
+      return [...exprRefs(stmt.task), ...taskMovePositionVars(stmt.position)];
+    case 'moveProject':
+      return [...exprRefs(stmt.project), ...(stmt.position.kind === 'folderBeginning' ? [stmt.position.var] : [])];
+    case 'callMethod':
+      return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
+    case 'constructTask':
+      return stmt.container.kind !== 'inbox' ? [stmt.container.var] : [];
+    case 'constructProject':
+      return stmt.folder.kind === 'resolved' ? [stmt.folder.var] : [];
+    case 'constructFolder':
+      return stmt.parent.kind === 'resolved' ? [stmt.parent.var] : [];
+    case 'return':
+      return Object.values(stmt.envelope).flatMap(exprRefs);
+    case 'bind':
+      return exprRefs(stmt.expr);
+    default:
+      return [];
+  }
+}
+
+function isResolveStmt(
+  stmt: Stmt,
+): stmt is Extract<Stmt, { type: 'resolveProject' | 'resolveTask' | 'resolveProjectById' | 'resolveFolder' }> {
+  return (
+    stmt.type === 'resolveProject' ||
+    stmt.type === 'resolveTask' ||
+    stmt.type === 'resolveProjectById' ||
+    stmt.type === 'resolveFolder'
+  );
+}
+
 // Rule 7: resolution-guard discipline (list-level check).
-// A failed resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
-// moveTasks explodes with an opaque runtime TypeError instead of a typed
-// envelope — so every consumed resolution bind must be guarded between
-// resolve and construct. The cond check is string-level: same trust model as
-// GuardNode.cond generally. (Slice 3 widened this from constructTask-only to
-// all three constructs — resolveFolder → constructProject was a pre-existing
-// enforcement gap.)
+// A failed resolution (null bind) reaching any consumer — `new Task` / `new
+// Project` / `new Folder`, a setProp target, moveTasks/moveSections, a
+// callMethod target, an assignTags target, or a return envelope — explodes
+// with an opaque runtime TypeError instead of a typed envelope, so every
+// consumed resolution bind must be guarded between resolve and the consumer.
+// The cond check is string-level: same trust model as GuardNode.cond
+// generally. (Slice 3 widened this from constructTask-only to all three
+// constructs; slice 4 widened it from constructs to ALL consumers.)
 function validateResolutionGuardDiscipline(statements: Stmt[]): void {
-  const consumedBind = (construct: Stmt): string | null => {
-    if (construct.type === 'constructTask' && construct.container.kind !== 'inbox') return construct.container.var;
-    if (construct.type === 'constructProject' && construct.folder.kind === 'resolved') return construct.folder.var;
-    if (construct.type === 'constructFolder' && construct.parent.kind === 'resolved') return construct.parent.var;
-    return null;
-  };
   for (let ri = 0; ri < statements.length; ri++) {
     const resolve = statements[ri];
-    if (
-      resolve.type !== 'resolveProject' &&
-      resolve.type !== 'resolveTask' &&
-      resolve.type !== 'resolveProjectById' &&
-      resolve.type !== 'resolveFolder'
-    )
-      continue;
+    if (!isResolveStmt(resolve)) continue;
+    const bindName = resolve.bind;
     // Word-boundary match, not substring: a guard on `proj` must not satisfy
     // bind `p`. Regex-escaped for safety even though binds are identifiers.
-    const bindPattern = new RegExp(`\\b${resolve.bind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-    for (let ci = 0; ci < statements.length; ci++) {
-      const construct = statements[ci];
-      if (consumedBind(construct) !== resolve.bind) continue;
+    const bindPattern = new RegExp(`\\b${bindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    for (let ci = ri + 1; ci < statements.length; ci++) {
+      const consumer = statements[ci];
+      if (!stmtConsumedRefs(consumer).includes(bindName)) continue;
       const guarded = statements.some((s, si) => si > ri && si < ci && s.type === 'guard' && bindPattern.test(s.cond));
       if (!guarded) {
         throw new Error(
-          `Invalid mutation program: ${construct.type} consumes resolution bind "${resolve.bind}" ` +
+          `Invalid mutation program: ${consumer.type} consumes resolution bind "${bindName}" ` +
             'without a guard between the resolve and the construct (the guard cond must mention the bind).',
         );
       }

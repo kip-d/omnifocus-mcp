@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveTask,
   resolveParentTask,
+  resolveProject,
   resolveProjectById,
   emitStmt,
   emitProgram,
@@ -11,8 +12,11 @@ import {
   moveProject,
   callMethod,
   assignTags,
+  setProp,
+  guard,
   json,
   ref,
+  member,
   newExpr,
   return_,
   validateMutationProgram,
@@ -209,5 +213,76 @@ describe('resolveTagByPath snippet', () => {
   it('is registered with parseTagPath dep', () => {
     expect(SNIPPETS.resolveTagByPath.deps).toEqual(['parseTagPath']);
     expect(SNIPPETS.resolveTagByPath.source).toContain('function resolveTagByPath');
+  });
+});
+
+describe('rule 7 generalized: resolve binds need a guard before ANY consumer', () => {
+  const env = { ok: json(true) };
+
+  it('rejects a setProp consuming an unguarded resolveTask bind', () => {
+    const program = {
+      statements: [resolveTask('task', 't1'), setProp(ref('task'), 'name', json('x')), return_(env)],
+      context: 'update_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/i);
+  });
+
+  it('rejects a moveTask position consuming an unguarded resolveProject bind', () => {
+    const program = {
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', { error: json(true), message: json('Task not found: t1') }),
+        resolveProject('targetProject', 'P'),
+        moveTask(ref('task'), { kind: 'projectBeginning', var: 'targetProject' }),
+        return_(env),
+      ],
+      context: 'update_task',
+      snippetDeps: ['resolveProjectFlexible'],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/targetProject.*without a guard/i);
+  });
+
+  it('rejects an envelope consuming an unguarded resolve bind', () => {
+    const program = {
+      statements: [resolveTask('task', 't1'), return_({ taskId: member(ref('task'), 'id.primaryKey') })],
+      context: 'update_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/i);
+  });
+
+  it('rejects a callMethod consuming an unguarded resolveProjectById bind', () => {
+    const program = {
+      statements: [resolveProjectById('proj', 'p1'), callMethod(ref('proj'), 'markComplete', []), return_(env)],
+      context: 'update_project',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/proj.*without a guard/i);
+  });
+
+  it('accepts the guarded shape', () => {
+    const program = {
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', { error: json(true), message: json('Task not found: t1') }),
+        setProp(ref('task'), 'name', json('x')),
+        return_({ taskId: member(ref('task'), 'id.primaryKey') }),
+      ],
+      context: 'update_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
+describe('rule 10: reserved binds on resolveProjectById', () => {
+  it('rejects resolveProjectById binding a reserved emitter identifier', () => {
+    const program = {
+      statements: [resolveProjectById('_warnings', 'p1'), return_({ ok: json(true) })],
+      context: 'update_project',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
   });
 });
