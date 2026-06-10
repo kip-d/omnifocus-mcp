@@ -568,16 +568,18 @@ type DateChanges = Pick<
  * must not depend on that upstream sanitization. */
 function lowerDateSetClear(targetVar: string, changes: DateChanges): Stmt[] {
   const stmts: Stmt[] = [];
+  // Literal property reads (not computed `changes[field]`) so the OMN-61
+  // schema↔builder parity scan sees every date/clear field being consumed.
   const fields = [
-    { field: 'dueDate', clear: 'clearDueDate' },
-    { field: 'deferDate', clear: 'clearDeferDate' },
-    { field: 'plannedDate', clear: 'clearPlannedDate' },
+    { field: 'dueDate', value: changes.dueDate, clear: changes.clearDueDate },
+    { field: 'deferDate', value: changes.deferDate, clear: changes.clearDeferDate },
+    { field: 'plannedDate', value: changes.plannedDate, clear: changes.clearPlannedDate },
   ] as const;
-  for (const { field, clear } of fields) {
-    if (changes[clear] === true || changes[field] === null || changes[field] === '') {
+  for (const { field, value, clear } of fields) {
+    if (clear === true || value === null || value === '') {
       stmts.push(setProp(ref(targetVar), field, json(null), 'direct'));
-    } else if (changes[field] !== undefined) {
-      stmts.push(setProp(ref(targetVar), field, dateExpr(json(changes[field])), 'dateExpr'));
+    } else if (value !== undefined) {
+      stmts.push(setProp(ref(targetVar), field, dateExpr(json(value)), 'dateExpr'));
     }
   }
   return stmts;

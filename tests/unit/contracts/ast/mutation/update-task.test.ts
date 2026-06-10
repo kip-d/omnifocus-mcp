@@ -104,6 +104,12 @@ describe('buildUpdateTaskProgram — golden emission', () => {
     }
   });
 
+  it("dueDate: '' lowers to null (shared lowerDateSetClear empty-string handling)", () => {
+    const omnijs = emit({ dueDate: '' });
+    expect(omnijs).toContain('task.dueDate = null;');
+    expect(omnijs).not.toContain('new Date');
+  });
+
   it('clear flag WINS over a simultaneous value (legacy clear-applied-last)', () => {
     const omnijs = emit({ dueDate: '2026-06-12 17:00', clearDueDate: true });
     expect(omnijs).toContain('task.dueDate = null;');

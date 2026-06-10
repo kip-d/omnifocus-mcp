@@ -543,321 +543,215 @@ describe('buildCreateProjectScript', () => {
   });
 });
 
-describe('buildUpdateTaskScript', () => {
-  it('generates valid script for task update', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      name: 'Updated Name',
-    });
+// OMN-128 slice 4: buildUpdateTaskScript emits ONE OmniJS program from the
+// mutation AST (dispatchMutation → emitProgram → wrapInLauncher) — the legacy
+// nested-backtick template (JSON-embedded changes object, runtime
+// `if (changes.x)` forest) is gone. Lowering details (set-vs-clear, tag modes,
+// resolve-first ordering, OMN-137 warnings, vm execution) are covered in
+// tests/unit/contracts/ast/mutation/update-task.test.ts.
+describe('buildUpdateTaskScript (OMN-128 AST emission)', () => {
+  it('wraps ONE OmniJS program in the data-free launcher', async () => {
+    const { script, operation, target, description } = await buildUpdateTaskScript('t1', { name: 'x' });
 
-    expect(result.script).toContain("Application('OmniFocus')");
-    expect(result.script).toContain('task-123');
-    expect(result.script).toContain('Updated Name');
-    expect(result.operation).toBe('update');
-    expect(result.target).toBe('task');
+    expect(operation).toBe('update');
+    expect(target).toBe('task');
+    expect(description).toBe('Update task: t1');
+    expect(script).toContain("Application('OmniFocus')");
+    expect(script).toContain('app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Task.byIdentifier("t1")');
+    expect(program).toContain('task.name = "x";');
+    expect(script).not.toContain('${'); // no template interpolation residue
   });
 
-  it('handles flagged update', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
+  it('target not-found is a loud in-program guard', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { flagged: true });
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Task not found: t1');
+    expect(program).toContain('task.flagged = true;');
+  });
+
+  it('project move resolves the destination in-program with a loud guard', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { project: 'new-project-id' });
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('resolveProjectFlexible("new-project-id")');
+    expect(program).toContain('Project not found: new-project-id');
+    expect(program).toContain('moveTasks([task], targetProject.beginning);');
+  });
+
+  it('project: null moves to inbox.beginning', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { project: null });
+
+    expect(extractOmniJsProgram(script)).toContain('moveTasks([task], inbox.beginning);');
+  });
+
+  it('parentTaskId moves to parentTask.ending behind a loud resolve guard', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { parentTaskId: 'parent-456' });
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Parent task not found: parent-456');
+    expect(program).toContain('moveTasks([task], parentTask.ending);');
+  });
+
+  it('parentTaskId: null unparents to the container root', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { parentTaskId: null });
+
+    expect(extractOmniJsProgram(script)).toContain(
+      'moveTasks([task], task.containingProject ? task.containingProject.beginning : inbox.beginning);',
+    );
+  });
+
+  it('tag replace injects the create-capable path resolver and clears first', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { tags: ['Errands : Downtown'] });
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('function resolveOrCreateTagByPath');
+    expect(program).toContain('task.clearTags();');
+    expect(program).toContain('.addTag(');
+  });
+
+  it('removeTags injects the read-only path resolver (no creation)', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { removeTags: ['Errands : Downtown'] });
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('function resolveTagByPath');
+    expect(program).toContain('.removeTag(');
+  });
+
+  it('clearDueDate lowers to a null assignment (the key string itself never appears)', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { clearDueDate: true });
+
+    expect(extractOmniJsProgram(script)).toContain('task.dueDate = null;');
+  });
+
+  it('repetitionRule: null assigns null', async () => {
+    const { script } = await buildUpdateTaskScript('t1', { repetitionRule: null });
+
+    expect(extractOmniJsProgram(script)).toContain('task.repetitionRule = null;');
+  });
+
+  it('contains NO backtick characters — the nested-template island class (OMN-111/113) is dead', async () => {
+    const { script } = await buildUpdateTaskScript('t1', {
+      name: 'Plain name',
+      note: 'multi\nline\nnote',
       flagged: true,
-    });
-
-    expect(result.script).toContain('flagged');
-    expect(result.script).toContain('true');
-  });
-
-  it('handles tag replacement', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      tags: ['new-tag-1', 'new-tag-2'],
-    });
-
-    expect(result.script).toContain('tags');
-    expect(result.script).toContain('new-tag-1');
-  });
-
-  it('handles addTags operation', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      addTags: ['additional-tag'],
-    });
-
-    expect(result.script).toContain('addTags');
-    expect(result.script).toContain('additional-tag');
-  });
-
-  it('handles removeTags operation', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      removeTags: ['unwanted-tag'],
-    });
-
-    expect(result.script).toContain('removeTags');
-    expect(result.script).toContain('unwanted-tag');
-  });
-
-  it('handles clearDueDate flag', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      clearDueDate: true,
-    });
-
-    expect(result.script).toContain('clearDueDate');
-  });
-
-  it('handles project change', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      project: 'new-project-id',
-    });
-
-    expect(result.script).toContain('project');
-    expect(result.script).toContain('new-project-id');
-  });
-
-  it('handles move to inbox (project: null)', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      project: null,
-    });
-
-    expect(result.script).toContain('inbox');
-  });
-
-  it('handles parentTaskId update using parentTask.ending for subtask relationship', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      parentTaskId: 'parent-456',
-    });
-
-    expect(result.script).toContain('parent-456');
-    expect(result.script).toContain('parentTask.ending');
-  });
-
-  it('handles parentTaskId: null to unparent using .beginning', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      parentTaskId: null,
-    });
-
-    expect(result.script).toContain('.beginning');
-  });
-
-  it('includes resolveOrCreateTagByPath for tag update', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      tags: ['Errands : Downtown'],
-    });
-    expect(result.script).toContain('resolveOrCreateTagByPath');
-  });
-
-  it('includes resolveTagByPath for removeTags (no creation)', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      removeTags: ['Errands : Downtown'],
-    });
-    expect(result.script).toContain('resolveTagByPath');
-  });
-
-  it('clears repetition rule when repetitionRule is null', async () => {
-    const result = await buildUpdateTaskScript('task-123', {
-      repetitionRule: null,
-    });
-    expect(result.script).toContain('repetitionRule === null');
-    expect(result.script).toContain('task.repetitionRule = null');
-  });
-});
-
-describe('buildUpdateProjectScript', () => {
-  it('generates valid script for project update', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      name: 'Updated Project',
-    });
-
-    expect(result.script).toContain('project-123');
-    expect(result.script).toContain('Updated Project');
-    expect(result.operation).toBe('update');
-    expect(result.target).toBe('project');
-  });
-
-  it('handles status change', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
+      tags: ['Work : Deep'],
+      dueDate: '2026-06-12 17:00',
+      project: 'Work',
       status: 'completed',
     });
 
-    expect(result.script).toContain('status');
-    expect(result.script).toContain('completed');
+    expect(script).not.toContain('`');
+    expect(() => Function(script)).not.toThrow();
+    expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
   });
 
-  it('handles folder change', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      folder: 'New Folder',
+  it('stays parse-safe when user data contains backticks or ${ (OMN-111 class)', async () => {
+    const { script } = await buildUpdateTaskScript('t1', {
+      name: 'Fix `parseTagPath` edge case',
+      note: 'cost is ${total}; run `npm test`',
     });
 
-    expect(result.script).toContain('folder');
-    expect(result.script).toContain('New Folder');
+    expect(() => Function(script)).not.toThrow();
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Fix `parseTagPath` edge case');
+    expect(program).toContain('${total}');
+  });
+});
+
+// OMN-128 slice 4: buildUpdateProjectScript emits ONE OmniJS program from the
+// mutation AST — the legacy JXA shell with FOUR evaluateJavascript islands
+// (update + status + folder move + tags) is gone, and so is the silent name
+// fallback on the update target (spec §2.1). Lowering details are covered in
+// tests/unit/contracts/ast/mutation/update-project.test.ts.
+describe('buildUpdateProjectScript (OMN-128 AST emission)', () => {
+  it('wraps ONE OmniJS program in the data-free launcher', async () => {
+    const { script, operation, target, description } = await buildUpdateProjectScript('p1', { name: 'x' });
+
+    expect(operation).toBe('update');
+    expect(target).toBe('project');
+    expect(description).toBe('Update project: p1');
+    expect(script).toContain("Application('OmniFocus')");
+    expect(script).toContain('app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Project.byIdentifier("p1")');
+    expect(program).toContain('proj.name = "x";');
+    expect(script).not.toContain('${'); // no template interpolation residue
   });
 
-  it('handles folder change to null (move to root)', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      folder: null,
-    });
+  it('has NO name fallback in the emitted program — strict byIdentifier with a loud guard (spec §2.1)', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { name: 'x' });
 
-    expect(result.script).toContain('moveSections');
-    expect(result.script).toContain('library.beginning');
+    const program = extractOmniJsProgram(script);
+    expect(program).not.toContain('flattenedProjects.find');
+    expect(program).toContain('Project not found: p1');
   });
 
-  it('generates moveSections call for folder change', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      folder: 'Development',
-    });
+  it('status lowers to a best-effort enum assignment with a live status read-back', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { status: 'completed' });
 
-    expect(result.script).toContain('moveSections');
-    expect(result.script).toContain('Development');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('proj.status = Project.Status.Done;');
+    // Envelope reads the LIVE status back instead of echoing the request.
+    expect(program).toContain("proj.status === Project.Status.Active ? 'active'");
   });
 
-  it('resolves " : " nested folder paths on update, identically to create (OMN-127 #2)', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      folder: 'Personal : Other Games : Shop Titans',
-    });
+  it('folder move resolves flexibly (path / id / leaf name — OMN-127 #2) with a loud guard', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { folder: 'Personal : Other Games : Shop Titans' });
 
-    // The update move-path must use the same path-aware resolver as create,
-    // not the old byIdentifier + flat-name-only lookup that can never resolve
-    // a " : " nested path.
-    expect(result.script).toContain('parseFolderPath');
-    expect(result.script).toContain('resolveFolderPath');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('resolveFolderFlexible("Personal : Other Games : Shop Titans")');
+    expect(program).toContain('function parseFolderPath');
+    expect(program).toContain('function resolveFolderPath');
+    expect(program).toContain('Folder not found: Personal : Other Games : Shop Titans');
+    expect(program).toContain('moveSections([proj], targetFolder.beginning);');
   });
 
-  it('handles tags replacement (clearTags + addTag)', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      tags: ['work', 'urgent'],
-    });
+  it('folder: null moves to library.beginning', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { folder: null });
 
-    expect(result.script).toContain('clearTags');
-    expect(result.script).toContain('addTag');
-    expect(result.script).toContain('work');
-    expect(result.script).toContain('urgent');
+    expect(extractOmniJsProgram(script)).toContain('moveSections([proj], library.beginning);');
   });
 
-  it('handles addTags', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      addTags: ['new-tag'],
-    });
+  // OMN-38 regression guards, carried over from the legacy describe: the broken
+  // seconds-conversion / plain-object / constructor attempts must stay dead.
+  it('reviewInterval uses read-modify-reassign with build-time unit conversion (OMN-38)', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { reviewInterval: 14 });
 
-    expect(result.script).toContain('addTag');
-    expect(result.script).toContain('new-tag');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain(
+      '{ const _rmr = proj.reviewInterval; if (_rmr) { _rmr.steps = 2; _rmr.unit = "weeks"; proj.reviewInterval = _rmr; } }',
+    );
+    expect(program).not.toContain('* 24 * 60 * 60');
+    expect(program).not.toContain('new Project.ReviewInterval');
+    expect(program).not.toMatch(/reviewInterval\s*=\s*\{\s*unit:/);
   });
 
-  it('handles removeTags', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      removeTags: ['old-tag'],
-    });
+  it('tags replacement clears then adds via the shared resolver', async () => {
+    const { script } = await buildUpdateProjectScript('p1', { tags: ['work', 'urgent'] });
 
-    expect(result.script).toContain('removeTag');
-    expect(result.script).toContain('old-tag');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('proj.clearTags();');
+    expect(program).toContain('.addTag(');
   });
 
-  it('handles reviewInterval', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      reviewInterval: 14,
+  it('generates syntactically valid JavaScript (launcher + decoded program), no backticks', async () => {
+    const { script } = await buildUpdateProjectScript('p1', {
+      name: 'New Name',
+      folder: 'Parent : Child',
+      status: 'on_hold',
+      tags: ['__test-a'],
+      dueDate: '2026-06-12 17:00',
+      reviewInterval: 7,
     });
 
-    expect(result.script).toContain('reviewInterval');
-    expect(result.script).toContain('14');
-  });
-
-  // OMN-38 follow-up: update path runs inside the outer updateScript template,
-  // which itself runs in OmniJS via app.evaluateJavascript at the JXA wrapper.
-  // No further bridging needed — the in-place mutation runs directly in OmniJS.
-  // Project.ReviewInterval is non-constructible in OmniJS, so we mutate the
-  // default instance that already exists on every project.
-  describe('reviewInterval update script (OMN-38 regression guards)', () => {
-    it('does NOT multiply by 24*60*60 (broken seconds-conversion attempt)', async () => {
-      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).not.toContain('* 24 * 60 * 60');
-      expect(result.script).not.toContain('*24*60*60');
-    });
-
-    it('does NOT assign a plain object literal (broken plain-object attempt)', async () => {
-      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*unit:/);
-      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*steps:/);
-    });
-
-    it('does NOT call new Project.ReviewInterval() (broken constructor attempt)', async () => {
-      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).not.toContain('new Project.ReviewInterval');
-    });
-
-    it('uses read-modify-reassign on project.reviewInterval', async () => {
-      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      // Read into local, mutate, reassign. Direct in-place mutation on
-      // project.reviewInterval silently no-ops (getter returns a snapshot).
-      expect(result.script).toMatch(/(?:const|let|var)\s+_ri\s*=\s*project\.reviewInterval/);
-      expect(result.script).toMatch(/\b_ri\.steps\s*=/);
-      expect(result.script).toMatch(/\b_ri\.unit\s*=/);
-      expect(result.script).toMatch(/project\.reviewInterval\s*=\s*_ri\b/);
-    });
-
-    it('embeds the days→{unit, steps} conversion logic for all natural units', async () => {
-      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).toContain('"years"');
-      expect(result.script).toContain('"months"');
-      expect(result.script).toContain('"weeks"');
-      expect(result.script).toContain('"days"');
-    });
-  });
-
-  it('handles deferDate', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      deferDate: '2026-03-01',
-    });
-
-    expect(result.script).toContain('deferDate');
-    expect(result.script).toContain('2026-03-01');
-  });
-
-  it('handles plannedDate', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      plannedDate: '2026-04-01',
-    });
-
-    expect(result.script).toContain('plannedDate');
-    expect(result.script).toContain('2026-04-01');
-  });
-
-  it('handles clearDeferDate', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      clearDeferDate: true,
-    });
-
-    expect(result.script).toContain('clearDeferDate');
-  });
-
-  it('handles clearPlannedDate', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      clearPlannedDate: true,
-    });
-
-    expect(result.script).toContain('clearPlannedDate');
-  });
-
-  it('handles sequential', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      sequential: true,
-    });
-
-    expect(result.script).toContain('sequential');
-  });
-
-  it('uses Project.byIdentifier for O(1) lookup instead of JXA .id()', async () => {
-    const result = await buildUpdateProjectScript('project-123', {
-      name: 'Updated',
-    });
-
-    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
-    expect(result.script).toContain('Project.byIdentifier');
-    // Should NOT use JXA .id() comparison which returns a different value
-    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
-  });
-
-  it('falls back to name matching when Project.byIdentifier fails', async () => {
-    const result = await buildUpdateProjectScript('My Project Name', {
-      name: 'Updated',
-    });
-
-    // Should support both ID and name lookup
-    expect(result.script).toContain('Project.byIdentifier');
-    expect(result.script).toContain('My Project Name');
+    expect(script).not.toContain('`');
+    expect(() => Function(script)).not.toThrow();
+    expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
   });
 });
 

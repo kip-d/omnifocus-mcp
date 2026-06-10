@@ -454,25 +454,49 @@ function validateResolutionGuardDiscipline(statements: Stmt[]): void {
 
 function validateStatementList(statements: Stmt[], ctx: ValidationContext): void {
   for (const stmt of statements) {
-    if (stmt.type === 'constructProject') validateConstructProjectStmt(stmt);
-    if (stmt.type === 'constructFolder') validateConstructFolderStmt(stmt);
-    if (stmt.type === 'setProp') validateSetPropStmt(stmt);
-    if (stmt.type === 'constructTask') validateConstructTaskStmt(stmt);
-    if (stmt.type === 'guard') validateGuardStmt(stmt, ctx);
-    if (stmt.type === 'moveTask') validateMoveTaskStmt(stmt);
-    if (stmt.type === 'moveProject') validateMoveProjectStmt(stmt);
-    if (stmt.type === 'callMethod') validateCallMethodStmt(stmt);
-    if (stmt.type === 'assignTags') validateAssignTagsStmt(stmt);
-
-    // Rule 8 (return inside batchItem): same IIFE-escape hazard as the return-mode guard above.
-    if (stmt.type === 'return' && ctx.insideBatchItem) {
-      throw new Error(
-        'Invalid batchItem: a return statement inside batchItem.statements would return from the whole ' +
-          'program IIFE, skipping remaining items and the results envelope.',
-      );
+    switch (stmt.type) {
+      case 'constructProject':
+        validateConstructProjectStmt(stmt);
+        break;
+      case 'constructFolder':
+        validateConstructFolderStmt(stmt);
+        break;
+      case 'setProp':
+        validateSetPropStmt(stmt);
+        break;
+      case 'constructTask':
+        validateConstructTaskStmt(stmt);
+        break;
+      case 'guard':
+        validateGuardStmt(stmt, ctx);
+        break;
+      case 'moveTask':
+        validateMoveTaskStmt(stmt);
+        break;
+      case 'moveProject':
+        validateMoveProjectStmt(stmt);
+        break;
+      case 'callMethod':
+        validateCallMethodStmt(stmt);
+        break;
+      case 'assignTags':
+        validateAssignTagsStmt(stmt);
+        break;
+      case 'return':
+        // Rule 8 (return inside batchItem): same IIFE-escape hazard as the return-mode guard above.
+        if (ctx.insideBatchItem) {
+          throw new Error(
+            'Invalid batchItem: a return statement inside batchItem.statements would return from the whole ' +
+              'program IIFE, skipping remaining items and the results envelope.',
+          );
+        }
+        break;
+      case 'batchItem':
+        validateBatchItemStmt(stmt, ctx);
+        break;
+      default:
+        break;
     }
-
-    if (stmt.type === 'batchItem') validateBatchItemStmt(stmt, ctx);
 
     validateReservedBinds(stmt);
   }
