@@ -375,7 +375,9 @@ function taskMovePositionVars(position: MoveTaskNode['position']): string[] {
 /** Refs a statement consumes (the rule-7 generalization, slice 4).
  * Guards, resolve statements, and batchItem nodes are NOT consumers (default
  * case): a guard mentioning the bind IS the guard; batchItem inner statements
- * are validated by the per-list recursion. */
+ * are validated by the per-list recursion. Guard ENVELOPE exprs are
+ * deliberately not scanned either — they emit only on the failure path and
+ * are builder-controlled (same trust model as raw). */
 function stmtConsumedRefs(stmt: Stmt): string[] {
   switch (stmt.type) {
     case 'setProp':
@@ -424,6 +426,7 @@ function isResolveStmt(
 // callMethod target, an assignTags target, or a return envelope — explodes
 // with an opaque runtime TypeError instead of a typed envelope, so every
 // consumed resolution bind must be guarded between resolve and the consumer.
+// Only statements LATER than the resolve (by index) count as consumers.
 // The cond check is string-level: same trust model as GuardNode.cond
 // generally. (Slice 3 widened this from constructTask-only to all three
 // constructs; slice 4 widened it from constructs to ALL consumers.)
@@ -442,7 +445,7 @@ function validateResolutionGuardDiscipline(statements: Stmt[]): void {
       if (!guarded) {
         throw new Error(
           `Invalid mutation program: ${consumer.type} consumes resolution bind "${bindName}" ` +
-            'without a guard between the resolve and the construct (the guard cond must mention the bind).',
+            'without a guard between the resolve and the consumer (the guard cond must mention the bind).',
         );
       }
     }
