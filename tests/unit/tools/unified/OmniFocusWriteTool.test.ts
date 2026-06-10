@@ -401,6 +401,73 @@ describe('OmniFocusWriteTool task operations', () => {
       // Minimal response should include fields_updated
       expect(result.id || result.data?.id || result.data?.task?.id || 'task-min').toBeDefined();
     });
+
+    it('OMN-137: surfaces script warnings in the full update task response', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'task-wu', name: 'Warn Update', updated: true, warnings: ['status: boom'] },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-wu',
+          changes: { name: 'Warn Update' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.warnings).toEqual(['status: boom']);
+    });
+
+    it('OMN-137: omits the warnings key when update task script reports none (full response)', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'task-nwu', name: 'Clean Update', updated: true, warnings: [] },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-nwu',
+          changes: { name: 'Clean Update' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('warnings' in result.data).toBe(false);
+    });
+
+    it('OMN-137: surfaces script warnings in the minimalResponse update task response', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'task-wum', name: 'Warn Minimal', updated: true, warnings: ['status: boom'] },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-wum',
+          changes: { name: 'Warn Minimal' },
+          minimalResponse: true,
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.warnings).toEqual(['status: boom']);
+    });
   });
 
   // ─── COMPLETE ───────────────────────────────────────────────────────
@@ -883,6 +950,42 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(true);
       expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-upd');
+    });
+
+    it('OMN-137: surfaces script warnings in the update project response', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ projectId: 'proj-wu', name: 'Warn Project', updated: true, warnings: ['status: boom'] }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-wu',
+          changes: { name: 'Warn Project' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.warnings).toEqual(['status: boom']);
+    });
+
+    it('OMN-137: omits the warnings key when project update script reports none', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ projectId: 'proj-nwu', name: 'Clean Project', updated: true, warnings: [] }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-nwu',
+          changes: { name: 'Clean Project' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('warnings' in result.data).toBe(false);
     });
   });
 

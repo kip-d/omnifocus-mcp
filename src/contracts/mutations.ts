@@ -200,6 +200,7 @@ export interface TaskUpdateData {
   clearDeferDate?: boolean;
   clearPlannedDate?: boolean;
   flagged?: boolean;
+  sequential?: boolean; // Live on tasks (action groups): the shared update schema + sanitizer forward it — spec §3 slice 4
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean;
   repetitionRule?: RepetitionRule | null; // Set/update (object) or clear (null)

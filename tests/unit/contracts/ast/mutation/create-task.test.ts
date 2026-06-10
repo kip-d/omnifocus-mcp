@@ -35,7 +35,7 @@ describe('buildCreateTaskProgram', () => {
     const ct = p.statements.find((s) => s.type === 'constructTask') as any;
     expect(ct.bind).toBe('task');
     expect(ct.container).toEqual({ kind: 'inbox' });
-    expect(p.statements.some((s) => s.type === 'resolveProject' || s.type === 'resolveParentTask')).toBe(false);
+    expect(p.statements.some((s) => s.type === 'resolveProject' || s.type === 'resolveTask')).toBe(false);
 
     const out = emitProgram(p);
     expect(out).toContain('new Task("X")');
@@ -90,7 +90,7 @@ describe('buildCreateTaskProgram', () => {
     const p = buildCreateTaskProgram({ name: 'X', parentTaskId: 'abc123' });
     expect(() => validateMutationProgram(p)).not.toThrow();
 
-    expect(p.statements[0].type).toBe('resolveParentTask');
+    expect(p.statements[0].type).toBe('resolveTask');
     expect((p.statements[0] as any).bind).toBe('parentTask');
     expect(p.statements[1].type).toBe('guard');
 
@@ -233,7 +233,7 @@ describe('lowerTaskCreate (parameterized names)', () => {
       kind: 'tempIdRef',
       var: '_t0',
     });
-    expect(statements.some((s) => s.type === 'resolveProject' || s.type === 'resolveParentTask')).toBe(false);
+    expect(statements.some((s) => s.type === 'resolveProject' || s.type === 'resolveTask')).toBe(false);
     expect(snippetDeps).not.toContain('resolveProjectFlexible');
     expect((statements.find((s) => s.type === 'constructTask') as any).container).toEqual({
       kind: 'tempIdRef',

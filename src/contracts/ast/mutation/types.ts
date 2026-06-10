@@ -74,13 +74,26 @@ export interface GuardNode {
   // per-item — the throw is caught by the item's try/capture wrapper).
   mode?: 'return' | 'throw';
 }
+/** Flexible: id-then-name fallback via resolveProjectFlexible — for create-time/
+ *  move-destination refs; update targets use ResolveProjectByIdNode (strict). */
 export interface ResolveProjectNode {
   type: 'resolveProject';
   bind: string;
   ref: string;
 }
-export interface ResolveParentTaskNode {
-  type: 'resolveParentTask';
+/** Resolves a task by identifier — general-purpose (create parent-task chain and
+ *  update target). Strict byIdentifier-only: no name fallback. */
+export interface ResolveTaskNode {
+  type: 'resolveTask';
+  bind: string;
+  ref: string;
+}
+/** Resolves a project strictly by identifier only — spec §2.1 deliberate
+ *  contrast with ResolveProjectNode (flexible, id-then-name fallback). Used
+ *  for update targets where the caller owns the id and name fallback would be
+ *  ambiguous. */
+export interface ResolveProjectByIdNode {
+  type: 'resolveProjectById';
   bind: string;
   ref: string;
 }
@@ -150,7 +163,62 @@ export interface AssignTagsNode {
   // as `_warnings.push(label + ': ' + msg)` instead of being swallowed.
   // Consumed by the emitter's `bestEffortCatch` for OMN-137 warnings attribution.
   label?: string;
+  // Tag application mode (slice 4): 'add' (absent = legacy create behavior,
+  // create-or-find + addTag), 'replace' (clearTags() first, then add), 'remove'
+  // (resolve WITHOUT create, removeTag, missing names silently skipped — legacy).
+  mode?: 'replace' | 'add' | 'remove';
 }
+
+/** Typed task-move destination (slice 4).
+ *  - inboxBeginning: task → inbox.beginning (de-project it)
+ *  - projectBeginning: task → <var>.beginning (move into a project)
+ *  - parentEnding: task → <var>.ending (nest under a parent task)
+ *  - containerRoot: ternary — task.containingProject ? project.beginning : inbox.beginning
+ *    (used to re-root a task at the top of its current container without knowing the type)
+ */
+export type TaskMovePosition =
+  | { kind: 'inboxBeginning' }
+  | { kind: 'projectBeginning'; var: string }
+  | { kind: 'parentEnding'; var: string }
+  | { kind: 'containerRoot'; taskVar: string };
+
+/** Moves one task to a typed position via OmniJS `moveTasks`. */
+export interface MoveTaskNode {
+  type: 'moveTask';
+  task: Expr;
+  position: TaskMovePosition;
+  bestEffort?: boolean;
+  label?: string;
+}
+
+/** Typed project-move destination (slice 4).
+ *  - libraryBeginning: project → library.beginning (move to root)
+ *  - folderBeginning: project → <var>.beginning (move into a folder)
+ */
+export type ProjectMovePosition = { kind: 'libraryBeginning' } | { kind: 'folderBeginning'; var: string };
+
+/** Moves one project to a typed position via OmniJS `moveSections`. */
+export interface MoveProjectNode {
+  type: 'moveProject';
+  project: Expr;
+  position: ProjectMovePosition;
+  bestEffort?: boolean;
+  label?: string;
+}
+
+/** Calls a method on a target expression with typed args (slice 4).
+ *  Only methods in CALL_METHOD_ALLOWLIST are permitted — see validator.ts.
+ *  Used for task status mutations: markComplete, drop.
+ */
+export interface CallMethodNode {
+  type: 'callMethod';
+  target: Expr;
+  method: string;
+  args: Expr[];
+  bestEffort?: boolean;
+  label?: string;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -159,7 +227,8 @@ export type Stmt =
   | BindNode
   | ResolveFolderNode
   | ResolveProjectNode
-  | ResolveParentTaskNode
+  | ResolveTaskNode
+  | ResolveProjectByIdNode
   | GuardNode
   | ConstructProjectNode
   | ConstructTaskNode
@@ -167,6 +236,9 @@ export type Stmt =
   | BatchItemNode
   | SetPropNode
   | AssignTagsNode
+  | MoveTaskNode
+  | MoveProjectNode
+  | CallMethodNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -197,8 +269,15 @@ export const resolveProject = (bindVar: string, refStr: string): ResolveProjectN
   bind: bindVar,
   ref: refStr,
 });
-export const resolveParentTask = (bindVar: string, refStr: string): ResolveParentTaskNode => ({
-  type: 'resolveParentTask',
+export const resolveTask = (bindVar: string, refStr: string): ResolveTaskNode => ({
+  type: 'resolveTask',
+  bind: bindVar,
+  ref: refStr,
+});
+/** Alias retained for the slice-2 create lowerings' readability (same node). */
+export const resolveParentTask = resolveTask;
+export const resolveProjectById = (bindVar: string, refStr: string): ResolveProjectByIdNode => ({
+  type: 'resolveProjectById',
   bind: bindVar,
   ref: refStr,
 });
@@ -270,6 +349,7 @@ export const assignTags = (
   bindVar: string,
   bestEffort = false,
   label?: string,
+  mode?: 'replace' | 'add' | 'remove',
 ): AssignTagsNode => ({
   type: 'assignTags',
   target,
@@ -277,5 +357,39 @@ export const assignTags = (
   bind: bindVar,
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
+  ...(mode ? { mode } : {}),
 });
 export const return_ = (envelope: Envelope): ReturnNode => ({ type: 'return', envelope });
+export const moveTask = (task: Expr, position: TaskMovePosition, bestEffort = false, label?: string): MoveTaskNode => ({
+  type: 'moveTask',
+  task,
+  position,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});
+export const moveProject = (
+  project: Expr,
+  position: ProjectMovePosition,
+  bestEffort = false,
+  label?: string,
+): MoveProjectNode => ({
+  type: 'moveProject',
+  project,
+  position,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});
+export const callMethod = (
+  target: Expr,
+  method: string,
+  args: Expr[],
+  bestEffort = false,
+  label?: string,
+): CallMethodNode => ({
+  type: 'callMethod',
+  target,
+  method,
+  args,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});

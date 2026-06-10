@@ -152,6 +152,8 @@ function extractOperationResult(
     if (operation === 'update') {
       entry.changes = result.fields_updated as string[];
     }
+    // OMN-137: minimalResponse updates carry warnings at the top level — keep them (non-empty only).
+    Object.assign(entry, liftWarnings(result));
     return entry;
   }
 
@@ -172,6 +174,9 @@ function extractOperationResult(
   if (operation === 'update' && task?.changes) {
     entry.changes = Object.keys(task.changes as Record<string, unknown>);
   }
+
+  // OMN-137: envelope-level warnings (data.warnings) survive the flatten (non-empty only).
+  Object.assign(entry, liftWarnings(data));
 
   return entry;
 }

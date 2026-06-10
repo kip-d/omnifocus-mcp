@@ -699,19 +699,30 @@ describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (O
 // =============================================================================
 //
 // Every field the create/update schemas accept must be *read* by the mutation
-// script builder as `data.<field>` / `changes.<field>` / `projectData.<field>`.
-// A schema field the builder never references is silently dropped on write —
+// builder seam as `data.<field>` / `changes.<field>` / `projectData.<field>`.
+// A schema field the seam never references is silently dropped on write —
 // the OMN-60 `fixed` bug shape (accepted, advertised, never applied). This is
 // the write-side analog of the read-side projection parity above.
 //
-// References the builder makes that are NOT user-settable fields of the two
+// OMN-128: the seam now spans TWO files — mutation-script-builder.ts holds the
+// thin AST wrappers (and the sandbox guard), while the field-consuming
+// lowerings live in mutation/defs.ts. Both are scanned; the per-field
+// compile-time exhaustiveness guards in defs.ts carry the same intent
+// structurally, this scan keeps the cross-file declaration↔implementation
+// pairing honest.
+//
+// References the seam makes that are NOT user-settable fields of the two
 // schemas under test, allowlisted so the reverse guard doesn't false-fail:
 //   projectId    — builder's internal remap of the `project` schema field
 //   parentFolder — a field of FolderCreateDataSchema, a different schema this
 //                   gate intentionally does not cover
+//   specs        — BatchCreateTasksData envelope field (batch fast path);
+//                   per-spec fields are covered by the BatchTaskSpec
+//                   exhaustiveness guard in defs.ts
+//   stopOnError  — BatchCreateTasksData option, not a settable data field
 // A new entry forces a conscious choice rather than silently widening the
 // accepted-but-internal surface.
-const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId'];
+const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId', 'specs', 'stopOnError'];
 
 // Strip comments before scanning the (checked-in, bounded) builder source:
 // it has a maintenance comment (`// ... if (data.X) ...`) that would
@@ -721,12 +732,12 @@ function stripComments(src: string): string {
   // `[^\n]*` (not `.*$/m`) keeps the line-comment strip backtracking-free.
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
-const mutationBuilderSource = stripComments(
-  readFileSync(
-    fileURLToPath(new URL('../../../src/contracts/ast/mutation-script-builder.ts', import.meta.url)),
-    'utf8',
-  ),
-);
+const mutationBuilderSource = [
+  '../../../src/contracts/ast/mutation-script-builder.ts',
+  '../../../src/contracts/ast/mutation/defs.ts',
+]
+  .map((p) => stripComments(readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8')))
+  .join('\n');
 const builderRefs = new Set(
   [...mutationBuilderSource.matchAll(/\b(?:data|changes|projectData)\.([A-Za-z]\w*)/g)].map((m) => m[1]),
 );

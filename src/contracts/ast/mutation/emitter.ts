@@ -2,7 +2,7 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, Stmt } from './types.js';
+import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TaskMovePosition } from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -33,6 +33,40 @@ export function emitExpr(node: Expr): string {
 // warning into the program-scope `_warnings` array instead of swallowing.
 function bestEffortCatch(label: string): string {
   return `catch (e) { _warnings.push(${JSON.stringify(label)} + ': ' + (e && e.message ? e.message : String(e))); }`;
+}
+
+// Exhaustive switch with never default — TypeScript enforces completeness as the
+// TaskMovePosition union grows (same pattern as FolderResolution handling above).
+function emitTaskMovePosition(p: TaskMovePosition): string {
+  switch (p.kind) {
+    case 'inboxBeginning':
+      return 'inbox.beginning';
+    case 'projectBeginning':
+      return `${p.var}.beginning`;
+    case 'parentEnding':
+      return `${p.var}.ending`;
+    case 'containerRoot':
+      return `${p.taskVar}.containingProject ? ${p.taskVar}.containingProject.beginning : inbox.beginning`;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown task move position: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+// Exhaustive switch with never default — a future third ProjectMovePosition kind
+// must be a compile error here, not a silent `.beginning` fallback.
+function emitProjectMovePosition(p: ProjectMovePosition): string {
+  switch (p.kind) {
+    case 'libraryBeginning':
+      return 'library.beginning';
+    case 'folderBeginning':
+      return `${p.var}.beginning`;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown project move position: ${JSON.stringify(_x)}`);
+    }
+  }
 }
 
 export function emitEnvelope(env: Envelope): string {
@@ -137,28 +171,74 @@ export function emitStmt(node: Stmt): string {
       // wrapped. (OMN-128: caught by live /verify. General rule: any bestEffort statement
       // whose binding is consumed later MUST hoist that declaration out of the try.)
       const decl = `let ${node.bind} = [];`;
-      const loop = [
-        `for (const _tagName of ${tags}) {`,
-        '  var _segs = parseTagPath(_tagName);',
-        '  var _tag;',
-        '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
-        '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
-        `  ${target}.addTag(_tag);`,
-        `  ${node.bind}.push(_tag.name);`,
-        '}',
-      ].join('\n');
-      // `bestEffort` wraps only the LOOP so a tag failure does not fail the surrounding
+
+      // Mode dispatch (slice 4):
+      //   absent / 'add':  legacy create-or-find + addTag (original behavior)
+      //   'replace':       clearTags() first (inside the best-effort wrap), then add
+      //   'remove':        resolve WITHOUT creating, removeTag; missing names silently skipped
+      const mode = node.mode;
+
+      let loop: string;
+      if (mode === 'remove') {
+        // resolve-only: parseTagPath + resolveTagByPath for path names (shared single-source
+        // helpers — parseTagPath keeps its empty-segment validation), flattenedTags.find for
+        // leaf names. Missing tags are silently skipped (legacy update builder semantics).
+        loop = [
+          `for (const _tagName of ${tags}) {`,
+          '  var _segs = parseTagPath(_tagName);',
+          '  var _tag;',
+          '  if (_segs) { _tag = resolveTagByPath(_segs); }',
+          '  else { _tag = flattenedTags.find(t => t.name === _tagName); }',
+          `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
+          '}',
+        ].join('\n');
+      } else {
+        // 'add' or absent: original create-or-find loop
+        loop = [
+          `for (const _tagName of ${tags}) {`,
+          '  var _segs = parseTagPath(_tagName);',
+          '  var _tag;',
+          '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
+          '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
+          `  ${target}.addTag(_tag);`,
+          `  ${node.bind}.push(_tag.name);`,
+          '}',
+        ].join('\n');
+      }
+
+      // 'replace' mode: prepend clearTags() INSIDE the best-effort wrap (the whole tag block
+      // is best-effort, matching legacy update builder semantics — clearTags + add are one unit).
+      const clearLine = mode === 'replace' ? `${target}.clearTags();\n` : '';
+      const block = `${clearLine}${loop}`;
+
+      // `bestEffort` wraps only the BLOCK so a tag failure does not fail the surrounding
       // mutation (original best-effort tag bridge semantics) — the binding survives,
       // and the catch records a labeled warning (OMN-137).
-      const guardedLoop = node.bestEffort ? `try {\n${loop}\n} ${bestEffortCatch(node.label ?? 'tags')}` : loop;
-      return `${decl}\n${guardedLoop}`;
+      const guardedBlock = node.bestEffort ? `try {\n${block}\n} ${bestEffortCatch(node.label ?? 'tags')}` : block;
+      return `${decl}\n${guardedBlock}`;
     }
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
+    case 'moveTask': {
+      const pos = emitTaskMovePosition(node.position);
+      const stmt = `moveTasks([${emitExpr(node.task)}], ${pos});`;
+      return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'move')}` : stmt;
+    }
+    case 'moveProject': {
+      const pos = emitProjectMovePosition(node.position);
+      const stmt = `moveSections([${emitExpr(node.project)}], ${pos});`;
+      return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'folder')}` : stmt;
+    }
+    case 'callMethod': {
+      const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
+      return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
+    }
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
-    case 'resolveParentTask':
+    case 'resolveTask':
       return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'resolveProjectById':
+      return `const ${node.bind} = Project.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
     case 'constructTask': {
       // `new Task(name)` lands in the inbox; non-inbox containers are placed via
       // moveTasks([t], container.ending). Container resolution failures are
