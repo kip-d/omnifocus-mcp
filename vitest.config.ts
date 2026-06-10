@@ -15,7 +15,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['tests/support/setup-unit.ts'],
+    // setup-worker-guard (OMN-143) runs in every worker. It arms wherever an
+    // IPC channel exists — which under vitest 3's default forks pool includes
+    // unit workers (deliberate: it only fires on a ppid TRANSITION to 1, i.e.
+    // genuine orphaning) — and no-ops in worker-thread pools.
+    setupFiles: ['tests/support/setup-unit.ts', 'tests/support/setup-worker-guard.ts'],
     // Global setup for integration test teardown - enable when any integration tests might run
     globalSetup: isUnitTestOnly ? undefined : ['tests/support/setup-integration.ts'],
     // Default timeouts accommodate integration tests; unit tests finish faster anyway
