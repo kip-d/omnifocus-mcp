@@ -84,6 +84,12 @@ describe('moveProject node', () => {
       'moveSections([proj], targetFolder.beginning);',
     );
   });
+
+  it('bestEffort wraps moveProject recording a labeled warning', () => {
+    const emitted = emitStmt(moveProject(ref('proj'), { kind: 'libraryBeginning' }, true, 'folder'));
+    expect(emitted).toMatch(/^try \{ moveSections/);
+    expect(emitted).toContain('_warnings.push("folder"');
+  });
 });
 
 describe('callMethod node', () => {

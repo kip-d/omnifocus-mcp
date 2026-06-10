@@ -2,7 +2,7 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, Stmt, TaskMovePosition } from './types.js';
+import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TaskMovePosition } from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -50,6 +50,21 @@ function emitTaskMovePosition(p: TaskMovePosition): string {
     default: {
       const _x: never = p;
       throw new Error(`Unknown task move position: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+// Exhaustive switch with never default — a future third ProjectMovePosition kind
+// must be a compile error here, not a silent `.beginning` fallback.
+function emitProjectMovePosition(p: ProjectMovePosition): string {
+  switch (p.kind) {
+    case 'libraryBeginning':
+      return 'library.beginning';
+    case 'folderBeginning':
+      return `${p.var}.beginning`;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown project move position: ${JSON.stringify(_x)}`);
     }
   }
 }
@@ -180,7 +195,7 @@ export function emitStmt(node: Stmt): string {
       return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'move')}` : stmt;
     }
     case 'moveProject': {
-      const pos = node.position.kind === 'libraryBeginning' ? 'library.beginning' : `${node.position.var}.beginning`;
+      const pos = emitProjectMovePosition(node.position);
       const stmt = `moveSections([${emitExpr(node.project)}], ${pos});`;
       return node.bestEffort ? `try { ${stmt} } ${bestEffortCatch(node.label ?? 'folder')}` : stmt;
     }
