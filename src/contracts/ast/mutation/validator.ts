@@ -40,10 +40,11 @@ function assertNotReserved(name: string, where: string): void {
  * Structural rules (enforced here):
  *  1. The last TOP-LEVEL statement must be a `return`. batchItem inner lists
  *     are exempt — they must NOT return (rule 8).
- *  2. Every `constructProject`'s `folder` must be a typed FolderResolution
- *     object (kind ∈ {resolved, none, notFound}) — never a string / missing kind.
- *  3. A `constructProject` with `folder.kind === 'notFound'` is illegal: the
- *     not-found case must be handled by a preceding `guard` that returns.
+ *  2. Every `constructProject`'s `folder` and `constructFolder`'s `parent` must
+ *     be a typed FolderResolution object (kind ∈ {resolved, none, notFound}) —
+ *     never a string / missing kind.
+ *  3. A `constructProject` or `constructFolder` with `folder/parent.kind === 'notFound'`
+ *     is illegal: the not-found case must be handled by a preceding `guard` that returns.
  *  4. A `setProp` with strategy !== 'readModifyReassign' MUST have a `value`;
  *     a `setProp` with strategy === 'readModifyReassign' MUST have `mutations`.
  *  5. Every `constructTask`'s `container` must be a typed ContainerResolution
@@ -74,8 +75,9 @@ function assertNotReserved(name: string, where: string): void {
  *     by the item catch as a FALSE per-item failure with an opaque message),
  *     and taskVar itself must not be a reserved identifier.
  * 10. No binding statement (bind, resolveFolder, resolveProject,
- *     resolveParentTask, constructProject, constructTask, assignTags) may use
- *     a reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
+ *     resolveParentTask, constructProject, constructTask, constructFolder,
+ *     assignTags) may use a reserved emitter identifier — see
+ *     RESERVED_EMITTER_IDENTIFIERS.
  *
  * NOT enforced here: snippet-dependency coverage (a statement that emits a call
  * to an OmniJS helper must declare that helper in `snippetDeps`). That check is
@@ -129,6 +131,28 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
       }
       // Rule 10: reserved emitter identifiers.
       assertNotReserved(stmt.bind, 'constructProject bind');
+    }
+
+    if (stmt.type === 'constructFolder') {
+      const parent = stmt.parent as unknown;
+      // Rules 2/3 at the folder altitude: typed FolderResolution; notFound illegal.
+      if (
+        typeof parent !== 'object' ||
+        parent === null ||
+        !FOLDER_KINDS.has((parent as { kind?: string }).kind ?? '')
+      ) {
+        throw new Error(
+          'Invalid constructFolder: parent must be a typed FolderResolution object ' +
+            'with kind in {resolved, none, notFound}, not a string or untyped value.',
+        );
+      }
+      if ((parent as { kind: string }).kind === 'notFound') {
+        throw new Error(
+          'Invalid constructFolder: parent.kind="notFound" is illegal — ' +
+            'the not-found case must be handled by a preceding guard that returns.',
+        );
+      }
+      assertNotReserved(stmt.bind, 'constructFolder bind');
     }
 
     if (stmt.type === 'setProp') {
