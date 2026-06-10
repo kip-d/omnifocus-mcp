@@ -52,13 +52,16 @@ function assertNotReserved(name: string, where: string): void {
  *     require a non-empty string `var`.
  *  6. A guard with mode 'throw' must have `envelope.message` defined (the
  *     emitter also throws — belt and suspenders at the validation seam).
- *  7. Resolution-guard discipline: a `resolveProject`/`resolveParentTask` bind
- *     consumed by a later `constructTask` container `var` must have a `guard`
- *     BETWEEN them whose `cond` mentions that bind (word-boundary match, not
- *     substring). String-level check on
- *     `cond` — same trust model as GuardNode.cond generally. Applies at each
+ *  7. Resolution-guard discipline: a `resolveProject`/`resolveParentTask`/
+ *     `resolveFolder` bind consumed by a later `constructTask` container `var`,
+ *     `constructProject` folder `var`, or `constructFolder` parent `var` must
+ *     have a `guard` BETWEEN them whose `cond` mentions that bind
+ *     (word-boundary match, not substring). String-level check on `cond` —
+ *     same trust model as GuardNode.cond generally. Applies at each
  *     statement-list level independently (resolve/guard/construct triplets
- *     stay within one list in practice).
+ *     stay within one list in practice). (Slice 3 widened this from
+ *     constructTask-only to all three constructs — resolveFolder →
+ *     constructProject was a pre-existing enforcement gap.)
  *  8. Inside `batchItem.statements`: all per-statement rules recurse, but a
  *     `return` statement is ILLEGAL (it would return from the whole program
  *     IIFE, skipping remaining items and the results envelope — Task 5 review
@@ -253,24 +256,33 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
   }
 
   // Rule 7: resolution-guard discipline, at THIS list level. A failed
-  // resolution (null bind) reaching `new Task` / moveTasks explodes with an
-  // opaque runtime TypeError instead of a typed envelope — so every consumed
-  // resolution bind must be guarded between resolve and construct. The cond
-  // check is string-level: same trust model as GuardNode.cond generally.
+  // resolution (null bind) reaching `new Task` / `new Project` / `new Folder` /
+  // moveTasks explodes with an opaque runtime TypeError instead of a typed
+  // envelope — so every consumed resolution bind must be guarded between
+  // resolve and construct. The cond check is string-level: same trust model as
+  // GuardNode.cond generally. (Slice 3 widened this from constructTask-only to
+  // all three constructs — resolveFolder → constructProject was a pre-existing
+  // enforcement gap.)
+  const consumedBind = (construct: Stmt): string | null => {
+    if (construct.type === 'constructTask' && construct.container.kind !== 'inbox') return construct.container.var;
+    if (construct.type === 'constructProject' && construct.folder.kind === 'resolved') return construct.folder.var;
+    if (construct.type === 'constructFolder' && construct.parent.kind === 'resolved') return construct.parent.var;
+    return null;
+  };
   for (let ri = 0; ri < statements.length; ri++) {
     const resolve = statements[ri];
-    if (resolve.type !== 'resolveProject' && resolve.type !== 'resolveParentTask') continue;
+    if (resolve.type !== 'resolveProject' && resolve.type !== 'resolveParentTask' && resolve.type !== 'resolveFolder')
+      continue;
     // Word-boundary match, not substring: a guard on `proj` must not satisfy
     // bind `p`. Regex-escaped for safety even though binds are identifiers.
     const bindPattern = new RegExp(`\\b${resolve.bind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
     for (let ci = 0; ci < statements.length; ci++) {
       const construct = statements[ci];
-      if (construct.type !== 'constructTask') continue;
-      if (construct.container.kind === 'inbox' || construct.container.var !== resolve.bind) continue;
+      if (consumedBind(construct) !== resolve.bind) continue;
       const guarded = statements.some((s, si) => si > ri && si < ci && s.type === 'guard' && bindPattern.test(s.cond));
       if (!guarded) {
         throw new Error(
-          `Invalid mutation program: constructTask consumes resolution bind "${resolve.bind}" ` +
+          `Invalid mutation program: ${construct.type} consumes resolution bind "${resolve.bind}" ` +
             'without a guard between the resolve and the construct (the guard cond must mention the bind).',
         );
       }

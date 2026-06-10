@@ -6,9 +6,12 @@ import {
   json,
   emitStmt,
   validateMutationProgram,
+  resolveFolder,
+  guard,
   return_,
   ref,
   member,
+  constructProject,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 
@@ -57,5 +60,51 @@ describe('constructFolder validator rules', () => {
     expect(() =>
       validateMutationProgram(wrap([constructFolder('_warnings', json('X'), { kind: 'none' }), return_(envelope)])),
     ).toThrow(/reserved emitter identifier/i);
+  });
+});
+
+describe('rule-7 extension: resolveFolder needs a guard before consumption', () => {
+  const wrap = (stmts: Program['statements']): Program => ({
+    statements: stmts,
+    context: 'create_folder',
+    snippetDeps: [],
+  });
+  const envelope = { ok: json(true) };
+
+  it('rejects resolveFolder → constructFolder with no guard between', () => {
+    expect(() =>
+      validateMutationProgram(
+        wrap([
+          resolveFolder('p', 'Personal'),
+          constructFolder('f', json('X'), { kind: 'resolved', var: 'p' }),
+          return_(envelope),
+        ]),
+      ),
+    ).toThrow(/consumes resolution bind "p" without a guard/);
+  });
+
+  it('rejects resolveFolder → constructProject with no guard between (pre-existing gap, closed)', () => {
+    expect(() =>
+      validateMutationProgram(
+        wrap([
+          resolveFolder('p', 'Personal'),
+          constructProject('proj', json('X'), { kind: 'resolved', var: 'p' }),
+          return_(envelope),
+        ]),
+      ),
+    ).toThrow(/consumes resolution bind "p" without a guard/);
+  });
+
+  it('accepts the guarded shape', () => {
+    expect(() =>
+      validateMutationProgram(
+        wrap([
+          resolveFolder('p', 'Personal'),
+          guard('p === null', { error: json(true), message: json('nope'), context: json('create_folder') }),
+          constructFolder('f', json('X'), { kind: 'resolved', var: 'p' }),
+          return_(envelope),
+        ]),
+      ),
+    ).not.toThrow();
   });
 });
