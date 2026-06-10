@@ -139,11 +139,26 @@ export function startOrphanWatchdog(
   const onOrphan =
     opts.onOrphan ??
     ((): void => {
-      console.error(
-        '[Integration Guard] Parent process died (reparented to PID 1) — ' +
-          'aborting orphaned integration run before it executes more destructive teardowns (OMN-143).',
-      );
-      process.exit(130);
+      // Logging must never block the abort: the parent is dead, so stderr's
+      // pipe consumer may be gone (EPIPE) — swallow and proceed.
+      try {
+        console.error(
+          '[Integration Guard] Parent process died (reparented to PID 1) — ' +
+            'aborting orphaned integration run before it executes more destructive teardowns (OMN-143).',
+        );
+      } catch {
+        /* dead pipe — abort anyway */
+      }
+      // Round-2 kill-test finding: a plain process.exit did NOT kill a vitest
+      // fork worker (vitest patches process.exit inside workers to catch tests
+      // calling it). Try the graceful exit first, then fall through to
+      // self-SIGKILL — which nothing can intercept.
+      try {
+        process.exit(130);
+      } catch {
+        /* patched/intercepted exit — escalate */
+      }
+      process.kill(process.pid, 'SIGKILL');
     });
   const intervalMs = opts.intervalMs ?? 2000;
 
