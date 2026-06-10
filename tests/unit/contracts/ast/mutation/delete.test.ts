@@ -6,6 +6,7 @@ import {
   buildDeleteTaskProgram,
   buildDeleteProjectProgram,
   buildBulkDeleteTasksProgram,
+  dispatchMutation,
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
@@ -46,6 +47,57 @@ describe('buildBulkDeleteTasksProgram — golden emission', () => {
     const omnijs = emitProgram(program);
     expect(omnijs).toContain('let _deleted = [];');
     expect(omnijs).toContain('"Deleted " + _deleted.length + " of " + 3 + " tasks"');
+  });
+});
+
+// The OMN-119/120 non-bypass property for the delete family: dispatch runs the
+// sandbox guard BEFORE building (mirrors update-task.test.ts's guard describe).
+describe('dispatchMutation delete/task guard (OMN-119/120 non-bypass)', () => {
+  it('rejects a non-sandbox task id when the sandbox guard is enabled', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      await expect(dispatchMutation('delete/task', { taskId: 'not-a-sandbox-task-id' })).rejects.toThrow(/TEST GUARD/);
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
+  });
+});
+
+describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () => {
+  it('rejects a non-sandbox project id when the sandbox guard is enabled', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      await expect(dispatchMutation('delete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
+        /TEST GUARD/,
+      );
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
+  });
+});
+
+describe('dispatchMutation bulk_delete/task guard (OMN-119/120 non-bypass)', () => {
+  it('rejects dispatch when ANY id is non-sandbox, even if others would pass', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      // One bad id among otherwise-good ids: all-ids pre-flight rejects the whole dispatch
+      await expect(
+        dispatchMutation('bulk_delete/task', {
+          taskIds: ['__test__sandbox-id', 'not-a-sandbox-task-id', '__test__sandbox-id-2'],
+        }),
+      ).rejects.toThrow(/TEST GUARD/);
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
   });
 });
 

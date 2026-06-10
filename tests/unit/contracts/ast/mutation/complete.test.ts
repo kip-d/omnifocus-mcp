@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildCompleteTaskProgram,
   buildCompleteProjectProgram,
+  dispatchMutation,
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
@@ -42,6 +43,40 @@ describe('buildCompleteProjectProgram — golden emission', () => {
     expect(omnijs).toContain('proj.markComplete();');
     expect(omnijs).toContain('projectId: proj.id.primaryKey'); // §2.3: live ids
     expect(omnijs).not.toContain('success'); // §2.3: no success key anywhere
+  });
+});
+
+// The OMN-119/120 non-bypass property for the complete family: dispatch runs the
+// sandbox guard BEFORE building (mirrors update-task.test.ts's guard describe).
+describe('dispatchMutation complete/task guard (OMN-119/120 non-bypass)', () => {
+  it('rejects a non-sandbox task id when the sandbox guard is enabled', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      await expect(dispatchMutation('complete/task', { taskId: 'not-a-sandbox-task-id' })).rejects.toThrow(
+        /TEST GUARD/,
+      );
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
+  });
+});
+
+describe('dispatchMutation complete/project guard (OMN-119/120 non-bypass)', () => {
+  it('rejects a non-sandbox project id when the sandbox guard is enabled', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      await expect(dispatchMutation('complete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
+        /TEST GUARD/,
+      );
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
   });
 });
 

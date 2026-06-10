@@ -985,8 +985,9 @@ export function buildDeleteProjectProgram(input: DeleteProjectInput): Program {
   return lowerDelete('project', input.projectId);
 }
 
-/** Bulk task delete (spec §4.2): ids ≤ 100 by schema; per-item continue-on-error
- *  unroll; emitProgram owns the _deleted/_errors declarations. */
+/** Bulk task delete (spec §4.2): ids 1–100 by schema (an empty array would emit a
+ *  program whose envelope references undeclared accumulators); per-item
+ *  continue-on-error unroll; emitProgram owns the _deleted/_errors declarations. */
 export function buildBulkDeleteTasksProgram(input: BulkDeleteTasksInput): Program {
   const _exhaustive: Record<keyof BulkDeleteTasksInput, true> = { taskIds: true };
   void _exhaustive;
@@ -1044,6 +1045,29 @@ export const MUTATION_DEFS = {
     },
     build: buildUpdateProjectProgram,
   } as MutationDef<UpdateProjectInput>,
+  'complete/task': {
+    guard: (d) => validateTaskInSandbox(d.taskId, 'complete'),
+    build: buildCompleteTaskProgram,
+  } as MutationDef<CompleteTaskInput>,
+  'complete/project': {
+    guard: (d) => validateProjectInSandbox(d.projectId, 'complete'),
+    build: buildCompleteProjectProgram,
+  } as MutationDef<CompleteProjectInput>,
+  'delete/task': {
+    guard: (d) => validateTaskInSandbox(d.taskId, 'delete'),
+    build: buildDeleteTaskProgram,
+  } as MutationDef<DeleteTaskInput>,
+  'delete/project': {
+    guard: (d) => validateProjectInSandbox(d.projectId, 'delete'),
+    build: buildDeleteProjectProgram,
+  } as MutationDef<DeleteProjectInput>,
+  'bulk_delete/task': {
+    // ALL ids pre-flight before any delete executes (spec §2.1); no-op outside test mode.
+    guard: async (d) => {
+      await Promise.all(d.taskIds.map((id) => validateTaskInSandbox(id, 'bulk delete')));
+    },
+    build: buildBulkDeleteTasksProgram,
+  } as MutationDef<BulkDeleteTasksInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =
