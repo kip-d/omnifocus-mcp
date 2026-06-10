@@ -245,7 +245,7 @@ export function validateProjectCreate(data: ProjectCreateData): void {
 /**
  * Validate that a folder creation is inside the sandbox
  */
-function validateFolderCreate(data: FolderCreateData): void {
+export function validateFolderCreate(data: FolderCreateData): void {
   if (!isTestMode()) return;
 
   if (data.parentFolder !== SANDBOX_FOLDER_NAME) {

@@ -3,9 +3,10 @@
 // dispatch registry (MUTATION_DEFS) that runs the build-time sandbox guard
 // BEFORE building, so a registered op can never bypass it (the OMN-119/120
 // non-bypass property — batch & bulk paths previously skipped the guard).
-import type { ProjectCreateData, TaskCreateData } from '../../mutations.js';
+import type { FolderCreateData, ProjectCreateData, TaskCreateData } from '../../mutations.js';
 import {
   validateBatchTaskSpecs,
+  validateFolderCreate,
   validateProjectCreate,
   validateTaskCreate,
   type BatchTaskSpec,
@@ -15,6 +16,7 @@ import {
   assignTags,
   batchItem,
   bind,
+  constructFolder,
   constructProject,
   constructTask,
   dateExpr,
@@ -164,6 +166,63 @@ export function buildCreateProjectProgram(data: ProjectCreateData): Program {
   statements.push(return_(envelope));
 
   return { statements, context: 'create_project', snippetDeps };
+}
+
+// =============================================================================
+// FOLDER CREATE LOWERING
+// =============================================================================
+
+/**
+ * Lower a folder-create request into a typed mutation Program (OMN-128 slice 3).
+ * Statement order preserves the legacy builder: parent resolve + guard (loud
+ * not-found, exact legacy message — already loud since OMN-127), construct,
+ * return. The legacy JXA→OmniJS id-bridge island is deleted, not migrated:
+ * folderId reads id.primaryKey directly off the fresh binding. `warnings` is
+ * additive (always [] today — no best-effort statements) for one-semantics
+ * uniformity across migrated create envelopes.
+ */
+export function buildCreateFolderProgram(data: FolderCreateData): Program {
+  // Compile-time exhaustiveness guard (same discipline as the other create
+  // lowerings): a new FolderCreateData field cannot be silently dropped.
+  const _exhaustive: Record<keyof FolderCreateData, true> = {
+    name: true,
+    parentFolder: true,
+  };
+  void _exhaustive;
+
+  const statements: Stmt[] = [];
+  const snippetDeps: string[] = [];
+
+  if (data.parentFolder) {
+    statements.push(resolveFolder('targetParent', data.parentFolder));
+    statements.push(
+      guard('targetParent === null', {
+        error: json(true),
+        message: json('Parent folder not found: ' + data.parentFolder),
+        context: json('create_folder'),
+      }),
+    );
+    snippetDeps.push('resolveFolderFlexible');
+  }
+
+  statements.push(
+    constructFolder(
+      'folder',
+      json(data.name),
+      data.parentFolder ? { kind: 'resolved', var: 'targetParent' } : { kind: 'none' },
+    ),
+  );
+
+  const envelope: Envelope = {
+    folderId: member(ref('folder'), 'id.primaryKey'),
+    name: member(ref('folder'), 'name'),
+    parentFolder: data.parentFolder ? raw('targetParent.name') : json(null),
+    warnings: ref('_warnings'),
+    created: json(true),
+  };
+  statements.push(return_(envelope));
+
+  return { statements, context: 'create_folder', snippetDeps };
 }
 
 // =============================================================================
@@ -482,6 +541,10 @@ export const MUTATION_DEFS = {
     guard: validateProjectCreate,
     build: buildCreateProjectProgram,
   } as MutationDef<ProjectCreateData>,
+  'create/folder': {
+    guard: validateFolderCreate,
+    build: buildCreateFolderProgram,
+  } as MutationDef<FolderCreateData>,
   'create/task': {
     guard: validateTaskCreate,
     build: buildCreateTaskProgram,
