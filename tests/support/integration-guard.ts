@@ -84,8 +84,11 @@ export function acquireIntegrationLock(
   }
 
   // Dead holder or garbage content → stale lock. Unlink-then-recreate so the
-  // atomic `wx` decides between two concurrent reclaimers: exactly one wins;
-  // the loser sees the winner's live PID and refuses.
+  // atomic `wx` decides between concurrent reclaimers in all but a
+  // sub-millisecond unlink/create interleaving (a strictly narrower residue
+  // than plain overwrite; closing it fully needs flock/link(2) — not worth
+  // the dependency for a single-dev-machine lock). The loser sees the
+  // winner's live PID and refuses.
   try {
     fs.unlinkSync(lockPath);
   } catch (e) {
