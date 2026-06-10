@@ -219,6 +219,14 @@ export interface CallMethodNode {
   label?: string;
 }
 
+/** deleteObject(<target>) — OmniJS free function (NOT a method; callMethod
+ *  cannot express it). No binding, no bestEffort: a failed delete is a hard
+ *  error — there is no partial result to preserve (spec §2.4/§4.1). */
+export interface DeleteObjectNode {
+  type: 'deleteObject';
+  target: Expr;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -239,6 +247,7 @@ export type Stmt =
   | MoveTaskNode
   | MoveProjectNode
   | CallMethodNode
+  | DeleteObjectNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -393,3 +402,4 @@ export const callMethod = (
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
 });
+export const deleteObject = (target: Expr): DeleteObjectNode => ({ type: 'deleteObject', target });

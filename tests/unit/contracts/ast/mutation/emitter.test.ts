@@ -26,6 +26,7 @@ import {
   batchItem,
   guard,
   bind,
+  deleteObject,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('emitExpr', () => {
@@ -318,6 +319,10 @@ describe('slice-2 statement emission', () => {
     expect(emitStmt(guard('p === null', { error: json(true) }))).toBe(
       'if (p === null) return JSON.stringify({ error: true });',
     );
+  });
+
+  it('emits deleteObject as a free-function call', () => {
+    expect(emitStmt(deleteObject(ref('task')))).toBe('deleteObject(task);');
   });
 
   it('batchItem emits try/capture with per-item warnings slice and results push', () => {

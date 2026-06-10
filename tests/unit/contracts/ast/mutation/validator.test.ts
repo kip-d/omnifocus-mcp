@@ -10,6 +10,7 @@ import {
   guard,
   resolveProject,
   resolveParentTask,
+  resolveTask,
   bind,
   assignTags,
   setProp,
@@ -18,6 +19,7 @@ import {
   ref,
   raw,
   json,
+  deleteObject,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -241,6 +243,33 @@ describe('resolution-guard discipline', () => {
   it('accepts an unguarded resolveParentTask whose bind is never consumed by a constructTask', () => {
     const good = { ...ok, statements: [resolveParentTask('pt', 'abc'), done] };
     expect(() => validateMutationProgram(good)).not.toThrow();
+  });
+
+  it('rule 7: deleteObject consuming an unguarded resolve bind is rejected', () => {
+    const program = {
+      statements: [resolveTask('task', 't1'), deleteObject(ref('task')), return_({ ok: json(true) })],
+      context: 'delete_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/guard/i);
+  });
+
+  it('rule 7: deleteObject after an intervening guard passes', () => {
+    const program = {
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', {
+          error: json(true),
+          message: json('Task not found: t1'),
+          context: json('delete_task'),
+        }),
+        deleteObject(ref('task')),
+        return_({ deleted: json(true) }),
+      ],
+      context: 'delete_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
   });
 
   it('applies the same discipline to resolveParentTask consumed as a parentTask container', () => {

@@ -279,7 +279,8 @@ const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 
 const PROJECT_MOVE_POSITION_KINDS = new Set(['libraryBeginning', 'folderBeginning']);
 
 /**
- * Allowlist of OmniJS task methods callable via callMethod (Rule 12).
+ * OmniJS task methods that callMethod nodes may invoke (Rule 12).
+ * Validator-enforced: any method not in this list is rejected at validation time.
  * Deliberately minimal — extend per slice as new lowerings land.
  * Exported so callers (batch program builder, tool layer) can reference it.
  */
@@ -394,6 +395,8 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return [...exprRefs(stmt.project), ...(stmt.position.kind === 'folderBeginning' ? [stmt.position.var] : [])];
     case 'callMethod':
       return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
+    case 'deleteObject':
+      return exprRefs(stmt.target);
     case 'constructTask':
       return stmt.container.kind !== 'inbox' ? [stmt.container.var] : [];
     case 'constructProject':

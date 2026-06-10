@@ -233,6 +233,8 @@ export function emitStmt(node: Stmt): string {
       const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
       return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
     }
+    case 'deleteObject':
+      return `deleteObject(${emitExpr(node.target)});`;
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':
