@@ -30,8 +30,8 @@ After this slice, **zero write-side template-string codegen remains** and every 
 it (`grep -rn parentTagId src tests` hits only the builder file itself).
 
 Tag-by-name resolution is hand-copied **five times** with already-divergent semantics (create's parent: id-first then
-name in JXA; nest/reparent: id-first then name in OmniJS; rename/delete/merge: name-only in JXA) — the OMN-127 drift
-class, live.
+name in JXA; nest/reparent: id-first then name in OmniJS; rename/delete/merge: name-only in JXA; match order also
+diverges — rename/delete take the first name match, merge/nest/reparent the last, §3) — the OMN-127 drift class, live.
 
 Existing test surface: `tests/unit/tag-operations.test.ts` (8 tests), `tests/unit/tag-conversion.test.ts` (3),
 `tests/integration/test-tag-hierarchy.ts`.
@@ -68,8 +68,9 @@ Also dead by construction: the legacy dual create path (`app.make` throws → re
 ### 2.3 Envelopes — slice-4 convention (no inner `success` key)
 
 Migrated envelopes drop `success: true` (the transport's `ScriptResult` owns success signaling; error envelopes remain
-`{error: true, message}` — same shape legacy tag errors already use). Everything else in the envelopes is preserved
-key-for-key, including `action`, the human `message` strings, and merge's `tasksMerged` count:
+`{error: true, message}` — same shape legacy tag errors already use, minus the `details` key two legacy error envelopes
+carried — delete-failure and the preamble null-tags check — which nothing consumes). Everything else in the envelopes is
+preserved key-for-key, including `action`, the human `message` strings, and merge's `tasksMerged` count:
 
 ```js
 // create (flat)                                    // create (path)
@@ -116,10 +117,12 @@ disappears. Tool-layer behavior is unchanged.
 ## 3. Legacy-faithful semantics (preserved exactly)
 
 - **Name resolution:** exact-name match over `flattenedTags`, **first match in flattened order** — a nested tag is
-  addressable by bare name. (Legacy rename/delete/merge used a JXA forEach-with-break; nest/reparent used OmniJS
-  forEach-**without**-break, which takes the _last_ match. The new `resolveTag` emits first-match for all — the
-  divergence is exactly the OMN-127 drift class this ticket exists to kill; flattened order makes last-vs-first
-  observable only with duplicate names at different depths, recorded here rather than preserved per-op.)
+  addressable by bare name. (Legacy rename/delete used a JXA for-loop-with-break (first-match); merge's JXA scan has
+  **no** break and its island re-resolves via forEach-without-break (last-match, end to end); nest/reparent used OmniJS
+  forEach-**without**-break (last-match). The new `resolveTag` emits first-match for all — the divergence is exactly the
+  OMN-127 drift class this ticket exists to kill; flattened order makes last-vs-first observable only with duplicate
+  names at different depths. For merge this means: with duplicate-named tags, which tag's tasks get retagged and which
+  tag gets deleted changes from the last to the first in flattened order — recorded here rather than preserved per-op.)
 - **Create, flat:** duplicate name anywhere → `{error: true, message: "Tag '<name>' already exists"}`. Parent given but
   not found → `"Parent tag not found: <name>"`.
 - **Create, path syntax** (`' : '` separator): find-or-create each segment; already-fully-existing path returns success
@@ -192,8 +195,8 @@ preamble, epilogue, the four islands, `validateTagMutation` — is deleted, not 
 
 ## 5. Validator (`mutation/validator.ts`)
 
-- Rule 7 (`consumedBind`) extends to the new consumers: `constructTag.parent` (when `resolved`), `moveTag.position`
-  (when `underTag`), `mergeRetag` (both vars).
+- Rule 7 (resolution-guard discipline — `stmtConsumedRefs` / `isResolveStmt` in `validator.ts`) extends to the new
+  consumers: `constructTag.parent` (when `resolved`), `moveTag.position` (when `underTag`), `mergeRetag` (both vars).
 - Bind-declaration tracking covers `resolveTag`, `constructTag`, `constructTagPath` (two binds), `mergeRetag`.
 - No `CALL_METHOD_ALLOWLIST` change — `moveTags` is a node, not a `callMethod`.
 
@@ -229,6 +232,6 @@ schema change, no response-assembly change.
 - **Typed `TagResolution` now vs continue string-shaped** — now: slice 1 deferred it "until a read-only ResolveTag node
   is needed"; rename/delete/merge/nest/reparent are exactly that need, and the greenlight comment requires resolution as
   a typed fail-able step.
-- **Unify name resolution on first-match** (vs preserving nest/reparent's accidental last-match) — unify: the per-op
-  divergence is the drift class itself; preserving it would mean two resolveTag variants distinguished only by a
+- **Unify name resolution on first-match** (vs preserving merge/nest/reparent's accidental last-match) — unify: the
+  per-op divergence is the drift class itself; preserving it would mean two resolveTag variants distinguished only by a
   historical bug. Recorded as a delta in §3.
