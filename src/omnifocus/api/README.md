@@ -21,7 +21,9 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 
 Manual carry-overs each regeneration (the raw export lacks both): the regen-instructions header block, and the
 `type _omnijs_AnonymousProxy = unknown;` placeholder (the export references it in `LanguageModel.Session.withTools()`
-without defining it).
+without defining it). The pre-commit hook prettier-reformats the export (4-space → 2-space indents), so when diffing a
+fresh raw export against the repo copy, normalize first (run the raw export through `npx prettier` or use a
+sorted-content diff) — otherwise indent noise masks real API drift.
 
 ## Usage
 
