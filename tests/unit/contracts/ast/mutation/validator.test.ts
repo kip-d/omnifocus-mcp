@@ -21,7 +21,10 @@ import {
   json,
   deleteObject,
   bulkDeleteItem,
+  resolveTag,
+  constructTag,
   type Program,
+  type TagResolution,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -427,6 +430,99 @@ describe('batchItem uniqueness', () => {
     expect(() => validateMutationProgram(batchProgram([item('a', 0, '_t0'), item('b', 1, '_t0')]))).toThrow(
       /duplicate.*taskVar/i,
     );
+  });
+});
+
+describe('constructTag (rules 2/3/10 at the tag altitude)', () => {
+  it('rejects an untyped parent value', () => {
+    const program: Program = {
+      statements: [
+        { type: 'constructTag', bind: '_t', name: json('X'), parent: 'Work' as unknown as TagResolution },
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/typed TagResolution/);
+  });
+
+  it('rejects parent.kind notFound', () => {
+    const program: Program = {
+      statements: [constructTag('_t', json('X'), { kind: 'notFound' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/notFound.*illegal/);
+  });
+
+  it('rejects a reserved bind', () => {
+    const program: Program = {
+      statements: [constructTag('_warnings', json('X'), { kind: 'none' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
+  });
+
+  it('accepts a well-formed constructTag with parent kind none', () => {
+    const program: Program = {
+      statements: [constructTag('_t', json('Home'), { kind: 'none' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
+  it('accepts a well-formed constructTag with parent kind resolved (preceded by a guard)', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        guard('_p === null', { error: json(true) }),
+        constructTag('_t', json('Home'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
+describe('rule 7 covers resolveTag binds', () => {
+  it('rejects a constructTag consuming an unguarded resolveTag bind', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        constructTag('_t', json('X'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('accepts the same program with a guard between', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        guard('_p === null', { error: json(true) }),
+        constructTag('_t', json('X'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
+  it('rejects a reserved resolveTag bind', () => {
+    const program: Program = {
+      statements: [resolveTag('_warnings', 'Home'), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
   });
 });
 

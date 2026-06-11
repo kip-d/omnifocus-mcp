@@ -266,6 +266,28 @@ export function emitStmt(node: Stmt): string {
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':
       return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'resolveTag':
+      return `const ${node.bind} = flattenedTags.find(t => t.name === ${JSON.stringify(node.ref)}) || null;`;
+    case 'constructTag': {
+      // Near-clone of constructFolder at the tag altitude. `new Tag(name, parent)`
+      // nests under the parent; omitted parent = top level (matches legacy
+      // app.make at doc.tags / new Tag(name, null) in the path island).
+      const name = emitExpr(node.name);
+      switch (node.parent.kind) {
+        case 'resolved':
+          return `const ${node.bind} = new Tag(${name}, ${node.parent.var});`;
+        case 'none':
+          return `const ${node.bind} = new Tag(${name});`;
+        case 'notFound':
+          throw new Error(
+            'constructTag with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+          );
+        default: {
+          const _x: never = node.parent;
+          throw new Error(`Unknown tag resolution: ${JSON.stringify(_x)}`);
+        }
+      }
+    }
     case 'resolveProjectById':
       return `const ${node.bind} = Project.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
     case 'constructTask': {

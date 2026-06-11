@@ -13,6 +13,8 @@ import {
   batchItem,
   guard,
   assignTags,
+  resolveTag,
+  constructTag,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('mutation node factories', () => {
@@ -84,5 +86,36 @@ describe('slice-2 node factories', () => {
     expect(node.taskVar).toBe('_t0');
     expect(node.stopOnError).toBe(true);
     expect(node.statements).toHaveLength(1);
+  });
+});
+
+describe('slice-6 tag node factories', () => {
+  it('resolveTag() binds a result var + ref string', () => {
+    expect(resolveTag('_tag', 'Home')).toEqual({ type: 'resolveTag', bind: '_tag', ref: 'Home' });
+  });
+
+  it('resolveTag() carries the ref verbatim (characters survive unescaped)', () => {
+    const node = resolveTag('_t', 'Err"or');
+    expect(node.bind).toBe('_t');
+    expect(node.ref).toBe('Err"or');
+  });
+
+  it('constructTag() with parent kind none', () => {
+    expect(constructTag('_t', json('Home'), { kind: 'none' })).toEqual({
+      type: 'constructTag',
+      bind: '_t',
+      name: json('Home'),
+      parent: { kind: 'none' },
+    });
+  });
+
+  it('constructTag() with parent kind resolved carries the var', () => {
+    const node = constructTag('_t', json('Home'), { kind: 'resolved', var: '_parent' });
+    expect(node.parent).toEqual({ kind: 'resolved', var: '_parent' });
+  });
+
+  it('constructTag() with parent kind notFound preserves the kind for downstream validation', () => {
+    const node = constructTag('_t', json('Home'), { kind: 'notFound' });
+    expect(node.parent).toEqual({ kind: 'notFound' });
   });
 });

@@ -8,6 +8,7 @@ import type {
   Expr,
   ConstructProjectNode,
   ConstructFolderNode,
+  ConstructTagNode,
   SetPropNode,
   ConstructTaskNode,
   GuardNode,
@@ -20,6 +21,7 @@ import type {
 } from './types.js';
 
 const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
+const TAG_KINDS = new Set(['resolved', 'none', 'notFound']);
 const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef']);
 
 /**
@@ -82,10 +84,10 @@ function assertNotReserved(name: string, where: string): void {
  *  6. A guard with mode 'throw' must have `envelope.message` defined (the
  *     emitter also throws — belt and suspenders at the validation seam).
  *  7. Resolution-guard discipline: a `resolveProject`/`resolveTask`/
- *     `resolveProjectById`/`resolveFolder` bind consumed by ANY later
- *     statement (setProp/moveTask/moveProject/callMethod/assignTags targets,
- *     construct container/folder/parent vars, return envelopes, binds) must
- *     have a `guard` BETWEEN them whose `cond` mentions that bind
+ *     `resolveProjectById`/`resolveFolder`/`resolveTag` bind consumed by ANY
+ *     later statement (setProp/moveTask/moveProject/callMethod/assignTags
+ *     targets, construct container/folder/parent/tag vars, return envelopes,
+ *     binds) must have a `guard` BETWEEN them whose `cond` mentions that bind
  *     (word-boundary match, not substring). String-level check on `cond` —
  *     same trust model as GuardNode.cond generally. Applies at each
  *     statement-list level independently (resolve/guard/consumer triplets
@@ -203,6 +205,26 @@ function validateConstructFolderStmt(stmt: ConstructFolderNode): void {
   assertNotReserved(stmt.bind, 'constructFolder bind');
 }
 
+// Rules 2/3/10 for constructTag (tag altitude, mirrors constructFolder).
+function validateConstructTagStmt(stmt: ConstructTagNode): void {
+  const parent = stmt.parent as unknown;
+  // Rule 2: typed TagResolution object.
+  if (typeof parent !== 'object' || parent === null || !TAG_KINDS.has((parent as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid constructTag: parent must be a typed TagResolution object ' +
+        'with kind in {resolved, none, notFound}, not a string or untyped value.',
+    );
+  }
+  // Rule 3: notFound is illegal here.
+  if ((parent as { kind: string }).kind === 'notFound') {
+    throw new Error(
+      'Invalid constructTag: parent.kind="notFound" is illegal — ' +
+        'the not-found case must be handled by a preceding guard that returns.',
+    );
+  }
+  assertNotReserved(stmt.bind, 'constructTag bind');
+}
+
 // Rule 4: value/mutations invariants for setProp.
 function validateSetPropStmt(stmt: SetPropNode): void {
   if (stmt.strategy === 'readModifyReassign') {
@@ -304,6 +326,7 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveProject') assertNotReserved(stmt.bind, 'resolveProject bind');
   if (stmt.type === 'resolveTask') assertNotReserved(stmt.bind, 'resolveTask bind');
   if (stmt.type === 'resolveProjectById') assertNotReserved(stmt.bind, 'resolveProjectById bind');
+  if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
 }
 
@@ -435,6 +458,8 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return stmt.folder.kind === 'resolved' ? [stmt.folder.var] : [];
     case 'constructFolder':
       return stmt.parent.kind === 'resolved' ? [stmt.parent.var] : [];
+    case 'constructTag':
+      return stmt.parent.kind === 'resolved' ? [stmt.parent.var] : [];
     case 'return':
       return Object.values(stmt.envelope).flatMap(exprRefs);
     case 'bind':
@@ -446,12 +471,16 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
 
 function isResolveStmt(
   stmt: Stmt,
-): stmt is Extract<Stmt, { type: 'resolveProject' | 'resolveTask' | 'resolveProjectById' | 'resolveFolder' }> {
+): stmt is Extract<
+  Stmt,
+  { type: 'resolveProject' | 'resolveTask' | 'resolveProjectById' | 'resolveFolder' | 'resolveTag' }
+> {
   return (
     stmt.type === 'resolveProject' ||
     stmt.type === 'resolveTask' ||
     stmt.type === 'resolveProjectById' ||
-    stmt.type === 'resolveFolder'
+    stmt.type === 'resolveFolder' ||
+    stmt.type === 'resolveTag'
   );
 }
 
@@ -495,6 +524,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'constructFolder':
         validateConstructFolderStmt(stmt);
+        break;
+      case 'constructTag':
+        validateConstructTagStmt(stmt);
         break;
       case 'setProp':
         validateSetPropStmt(stmt);

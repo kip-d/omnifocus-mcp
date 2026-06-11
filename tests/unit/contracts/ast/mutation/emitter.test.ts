@@ -28,6 +28,8 @@ import {
   bind,
   deleteObject,
   bulkDeleteItem,
+  resolveTag,
+  constructTag,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
@@ -494,6 +496,28 @@ describe('wrapInLauncher (JXA boundary)', () => {
     const m = jxa.match(/app\.evaluateJavascript\((".*?")\);/s);
     expect(m).not.toBeNull();
     expect(JSON.parse(m![1])).toBe(hostile);
+  });
+});
+
+describe('resolveTag', () => {
+  it('emits a first-match flattenedTags scan with JSON-escaped name', () => {
+    expect(emitStmt(resolveTag('_tag', 'Err"or'))).toBe(
+      'const _tag = flattenedTags.find(t => t.name === "Err\\"or") || null;',
+    );
+  });
+});
+
+describe('constructTag', () => {
+  it('emits new Tag(name) for parent kind none', () => {
+    expect(emitStmt(constructTag('_t', json('Home'), { kind: 'none' }))).toBe('const _t = new Tag("Home");');
+  });
+  it('emits new Tag(name, parentVar) for parent kind resolved', () => {
+    expect(emitStmt(constructTag('_t', json('Home'), { kind: 'resolved', var: '_parent' }))).toBe(
+      'const _t = new Tag("Home", _parent);',
+    );
+  });
+  it('throws on parent kind notFound (must be guarded earlier)', () => {
+    expect(() => emitStmt(constructTag('_t', json('Home'), { kind: 'notFound' }))).toThrow(/notFound.*illegal/);
   });
 });
 

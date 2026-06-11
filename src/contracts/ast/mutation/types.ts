@@ -45,6 +45,11 @@ export type Expr = RefNode | MemberNode | NewNode | EnumRefNode | DateExprNode |
 // --- Typed fail-able folder resolution ---
 export type FolderResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
 
+// --- Typed fail-able tag resolution (slice 6) ---
+// The TagResolution union deferred since slice 1 (see AssignTagsNode comment):
+// where a constructed tag's parent comes from is a closed set of typed states.
+export type TagResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
+
 // --- Typed fail-able container resolution (slice 2) ---
 // Mirrors FolderResolution's named-states discipline: where a created task goes
 // is a closed set of typed states, never a stringly-typed value.
@@ -87,6 +92,20 @@ export interface ResolveTaskNode {
   type: 'resolveTask';
   bind: string;
   ref: string;
+}
+/** Resolves a tag by exact name — FIRST match in flattenedTags order (spec §3:
+ *  legacy ops diverged first-vs-last; slice 6 unifies on first). Name-only:
+ *  the production seam passes names exclusively (spec §2.4). */
+export interface ResolveTagNode {
+  type: 'resolveTag';
+  bind: string;
+  ref: string;
+}
+export interface ConstructTagNode {
+  type: 'constructTag';
+  bind: string;
+  name: Expr;
+  parent: TagResolution;
 }
 /** Resolves a project strictly by identifier only — spec §2.1 deliberate
  *  contrast with ResolveProjectNode (flexible, id-then-name fallback). Used
@@ -250,10 +269,12 @@ export type Stmt =
   | ResolveProjectNode
   | ResolveTaskNode
   | ResolveProjectByIdNode
+  | ResolveTagNode
   | GuardNode
   | ConstructProjectNode
   | ConstructTaskNode
   | ConstructFolderNode
+  | ConstructTagNode
   | BatchItemNode
   | SetPropNode
   | AssignTagsNode
@@ -299,6 +320,17 @@ export const resolveTask = (bindVar: string, refStr: string): ResolveTaskNode =>
 });
 /** Alias retained for the slice-2 create lowerings' readability (same node). */
 export const resolveParentTask = resolveTask;
+export const resolveTag = (bindVar: string, refStr: string): ResolveTagNode => ({
+  type: 'resolveTag',
+  bind: bindVar,
+  ref: refStr,
+});
+export const constructTag = (bindVar: string, name: Expr, parent: TagResolution): ConstructTagNode => ({
+  type: 'constructTag',
+  bind: bindVar,
+  name,
+  parent,
+});
 export const resolveProjectById = (bindVar: string, refStr: string): ResolveProjectByIdNode => ({
   type: 'resolveProjectById',
   bind: bindVar,
