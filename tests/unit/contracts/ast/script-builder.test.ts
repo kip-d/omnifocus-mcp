@@ -74,6 +74,30 @@ describe('buildFilteredTasksScript', () => {
       // Should have the AST filter checking completed
       expect(result.script).toContain('task.completed === true');
     });
+
+    // OMN-157: dropped is the third terminal state — bare/search/all/inbox paths
+    // must exclude it by default, mirroring the completed check exactly.
+    it('excludes dropped tasks by default', () => {
+      const result = buildFilteredTasksScript({});
+
+      expect(result.script).toContain('if (task.dropped) return');
+    });
+
+    it('includes dropped tasks when includeCompleted option is true', () => {
+      // includeCompleted is the "everything" knob (export); it lifts both defaults
+      const result = buildFilteredTasksScript({}, { includeCompleted: true });
+
+      expect(result.script).not.toContain('if (task.dropped) return');
+    });
+
+    it('uses explicit dropped filter over the default check', () => {
+      const result = buildFilteredTasksScript({ dropped: true });
+
+      // No default dropped check (AST predicate handles it)
+      expect(result.script).not.toMatch(/if \(task\.dropped\) return;/);
+      // Synthetic status predicate present
+      expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
+    });
   });
 
   describe('tag filters', () => {
@@ -221,6 +245,20 @@ describe('buildInboxScript', () => {
 
     expect(result.script).toContain('inbox.forEach');
     expect(result.script).not.toContain('flattenedTasks.forEach');
+  });
+
+  // OMN-157: inbox path must also exclude dropped by default
+  it('excludes dropped tasks by default', () => {
+    const result = buildInboxScript();
+
+    expect(result.script).toContain('if (task.dropped) return');
+  });
+
+  it('uses explicit dropped filter over the default check', () => {
+    const result = buildInboxScript({ dropped: true });
+
+    expect(result.script).not.toMatch(/if \(task\.dropped\) return;/);
+    expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
   });
 
   it('applies additional filters', () => {
@@ -458,6 +496,23 @@ describe('buildRecurringTasksScript', () => {
 });
 
 describe('buildTaskCountScript', () => {
+  // OMN-157: count parity — the OMN-52 shim defaults completed:false; dropped
+  // must get the same default or countOnly diverges from the list path.
+  describe('terminal-state defaults (parity with list path)', () => {
+    it('defaults to excluding dropped tasks', () => {
+      const result = buildTaskCountScript({});
+
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('honors explicit dropped:true over the default', () => {
+      const result = buildTaskCountScript({ dropped: true });
+
+      expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
+      expect(result.script).not.toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+  });
+
   describe('inbox counting', () => {
     it('uses OmniJS inbox global when inInbox is true', () => {
       const result = buildTaskCountScript({ inInbox: true });

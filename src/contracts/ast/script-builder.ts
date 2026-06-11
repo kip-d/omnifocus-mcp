@@ -492,11 +492,17 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
   const completionCheck = filter.completed !== undefined ? '' : defaultCompletionCheck;
 
+  // OMN-157: dropped is the third terminal state — excluded by default with the
+  // same gating (explicit filter reference or includeCompleted lifts the check;
+  // status:'dropped' compiles to filter.dropped upstream).
+  const defaultDroppedCheck = includeCompleted ? '' : 'if (task.dropped) return;';
+  const droppedCheck = filter.dropped !== undefined ? '' : defaultDroppedCheck;
+
   const ctx: ScriptBuildContext = {
     filterCode,
     filterDescription,
     fieldProjection,
-    completionCheck,
+    completionCheck: [completionCheck, droppedCheck].filter(Boolean).join('\n      '),
     hasProjectPreamble: !!filterCode.preamble,
     projectValue: filter.projectId ?? filter.project,
     limit,
@@ -598,10 +604,15 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 
   // Determine completion filter - exclude completed by default for inbox
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
-  const completionCheck =
+  const baseCompletionCheck =
     filter.completed !== undefined
       ? '' // AST handles it if explicitly set in filter
       : defaultCompletionCheck;
+
+  // OMN-157: same default exclusion for dropped (third terminal state)
+  const defaultDroppedCheck = includeCompleted ? '' : 'if (task.dropped) return;';
+  const droppedCheck = filter.dropped !== undefined ? '' : defaultDroppedCheck;
+  const completionCheck = [baseCompletionCheck, droppedCheck].filter(Boolean).join('\n      ');
 
   // Only include offset logic when offset > 0
   const useOffset = offset > 0;
@@ -1982,6 +1993,8 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     const f = { ...normalizedFilter };
     if (checkInbox) delete f.inInbox;
     if (f.completed === undefined) f.completed = false;
+    // OMN-157: dropped gets the same default for the same parity reason
+    if (f.dropped === undefined) f.dropped = false;
     return f;
   })();
 
