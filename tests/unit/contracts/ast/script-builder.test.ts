@@ -25,7 +25,9 @@ describe('buildFilteredTasksScript', () => {
 
       expect(result.script).toContain('flattenedTasks.forEach');
       expect(result.script).toContain('matchesFilter');
-      expect(result.script).toContain('return true'); // Empty filter returns true
+      // OMN-157: even an "empty" user filter compiles the default dropped
+      // exclusion into the predicate (dropped is synthetic — AST-only)
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
       expect(result.isEmptyFilter).toBe(true);
       expect(result.filterDescription).toBe('all tasks');
     });
@@ -73,6 +75,39 @@ describe('buildFilteredTasksScript', () => {
       expect(result.script).not.toMatch(/if \(task\.completed\) return;/);
       // Should have the AST filter checking completed
       expect(result.script).toContain('task.completed === true');
+    });
+
+    // OMN-157: dropped is the third terminal state — bare/search/all/inbox paths
+    // must exclude it by default. task.dropped is SYNTHETIC (no such OmniJS
+    // property), so the default must compile through the AST emitter as a
+    // taskStatus comparison — a raw `if (task.dropped)` check is a silent no-op.
+    it('excludes dropped tasks by default via the AST predicate', () => {
+      const result = buildFilteredTasksScript({});
+
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+      // The broken raw-property form must never reappear
+      expect(result.script).not.toContain('if (task.dropped)');
+    });
+
+    it('includes dropped tasks when includeCompleted option is true', () => {
+      // includeCompleted is the "everything" knob (export); it lifts both defaults
+      const result = buildFilteredTasksScript({}, { includeCompleted: true });
+
+      expect(result.script).not.toContain('Task.Status.Dropped');
+    });
+
+    it('uses explicit dropped:true filter over the default', () => {
+      const result = buildFilteredTasksScript({ dropped: true });
+
+      expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
+      expect(result.script).not.toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('explicit dropped:false replaces the default rather than stacking', () => {
+      const result = buildFilteredTasksScript({ dropped: false });
+
+      const occurrences = result.script.match(/task\.taskStatus !== Task\.Status\.Dropped/g) ?? [];
+      expect(occurrences).toHaveLength(1);
     });
   });
 
@@ -221,6 +256,22 @@ describe('buildInboxScript', () => {
 
     expect(result.script).toContain('inbox.forEach');
     expect(result.script).not.toContain('flattenedTasks.forEach');
+  });
+
+  // OMN-157: inbox path must also exclude dropped by default — via the AST
+  // predicate (task.dropped is synthetic; a raw property check is a no-op)
+  it('excludes dropped tasks by default via the AST predicate', () => {
+    const result = buildInboxScript();
+
+    expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+    expect(result.script).not.toContain('if (task.dropped)');
+  });
+
+  it('uses explicit dropped:true filter over the default', () => {
+    const result = buildInboxScript({ dropped: true });
+
+    expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
+    expect(result.script).not.toContain('task.taskStatus !== Task.Status.Dropped');
   });
 
   it('applies additional filters', () => {
@@ -458,6 +509,23 @@ describe('buildRecurringTasksScript', () => {
 });
 
 describe('buildTaskCountScript', () => {
+  // OMN-157: count parity — the OMN-52 shim defaults completed:false; dropped
+  // must get the same default or countOnly diverges from the list path.
+  describe('terminal-state defaults (parity with list path)', () => {
+    it('defaults to excluding dropped tasks', () => {
+      const result = buildTaskCountScript({});
+
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('honors explicit dropped:true over the default', () => {
+      const result = buildTaskCountScript({ dropped: true });
+
+      expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
+      expect(result.script).not.toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+  });
+
   describe('inbox counting', () => {
     it('uses OmniJS inbox global when inInbox is true', () => {
       const result = buildTaskCountScript({ inInbox: true });
