@@ -1267,6 +1267,12 @@ export interface TagReparentInput {
  *  → self-check] → moveTag → envelope. nest/unparent/reparent differ only in
  *  required-parent policy, messages, and envelope keys (spec §4.2). */
 function lowerTagMove(op: 'nest' | 'unparent' | 'reparent', tagName: string, parentTagName?: string): Program {
+  // Local invariant (not caller-enforced): the nest envelope branch below
+  // references _parent unconditionally, so a parentless nest must be
+  // impossible here — buildNestTagProgram gates it with a constant error.
+  if (op === 'nest' && !parentTagName) {
+    throw new Error('lowerTagMove: nest requires parentTagName (buildNestTagProgram gates this)');
+  }
   const context = `${op}_tag`;
   const statements: Stmt[] = [
     resolveTag('_tag', tagName),
@@ -1317,6 +1323,7 @@ function lowerTagMove(op: 'nest' | 'unparent' | 'reparent', tagName: string, par
       }),
     );
   } else if (parentTagName) {
+    // reparent with a parent
     statements.push(
       return_({
         action: json('reparented'),

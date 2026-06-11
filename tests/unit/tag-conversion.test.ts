@@ -15,15 +15,16 @@ describe('Tag Type Conversion Issues', () => {
   });
 
   it('should verify tag array handling patterns', async () => {
-    // AST builder uses OmniJS bridge - check for bridge patterns
+    // List script uses the OmniJS bridge - check for bridge patterns
     const { script: LIST_TAGS_SCRIPT } = buildTagsScript({ mode: 'full', includeUsageStats: true });
     expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags');
 
-    // Merge uses OmniJS bridge with singular methods (JXA plural methods silently fail)
+    // Merge emits ONE OmniJS program (mergeRetag node) using singular methods
+    // against the resolved tag bindings (JXA plural methods silently fail)
     const { script: MERGE_SCRIPT } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
-    expect(MERGE_SCRIPT).toContain('task.addTag(');
-    expect(MERGE_SCRIPT).toContain('task.removeTag(');
+    expect(MERGE_SCRIPT).toContain('task.addTag(_tgt)');
+    expect(MERGE_SCRIPT).toContain('task.removeTag(_src)');
   });
 
   it('should use JSON.stringify for all return values', async () => {
