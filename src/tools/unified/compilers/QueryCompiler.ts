@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
 import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
@@ -170,10 +171,29 @@ export class QueryCompiler {
 
     if (input.NOT) {
       const notFilter = input.NOT as FlatQueryFilter;
-      if (notFilter.status === 'completed') return { completed: false };
-      if (notFilter.status === 'active') return { completed: true };
-      console.warn('[QueryCompiler] Complex NOT operator simplified. Original: ' + JSON.stringify(notFilter));
-      return {};
+      // The status special-case applies only when status is the SOLE key —
+      // otherwise the other keys would be silently dropped (OMN-131 rider).
+      if (Object.keys(notFilter).length === 1) {
+        if (notFilter.status === 'completed') return { completed: false };
+        if (notFilter.status === 'active') return { completed: true };
+      }
+      // OMN-131: every other NOT payload used to warn + return {} — an EMPTY
+      // filter, i.e. the query silently matched EVERYTHING. A caller that
+      // trusts the result set (e.g. a destructive sweep) gets the whole
+      // database. Reject loudly instead; a ZodError surfaces as
+      // VALIDATION_ERROR in the failure log and InvalidParams over MCP.
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters', 'NOT'],
+          message:
+            `Unsupported NOT filter: ${JSON.stringify(notFilter)}. ` +
+            "NOT supports exactly { status: 'completed' } or { status: 'active' }. " +
+            'Alternatives: tag exclusion → tags: { none: [...] }; ' +
+            'flagged exclusion → flagged: false; ' +
+            'otherwise express the condition directly without NOT.',
+        },
+      ]);
     }
 
     return null;

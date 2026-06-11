@@ -361,6 +361,18 @@ describe('OmniFocusReadTool', () => {
       expect(result.summary).toBeUndefined();
     });
 
+    // OMN-131: an unsupported NOT payload used to compile to an EMPTY filter —
+    // the query silently returned ALL tasks. It must reject before any script
+    // reaches OmniFocus.
+    it('OMN-131: NOT:{tags:{any}} rejects with InvalidParams instead of matching everything', async () => {
+      await expect(
+        tool.execute({
+          query: { type: 'tasks', filters: { NOT: { tags: { any: ['someday'] } } } },
+        }),
+      ).rejects.toThrow(/Invalid parameters/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
     // OMN-142: a projects name filter must compile to a name-only predicate.
     // The old path routed name → search → ProjectFilter.text, which also
     // matched project NOTE content.
