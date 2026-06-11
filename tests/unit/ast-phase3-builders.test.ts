@@ -66,7 +66,8 @@ describe('Phase 3 AST Builders', () => {
       const filter: ProjectFilter = { name: '^Q[1-4]', nameOperator: 'MATCHES' };
       const code = generateProjectFilterCode(filter);
       expect(code).toContain('project.name');
-      expect(code).toContain('test');
+      expect(code).toContain('new RegExp');
+      expect(code).toContain('^Q[1-4]');
       expect(code).not.toContain('project.note');
     });
 

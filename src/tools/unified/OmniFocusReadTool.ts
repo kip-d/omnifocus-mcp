@@ -643,7 +643,9 @@ PERFORMANCE:
     // Status- and folder-only browses still return the summary — those look
     // dashboard-ish and users may be scanning review state. See Linear OMN-19
     // for the full option trade-off (explicit param vs heuristic vs slim mode).
-    const isNarrowLookup = Boolean(compiled.filters.search || compiled.filters.name || compiled.filters.id);
+    const isNarrowLookup = Boolean(
+      compiled.filters.search || compiled.filters.name || compiled.filters.text || compiled.filters.id,
+    );
 
     // Build cache key
     const cacheParams = { ...projectFilter, limit, includeStats };
