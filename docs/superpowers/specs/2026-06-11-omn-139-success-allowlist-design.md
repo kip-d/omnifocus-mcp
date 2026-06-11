@@ -79,7 +79,11 @@ miniature); closed-world fails it loudly. Top-level key sets are small and stabl
 **Family schemas model the success branch only; error branches are 3.1 step 1's job.** The envelope families are
 discriminated unions (`JxaEnvelopeSchema`: success carries `data`, never `error`), so success schema and error
 interception partition cleanly. Never write `error: z.unknown().optional()` into a strict success schema — that
-partially reopens the hybrid-output hole closed-world exists to close.
+partially reopens the hybrid-output hole closed-world exists to close. **Discriminating keys are literals**
+(`ok: z.literal(true)`, `success: z.literal(true)`), never `z.boolean()` — a broad type there would let
+`{success: false, ...}` validate as success if it shares top-level keys with the success branch; 3.1's error-first
+ordering and this rule are mutually redundant guards, each covering the other's failure mode (spec-walkthrough finding,
+2026-06-11).
 
 **End state (decision record, Kip 2026-06-11): fully strict including leaves — §3.2 Option 2.** That lands as
 [OMN-158](https://linear.app/omnifocus-mcp/issue/OMN-158) so schema-precision regressions are attributable separately
