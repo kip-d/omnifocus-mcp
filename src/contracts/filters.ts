@@ -78,6 +78,16 @@ export interface TaskFilter {
   text?: string; // Search term
   textOperator?: TextOperator; // How to match (default: CONTAINS)
 
+  // --- Name Search (OMN-142) ---
+  /**
+   * Name-scoped search term — matches task.name ONLY, never the note.
+   * Distinct from `text`/`search`, which match name OR note. The public
+   * `filters.name` compiles here; before OMN-142 it aliased onto `search`
+   * and the note over-match fed a destructive sweep.
+   */
+  name?: string;
+  nameOperator?: TextOperator; // How to match (default: CONTAINS)
+
   // --- Date Filters ---
   dueAfter?: string; // ISO date string
   dueBefore?: string; // ISO date string
@@ -253,6 +263,18 @@ export interface ProjectFilter {
    * Case-insensitive substring match
    */
   text?: string;
+  /**
+   * OMN-142: how `text` matches (default CONTAINS; MATCHES = regex).
+   */
+  textOperator?: TextOperator;
+
+  // --- Name Search (OMN-142) ---
+  /**
+   * Name-scoped search term — matches project.name ONLY, never the note.
+   * Distinct from `text`, which matches name OR note.
+   */
+  name?: string;
+  nameOperator?: TextOperator; // How to match (default: CONTAINS)
 
   // --- Folder Filter ---
   /**
@@ -283,6 +305,9 @@ export const PROJECT_FILTER_PROPERTY_NAMES = [
   'flagged',
   'needsReview',
   'text',
+  'textOperator', // OMN-142
+  'name', // OMN-142: name-only match (text also matches notes)
+  'nameOperator', // OMN-142
   'folderId',
   'folderName',
   'topLevelOnly', // OMN-96
@@ -353,6 +378,9 @@ export const FILTER_PROPERTY_NAMES = [
   'tagsOperator',
   'text',
   'textOperator',
+  'name', // OMN-142: name-only match (text/search also match notes)
+  'nameOperator', // OMN-142
+
   'dueAfter',
   'dueBefore',
   'dueDateOperator',
@@ -491,6 +519,11 @@ export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
   // Default textOperator
   if (normalized.text && !normalized.textOperator) {
     normalized.textOperator = 'CONTAINS';
+  }
+
+  // OMN-142: default nameOperator
+  if (normalized.name && !normalized.nameOperator) {
+    normalized.nameOperator = 'CONTAINS';
   }
 
   // Brand the filter as normalized using Object.assign to add the symbol property

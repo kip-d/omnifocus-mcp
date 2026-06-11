@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **`filters.name` no longer matches note content** (OMN-142) — The `name` filter compiled onto the legacy `search`
+  field, whose every consumer (tasks, projects, export) implements name-OR-note matching — so a task whose _note_ cited
+  a term matched a "name" search for it. That over-match fed a deletion sweep that collaterally deleted a real user task
+  (restored from the OmniFocus transaction snapshot). `name` now has a name-scoped internal representation end to end;
+  `text` keeps full-text (name OR note) semantics. Two riders fixed by the same change: `name: { matches }` no longer
+  silently degrades regex to substring matching, and sending both `name` and `text` now applies both (the old alias made
+  `text` silently win). Also un-dropped on projects queries: `filters.text` was advertised (the tool's own error message
+  recommends it) but silently ignored — it now performs full-text project search, with regex support via `{ matches }`.
 - **Tag `unnest` and `reparent`-to-root work** (OMN-128 slice 6) — Moving a tag to the root level never worked: the
   generated script passed a null position to `Database.moveTags`, which the OmniFocus API rejects
   (`argument "position" … requires a non-null value`), so every unnest/reparent-to-root returned an error. Root moves

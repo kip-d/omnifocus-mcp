@@ -13,7 +13,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, ProjectFilter, NormalizedTaskFilter } from '../filters.js';
+import type { TaskFilter, ProjectFilter, NormalizedTaskFilter, TextOperator } from '../filters.js';
 import { normalizeFilter } from '../filters.js';
 import {
   generateFilterCode,
@@ -1015,6 +1015,10 @@ function describeFilterForScript(filter: TaskFilter): string {
   if (filter.text || filter.search) {
     conditions.push(`text: "${filter.text || filter.search}"`);
   }
+  if (filter.name) {
+    // OMN-142: name-only filter (distinct from text, which matches notes)
+    conditions.push(`name: "${filter.name}"`);
+  }
 
   const dueDescription = describeDueDateRange(filter);
   if (dueDescription) {
@@ -1480,6 +1484,9 @@ export interface ExportFilter {
   tags?: string[];
   tagsOperator?: 'AND' | 'OR' | 'NOT_IN';
   search?: string; // Maps to 'text' in TaskFilter
+  // OMN-142: name-scoped filter — matches task.name only, never the note
+  name?: string;
+  nameOperator?: TextOperator;
   limit?: number;
 }
 
@@ -1498,6 +1505,11 @@ function normalizeExportFilter(filter: ExportFilter): TaskFilter {
   if (filter.tagsOperator !== undefined) taskFilter.tagsOperator = filter.tagsOperator;
   // Map 'search' to 'text' for AST compatibility
   if (filter.search !== undefined) taskFilter.text = filter.search;
+  // OMN-142: name passes through name-scoped (text/search match notes too)
+  if (filter.name !== undefined) {
+    taskFilter.name = filter.name;
+    taskFilter.nameOperator = filter.nameOperator;
+  }
 
   return taskFilter;
 }

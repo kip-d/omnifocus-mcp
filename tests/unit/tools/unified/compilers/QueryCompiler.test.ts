@@ -728,15 +728,31 @@ describe('QueryCompiler', () => {
       });
     });
 
-    describe('name filter transformation', () => {
-      it('name.contains routes to result.search', () => {
+    // OMN-142: `name` must compile to a name-scoped filter, never the legacy
+    // `search` field — `search` matches note content too, and that over-match
+    // collaterally deleted a real user task on 2026-06-09.
+    describe('name filter transformation (OMN-142)', () => {
+      it('name.contains compiles to name + CONTAINS, not search', () => {
         const result = compiler.transformFilters({ name: { contains: 'Quarterly' } });
-        expect(result.search).toBe('Quarterly');
+        expect(result.name).toBe('Quarterly');
+        expect(result.nameOperator).toBe('CONTAINS');
+        expect(result.search).toBeUndefined();
       });
 
-      it('name.matches also routes to result.search (no separate operator)', () => {
+      it('name.matches compiles to name + MATCHES (regex no longer degrades to substring)', () => {
         const result = compiler.transformFilters({ name: { matches: 'Review.*' } });
-        expect(result.search).toBe('Review.*');
+        expect(result.name).toBe('Review.*');
+        expect(result.nameOperator).toBe('MATCHES');
+        expect(result.search).toBeUndefined();
+      });
+
+      it('name and text filters coexist — neither silently drops the other', () => {
+        const result = compiler.transformFilters({
+          name: { contains: 'Alpha' },
+          text: { contains: 'Beta' },
+        });
+        expect(result.name).toBe('Alpha');
+        expect(result.text).toBe('Beta');
       });
     });
 

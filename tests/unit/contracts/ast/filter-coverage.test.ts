@@ -14,6 +14,7 @@ import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryComp
 import { buildAST } from '../../../../src/contracts/ast/builder.js';
 import { emitOmniJS } from '../../../../src/contracts/ast/emitters/omnijs.js';
 import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
+import { normalizeFilter } from '../../../../src/contracts/filters.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
 // =============================================================================
@@ -236,15 +237,21 @@ describe('QueryCompiler.transformFilters', () => {
     });
   });
 
+  // OMN-142: name is a name-scoped filter, distinct from text/search which
+  // also match note content.
   describe('name filter transformation', () => {
-    it('transforms name.contains to search', () => {
+    it('transforms name.contains to name + CONTAINS operator (not search)', () => {
       const result = compiler.transformFilters({ name: { contains: 'weekly' } });
-      expect(result.search).toBe('weekly');
+      expect(result.name).toBe('weekly');
+      expect(result.nameOperator).toBe('CONTAINS');
+      expect(result.search).toBeUndefined();
     });
 
-    it('transforms name.matches to search', () => {
+    it('transforms name.matches to name + MATCHES operator (not search)', () => {
       const result = compiler.transformFilters({ name: { matches: '^Q[1-4]' } });
-      expect(result.search).toBe('^Q[1-4]');
+      expect(result.name).toBe('^Q[1-4]');
+      expect(result.nameOperator).toBe('MATCHES');
+      expect(result.search).toBeUndefined();
     });
   });
 
@@ -270,6 +277,8 @@ describe('emitter parity', () => {
     { name: 'tags NOT_IN', filter: { tags: ['waiting'], tagsOperator: 'NOT_IN' } },
     { name: 'text CONTAINS', filter: { text: 'review', textOperator: 'CONTAINS' } },
     { name: 'text MATCHES', filter: { text: '^meet', textOperator: 'MATCHES' } },
+    { name: 'name CONTAINS (OMN-142)', filter: { name: 'review', nameOperator: 'CONTAINS' } },
+    { name: 'name MATCHES (OMN-142)', filter: { name: '^meet', nameOperator: 'MATCHES' } },
     { name: 'due date before', filter: { dueBefore: '2025-12-31' } },
     { name: 'due date after', filter: { dueAfter: '2025-01-01' } },
     {
@@ -404,5 +413,21 @@ describe('DATE_FILTER_DEFS data-driven date handling', () => {
     if (dateComp && dateComp.type === 'comparison') {
       expect(dateComp.operator).toBe('>');
     }
+  });
+});
+
+// =============================================================================
+// normalizeFilter defaults (OMN-142)
+// =============================================================================
+
+describe('normalizeFilter name defaults', () => {
+  it('defaults nameOperator to CONTAINS when name is set', () => {
+    const normalized = normalizeFilter({ name: 'review' });
+    expect(normalized.nameOperator).toBe('CONTAINS');
+  });
+
+  it('preserves an explicit nameOperator', () => {
+    const normalized = normalizeFilter({ name: '^review', nameOperator: 'MATCHES' });
+    expect(normalized.nameOperator).toBe('MATCHES');
   });
 });

@@ -153,6 +153,19 @@ export const FILTER_DEFS: readonly FilterDef[] = [
     },
   },
 
+  // --- Name search (OMN-142) ---
+  // Name-scoped: matches task.name ONLY, never task.note. Composes with
+  // text/search above (AND) rather than aliasing onto them — the old alias
+  // routed name through the name-OR-note search and over-matched notes.
+  {
+    fields: ['task.name'],
+    build: (f) => {
+      if (f.name === undefined) return null;
+      const operator = f.nameOperator === 'MATCHES' ? 'matches' : 'includes';
+      return comparison('task.name', operator, f.name);
+    },
+  },
+
   // --- Date filters (data-driven from DATE_FILTER_DEFS) ---
   ...DATE_FILTER_DEFS.map(
     (def): FilterDef => ({

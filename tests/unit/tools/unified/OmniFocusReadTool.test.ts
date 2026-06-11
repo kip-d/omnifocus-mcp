@@ -361,6 +361,35 @@ describe('OmniFocusReadTool', () => {
       expect(result.summary).toBeUndefined();
     });
 
+    // OMN-142: a projects name filter must compile to a name-only predicate.
+    // The old path routed name → search → ProjectFilter.text, which also
+    // matched project NOTE content.
+    it('OMN-142: name filter generates a name-only project predicate (no note match)', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'projects', filters: { name: { contains: 'OmniFocus' } } },
+      });
+
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toMatch(/project\.name[^\n]*omnifocus/i);
+      expect(script).not.toMatch(/project\.note[^\n]*omnifocus/i);
+    });
+
+    // OMN-142 adjacent guard: filters.text on projects keeps full-text
+    // semantics (name OR note).
+    it('OMN-142: text filter still matches project notes', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'projects', filters: { text: { contains: 'OmniFocus' } } },
+      });
+
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toMatch(/project\.name[^\n]*omnifocus/i);
+      expect(script).toMatch(/project\.note[^\n]*omnifocus/i);
+    });
+
     it('strips summary when id filter is present (lookup-by-id)', async () => {
       execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
 
