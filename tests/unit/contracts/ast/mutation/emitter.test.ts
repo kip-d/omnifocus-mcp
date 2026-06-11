@@ -553,9 +553,9 @@ describe('bulkDeleteItem emission (slice 5)', () => {
 });
 
 describe('moveTag', () => {
-  it('emits moveTags to null for root, wrapped in an error-envelope catch', () => {
+  it('emits moveTags to tags.ending for root (live API rejects null), wrapped in an error-envelope catch', () => {
     expect(emitStmt(moveTag(ref('_t'), { kind: 'root' }, 'Failed to unparent tag: '))).toBe(
-      'try { moveTags([_t], null); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
+      'try { moveTags([_t], tags.ending); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
     );
   });
   it('emits moveTags to the parent var for underTag, wrapped in an error-envelope catch', () => {

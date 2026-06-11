@@ -109,7 +109,7 @@ describe('unparent/tag lowering', () => {
       'if (_tag === null) return JSON.stringify({ error: true, message: "Tag \'X\' not found", context: "unparent_tag" });',
     );
     expect(omnijs).toContain(
-      'try { moveTags([_tag], null); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
+      'try { moveTags([_tag], tags.ending); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
     );
     // Envelope (spec §2.3): action/tagName/message only.
     expect(Object.keys(returnStmt(program).envelope)).toEqual(['action', 'tagName', 'message']);
@@ -187,7 +187,7 @@ describe('reparent/tag lowering', () => {
 
     const omnijs = emitProgram(program);
     expect(omnijs).toContain(
-      'try { moveTags([_tag], null); } catch (e) { return JSON.stringify({ error: true, message: "Failed to reparent tag: " + String(e) }); }',
+      'try { moveTags([_tag], tags.ending); } catch (e) { return JSON.stringify({ error: true, message: "Failed to reparent tag: " + String(e) }); }',
     );
     // The action stays 'reparented' but the parent keys are ABSENT (spec §2.3).
     expect(Object.keys(returnStmt(program).envelope)).toEqual(['action', 'tagName', 'message']);
@@ -211,19 +211,24 @@ describe('emitted tag-move programs execute (vm)', () => {
     sandbox: Record<string, unknown>;
     tag: TagStub;
     parent: TagStub;
-    moveCalls: Array<{ tags: TagStub[]; position: TagStub | null }>;
+    rootEnding: object;
+    moveCalls: Array<{ tags: TagStub[]; position: TagStub | object }>;
   } {
     const tag: TagStub = { name: 'X', id: { primaryKey: 'pk-x' } };
     const parent: TagStub = { name: 'P', id: { primaryKey: 'pk-p' } };
-    const moveCalls: Array<{ tags: TagStub[]; position: TagStub | null }> = [];
+    // Sentinel for the root insertion location: emitted root moves reference
+    // the OmniJS global `tags.ending` (the live API rejects a null position).
+    const rootEnding = { location: 'tags.ending' };
+    const moveCalls: Array<{ tags: TagStub[]; position: TagStub | object }> = [];
     const sandbox: Record<string, unknown> = {
       flattenedTags: [tag, parent],
-      moveTags: (tags: TagStub[], position: TagStub | null) => {
+      tags: { ending: rootEnding },
+      moveTags: (tags: TagStub[], position: TagStub | object) => {
         if (opts?.moveThrows) throw new Error('boom');
         moveCalls.push({ tags, position });
       },
     };
-    return { sandbox, tag, parent, moveCalls };
+    return { sandbox, tag, parent, rootEnding, moveCalls };
   }
 
   it('vm A: nest happy path calls moveTags([tag], parent) and returns the live-parent envelope', async () => {
@@ -258,23 +263,23 @@ describe('emitted tag-move programs execute (vm)', () => {
     expect(parsed).toEqual({ error: true, message: 'Failed to nest tag: Error: boom' });
   });
 
-  it('vm D: unparent calls moveTags([tag], null) and returns the to-root envelope', async () => {
-    const { sandbox, tag, moveCalls } = makeMoveSandbox();
+  it('vm D: unparent calls moveTags([tag], tags.ending) and returns the to-root envelope', async () => {
+    const { sandbox, tag, rootEnding, moveCalls } = makeMoveSandbox();
     const program = emitProgram(await dispatchMutation('unparent/tag', { tagName: 'X' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
     expect(parsed).toEqual({ action: 'unparented', tagName: 'X', message: "Tag 'X' moved to root level" });
-    expect(moveCalls).toEqual([{ tags: [tag], position: null }]);
+    expect(moveCalls).toEqual([{ tags: [tag], position: rootEnding }]);
   });
 
   it('vm E: reparent without parent executes the legacy to-root quirk with NO parent keys', async () => {
-    const { sandbox, tag, moveCalls } = makeMoveSandbox();
+    const { sandbox, tag, rootEnding, moveCalls } = makeMoveSandbox();
     const program = emitProgram(await dispatchMutation('reparent/tag', { tagName: 'X' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
     expect(parsed).toEqual({ action: 'reparented', tagName: 'X', message: "Tag 'X' moved to root level" });
     expect('newParentTagName' in parsed).toBe(false);
-    expect(moveCalls).toEqual([{ tags: [tag], position: null }]);
+    expect(moveCalls).toEqual([{ tags: [tag], position: rootEnding }]);
   });
 });
 

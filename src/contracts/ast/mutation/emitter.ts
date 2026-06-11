@@ -74,7 +74,14 @@ function emitProjectMovePosition(p: ProjectMovePosition): string {
 function emitTagMovePosition(p: TagMovePosition): string {
   switch (p.kind) {
     case 'root':
-      return 'null';
+      // 'tags.ending' (end of the database's top-level tag list), NOT null.
+      // The legacy template emitted moveTags([t], null) and the slice-6 port
+      // preserved it — but the live API rejects it ('Database.moveTags
+      // argument "position" requires a non-null value'), so unparent and
+      // reparent-to-root NEVER worked against real OmniFocus. Found by the
+      // tag-paths live integration suite (OMN-128 slice 6). 'tags.beginning'
+      // would also work; ending appends, which least disturbs manual order.
+      return 'tags.ending';
     case 'underTag':
       return p.var;
     default: {

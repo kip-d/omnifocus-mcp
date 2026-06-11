@@ -238,8 +238,9 @@ export interface CallMethodNode {
   label?: string;
 }
 
-/** Typed tag-move destination (slice 6): root (moveTags([t], null)) or under a
- *  resolved parent tag var. */
+/** Typed tag-move destination (slice 6): root (moveTags([t], tags.ending) —
+ *  the legacy null position is rejected by the live API) or under a resolved
+ *  parent tag var. */
 export type TagMovePosition = { kind: 'root' } | { kind: 'underTag'; var: string };
 
 /** Moves one tag via OmniJS `moveTags`. Failure is a HARD error envelope (not a
