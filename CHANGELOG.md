@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Tag `unnest` and `reparent`-to-root work** (OMN-128 slice 6) — Moving a tag to the root level never worked: the
+  generated script passed a null position to `Database.moveTags`, which the OmniFocus API rejects
+  (`argument "position" … requires a non-null value`), so every unnest/reparent-to-root returned an error. Root moves
+  now place the tag at the end of the top-level tag list (`tags.ending`). Found by the new live integration coverage
+  during the slice-6 migration of the tag builders onto the mutation AST.
 - **`omnifocus_analyze` and `system` reject unknown fields** (OMN-90) — Sibling of OMN-76. `AnalyzeSchema` (every
   discriminated-union member, every nested `params`/`scope`, the shared `AnalysisScopeSchema`, and the wrapper) and
   `SystemToolSchema` now carry `.strict()` at every depth. Previously, unknown keys passed to `omnifocus_analyze` or
