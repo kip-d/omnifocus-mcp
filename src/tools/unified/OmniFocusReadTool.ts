@@ -179,7 +179,8 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
 - dates (dueDate, deferDate, plannedDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
-- text: { contains: "..." }, { matches: "regex" }
+- text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
+- name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
 - folder (projects queries): "<name>" matches folder-name substring; null = top-level projects only (no containing folder)
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
@@ -623,6 +624,18 @@ PERFORMANCE:
     if (compiled.filters.search) {
       projectFilter.text = compiled.filters.search;
     }
+    // OMN-142: `filters.text` is the full-text (name OR note) filter. Before
+    // OMN-142 it was silently dropped on projects queries — the only working
+    // text search was the name filter's accidental note over-match.
+    if (compiled.filters.text) {
+      projectFilter.text = compiled.filters.text;
+      projectFilter.textOperator = compiled.filters.textOperator;
+    }
+    // OMN-142: `filters.name` is name-scoped — matches project.name only.
+    if (compiled.filters.name) {
+      projectFilter.name = compiled.filters.name;
+      projectFilter.nameOperator = compiled.filters.nameOperator;
+    }
 
     // OMN-19: suppress review/bottleneck summary on narrow lookups (name or id).
     // Rationale: the summary is built for weekly-review/dashboard flows but is
@@ -630,7 +643,7 @@ PERFORMANCE:
     // Status- and folder-only browses still return the summary — those look
     // dashboard-ish and users may be scanning review state. See Linear OMN-19
     // for the full option trade-off (explicit param vs heuristic vs slim mode).
-    const isNarrowLookup = Boolean(compiled.filters.search || compiled.filters.id);
+    const isNarrowLookup = Boolean(compiled.filters.search || compiled.filters.name || compiled.filters.id);
 
     // Build cache key
     const cacheParams = { ...projectFilter, limit, includeStats };
@@ -920,6 +933,10 @@ PERFORMANCE:
       tags: compiled.filters.tags,
       tagsOperator: compiled.filters.tagsOperator as ExportFilter['tagsOperator'],
       search: compiled.filters.search,
+      // OMN-142: name is name-scoped (never matches notes); search above
+      // keeps the legacy full-text (name OR note) semantics.
+      name: compiled.filters.name,
+      nameOperator: compiled.filters.nameOperator,
     };
     // OMN-44: response-size pressure does not apply when writing to disk, so
     // raise the implicit cap; a user-supplied `limit` always wins.

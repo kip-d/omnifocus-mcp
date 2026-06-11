@@ -53,6 +53,23 @@ describe('Phase 3 AST Builders', () => {
       expect(code).toContain('test project');
     });
 
+    // OMN-142: name is name-scoped — must never read project.note (text does that)
+    it('should generate name-only filter without touching project.note', () => {
+      const filter: ProjectFilter = { name: 'review' };
+      const code = generateProjectFilterCode(filter);
+      expect(code).toContain('project.name');
+      expect(code).toContain('review');
+      expect(code).not.toContain('project.note');
+    });
+
+    it('should generate regex name filter for MATCHES, still name only', () => {
+      const filter: ProjectFilter = { name: '^Q[1-4]', nameOperator: 'MATCHES' };
+      const code = generateProjectFilterCode(filter);
+      expect(code).toContain('project.name');
+      expect(code).toContain('test');
+      expect(code).not.toContain('project.note');
+    });
+
     it('should generate folder ID filter', () => {
       const filter: ProjectFilter = { folderId: 'abc123' };
       const code = generateProjectFilterCode(filter);
@@ -96,6 +113,11 @@ describe('Phase 3 AST Builders', () => {
 
     it('should return false for filter with flagged', () => {
       expect(isEmptyProjectFilter({ flagged: true })).toBe(false);
+    });
+
+    // OMN-142: a name filter is a real constraint
+    it('should return false for filter with name', () => {
+      expect(isEmptyProjectFilter({ name: 'review' })).toBe(false);
     });
 
     // OMN-96: topLevelOnly is a real constraint, so the filter isn't empty

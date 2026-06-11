@@ -311,12 +311,17 @@ export class QueryCompiler {
       }
     }
 
+    // OMN-142: `name` compiles to the name-scoped fields, NEVER the legacy
+    // `search` alias — `search` matches note content too, and that over-match
+    // collaterally deleted a real user task (2026-06-09).
     if (input.name) {
       const nameFilter = input.name as { contains?: string; matches?: string };
       if ('contains' in nameFilter && nameFilter.contains) {
-        result.search = nameFilter.contains;
+        result.name = nameFilter.contains;
+        result.nameOperator = 'CONTAINS';
       } else if ('matches' in nameFilter && nameFilter.matches) {
-        result.search = nameFilter.matches;
+        result.name = nameFilter.matches;
+        result.nameOperator = 'MATCHES';
       }
     }
   }

@@ -14,7 +14,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, ProjectFilter, ProjectStatus, NormalizedTaskFilter } from '../filters.js';
+import type { TaskFilter, ProjectFilter, ProjectStatus, NormalizedTaskFilter, TextOperator } from '../filters.js';
 import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
@@ -228,6 +228,10 @@ export function describeFilter(filter: TaskFilter): string {
   if (filter.text) {
     conditions.push(`name ${filter.textOperator || 'CONTAINS'} "${filter.text}"`);
   }
+  if (filter.name) {
+    // OMN-142: name-only filter (text above also matches notes)
+    conditions.push(`name-only ${filter.nameOperator || 'CONTAINS'} "${filter.name}"`);
+  }
   const dateDesc = describeDateRange(filter);
   if (dateDesc) conditions.push(dateDesc);
   if (filter.projectId) conditions.push(`in project ${filter.projectId}`);
@@ -249,6 +253,19 @@ const PROJECT_STATUS_MAP: Record<ProjectStatus, string> = {
   done: 'Project.Status.Done',
   dropped: 'Project.Status.Dropped',
 };
+
+/**
+ * Emit one case-insensitive match condition against a project string field.
+ * CONTAINS lowercases both sides; MATCHES compiles to a RegExp test. The
+ * term is injected via JSON.stringify only — never raw interpolation.
+ */
+function projectTextCondition(field: 'name' | 'note', term: string, operator?: TextOperator): string {
+  const accessor = `(project.${field} || '')`;
+  if (operator === 'MATCHES') {
+    return `new RegExp(${JSON.stringify(term)}, 'i').test(${accessor})`;
+  }
+  return `${accessor}.toLowerCase().includes(${JSON.stringify(term.toLowerCase())})`;
+}
 
 /**
  * Generate OmniJS filter code for a ProjectFilter
@@ -285,11 +302,17 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
 
   // Text search (case-insensitive on name and note)
   if (filter.text) {
-    const escaped = JSON.stringify(filter.text.toLowerCase());
     conditions.push(
-      `((project.name || '').toLowerCase().includes(${escaped}) || ` +
-        `(project.note || '').toLowerCase().includes(${escaped}))`,
+      `(${projectTextCondition('name', filter.text, filter.textOperator)} || ` +
+        `${projectTextCondition('note', filter.text, filter.textOperator)})`,
     );
+  }
+
+  // OMN-142: name search — name ONLY, never the note. `text` above is the
+  // full-text (name OR note) filter; aliasing name onto it over-matched
+  // notes and fed a destructive sweep.
+  if (filter.name) {
+    conditions.push(`(${projectTextCondition('name', filter.name, filter.nameOperator)})`);
   }
 
   // Folder filter by ID
@@ -324,6 +347,7 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
     filter.flagged === undefined &&
     filter.needsReview === undefined &&
     !filter.text &&
+    !filter.name && // OMN-142
     !filter.folderId &&
     !filter.folderName &&
     !filter.topLevelOnly // OMN-96
@@ -346,7 +370,11 @@ export function describeProjectFilter(filter: ProjectFilter): string {
     conditions.push(filter.needsReview ? 'needs review' : 'does not need review');
   }
   if (filter.text) {
-    conditions.push(`text contains "${filter.text}"`);
+    conditions.push(`text ${filter.textOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.text}"`);
+  }
+  if (filter.name) {
+    // OMN-142
+    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
   }
   if (filter.folderId) {
     conditions.push(`folder ID = ${filter.folderId}`);

@@ -56,6 +56,23 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toContain('task.note');
     });
 
+    it('OMN-142: name filter emits a name-only predicate (no task.note read)', () => {
+      const filter: TaskFilter = { name: 'review', nameOperator: 'CONTAINS' };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      expect(result.predicate).toContain('task.name');
+      expect(result.predicate).not.toContain('task.note');
+    });
+
+    it('OMN-142: name MATCHES emits a regex test, still name only', () => {
+      const filter: TaskFilter = { name: '^review', nameOperator: 'MATCHES' };
+      const result = generateFilterCode(filter, 'omnijs');
+
+      expect(result.predicate).toContain('task.name');
+      expect(result.predicate).toContain('test');
+      expect(result.predicate).not.toContain('task.note');
+    });
+
     it('OMN-114: parentTaskId emits a null-guarded parent id comparison', () => {
       const filter: TaskFilter = { parentTaskId: 'abc123' };
       const result = generateFilterCode(filter, 'omnijs');

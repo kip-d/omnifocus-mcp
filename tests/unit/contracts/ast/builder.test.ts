@@ -291,6 +291,69 @@ describe('buildAST', () => {
     });
   });
 
+  // OMN-142: `name` is name-scoped — it must NEVER touch task.note. The old
+  // behavior (name compiled to the search alias → name OR note) collaterally
+  // matched tasks whose note cited the search term, and fed a deletion sweep.
+  describe('name filters (OMN-142)', () => {
+    it('name filter matches task.name only — never task.note', () => {
+      const filter: TaskFilter = { name: 'review', nameOperator: 'CONTAINS' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'includes',
+        value: 'review',
+      });
+    });
+
+    it('name filter honors MATCHES operator, still name only', () => {
+      const filter: TaskFilter = { name: '^review.*', nameOperator: 'MATCHES' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'matches',
+        value: '^review.*',
+      });
+    });
+
+    it('defaults to CONTAINS when nameOperator omitted', () => {
+      const filter: TaskFilter = { name: 'review' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'includes',
+        value: 'review',
+      });
+    });
+
+    it('name and text compose with AND — neither drops the other', () => {
+      const filter: TaskFilter = { name: 'alpha', nameOperator: 'CONTAINS', text: 'beta', textOperator: 'CONTAINS' };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      expect(ast.children).toContainEqual({
+        type: 'comparison',
+        field: 'task.name',
+        operator: 'includes',
+        value: 'alpha',
+      });
+      expect(ast.children).toContainEqual({
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'beta' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'beta' },
+        ],
+      });
+    });
+  });
+
   describe('parent task filter (OMN-114)', () => {
     it('transforms parentTaskId to a synthetic comparison node', () => {
       const filter: TaskFilter = { parentTaskId: 'abc123' };
