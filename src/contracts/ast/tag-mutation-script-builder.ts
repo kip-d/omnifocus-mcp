@@ -5,7 +5,7 @@
  * and the tag unit tests) but is now dispatchMutation -> validateMutationProgram
  * -> emitProgram -> wrapInLauncher, same shape as buildCreateFolderScript.
  *
- * The legacy template bodies, the shared JXA preamble/epilogue, and all four
+ * The legacy template bodies, the shared JXA preamble/epilogue, and all five
  * nested-backtick evaluateJavascript islands were DELETED, not migrated
  * (OMN-128 slice 6). Quoting/escaping is emitter-owned: wrapInLauncher passes
  * the whole OmniJS program across the JXA boundary as ONE JSON.stringify'd

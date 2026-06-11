@@ -196,7 +196,7 @@ choice, recorded in the plan).
 
 The module survives as the import seam: seven thin async wrappers in the established shape (`dispatchMutation` →
 `validateMutationProgram` → `emitProgram` → `wrapInLauncher` → `GeneratedMutationScript`). Everything else in the file —
-preamble, epilogue, the four islands, `validateTagMutation` — is deleted, not migrated.
+preamble, epilogue, the five islands, `validateTagMutation` — is deleted, not migrated.
 
 ## 5. Validator (`mutation/validator.ts`)
 
