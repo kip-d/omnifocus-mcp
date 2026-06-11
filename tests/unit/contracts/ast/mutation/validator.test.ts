@@ -23,6 +23,7 @@ import {
   bulkDeleteItem,
   resolveTag,
   constructTag,
+  constructTagPath,
   moveTag,
   type Program,
   type TagResolution,
@@ -546,6 +547,44 @@ describe('bulkDeleteItem uniqueness (rule 9)', () => {
   });
 });
 
+describe('constructTagPath reserved-identifier enforcement (rule 10)', () => {
+  it('_tagPath is reserved: a bind(_tagPath, ...) statement in a program throws /reserved emitter identifier/', () => {
+    const program: Program = {
+      statements: [bind('_tagPath', json(1)), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('constructTagPath bind must not be a reserved identifier (_warnings throws)', () => {
+    const program: Program = {
+      statements: [constructTagPath('_warnings', '_created', json(['Work'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('constructTagPath createdBind must not be a reserved identifier (_aborted throws)', () => {
+    const program: Program = {
+      statements: [constructTagPath('_tag', '_aborted', json(['Work'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('accepts a well-formed constructTagPath with non-reserved binds', () => {
+    const program: Program = {
+      statements: [constructTagPath('_tag', '_created', json(['Work', 'Active'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
 describe('moveTag position (rule 11 at the tag altitude)', () => {
   it('rejects an untyped position', () => {
     const program: Program = {
@@ -588,7 +627,7 @@ describe('moveTag position (rule 11 at the tag altitude)', () => {
 
 describe('reserved emitter identifiers', () => {
   it('exports the reserved list for the batch program builder', () => {
-    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors']);
+    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors', '_tagPath']);
   });
 
   it('rejects a bind statement named _warnings', () => {

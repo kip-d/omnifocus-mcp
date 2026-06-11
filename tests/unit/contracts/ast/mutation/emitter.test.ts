@@ -30,6 +30,7 @@ import {
   bulkDeleteItem,
   resolveTag,
   constructTag,
+  constructTagPath,
   moveTag,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
@@ -560,6 +561,39 @@ describe('moveTag', () => {
     expect(emitStmt(moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: '))).toContain(
       'moveTags([_t], _p);',
     );
+  });
+});
+
+describe('constructTagPath', () => {
+  it('emits the createTagPath call + result destructuring via _tagPath', () => {
+    expect(emitStmt(constructTagPath('_tag', '_created', json(['Work', 'Active'])))).toBe(
+      'const _tagPath = createTagPath(["Work","Active"]);\nconst _tag = _tagPath.tag;\nconst _created = _tagPath.created;',
+    );
+  });
+
+  it('emitProgram: missing createTagPath in snippetDeps throws snippet-coverage error', () => {
+    const program: Program = {
+      context: 'create_tag',
+      snippetDeps: [],
+      statements: [
+        constructTagPath('_tag', '_created', json(['Work', 'Active'])),
+        return_({ tagId: member(ref('_tag'), 'id.primaryKey'), created: ref('_created') }),
+      ],
+    };
+    expect(() => emitProgram(program)).toThrow(/createTagPath.*snippetDeps/i);
+  });
+
+  it('emitProgram: with createTagPath in snippetDeps the assembled program contains function createTagPath', () => {
+    const program: Program = {
+      context: 'create_tag',
+      snippetDeps: ['createTagPath'],
+      statements: [
+        constructTagPath('_tag', '_created', json(['Work', 'Active'])),
+        return_({ tagId: member(ref('_tag'), 'id.primaryKey'), created: ref('_created') }),
+      ],
+    };
+    const out = emitProgram(program);
+    expect(out).toContain('function createTagPath');
   });
 });
 

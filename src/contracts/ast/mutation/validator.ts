@@ -34,6 +34,10 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  *  - `_deleted`: the bulk-delete success accumulator declared by emitProgram
  *    when any bulkDeleteItem is present (mirrors the _aborted ownership pattern).
  *  - `_errors`: the bulk-delete failure accumulator, same ownership.
+ *  - `_tagPath`: the constructTagPath emission's intermediate — bound as
+ *    `const _tagPath = createTagPath(...)` before the leaf tag and created-
+ *    segments are destructured out. At most one constructTagPath per program
+ *    (create/tag path form), so a fixed name is safe.
  *  - `_w<i>` (pattern, see RESERVED_ITEM_VAR_PATTERN): per-item warning
  *    watermarks declared by batchItem emission.
  *  - `_d<i>` (pattern, see RESERVED_DELETE_RESOLVE_PATTERN): per-item task
@@ -47,7 +51,13 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  * Exported so the batch program builder (Task 9) can keep its generated names
  * clear of the same set.
  */
-export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted', '_deleted', '_errors'];
+export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = [
+  '_warnings',
+  '_aborted',
+  '_deleted',
+  '_errors',
+  '_tagPath',
+];
 const RESERVED_ITEM_VAR_PATTERN = /^_w\d+$/;
 const RESERVED_DELETE_RESOLVE_PATTERN = /^_d\d+$/;
 const RESERVED_DELETE_NAME_PATTERN = /^_n\d+$/;
@@ -119,8 +129,8 @@ function assertNotReserved(name: string, where: string): void {
  *     (SyntaxError at runtime).
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
  *     resolveProjectById, resolveTag, constructProject, constructTask,
- *     constructFolder, constructTag, assignTags) may use a reserved emitter
- *     identifier — see RESERVED_EMITTER_IDENTIFIERS.
+ *     constructFolder, constructTag, constructTagPath, assignTags) may use a
+ *     reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
  * 11. A `moveTask` node's `position` must be a typed TaskMovePosition object
  *     with kind ∈ {inboxBeginning, projectBeginning, parentEnding, containerRoot}.
  *     projectBeginning and parentEnding require a non-empty string `var`;
@@ -331,6 +341,10 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveProjectById') assertNotReserved(stmt.bind, 'resolveProjectById bind');
   if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
+  if (stmt.type === 'constructTagPath') {
+    assertNotReserved(stmt.bind, 'constructTagPath bind');
+    assertNotReserved(stmt.createdBind, 'constructTagPath createdBind');
+  }
 }
 
 const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 'parentEnding', 'containerRoot']);

@@ -253,6 +253,17 @@ export interface MoveTagNode {
   errorPrefix: string;
 }
 
+/** Find-or-create a tag path (spec §4.1): binds the leaf tag AND the array of
+ *  created segment names. Path parsing happens at BUILD time (spec §3) — this
+ *  node receives the already-split segments as a json Expr. Emission uses the
+ *  reserved `_tagPath` intermediate (validator rule 10). */
+export interface ConstructTagPathNode {
+  type: 'constructTagPath';
+  bind: string;
+  createdBind: string;
+  segments: Expr;
+}
+
 /** deleteObject(<target>) — OmniJS free function (NOT a method; callMethod
  *  cannot express it). Default = hard error (no partial result to preserve —
  *  spec slice-5 §2.4/§4.1). `bestEffort` (slice 6, spec §2.5) exists for ONE
@@ -294,6 +305,7 @@ export type Stmt =
   | ConstructTaskNode
   | ConstructFolderNode
   | ConstructTagNode
+  | ConstructTagPathNode
   | BatchItemNode
   | SetPropNode
   | AssignTagsNode
@@ -350,6 +362,12 @@ export const constructTag = (bindVar: string, name: Expr, parent: TagResolution)
   bind: bindVar,
   name,
   parent,
+});
+export const constructTagPath = (bindVar: string, createdBindVar: string, segments: Expr): ConstructTagPathNode => ({
+  type: 'constructTagPath',
+  bind: bindVar,
+  createdBind: createdBindVar,
+  segments,
 });
 export const resolveProjectById = (bindVar: string, refStr: string): ResolveProjectByIdNode => ({
   type: 'resolveProjectById',

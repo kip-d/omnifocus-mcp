@@ -93,6 +93,29 @@ function resolveOrCreateTagByPath(segments) {
   return current;
 }`;
 
+// Reporting sibling of resolveOrCreateTagByPath (slice 6): same find-or-create
+// walk, but returns { tag, created } so the create/tag envelope can echo
+// createdSegments (legacy buildCreateTagScript path-island behavior).
+const createTagPath = `
+function createTagPath(segments) {
+  var parent = null;
+  var current = null;
+  var created = [];
+  for (var i = 0; i < segments.length; i++) {
+    current = null;
+    var children = parent ? parent.children : tags;
+    for (var j = 0; j < children.length; j++) {
+      if (children[j].name === segments[i]) { current = children[j]; break; }
+    }
+    if (!current) {
+      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i], null);
+      created.push(segments[i]);
+    }
+    parent = current;
+  }
+  return { tag: current, created: created };
+}`;
+
 // Lifted verbatim from OMNIJS_RESOLVE_TAG_PATH const in mutation-script-builder.ts (OMN-128 slice 4).
 // Resolve-only walk: returns null on a missing segment rather than creating.
 // Used by the 'remove' mode of assignTags — resolves without creating tags.
@@ -128,6 +151,10 @@ export const SNIPPETS: Record<string, Snippet> = {
   resolveFolderFlexible: { source: resolveFolderFlexible, deps: ['parseFolderPath', 'resolveFolderPath'] },
   parseTagPath: { source: parseTagPath, deps: [] },
   resolveOrCreateTagByPath: { source: resolveOrCreateTagByPath, deps: ['parseTagPath'] },
+  // Reporting sibling of resolveOrCreateTagByPath (slice 6): returns { tag, created }
+  // so the create/tag envelope can echo createdSegments. No deps: walks `tags` directly
+  // (does not need parseTagPath — segments arrive pre-split from BUILD time, spec §3).
+  createTagPath: { source: createTagPath, deps: [] },
   // Resolve-only sibling of resolveOrCreateTagByPath: walk returns null on a missing
   // segment instead of creating. Used by the assignTags 'remove' mode (OMN-128 slice 4).
   resolveTagByPath: { source: resolveTagByPath, deps: ['parseTagPath'] },
