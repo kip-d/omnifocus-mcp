@@ -592,6 +592,139 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  // ─── OMN-144: bulk_delete envelope honesty ──────────────────────────
+  //
+  // A fully-refused/failed bulk delete must report top-level success:false,
+  // matching the single-op envelope for the same refusal. Partial success
+  // stays success:true with loud errors[] (OMN-137 contract).
+
+  describe('OMN-144: bulk_delete envelope honesty (tasks)', () => {
+    it('returns success:false when the whole dispatch failed (script error, zero deletes)', async () => {
+      execJsonSpy.mockResolvedValue(createScriptError('TEST GUARD: task outside sandbox', 'bulk_delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'task',
+          ids: ['id1', 'id2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('BULK_DELETE_FAILED');
+      // The underlying error text must surface in the top-level error, not
+      // only in a buried per-item array.
+      expect(JSON.stringify(result.error)).toContain('TEST GUARD');
+      // Per-item detail preserved for clients that want it.
+      expect(result.error.details.successCount).toBe(0);
+      expect(result.error.details.errorCount).toBe(1);
+    });
+
+    it('returns success:false when every item failed per-item (zero deletes)', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          deleted: [],
+          errors: [
+            { taskId: 'id1', error: 'Task not found: id1' },
+            { taskId: 'id2', error: 'Task not found: id2' },
+          ],
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'task',
+          ids: ['id1', 'id2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('BULK_DELETE_FAILED');
+      expect(result.error.details.successCount).toBe(0);
+      expect(result.error.details.errorCount).toBe(2);
+    });
+
+    it('keeps success:true with loud errors[] on partial success (OMN-137 contract)', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          deleted: [{ id: 'id1', name: 'Task 1' }],
+          errors: [{ taskId: 'id2', error: 'Task not found: id2' }],
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'task',
+          ids: ['id1', 'id2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.successCount).toBe(1);
+      expect(result.data.errorCount).toBe(1);
+      expect(result.data.errors).toBeDefined();
+    });
+
+    it('rider: unrecognized script result shape is loud, not a 0/0 silent success', async () => {
+      // collectBulkDeleteResults previously early-returned on a non-object
+      // result.data, yielding successCount:0/errorCount:0 with success:true —
+      // a bulk delete that reported nothing at all.
+      execJsonSpy.mockResolvedValue(createScriptSuccess('not-an-object'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'task',
+          ids: ['id1', 'id2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('BULK_DELETE_FAILED');
+      expect(result.error.details.errorCount).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('OMN-144: bulk_delete envelope honesty (projects)', () => {
+    it('returns success:false when every project delete failed', async () => {
+      execJsonSpy.mockResolvedValue(createScriptError('Project not found', 'delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'project',
+          ids: ['proj-1', 'proj-2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('BULK_DELETE_FAILED');
+      expect(result.error.details.successCount).toBe(0);
+      expect(result.error.details.errorCount).toBe(2);
+    });
+
+    it('keeps success:true with loud errors[] on partial project success', async () => {
+      execJsonSpy
+        .mockResolvedValueOnce(createScriptSuccess({ id: 'proj-1', name: 'P1' }))
+        .mockResolvedValueOnce(createScriptError('Project not found', 'delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'bulk_delete',
+          target: 'project',
+          ids: ['proj-1', 'proj-2'],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.successCount).toBe(1);
+      expect(result.data.errorCount).toBe(1);
+      expect(result.data.errors).toBeDefined();
+    });
+  });
+
   // ─── PROJECT OPERATIONS (inline, no ProjectsTool) ──────────────────
 
   describe('project create', () => {

@@ -1004,8 +1004,7 @@ SAFETY:
       }
     }
 
-    return createSuccessResponseV2(
-      'omnifocus_write',
+    return this.bulkDeleteEnvelope(
       {
         operation: 'bulk_delete',
         successCount: deleteResults.length,
@@ -1013,8 +1012,7 @@ SAFETY:
         results: deleteResults,
         errors: deleteErrors.length > 0 ? deleteErrors : undefined,
       },
-      undefined,
-      timer.toMetadata(),
+      timer,
     );
   }
 
@@ -1044,13 +1042,54 @@ SAFETY:
       errors.push({ error: String(error) });
     }
 
-    const responseData = {
-      operation: 'bulk_delete',
-      successCount: results.length,
-      errorCount: errors.length,
-      results,
-      errors: errors.length > 0 ? errors : undefined,
-    };
+    // ids is schema-guaranteed non-empty, so a script result that reported
+    // neither deletes nor errors is an unrecognized shape — make it loud
+    // instead of returning a 0/0 "success" that says nothing happened.
+    if (results.length === 0 && errors.length === 0) {
+      errors.push({ error: 'Bulk delete script returned no per-item results (unrecognized result shape)' });
+    }
+
+    return this.bulkDeleteEnvelope(
+      {
+        operation: 'bulk_delete',
+        successCount: results.length,
+        errorCount: errors.length,
+        results,
+        errors: errors.length > 0 ? errors : undefined,
+      },
+      timer,
+    );
+  }
+
+  /**
+   * Wrap a bulk delete outcome in the honest envelope (OMN-144): zero
+   * successes with any errors is a top-level failure — matching the
+   * single-op envelope for the same refusal — while partial success stays
+   * success:true with loud errors[] (OMN-137 contract). Per-item detail
+   * rides error.details either way.
+   */
+  private bulkDeleteEnvelope(
+    responseData: {
+      operation: 'bulk_delete';
+      successCount: number;
+      errorCount: number;
+      results: unknown[];
+      errors?: unknown[];
+    },
+    timer: OperationTimerV2,
+  ): unknown {
+    if (responseData.successCount === 0 && responseData.errorCount > 0) {
+      const first = (responseData.errors?.[0] ?? {}) as { error?: unknown };
+      const firstText = typeof first.error === 'string' ? first.error : JSON.stringify(first);
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'BULK_DELETE_FAILED',
+        `Bulk delete failed: 0 deleted, ${responseData.errorCount} error(s). First error: ${firstText}`,
+        'No items were deleted. Check error.details.errors for per-item failures, verify the ids, and retry.',
+        responseData,
+        timer.toMetadata(),
+      );
+    }
 
     return createSuccessResponseV2('omnifocus_write', responseData, undefined, timer.toMetadata());
   }
