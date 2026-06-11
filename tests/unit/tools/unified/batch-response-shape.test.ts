@@ -163,6 +163,26 @@ describe('flattenBatchResults', () => {
     });
   });
 
+  it('OMN-141: phase-level errors without an id flatten with id:null, not the string "unknown"', () => {
+    const nestedResults = {
+      created: [],
+      updated: [],
+      completed: [],
+      deleted: [],
+      errors: [{ phase: 'create', error: '1 of 3 creates failed; batch halted (stopOnError)' }],
+    };
+
+    const flat = flattenBatchResults(nestedResults);
+
+    expect(flat).toHaveLength(1);
+    expect(flat[0]).toEqual({
+      operation: 'create',
+      success: false,
+      id: null,
+      error: '1 of 3 creates failed; batch halted (stopOnError)',
+    });
+  });
+
   it('should handle mixed operations preserving type ordering (creates, updates, completes, deletes, errors)', () => {
     const nestedResults = {
       created: [

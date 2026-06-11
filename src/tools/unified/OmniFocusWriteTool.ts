@@ -1621,11 +1621,30 @@ SAFETY:
         stopOnError: compiled.stopOnError ?? true,
       });
 
+      // OMN-141: per-item rows always flatten from the created bucket — pushing
+      // the whole createResult envelope into errors degraded every row to
+      // operation:'unknown'/error:'undefined'. The halt/rollback itself is a
+      // compact phase-level error; errors[] is reserved for that shape.
       if (createResult.success === false && createResult.rolledBack) {
-        results.errors.push(createResult);
+        // Successes were undone by the rollback — mark them so the flattened
+        // rows don't claim surviving creates.
+        results.created.push({
+          ...createResult,
+          results: createResult.results.map((r) =>
+            r.success ? { ...r, success: false, error: 'Created, then rolled back (atomicOperation)' } : r,
+          ),
+        });
+        results.errors.push({
+          phase: 'create',
+          error: `Atomic batch rolled back: ${createResult.failed} of ${createResult.totalItems} creates failed; all created items were removed`,
+        });
         if (compiled.stopOnError) hadError = true;
       } else if (createResult.failed > 0 && compiled.stopOnError) {
-        results.errors.push(createResult);
+        results.created.push(createResult);
+        results.errors.push({
+          phase: 'create',
+          error: `${createResult.failed} of ${createResult.totalItems} creates failed; batch halted (stopOnError)`,
+        });
         hadError = true;
       } else {
         results.created.push(createResult);

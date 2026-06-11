@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Batch `stopOnError`/atomic-rollback failures keep per-item results** (OMN-141) — A batch create halted by
+  `stopOnError: true` (or undone by `atomicOperation` rollback) returned a single degenerate row
+  `{ operation: "unknown", id: "unknown", error: "undefined" }` instead of the per-item rows — which item succeeded,
+  which failed, and the real error message were all lost (summary counts and `tempIdMapping` were correct). Per-item
+  rows now survive in `results`, with rolled-back creates re-marked `success: false` ("Created, then rolled back")
+  rather than reported as surviving; the halt/rollback itself appears as one compact phase-level error row. Phase-level
+  error rows now carry `id: null` instead of the string `"unknown"`.
 - **A fully-failed `bulk_delete` reports top-level `success: false`** (OMN-144) — A bulk delete in which nothing was
   deleted (e.g. the whole dispatch was refused by the sandbox guard, or every item failed) returned top-level
   `success: true` with `successCount: 0` and the failures buried in `data.errors[]` — while the identical refusal on a

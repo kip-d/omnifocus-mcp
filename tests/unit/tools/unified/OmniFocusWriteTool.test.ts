@@ -966,6 +966,113 @@ describe('OmniFocusWriteTool task operations', () => {
       taskSpy.mockRestore();
     });
 
+    it('OMN-141: stopOnError=true with a failing item keeps per-item rows (no operation:unknown degradation)', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      // Script halted after the failing second item — third row never produced.
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          results: [
+            { tempId: 't1', taskId: 'real-1', success: true },
+            { tempId: 't2', taskId: null, success: false, error: 'Parent task not found: DOES_NOT_EXIST_123' },
+          ],
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          stopOnError: true,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            {
+              operation: 'create',
+              target: 'task',
+              data: { tempId: 't2', name: 'B', parentTaskId: 'DOES_NOT_EXIST_123' },
+            },
+            { operation: 'create', target: 'task', data: { tempId: 't3', name: 'C' } },
+          ],
+        },
+      })) as any;
+
+      // Halted batch is still an overall failure with a non-zero error count.
+      expect(result.success).toBe(false);
+      expect(result.data.summary.created).toBe(1);
+      expect(result.data.summary.errors).toBeGreaterThanOrEqual(1);
+      // tempIdMapping survives.
+      expect(result.data.tempIdMapping.t1).toBe('real-1');
+
+      const items = result.data.results as Array<Record<string, unknown>>;
+      // The per-item rows survive: which item succeeded, which failed, and why.
+      const ok = items.find((r) => r.tempId === 't1');
+      expect(ok).toMatchObject({ operation: 'create', success: true, id: 'real-1' });
+      const fail = items.find((r) => r.tempId === 't2');
+      expect(fail).toMatchObject({ operation: 'create', success: false });
+      expect(String(fail!.error)).toContain('Parent task not found');
+      // The degenerate flattening must be gone.
+      expect(items.some((r) => r.operation === 'unknown')).toBe(false);
+      expect(items.some((r) => r.error === 'undefined')).toBe(false);
+      buildSpy.mockRestore();
+    });
+
+    it('OMN-141 rider: atomic rollback keeps per-item rows, marking undone creates instead of degrading', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      // First call: the batch create script (one ok, one fail). Later calls
+      // (rollback deletes) get a generic success.
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'Parent task not found: DOES_NOT_EXIST_123' },
+            ],
+          },
+        })
+        .mockResolvedValue({ success: true, data: {} });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: true,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            {
+              operation: 'create',
+              target: 'task',
+              data: { tempId: 't2', name: 'B', parentTaskId: 'DOES_NOT_EXIST_123' },
+            },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      const items = result.data.results as Array<Record<string, unknown>>;
+      // The rolled-back create must NOT flatten as a surviving success.
+      const undone = items.find((r) => r.tempId === 't1');
+      expect(undone).toBeDefined();
+      expect(undone!.success).toBe(false);
+      expect(String(undone!.error)).toContain('rolled back');
+      const fail = items.find((r) => r.tempId === 't2');
+      expect(String(fail!.error)).toContain('Parent task not found');
+      expect(items.some((r) => r.operation === 'unknown')).toBe(false);
+      expect(items.some((r) => r.error === 'undefined')).toBe(false);
+      buildSpy.mockRestore();
+    });
+
     it('slow path: batch task create passes repetitionRule to the builder with NO second script', async () => {
       // repetitionRule on an item forces the per-item path; the rule must ride
       // the create script itself (applyRepetitionRuleSilently is gone).

@@ -96,7 +96,9 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
     flat.push({
       operation: err.phase || 'unknown',
       success: false as const,
-      id: err.id || 'unknown',
+      // Phase-level errors (OMN-141: stopOnError halt, atomic rollback) have no
+      // item id — null is honest where the string 'unknown' was a lie.
+      id: err.id ?? null,
       error: errorMsg || 'Unknown error',
     });
   }
