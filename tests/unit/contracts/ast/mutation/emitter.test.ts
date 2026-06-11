@@ -558,9 +558,9 @@ describe('moveTag', () => {
       'try { moveTags([_t], null); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
     );
   });
-  it('emits moveTags to the parent var for underTag', () => {
-    expect(emitStmt(moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: '))).toContain(
-      'moveTags([_t], _p);',
+  it('emits moveTags to the parent var for underTag, wrapped in an error-envelope catch', () => {
+    expect(emitStmt(moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: '))).toBe(
+      'try { moveTags([_t], _p); } catch (e) { return JSON.stringify({ error: true, message: "Failed to nest tag: " + String(e) }); }',
     );
   });
 });

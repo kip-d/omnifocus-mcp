@@ -637,6 +637,28 @@ describe('moveTag position (rule 11 at the tag altitude)', () => {
     };
     expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
   });
+
+  // Rule 8 generalized: moveTag's emission contains a top-level return (its
+  // hard-error envelope catch) — inside batchItem.statements that return would
+  // escape the whole program IIFE, the exact rule-8 hazard.
+  it('rejects a moveTag inside batchItem.statements (rule 8 — emission contains a top-level return)', () => {
+    const bad: Program = {
+      context: 'batch_create',
+      snippetDeps: [],
+      statements: [
+        bind('results', raw('[]')),
+        batchItem(
+          'a',
+          0,
+          '_t0',
+          [constructTask('_t0', json('A'), { kind: 'inbox' as const }), moveTag(ref('_t0'), { kind: 'root' }, 'p: ')],
+          false,
+        ),
+        return_({ results: ref('results') }),
+      ],
+    };
+    expect(() => validateMutationProgram(bad)).toThrow(/moveTag.*batchItem|batchItem.*moveTag/i);
+  });
 });
 
 describe('reserved emitter identifiers', () => {

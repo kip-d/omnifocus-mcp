@@ -109,11 +109,13 @@ function assertNotReserved(name: string, where: string): void {
  *     widened it from constructs to ALL consumers — the update lowerings
  *     consume resolve binds in setProp targets, moves, callMethod targets,
  *     and envelopes.)
- *  8. Inside `batchItem.statements`: all per-statement rules recurse, but a
- *     `return` statement is ILLEGAL (it would return from the whole program
- *     IIFE, skipping remaining items and the results envelope — Task 5 review
- *     finding), and for the same reason a return-MODE guard is ILLEGAL —
- *     inner guards must be mode 'throw'.
+ *  8. Inside `batchItem.statements`: all per-statement rules recurse, but ANY
+ *     statement whose emission contains a top-level `return` is ILLEGAL — it
+ *     would return from the whole program IIFE, skipping remaining items and
+ *     the results envelope (Task 5 review finding). Concretely: a `return`
+ *     statement, a return-MODE guard (inner guards must be mode 'throw'), and
+ *     a `moveTag` (its hard-error envelope catch emits a top-level return).
+ *     Extend this rule when a new node's emission gains a top-level return.
  *  9. Across a program's batchItem nodes, `index` AND `taskVar` values must
  *     each be unique. A duplicate index would double-declare `_w<i>`
  *     (SyntaxError at runtime); and since constructTask binds emit as `var`
@@ -590,6 +592,16 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         validateMoveProjectStmt(stmt);
         break;
       case 'moveTag':
+        // Rule 8 (moveTag inside batchItem): moveTag's emission contains a
+        // top-level return (the hard-error envelope catch) — same IIFE-escape
+        // hazard as a bare return / return-mode guard inside batchItem.
+        if (ctx.insideBatchItem) {
+          throw new Error(
+            'Invalid batchItem: a moveTag statement inside batchItem.statements emits a top-level return ' +
+              '(its hard-error envelope catch), which would return from the whole program IIFE, ' +
+              'skipping remaining items and the results envelope.',
+          );
+        }
         validateMoveTagStmt(stmt);
         break;
       case 'callMethod':
