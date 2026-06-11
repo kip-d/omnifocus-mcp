@@ -294,6 +294,7 @@ describe('moveTag position (rule 11 at the tag altitude)', () => {
   });
   it('counts moveTag as a rule-7 consumer of its tag ref and underTag var', () => {
     // resolveTag('_t', 'X') then moveTag(ref('_t'), {kind:'root'}, 'p: ') with no guard → /without a guard/
+    // NOTE: the program must still end in return_({...}) or rule 1 fires first with the wrong error.
   });
 });
 ```
@@ -730,7 +731,8 @@ export function buildCreateTagProgram(data: TagCreateInput): Program {
 ```
 
 Imports to extend at the top of `defs.ts`: `isTestMode`, `TEST_TAG_PREFIX` (from `../mutation-script-builder.js` —
-already the source of other guard imports), plus the new factories from `./types.js`.
+already the source of other guard imports), plus the new factories from `./types.js` AND the `TagResolution` type import
+(needed for the `let parentResolution: TagResolution` annotation).
 
 Registry entry (inside `MUTATION_DEFS`):
 
@@ -866,7 +868,9 @@ export function buildMergeTagsProgram(data: TagMergeInput): Program {
     bind('_tgtName', json(data.targetTag)),
     mergeRetag('_src', '_tgt', '_count'),
     // bestEffort label IS the legacy warning prefix, so _warnings[0] reproduces
-    // the legacy warning text verbatim (spec §2.5).
+    // the legacy warning shape (spec §2.5). Not byte-identical: legacy appended
+    // deleteError.toString() ("Error: <msg>"); bestEffortCatch appends e.message
+    // ("<msg>"). Tests assert the prefix, not the tail.
     deleteObject(ref('_src'), true, 'Tags were merged but source tag could not be deleted'),
     return_({
       action: raw(`_warnings.length ? "merged_with_warning" : "merged"`),
@@ -1126,8 +1130,9 @@ test files FAIL (they assert template internals: `parseTagPath` in the JXA shell
 - `tag-operations.test.ts`: keep the read-side `buildTagsScript` test untouched. Rewrite the four mutation tests: merge
   script contains `task.removeTag(_src)` / `task.addTag(_tgt)` inside a `wrapInLauncher`-shaped script (assert
   `evaluateJavascript(` present + NO backtick character in the whole script — the structural OMN-111/113 kill); plural
-  `addTags(`/`removeTags(` still absent; create-path script contains `createTagPath(["A","B"])` for `'A : B'`; conflict
-  envelope test now asserts the constant error program text in the emitted script.
+  `addTags(`/`removeTags(` still absent; create-path script contains `createTagPath(` for `'A : B'` (quote-free
+  substring — `wrapInLauncher` JSON-escapes the program, so `["A","B"]` appears as `[\"A\",\"B\"]`); conflict envelope
+  test now asserts the constant error program text in the emitted script.
 - `tag-conversion.test.ts`: re-point its `JSON.stringify`-returns and array-handling assertions at the new emitted
   scripts (the invariants survive; the selectors change).
 - Both files: builders are now async-only wrappers — assertions go through `await build*` exactly as before.
