@@ -47,9 +47,13 @@ d('OMN-142: name filter is name-scoped (never matches notes)', () => {
   // are exactly the probe records.
   const TASK_MARKER = `XYZNAMESCOPE${RUN_ID.replace(/[^a-z0-9]/gi, '')}`;
   const PROJECT_MARKER = `XYZPROJSCOPE${RUN_ID.replace(/[^a-z0-9]/gi, '')}`;
+  // OMN-149: marker containing "/" — the old matches emitter raw-interpolated
+  // the pattern into a regex literal, so any "/" broke the generated script.
+  const SLASH_MARKER = `XYZSLASH${RUN_ID.replace(/[^a-z0-9]/gi, '')}/probe`;
 
   let nameTaskId: string;
   let noteTaskId: string;
+  let slashTaskId: string;
   let nameProjectId: string;
   let noteProjectId: string;
 
@@ -95,6 +99,16 @@ d('OMN-142: name filter is name-scoped (never matches notes)', () => {
           },
           {
             operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'slashTask',
+              name: runScopedName(`NameScope_${SLASH_MARKER}`),
+              note: 'bland note',
+              parentTempId: 'holder',
+            },
+          },
+          {
+            operation: 'create',
             target: 'project',
             data: {
               tempId: 'nameProject',
@@ -125,10 +139,12 @@ d('OMN-142: name filter is name-scoped (never matches notes)', () => {
     const mapping = response.data.tempIdMapping ?? {};
     nameTaskId = mapping['nameTask'];
     noteTaskId = mapping['noteTask'];
+    slashTaskId = mapping['slashTask'];
     nameProjectId = mapping['nameProject'];
     noteProjectId = mapping['noteProject'];
     expect(nameTaskId).toBeTruthy();
     expect(noteTaskId).toBeTruthy();
+    expect(slashTaskId).toBeTruthy();
     expect(nameProjectId).toBeTruthy();
     expect(noteProjectId).toBeTruthy();
   }, 120000);
@@ -158,6 +174,19 @@ d('OMN-142: name filter is name-scoped (never matches notes)', () => {
     const ids = (result.data?.tasks ?? []).map((t) => t.id);
     expect(ids).toContain(nameTaskId);
     expect(ids).toContain(noteTaskId);
+  }, 60000);
+
+  // OMN-149: a "/" in the pattern used to produce a syntax-broken script
+  // (regex-literal interpolation). Must now match as a real regex.
+  it('tasks: name.matches with a "/" in the pattern works (OMN-149)', async () => {
+    const result = (await client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { name: { matches: SLASH_MARKER } }, limit: 50 },
+    })) as TasksReadResponse;
+
+    expect(result.success).toBe(true);
+    const ids = (result.data?.tasks ?? []).map((t) => t.id);
+    expect(ids).toContain(slashTaskId);
+    expect(ids).not.toContain(noteTaskId);
   }, 60000);
 
   it('projects: name.contains matches the name-marker project and NOT the note-marker project', async () => {

@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Task-side `{ matches }` regex patterns may contain `/` and can no longer inject code** (OMN-149) — The AST emitter's
+  `matches` case interpolated the user pattern raw into a regex _literal_ (`/pattern/i`), so any in-contract pattern
+  containing `/` (e.g. `OMN/142`) produced a syntax-broken script and a crafted pattern could break out of the literal
+  into executable OmniJS. The pattern now crosses into generated code only as a JSON string literal via the `RegExp`
+  constructor — same form the project side already used — unifying `{ matches }` behavior across tasks and projects.
+  Invalid regex patterns now fail loudly at predicate construction. Found by the OMN-142 pre-merge review (the
+  name-filter fix made the path newly reachable via `name: { matches }`; it was always reachable via
+  `text: { matches }`).
 - **`filters.name` no longer matches note content** (OMN-142) — The `name` filter compiled onto the legacy `search`
   field, whose every consumer (tasks, projects, export) implements name-OR-note matching — so a task whose _note_ cited
   a term matched a "name" search for it. That over-match fed a deletion sweep that collaterally deleted a real user task

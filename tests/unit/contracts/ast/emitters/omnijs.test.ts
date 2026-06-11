@@ -79,7 +79,7 @@ describe('emitOmniJS', () => {
       expectPredicate(code, 'task.name.toLowerCase().includes("review".toLowerCase())');
     });
 
-    it('emits regex match for matches operator', () => {
+    it('emits regex match via RegExp constructor (OMN-149: pattern is JSON-escaped, never a raw literal)', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.name',
@@ -87,7 +87,7 @@ describe('emitOmniJS', () => {
         value: '^review.*',
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, '/^review.*/i.test(task.name)');
+      expectPredicate(code, 'new RegExp("^review.*", \'i\').test(task.name)');
     });
 
     it('emits project ID check', () => {
@@ -410,7 +410,7 @@ describe('emitOmniJS', () => {
       expectPredicate(code, 'task.note.toLowerCase().includes("important".toLowerCase())');
     });
 
-    it('emits regex match for note field', () => {
+    it('emits regex match for note field via RegExp constructor (OMN-149)', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.note',
@@ -418,7 +418,52 @@ describe('emitOmniJS', () => {
         value: '\\d+-note',
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, '/\\d+-note/i.test(task.note)');
+      expectPredicate(code, 'new RegExp("\\\\d+-note", \'i\').test(task.note)');
+    });
+  });
+
+  // OMN-149: the old emitter raw-interpolated the user pattern into a regex
+  // LITERAL (`/${pattern}/i`), so any pattern containing `/` produced a
+  // syntax-broken script, and a crafted pattern could break out of the
+  // literal and inject arbitrary OmniJS into the predicate. The RegExp
+  // constructor form injects the pattern via JSON.stringify only.
+  describe('matches operator regex safety (OMN-149)', () => {
+    function emitMatches(field: string, pattern: string) {
+      const ast: FilterNode = { type: 'comparison', field, operator: 'matches', value: pattern };
+      return emitOmniJS(ast);
+    }
+
+    // The emitted predicate is plain JS over a `task` object — execute it
+    // directly so the tests pin behavior, not just string shape.
+    function evalPredicate(result: ReturnType<typeof emitOmniJS>, task: Record<string, unknown>): boolean {
+      expect(result.preamble).toBe('');
+      return new Function('task', `return ${result.predicate};`)(task) as boolean;
+    }
+
+    it('pattern containing "/" compiles and matches (was: syntax-broken script)', () => {
+      const code = emitMatches('task.name', 'OMN/142');
+      expect(evalPredicate(code, { name: 'fix OMN/142 today' })).toBe(true);
+      expect(evalPredicate(code, { name: 'unrelated task' })).toBe(false);
+    });
+
+    it('code-shaped pattern stays an inert JSON string literal in the predicate', () => {
+      const payload = 'x/i.test("x") || true || /y';
+      const code = emitMatches('task.name', payload);
+      // The payload may appear ONLY as the JSON-stringified RegExp argument —
+      // never as executable code outside the string literal.
+      expect(code.predicate).toBe(`new RegExp(${JSON.stringify(payload)}, 'i').test(task.name)`);
+    });
+
+    it('matching stays case-insensitive through the constructor form', () => {
+      const code = emitMatches('task.name', '^review');
+      expect(evalPredicate(code, { name: 'REVIEWING the quarter' })).toBe(true);
+    });
+
+    it('an invalid regex pattern fails loudly at predicate construction, not silently', () => {
+      const code = emitMatches('task.name', '(unclosed');
+      // new RegExp('(unclosed') throws SyntaxError when the predicate runs —
+      // a loud script error, not a silent match-nothing or match-all.
+      expect(() => evalPredicate(code, { name: 'anything' })).toThrow();
     });
   });
 

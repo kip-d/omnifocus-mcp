@@ -126,7 +126,12 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
         break;
 
       case 'matches':
-        predicate = `/${String(value)}/i.test(${accessor})`;
+        // OMN-149: the pattern crosses into generated code ONLY as a JSON
+        // string literal. A regex literal (`/${pattern}/i`) raw-interpolates
+        // user data — a pattern containing `/` breaks the script, and a
+        // crafted pattern can inject code into the predicate. Matches the
+        // project-side projectTextCondition() form.
+        predicate = `new RegExp(${JSON.stringify(String(value))}, 'i').test(${accessor})`;
         break;
 
       case 'some':
