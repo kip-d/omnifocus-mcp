@@ -12,10 +12,7 @@
 // Re-export the modularized scripts
 // Note: CREATE_TASK_SCRIPT archived 2025-12-18, replaced by AST builder
 // Note: GET_TASK_COUNT_SCRIPT archived 2025-12-19, replaced by buildTaskCountScript in script-builder.ts
-export { buildCompleteTaskScript } from './tasks/complete-task.js';
-export { buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
-export { buildDeleteTaskScript } from './tasks/delete-task.js';
-export { buildBulkDeleteTasksScript } from './tasks/delete-tasks-bulk.js';
+// Note: complete-task, delete-task, delete-tasks-bulk, complete-tasks-bulk deleted 2026-06-10 (OMN-128 slice 5; git history is the record)
 // Note: TODAYS_AGENDA_SCRIPT archived 2026-02-09, replaced by AST builder (todayMode in buildAST)
 
 // AST-powered scripts (Phase 1-2 migration complete 2025-12-17):

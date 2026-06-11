@@ -219,6 +219,27 @@ export interface CallMethodNode {
   label?: string;
 }
 
+/** deleteObject(<target>) — OmniJS free function (NOT a method; callMethod
+ *  cannot express it). No binding, no bestEffort: a failed delete is a hard
+ *  error — there is no partial result to preserve (spec §2.4/§4.1). */
+export interface DeleteObjectNode {
+  type: 'deleteObject';
+  target: Expr;
+}
+
+/** One id's delete attempt inside a bulk program (spec §4.2): resolve →
+ *  not-found else capture-name → deleteObject → push to _deleted, with a
+ *  per-item catch pushing to _errors (continue-on-error, legacy-faithful).
+ *  Self-contained: consumes no external binds (its own resolve is internal),
+ *  so rule 7 does not apply to it. The _deleted/_errors accumulators are
+ *  DECLARED by emitProgram when any bulkDeleteItem is present — the _aborted
+ *  ownership pattern, not a builder bind. */
+export interface BulkDeleteItemNode {
+  type: 'bulkDeleteItem';
+  id: string;
+  index: number;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -239,6 +260,8 @@ export type Stmt =
   | MoveTaskNode
   | MoveProjectNode
   | CallMethodNode
+  | DeleteObjectNode
+  | BulkDeleteItemNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -392,4 +415,10 @@ export const callMethod = (
   args,
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
+});
+export const deleteObject = (target: Expr): DeleteObjectNode => ({ type: 'deleteObject', target });
+export const bulkDeleteItem = (id: string, index: number): BulkDeleteItemNode => ({
+  type: 'bulkDeleteItem',
+  id,
+  index,
 });

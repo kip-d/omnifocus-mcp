@@ -12,6 +12,7 @@ import type {
   ConstructTaskNode,
   GuardNode,
   BatchItemNode,
+  BulkDeleteItemNode,
   MoveTaskNode,
   MoveProjectNode,
   CallMethodNode,
@@ -27,8 +28,15 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  *  - `_warnings`: the OMN-137 program-scope warnings array (Task 4 review:
  *    it briefly joined the unreserved namespace — this rule closes that gap).
  *  - `_aborted`: the batch stop-on-error flag set by batchItem's catch.
+ *  - `_deleted`: the bulk-delete success accumulator declared by emitProgram
+ *    when any bulkDeleteItem is present (mirrors the _aborted ownership pattern).
+ *  - `_errors`: the bulk-delete failure accumulator, same ownership.
  *  - `_w<i>` (pattern, see RESERVED_ITEM_VAR_PATTERN): per-item warning
  *    watermarks declared by batchItem emission.
+ *  - `_d<i>` (pattern, see RESERVED_DELETE_RESOLVE_PATTERN): per-item task
+ *    resolution vars declared by bulkDeleteItem emission.
+ *  - `_n<i>` (pattern, see RESERVED_DELETE_NAME_PATTERN): per-item name
+ *    capture vars declared by bulkDeleteItem emission.
  *
  * `results` is deliberately NOT reserved: the batch program builder
  * legitimately binds it via a bind statement.
@@ -36,14 +44,21 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  * Exported so the batch program builder (Task 9) can keep its generated names
  * clear of the same set.
  */
-export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted'];
+export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted', '_deleted', '_errors'];
 const RESERVED_ITEM_VAR_PATTERN = /^_w\d+$/;
+const RESERVED_DELETE_RESOLVE_PATTERN = /^_d\d+$/;
+const RESERVED_DELETE_NAME_PATTERN = /^_n\d+$/;
 
 function assertNotReserved(name: string, where: string): void {
-  if (RESERVED_EMITTER_IDENTIFIERS.includes(name) || RESERVED_ITEM_VAR_PATTERN.test(name)) {
+  if (
+    RESERVED_EMITTER_IDENTIFIERS.includes(name) ||
+    RESERVED_ITEM_VAR_PATTERN.test(name) ||
+    RESERVED_DELETE_RESOLVE_PATTERN.test(name) ||
+    RESERVED_DELETE_NAME_PATTERN.test(name)
+  ) {
     throw new Error(
       `Invalid ${where}: "${name}" is a reserved emitter identifier ` +
-        `(reserved: ${RESERVED_EMITTER_IDENTIFIERS.join(', ')}, and the _w<digits> pattern).`,
+        `(reserved: ${RESERVED_EMITTER_IDENTIFIERS.join(', ')}, and the _w<digits>, _d<digits>, _n<digits> patterns).`,
     );
   }
 }
@@ -95,7 +110,10 @@ function assertNotReserved(name: string, where: string): void {
  *     constructTask whose bind === taskVar (the item's results push reads
  *     `<taskVar>.id.primaryKey` — without it, a ReferenceError is swallowed
  *     by the item catch as a FALSE per-item failure with an opaque message),
- *     and taskVar itself must not be a reserved identifier.
+ *     and taskVar itself must not be a reserved identifier. The same
+ *     duplicate-index rule applies across a program's bulkDeleteItem nodes:
+ *     a duplicate index would double-declare `const _d<i>` / `const _n<i>`
+ *     (SyntaxError at runtime).
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
  *     resolveProjectById, constructProject, constructTask, constructFolder,
  *     assignTags) may use a reserved emitter identifier — see
@@ -131,6 +149,7 @@ export function validateMutationProgram(program: Program): void {
     insideBatchItem: false,
     batchIndexes: new Set<number>(),
     batchTaskVars: new Set<string>(),
+    bulkDeleteIndexes: new Set<number>(),
   });
 }
 
@@ -139,6 +158,9 @@ interface ValidationContext {
   // Program-wide batchItem uniqueness tracking (rule 9) — shared across levels.
   batchIndexes: Set<number>;
   batchTaskVars: Set<string>;
+  // Program-wide bulkDeleteItem index uniqueness (rule 9, slice 5) — a
+  // duplicate index would double-declare `const _d<i>` / `const _n<i>`.
+  bulkDeleteIndexes: Set<number>;
 }
 
 // Rules 2/3/10 for constructProject.
@@ -265,6 +287,16 @@ function validateBatchItemStmt(stmt: BatchItemNode, ctx: ValidationContext): voi
   validateStatementList(stmt.statements, { ...ctx, insideBatchItem: true });
 }
 
+// Rule 9 (bulkDeleteItem altitude): program-wide index uniqueness. A duplicate
+// index double-declares `const _d<i>` / `const _n<i>` (SyntaxError at runtime)
+// — the same hazard the batchItem _w<i> check above guards against.
+function validateBulkDeleteItemStmt(stmt: BulkDeleteItemNode, ctx: ValidationContext): void {
+  if (ctx.bulkDeleteIndexes.has(stmt.index)) {
+    throw new Error(`Invalid bulkDeleteItem: duplicate index ${stmt.index} — per-item _d<i>/_n<i> vars would collide.`);
+  }
+  ctx.bulkDeleteIndexes.add(stmt.index);
+}
+
 // Rule 10 catch-all: reserved emitter identifiers on the remaining binding statements.
 function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'bind') assertNotReserved(stmt.name, 'bind statement');
@@ -279,7 +311,8 @@ const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 
 const PROJECT_MOVE_POSITION_KINDS = new Set(['libraryBeginning', 'folderBeginning']);
 
 /**
- * Allowlist of OmniJS task methods callable via callMethod (Rule 12).
+ * OmniJS task methods that callMethod nodes may invoke (Rule 12).
+ * Validator-enforced: any method not in this list is rejected at validation time.
  * Deliberately minimal — extend per slice as new lowerings land.
  * Exported so callers (batch program builder, tool layer) can reference it.
  */
@@ -394,6 +427,8 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return [...exprRefs(stmt.project), ...(stmt.position.kind === 'folderBeginning' ? [stmt.position.var] : [])];
     case 'callMethod':
       return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
+    case 'deleteObject':
+      return exprRefs(stmt.target);
     case 'constructTask':
       return stmt.container.kind !== 'inbox' ? [stmt.container.var] : [];
     case 'constructProject':
@@ -493,6 +528,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'batchItem':
         validateBatchItemStmt(stmt, ctx);
+        break;
+      case 'bulkDeleteItem':
+        validateBulkDeleteItemStmt(stmt, ctx);
         break;
       default:
         break;

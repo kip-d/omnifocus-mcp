@@ -233,6 +233,35 @@ export function emitStmt(node: Stmt): string {
       const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
       return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
     }
+    case 'deleteObject':
+      return `deleteObject(${emitExpr(node.target)});`;
+    case 'bulkDeleteItem': {
+      // Ownership split (bulk-delete composition, mirrors batchItem):
+      // - `let _deleted = []` and `let _errors = []` are DECLARED at the
+      //   emitProgram level when the program contains any bulkDeleteItem —
+      //   NOT via bind statements: the validator reserves these names, and
+      //   bind emits `const` anyway. This case only READS/WRITES them.
+      // - The accumulators are NOT declared here so they stay hoisted to
+      //   program scope for the return envelope to consume (same discipline
+      //   as `_aborted` and the assignTags binding hoist lesson).
+      const idLit = JSON.stringify(node.id);
+      const dVar = `_d${node.index}`;
+      const nVar = `_n${node.index}`;
+      return [
+        `const ${dVar} = Task.byIdentifier(${idLit}) || null;`,
+        `if (${dVar} === null) {`,
+        `  _errors.push({ taskId: ${idLit}, error: "Task not found" });`,
+        '} else {',
+        '  try {',
+        `    const ${nVar} = ${dVar}.name;`,
+        `    deleteObject(${dVar});`,
+        `    _deleted.push({ id: ${idLit}, name: ${nVar} });`,
+        '  } catch (e) {',
+        `    _errors.push({ taskId: ${idLit}, error: String(e && e.message ? e.message : e) });`,
+        '  }',
+        '}',
+      ].join('\n');
+    }
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':
@@ -300,6 +329,12 @@ export function emitProgram(program: Program): string {
   // stopOnError ones) is the simplest correct shape: `_aborted` only ever
   // flips when a stopOnError item fails, so the gate is a no-op until then.
   const hasStopOnError = program.statements.some((s) => s.type === 'batchItem' && s.stopOnError);
+  // Bulk-delete scaffolding (owned HERE, mirrors the _aborted ownership pattern):
+  // when any bulkDeleteItem is present, declare `let _deleted = []` and
+  // `let _errors = []` at program scope so every item's push lands in the same
+  // accumulator and the return envelope can reference them. NOT via bind
+  // statements (validator reserves these names; bind emits `const` anyway).
+  const hasBulkDelete = program.statements.some((s) => s.type === 'bulkDeleteItem');
   const body = program.statements
     .map((s) => {
       const emitted = emitStmt(s);
@@ -309,7 +344,10 @@ export function emitProgram(program: Program): string {
   // `_warnings` is declared UNCONDITIONALLY as the first body line (OMN-137).
   // Conditional declaration would recreate the `appliedTags` ReferenceError class
   // (a later consumer referencing an undeclared binding); one dead `let` is free.
-  const decls = hasStopOnError ? 'let _warnings = [];\nlet _aborted = false;' : 'let _warnings = [];';
+  let decls = hasStopOnError ? 'let _warnings = [];\nlet _aborted = false;' : 'let _warnings = [];';
+  if (hasBulkDelete) {
+    decls += '\nlet _deleted = [];\nlet _errors = [];';
+  }
   const inner = [decls, snippets, body].filter((s) => s.length > 0).join('\n');
 
   // Snippet-dependency coverage guard (replaces the plan's original validator

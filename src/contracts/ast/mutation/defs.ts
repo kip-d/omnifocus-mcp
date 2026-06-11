@@ -25,11 +25,13 @@ import {
   assignTags,
   batchItem,
   bind,
+  bulkDeleteItem,
   callMethod,
   constructFolder,
   constructProject,
   constructTask,
   dateExpr,
+  deleteObject,
   enumRef,
   guard,
   json,
@@ -880,6 +882,128 @@ export function buildUpdateProjectProgram(input: UpdateProjectInput): Program {
 }
 
 // =============================================================================
+// LIFECYCLE LOWERINGS (slice 5) — complete + delete, single and bulk
+// =============================================================================
+
+export interface CompleteTaskInput {
+  taskId: string;
+  completionDate?: string | null;
+}
+export interface CompleteProjectInput {
+  projectId: string;
+  completionDate?: string | null;
+}
+
+/** Shared complete lowering (spec §4.2) — task/project differ only in the
+ *  resolve node, guard message, and envelope id key. completionDate is already
+ *  UTC-converted by the tool layer; absent/null/empty → bare markComplete() ("now"
+ *  — the truthy check collapses all three; `new Date("")` is Invalid Date). */
+function lowerComplete(kind: 'task' | 'project', id: string, completionDate?: string | null): Program {
+  const isTask = kind === 'task';
+  const v = isTask ? 'task' : 'proj';
+  const context = isTask ? 'complete_task' : 'complete_project';
+  const statements: Stmt[] = [
+    isTask ? resolveTask(v, id) : resolveProjectById(v, id),
+    guard(`${v} === null`, {
+      error: json(true),
+      message: json(`${isTask ? 'Task' : 'Project'} not found: ${id}`),
+      context: json(context),
+    }),
+    callMethod(ref(v), 'markComplete', completionDate ? [dateExpr(json(completionDate))] : []),
+    return_({
+      [isTask ? 'taskId' : 'projectId']: member(ref(v), 'id.primaryKey'),
+      name: member(ref(v), 'name'),
+      completed: json(true),
+      // Live read-back, not an echo (spec §3). Builder-internal raw — no user data.
+      completionDate: raw(`${v}.completionDate ? ${v}.completionDate.toISOString() : null`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a complete-task request — see lowerComplete. */
+export function buildCompleteTaskProgram(input: CompleteTaskInput): Program {
+  const _exhaustive: Record<keyof CompleteTaskInput, true> = { taskId: true, completionDate: true };
+  void _exhaustive;
+  return lowerComplete('task', input.taskId, input.completionDate);
+}
+
+/** Lower a complete-project request — see lowerComplete. */
+export function buildCompleteProjectProgram(input: CompleteProjectInput): Program {
+  const _exhaustive: Record<keyof CompleteProjectInput, true> = { projectId: true, completionDate: true };
+  void _exhaustive;
+  return lowerComplete('project', input.projectId, input.completionDate);
+}
+
+export interface DeleteTaskInput {
+  taskId: string;
+}
+export interface DeleteProjectInput {
+  projectId: string;
+}
+export interface BulkDeleteTasksInput {
+  taskIds: string[];
+}
+
+/** Shared single-delete lowering (spec §4.2): resolve → guard → capture name →
+ *  deleteObject → envelope. The id is a deliberate echo: the object no longer
+ *  exists to read (spec §3); name is captured pre-delete. */
+function lowerDelete(kind: 'task' | 'project', id: string): Program {
+  const isTask = kind === 'task';
+  const v = isTask ? 'task' : 'proj';
+  const nameVar = isTask ? 'taskName' : 'projName';
+  const context = isTask ? 'delete_task' : 'delete_project';
+  const statements: Stmt[] = [
+    isTask ? resolveTask(v, id) : resolveProjectById(v, id),
+    guard(`${v} === null`, {
+      error: json(true),
+      message: json(`${isTask ? 'Task' : 'Project'} not found: ${id}`),
+      context: json(context),
+    }),
+    bind(nameVar, member(ref(v), 'name')),
+    deleteObject(ref(v)),
+    return_({
+      [isTask ? 'taskId' : 'projectId']: json(id),
+      name: ref(nameVar),
+      deleted: json(true),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a delete-task request — see lowerDelete. */
+export function buildDeleteTaskProgram(input: DeleteTaskInput): Program {
+  const _exhaustive: Record<keyof DeleteTaskInput, true> = { taskId: true };
+  void _exhaustive;
+  return lowerDelete('task', input.taskId);
+}
+
+/** Lower a delete-project request — see lowerDelete. */
+export function buildDeleteProjectProgram(input: DeleteProjectInput): Program {
+  const _exhaustive: Record<keyof DeleteProjectInput, true> = { projectId: true };
+  void _exhaustive;
+  return lowerDelete('project', input.projectId);
+}
+
+/** Bulk task delete (spec §4.2): ids 1–100 by schema (an empty array would emit a
+ *  program whose envelope references undeclared accumulators); per-item
+ *  continue-on-error unroll; emitProgram owns the _deleted/_errors declarations. */
+export function buildBulkDeleteTasksProgram(input: BulkDeleteTasksInput): Program {
+  const _exhaustive: Record<keyof BulkDeleteTasksInput, true> = { taskIds: true };
+  void _exhaustive;
+  const statements: Stmt[] = input.taskIds.map((id, i) => bulkDeleteItem(id, i));
+  statements.push(
+    return_({
+      deleted: ref('_deleted'),
+      errors: ref('_errors'),
+      // Builder-internal raw: the only interpolation is the build-time count.
+      message: raw(`"Deleted " + _deleted.length + " of " + ${input.taskIds.length} + " tasks"`),
+    }),
+  );
+  return { statements, context: 'bulk_delete_tasks', snippetDeps: [] };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -921,6 +1045,29 @@ export const MUTATION_DEFS = {
     },
     build: buildUpdateProjectProgram,
   } as MutationDef<UpdateProjectInput>,
+  'complete/task': {
+    guard: (d) => validateTaskInSandbox(d.taskId, 'complete'),
+    build: buildCompleteTaskProgram,
+  } as MutationDef<CompleteTaskInput>,
+  'complete/project': {
+    guard: (d) => validateProjectInSandbox(d.projectId, 'complete'),
+    build: buildCompleteProjectProgram,
+  } as MutationDef<CompleteProjectInput>,
+  'delete/task': {
+    guard: (d) => validateTaskInSandbox(d.taskId, 'delete'),
+    build: buildDeleteTaskProgram,
+  } as MutationDef<DeleteTaskInput>,
+  'delete/project': {
+    guard: (d) => validateProjectInSandbox(d.projectId, 'delete'),
+    build: buildDeleteProjectProgram,
+  } as MutationDef<DeleteProjectInput>,
+  'bulk_delete/task': {
+    // ALL ids pre-flight before any delete executes (spec §2.1); no-op outside test mode.
+    guard: async (d) => {
+      await Promise.all(d.taskIds.map((id) => validateTaskInSandbox(id, 'bulk delete')));
+    },
+    build: buildBulkDeleteTasksProgram,
+  } as MutationDef<BulkDeleteTasksInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =

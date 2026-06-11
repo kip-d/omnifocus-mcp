@@ -28,6 +28,7 @@ import {
   buildCreateFolderScript,
   buildCompleteScript,
   buildDeleteScript,
+  buildBulkDeleteTasksScript,
   buildCreateTaskScript,
   buildBatchCreateTasksScript,
   type BatchTaskSpec,
@@ -44,17 +45,8 @@ import type {
   TaskCreateData,
 } from '../../contracts/mutations.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
-import type {
-  ScriptExecutionResult,
-  TaskCreationArgs,
-  TaskOperationResult,
-} from '../../omnifocus/script-response-types.js';
+import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
-import {
-  buildBulkDeleteTasksScript,
-  buildCompleteTaskScript,
-  buildDeleteTaskScript,
-} from '../../omnifocus/scripts/tasks.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
@@ -868,37 +860,30 @@ SAFETY:
     }
 
     try {
-      const completeScript = buildCompleteTaskScript({
+      const generated = await buildCompleteScript(
+        'task',
         taskId,
-        completionDate: compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : null,
-      });
-      const res = await this.execJson(completeScript);
-      const completeResult =
-        res && typeof res === 'object' && 'success' in res
-          ? (res as TaskOperationResult)
-          : { success: true, data: res };
+        compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : undefined,
+      );
+      const result = await this.execJson(generated.script);
 
-      if (typeof completeResult === 'object' && 'success' in completeResult && !completeResult.success) {
-        const error = (completeResult as { error?: string }).error;
-        if (error && typeof error === 'string' && this.isJxaAccessDenied(error)) {
+      if (isScriptError(result)) {
+        const errorMessage = result.error || 'Failed to complete task';
+        if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
           this.logger.info('JXA access denied for task completion');
           return this.jxaAccessDeniedError(timer);
         }
-        const errorMsg = error || 'Unknown error';
-        const details = (completeResult as { details?: unknown }).details;
         return createErrorResponseV2(
           'omnifocus_write',
           'SCRIPT_ERROR',
-          errorMsg,
+          typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
           'Verify task ID and OmniFocus state',
-          details,
+          result.details,
           timer.toMetadata(),
         );
       }
 
-      this.logger.info(`Completed task via JXA: ${taskId}`);
-
-      const parsedCompleteResult = (completeResult as { data?: unknown }).data;
+      this.logger.info(`Completed task via AST builder: ${taskId}`);
 
       this.cache.invalidateForTaskChange({
         operation: 'complete',
@@ -906,10 +891,10 @@ SAFETY:
         affectsOverdue: true,
       });
 
-      return createSuccessResponseV2('omnifocus_write', { task: parsedCompleteResult }, undefined, {
+      return createSuccessResponseV2('omnifocus_write', { task: result.data }, undefined, {
         ...timer.toMetadata(),
         completed_id: taskId,
-        method: 'jxa',
+        method: 'ast',
         input_params: { taskId },
       });
     } catch (jxaError: unknown) {
@@ -940,32 +925,24 @@ SAFETY:
     }
 
     try {
-      const deleteScript = buildDeleteTaskScript({ taskId });
-      const res = await this.execJson(deleteScript);
-      const deleteResult =
-        res && typeof res === 'object' && 'success' in res
-          ? (res as TaskOperationResult)
-          : { success: true, data: res };
+      const generated = await buildDeleteScript('task', taskId);
+      const result = await this.execJson(generated.script);
 
-      if (typeof deleteResult === 'object' && 'success' in deleteResult && !deleteResult.success) {
-        const error = (deleteResult as { error?: string }).error;
-        if (error && typeof error === 'string' && this.isJxaAccessDenied(error)) {
+      if (isScriptError(result)) {
+        const errorMessage = result.error || 'Failed to delete task';
+        if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
           this.logger.info('JXA failed for task deletion');
           return this.jxaAccessDeniedError(timer);
         }
-        const errorMsg = error || 'Unknown error';
-        const details = (deleteResult as { details?: unknown }).details;
         return createErrorResponseV2(
           'omnifocus_write',
           'SCRIPT_ERROR',
-          errorMsg,
+          typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
           'Verify task ID and permissions',
-          details,
+          result.details,
           timer.toMetadata(),
         );
       }
-
-      const parsedDeleteResult = (deleteResult as { data?: unknown }).data;
 
       // Conservative cache invalidation — we don't know which project/tags were affected
       this.cache.invalidateForTaskChange({
@@ -976,11 +953,11 @@ SAFETY:
       this.cache.invalidate('projects');
       this.cache.invalidate('tags');
 
-      this.logger.info(`Deleted task via JXA: ${taskId}`);
-      return createSuccessResponseV2('omnifocus_write', { task: parsedDeleteResult }, undefined, {
+      this.logger.info(`Deleted task via AST builder: ${taskId}`);
+      return createSuccessResponseV2('omnifocus_write', { task: result.data }, undefined, {
         ...timer.toMetadata(),
         deleted_id: taskId,
-        method: 'jxa',
+        method: 'ast',
         input_params: { taskId },
       });
     } catch (jxaError: unknown) {
@@ -1042,7 +1019,7 @@ SAFETY:
   }
 
   /**
-   * Bulk delete tasks via direct script execution.
+   * Bulk delete tasks via AST builder script execution.
    */
   private async handleBulkDeleteTasks(ids: string[], timer: OperationTimerV2): Promise<unknown> {
     const taskIds = ids.map((id) => convertToTaskId(id));
@@ -1050,10 +1027,10 @@ SAFETY:
     const errors: unknown[] = [];
 
     try {
-      const script = buildBulkDeleteTasksScript({
+      const generated = await buildBulkDeleteTasksScript({
         taskIds: taskIds.map((id) => id as string),
       });
-      const result = await this.execJson(script);
+      const result = await this.execJson(generated.script);
 
       if (isScriptError(result)) {
         errors.push({ error: result.error || 'Bulk delete failed' });
@@ -1127,7 +1104,12 @@ SAFETY:
         return this.handleProjectCreate(compiled as Extract<CompiledMutation, { operation: 'create' }>);
       case 'complete':
         if ('projectId' in compiled && compiled.projectId) {
-          return this.handleProjectComplete(compiled.projectId);
+          return this.handleProjectComplete(
+            compiled.projectId,
+            'completionDate' in compiled && compiled.completionDate
+              ? localToUTC(compiled.completionDate, 'completion')
+              : undefined,
+          );
         }
         return createErrorResponseV2(
           'omnifocus_write',
@@ -1231,11 +1213,12 @@ SAFETY:
 
   /**
    * Complete a project via buildCompleteScript (AST mutation builder).
+   * @param completionDate Optional UTC-formatted date string (pre-converted via localToUTC).
    */
-  private async handleProjectComplete(projectId: string): Promise<unknown> {
+  private async handleProjectComplete(projectId: string, completionDate?: string): Promise<unknown> {
     const timer = new OperationTimerV2();
 
-    const generatedScript = await buildCompleteScript('project', projectId);
+    const generatedScript = await buildCompleteScript('project', projectId, completionDate);
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
@@ -1291,7 +1274,7 @@ SAFETY:
     this.cache.invalidateProject(projectId);
     this.cache.invalidate('analytics');
 
-    return createSuccessResponseV2('omnifocus_write', { project: { deleted: true }, operation: 'delete' }, undefined, {
+    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'delete' }, undefined, {
       ...timer.toMetadata(),
       operation: 'delete',
     });
@@ -1451,8 +1434,9 @@ SAFETY:
 
     // OMN-119: batch creates run through a separate execution path that bypassed the
     // per-builder sandbox guard. Validate create sub-ops up front (no-op outside test mode)
-    // so a `batch` envelope cannot write outside the sandbox. Update/complete/delete sub-ops
-    // dispatch through the already-guarded single-op handlers.
+    // so a `batch` envelope cannot write outside the sandbox (tool-layer guard applied here).
+    // Update/complete/delete sub-ops now genuinely dispatch through builders whose
+    // MUTATION_DEFS guards run at dispatch (OMN-128 slice 5).
     const guardError = await this.guardBatchCreates(createOps, batchTimer);
     if (guardError) return guardError;
 
@@ -1653,7 +1637,10 @@ SAFETY:
         case 'update':
           return this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
         case 'complete':
-          return this.handleProjectComplete(resolvedId!);
+          return this.handleProjectComplete(
+            resolvedId!,
+            op.completionDate ? localToUTC(op.completionDate, 'completion') : undefined,
+          );
         case 'delete':
           return this.handleProjectDelete(resolvedId!);
         default:

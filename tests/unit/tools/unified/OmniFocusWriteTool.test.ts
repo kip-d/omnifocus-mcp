@@ -473,14 +473,9 @@ describe('OmniFocusWriteTool task operations', () => {
   // ─── COMPLETE ───────────────────────────────────────────────────────
 
   describe('task complete', () => {
-    it('completes a task and returns success', async () => {
-      // Mock buildScript (called by handleTaskComplete before execJson)
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('complete-script') };
-
-      execJsonSpy.mockResolvedValue({
-        success: true,
-        data: { id: 'task-done', name: 'Done Task', completed: true },
-      });
+    it('completes a task and returns success with taskId (AST envelope)', async () => {
+      // New AST envelope: {taskId, name, completed: true} — no legacy `id` key, no inner `success`
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ taskId: 'task-done', name: 'Done Task', completed: true }));
 
       const result = (await tool.execute({
         mutation: {
@@ -491,6 +486,11 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result.success).toBe(true);
+      // task envelope is result.data.task; new key is taskId (spec §2.3)
+      expect(result.data.task.taskId).toBe('task-done');
+      expect(result.data.task.completed).toBe(true);
+      // metadata carries completed_id for downstream consumers
+      expect(result.metadata.completed_id).toBe('task-done');
       expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
         expect.objectContaining({
           operation: 'complete',
@@ -500,13 +500,8 @@ describe('OmniFocusWriteTool task operations', () => {
       );
     });
 
-    it('handles COMPLETE_TASK_SCRIPT error', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('complete-script') };
-
-      execJsonSpy.mockResolvedValue({
-        success: false,
-        error: 'Task not found',
-      });
+    it('handles complete error via isScriptError path', async () => {
+      execJsonSpy.mockResolvedValue(createScriptError('Task not found', 'complete'));
 
       const result = (await tool.execute({
         mutation: {
@@ -523,13 +518,9 @@ describe('OmniFocusWriteTool task operations', () => {
   // ─── DELETE ─────────────────────────────────────────────────────────
 
   describe('task delete', () => {
-    it('deletes a task and returns success', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('delete-script') };
-
-      execJsonSpy.mockResolvedValue({
-        success: true,
-        data: { id: 'task-del', name: 'Deleted Task', deleted: true },
-      });
+    it('deletes a task and returns success with taskId (AST envelope)', async () => {
+      // New AST envelope: {taskId, name, deleted: true} — no legacy `id` key, no inner `success`
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ taskId: 'task-del', name: 'Deleted Task', deleted: true }));
 
       const result = (await tool.execute({
         mutation: {
@@ -540,6 +531,11 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result.success).toBe(true);
+      // task envelope exposes taskId (spec §2.3)
+      expect(result.data.task.taskId).toBe('task-del');
+      expect(result.data.task.deleted).toBe(true);
+      // metadata carries deleted_id for downstream consumers
+      expect(result.metadata.deleted_id).toBe('task-del');
       expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
         expect.objectContaining({
           operation: 'delete',
@@ -552,13 +548,8 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(mockCache.invalidate).toHaveBeenCalledWith('tags');
     });
 
-    it('handles DELETE_TASK_SCRIPT error', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('delete-script') };
-
-      execJsonSpy.mockResolvedValue({
-        success: false,
-        error: 'Task not found: bad-id',
-      });
+    it('handles delete error via isScriptError path', async () => {
+      execJsonSpy.mockResolvedValue(createScriptError('Task not found: bad-id', 'delete'));
 
       const result = (await tool.execute({
         mutation: {
@@ -575,9 +566,8 @@ describe('OmniFocusWriteTool task operations', () => {
   // ─── BULK DELETE ────────────────────────────────────────────────────
 
   describe('bulk_delete tasks', () => {
-    it('bulk deletes tasks via BULK_DELETE_TASKS_SCRIPT', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('bulk-delete-script') };
-
+    it('bulk deletes tasks via AST buildBulkDeleteTasksScript', async () => {
+      // The handler now calls the AST builder and executes generated.script
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
           deleted: [
@@ -880,9 +870,8 @@ describe('OmniFocusWriteTool task operations', () => {
 
   describe('project complete', () => {
     it('completes a project via buildCompleteScript and invalidates cache', async () => {
-      execJsonSpy.mockResolvedValue(
-        createScriptSuccess({ success: true, projectId: 'proj-done', name: 'Done', completed: true }),
-      );
+      // Clean AST envelope — no inner `success` key (spec §2.3)
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ projectId: 'proj-done', name: 'Done', completed: true }));
 
       const result = (await tool.execute({
         mutation: {
@@ -897,6 +886,31 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.operation).toBe('complete');
       expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-done');
       expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+    });
+
+    it('forwards completionDate through handleProjectComplete to buildCompleteScript', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildCompleteScript').mockResolvedValue({
+        script: 'mock complete script',
+        operation: 'complete',
+        target: 'project',
+        description: 'mock',
+      });
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ projectId: 'proj-cd', name: 'CD', completed: true, completionDate: '2026-01-15' }),
+      );
+
+      await tool.execute({
+        mutation: {
+          operation: 'complete',
+          target: 'project',
+          id: 'proj-cd',
+          completionDate: '2026-01-15',
+        },
+      });
+
+      // Verify completionDate was forwarded (as localToUTC-converted string containing the date)
+      expect(buildSpy).toHaveBeenCalledWith('project', 'proj-cd', expect.stringContaining('2026-01-15'));
+      buildSpy.mockRestore();
     });
 
     it('returns error when script fails', async () => {
@@ -915,8 +929,9 @@ describe('OmniFocusWriteTool task operations', () => {
   });
 
   describe('project delete', () => {
-    it('deletes a project via buildDeleteScript and invalidates cache', async () => {
-      execJsonSpy.mockResolvedValue(createScriptSuccess({ success: true, projectId: 'proj-del', deleted: true }));
+    it('deletes a project via buildDeleteScript and returns AST envelope in project (spec §2.3)', async () => {
+      // New envelope: {projectId, name, deleted: true} — handler passes result.data through (no hardcoded {deleted: true})
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ projectId: 'proj-del', name: 'Old Project', deleted: true }));
 
       const result = (await tool.execute({
         mutation: {
@@ -928,6 +943,8 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project).toBeDefined();
+      // projectId from the AST envelope must flow through to the response
+      expect(result.data.project.projectId).toBe('proj-del');
       expect(result.data.project.deleted).toBe(true);
       expect(result.data.operation).toBe('delete');
       expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-del');

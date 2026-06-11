@@ -10,6 +10,7 @@ import {
   guard,
   resolveProject,
   resolveParentTask,
+  resolveTask,
   bind,
   assignTags,
   setProp,
@@ -18,6 +19,9 @@ import {
   ref,
   raw,
   json,
+  deleteObject,
+  bulkDeleteItem,
+  type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -243,6 +247,33 @@ describe('resolution-guard discipline', () => {
     expect(() => validateMutationProgram(good)).not.toThrow();
   });
 
+  it('rule 7: deleteObject consuming an unguarded resolve bind is rejected', () => {
+    const program = {
+      statements: [resolveTask('task', 't1'), deleteObject(ref('task')), return_({ ok: json(true) })],
+      context: 'delete_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/guard/i);
+  });
+
+  it('rule 7: deleteObject after an intervening guard passes', () => {
+    const program = {
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', {
+          error: json(true),
+          message: json('Task not found: t1'),
+          context: json('delete_task'),
+        }),
+        deleteObject(ref('task')),
+        return_({ deleted: json(true) }),
+      ],
+      context: 'delete_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
   it('applies the same discipline to resolveParentTask consumed as a parentTask container', () => {
     const bad = {
       ...ok,
@@ -399,9 +430,27 @@ describe('batchItem uniqueness', () => {
   });
 });
 
+describe('bulkDeleteItem uniqueness (rule 9)', () => {
+  const bulkProgram = (items: ReturnType<typeof bulkDeleteItem>[]): Program => ({
+    context: 'bulk_delete_tasks',
+    snippetDeps: [],
+    statements: [...items, return_({ deleted: ref('_deleted'), errors: ref('_errors') })],
+  });
+
+  it('accepts distinct bulkDeleteItem indexes', () => {
+    expect(() => validateMutationProgram(bulkProgram([bulkDeleteItem('a', 0), bulkDeleteItem('b', 1)]))).not.toThrow();
+  });
+
+  it('rejects duplicate bulkDeleteItem index values', () => {
+    expect(() => validateMutationProgram(bulkProgram([bulkDeleteItem('a', 0), bulkDeleteItem('b', 0)]))).toThrow(
+      /duplicate.*index/i,
+    );
+  });
+});
+
 describe('reserved emitter identifiers', () => {
   it('exports the reserved list for the batch program builder', () => {
-    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted']);
+    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors']);
   });
 
   it('rejects a bind statement named _warnings', () => {
@@ -458,5 +507,16 @@ describe('reserved emitter identifiers', () => {
       statements: [bind('_warning', raw('1')), bind('_w', raw('1')), bind('_wx1', raw('1')), done],
     };
     expect(() => validateMutationProgram(good)).not.toThrow();
+  });
+
+  it('rule 10: _deleted/_errors and _d<i>/_n<i> are reserved emitter identifiers', () => {
+    for (const name of ['_deleted', '_errors', '_d0', '_n12']) {
+      const program: Program = {
+        statements: [bind(name, raw('[]')), return_({ ok: json(true) })],
+        context: 'x',
+        snippetDeps: [],
+      };
+      expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
+    }
   });
 });

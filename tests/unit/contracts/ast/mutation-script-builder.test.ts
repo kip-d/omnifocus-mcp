@@ -7,9 +7,8 @@ import {
   buildUpdateProjectScript,
   buildCompleteScript,
   buildDeleteScript,
-  buildBatchScript,
   buildBatchCreateTasksScript,
-  buildBulkDeleteScript,
+  buildBulkDeleteTasksScript,
   validateBatchCreateOps,
   type GeneratedMutationScript,
 } from '../../../../src/contracts/ast/mutation-script-builder.js';
@@ -755,85 +754,122 @@ describe('buildUpdateProjectScript (OMN-128 AST emission)', () => {
   });
 });
 
-describe('buildCompleteScript', () => {
-  it('generates valid script for task completion', async () => {
-    const result = await buildCompleteScript('task', 'task-123');
+// OMN-128 slice 5: buildCompleteScript emits ONE OmniJS program from the
+// mutation AST (dispatchMutation → emitProgram → wrapInLauncher) — the legacy
+// '(' + island concatenation and flattenedTasks.find O(n) lookup are gone.
+// Lowering details (vm execution, guard short-circuits) are covered in
+// tests/unit/contracts/ast/mutation/complete.test.ts.
+describe('buildCompleteScript (OMN-128 AST emission)', () => {
+  it('wraps ONE OmniJS program in the data-free launcher for task', async () => {
+    const { script, operation, target, description } = await buildCompleteScript('task', 'task-123');
 
-    expect(result.script).toContain('task-123');
-    expect(result.script).toContain('complete');
-    expect(result.operation).toBe('complete');
-    expect(result.target).toBe('task');
+    expect(operation).toBe('complete');
+    expect(target).toBe('task');
+    expect(description).toBe('Complete task: task-123');
+    expect(script).toContain("Application('OmniFocus')");
+    expect(script).toContain('app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Task.byIdentifier("task-123")');
+    expect(program).toContain('Task not found: task-123');
+    expect(program).toContain('markComplete()');
+    expect(program).toContain('completed: true');
+    expect(script).not.toContain('${'); // no template interpolation residue
   });
 
-  it('generates valid script for project completion', async () => {
-    const result = await buildCompleteScript('project', 'project-123');
+  it('wraps ONE OmniJS program in the data-free launcher for project', async () => {
+    const { script, operation, target, description } = await buildCompleteScript('project', 'project-123');
 
-    expect(result.script).toContain('project-123');
-    expect(result.operation).toBe('complete');
-    expect(result.target).toBe('project');
+    expect(operation).toBe('complete');
+    expect(target).toBe('project');
+    expect(description).toBe('Complete project: project-123');
+    expect(script).toContain("Application('OmniFocus')");
+    expect(script).toContain('app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Project.byIdentifier("project-123")');
+    expect(program).toContain('Project not found: project-123');
+    expect(program).toContain('markComplete()');
   });
 
-  it('handles custom completion date', async () => {
-    const result = await buildCompleteScript('task', 'task-123', '2025-11-24');
+  it('passes completionDate to markComplete via dateExpr when provided', async () => {
+    const { script } = await buildCompleteScript('task', 'task-123', '2025-11-24');
 
-    expect(result.script).toContain('2025-11-24');
-    expect(result.script).toContain('completionDate');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('markComplete(new Date("2025-11-24"))');
+    // completionDate live read-back is in the envelope
+    expect(program).toContain('completionDate');
   });
 
-  it('includes markComplete call', async () => {
-    const result = await buildCompleteScript('task', 'task-123');
+  it('emits bare markComplete() (no arg) when no completionDate is given', async () => {
+    const { script } = await buildCompleteScript('task', 'task-123');
 
-    expect(result.script).toContain('markComplete');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('markComplete()');
+    // Should not inject a Date arg
+    expect(program).not.toContain('markComplete(new Date');
   });
 
-  it('does not hardcode completed: true in outer return for projects', async () => {
-    const result = await buildCompleteScript('project', 'project-123');
+  it('live-reads completionDate from the object instead of echoing the input', async () => {
+    const { script } = await buildCompleteScript('project', 'project-123', '2025-11-24');
 
-    // The outer script should return the bridge result directly (like buildDeleteScript),
-    // not construct a new object with hardcoded completed: true.
-    // The correct pattern is: return JSON.stringify(result)
-    expect(result.script).toContain('return JSON.stringify(result)');
+    const program = extractOmniJsProgram(script);
+    // Live read-back pattern (spec §3): not an echo of the input string
+    expect(program).toMatch(/completionDate.*toISOString/);
   });
 
-  it('checks result.success before reporting completion for projects', async () => {
-    const result = await buildCompleteScript('project', 'project-123');
+  it('uses byIdentifier (O(1)) — the legacy flattenedTasks.find O(n) loop is gone', async () => {
+    const { script } = await buildCompleteScript('task', 'task-123');
+    const { script: pscript } = await buildCompleteScript('project', 'project-123');
 
-    // Like buildDeleteScript, should check result.success and return error if not successful
-    expect(result.script).toContain('result.success');
+    expect(script).not.toContain('flattenedTasks.find');
+    expect(pscript).not.toContain('flattenedProjects.find');
+    // No legacy island concatenation pattern
+    expect(script).not.toContain("'(' +");
+    expect(pscript).not.toContain("'(' +");
   });
 
-  it('passes completionDate to markComplete for projects', async () => {
-    const result = await buildCompleteScript('project', 'project-123', '2025-11-24');
+  it('generates syntactically valid JavaScript (launcher + decoded program)', async () => {
+    const { script } = await buildCompleteScript('task', 'task-123', '2025-11-24');
 
-    // markComplete should receive the completion date inside the bridge script
-    expect(result.script).toContain('markComplete');
-    expect(result.script).toContain('2025-11-24');
-  });
-
-  it('uses OmniJS bridge for project lookup by id.primaryKey', async () => {
-    const result = await buildCompleteScript('project', 'project-123');
-
-    // Should use id.primaryKey for lookup (correct for both tasks and projects)
-    expect(result.script).toContain('id.primaryKey');
-    expect(result.script).toContain('flattenedProjects');
+    expect(() => Function(script)).not.toThrow();
+    expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
   });
 });
 
-describe('buildDeleteScript', () => {
-  it('generates valid script for task deletion', async () => {
-    const result = await buildDeleteScript('task', 'task-123');
+// OMN-128 slice 5: buildDeleteScript emits ONE OmniJS program from the
+// mutation AST (dispatchMutation → emitProgram → wrapInLauncher) — the legacy
+// '(' + island concatenation and flattenedTasks.find O(n) loop are gone.
+// Lowering details (vm execution, guard short-circuits) are covered in
+// tests/unit/contracts/ast/mutation/delete.test.ts.
+describe('buildDeleteScript (OMN-128 AST emission)', () => {
+  it('wraps ONE OmniJS program in the data-free launcher for task', async () => {
+    const { script, operation, target, description } = await buildDeleteScript('task', 'task-123');
 
-    expect(result.script).toContain('task-123');
-    expect(result.operation).toBe('delete');
-    expect(result.target).toBe('task');
+    expect(operation).toBe('delete');
+    expect(target).toBe('task');
+    expect(description).toBe('Delete task: task-123');
+    expect(script).toContain("Application('OmniFocus')");
+    expect(script).toContain('app.evaluateJavascript(');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Task.byIdentifier("task-123")');
+    expect(program).toContain('Task not found: task-123');
+    expect(program).toContain('deleteObject(');
+    expect(script).not.toContain('${'); // no template interpolation residue
   });
 
-  it('generates valid script for project deletion', async () => {
-    const result = await buildDeleteScript('project', 'project-123');
+  it('wraps ONE OmniJS program in the data-free launcher for project', async () => {
+    const { script, operation, target, description } = await buildDeleteScript('project', 'project-123');
 
-    expect(result.script).toContain('project-123');
-    expect(result.operation).toBe('delete');
-    expect(result.target).toBe('project');
+    expect(operation).toBe('delete');
+    expect(target).toBe('project');
+    expect(description).toBe('Delete project: project-123');
+
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Project.byIdentifier("project-123")');
+    expect(program).toContain('Project not found: project-123');
+    expect(program).toContain('deleteObject(');
   });
 
   it('uses deleteObject() — the correct OmniJS API for deletion', async () => {
@@ -841,8 +877,8 @@ describe('buildDeleteScript', () => {
     const projectResult = await buildDeleteScript('project', 'proj-123');
 
     // OmniJS uses deleteObject(item) — not item.remove() (which doesn't exist)
-    expect(taskResult.script).toContain('deleteObject(item)');
-    expect(projectResult.script).toContain('deleteObject(item)');
+    expect(extractOmniJsProgram(taskResult.script)).toContain('deleteObject(');
+    expect(extractOmniJsProgram(projectResult.script)).toContain('deleteObject(');
   });
 
   it('does NOT use item.remove() — that method does not exist in OmniJS', async () => {
@@ -852,151 +888,70 @@ describe('buildDeleteScript', () => {
     expect(taskResult.script).not.toContain('item.remove()');
     expect(projectResult.script).not.toContain('item.remove()');
   });
-});
 
-describe('buildBatchScript', () => {
-  it('generates valid script for batch creates', () => {
-    const result = buildBatchScript('task', [
-      { operation: 'create', target: 'task', data: { name: 'Task 1' } },
-      { operation: 'create', target: 'task', data: { name: 'Task 2' } },
-    ]);
+  it('uses byIdentifier (O(1)) — the legacy flattenedTasks.find O(n) loop is gone', async () => {
+    const { script } = await buildDeleteScript('task', 'task-123');
+    const { script: pscript } = await buildDeleteScript('project', 'project-123');
 
-    expect(result.script).toContain('Task 1');
-    expect(result.script).toContain('Task 2');
-    expect(result.operation).toBe('batch');
-    expect(result.target).toBe('task');
+    expect(script).not.toContain('flattenedTasks.find');
+    expect(pscript).not.toContain('flattenedProjects.find');
+    // No legacy island concatenation pattern
+    expect(script).not.toContain("'(' +");
+    expect(pscript).not.toContain("'(' +");
   });
 
-  it('generates valid script for batch updates', () => {
-    const result = buildBatchScript('task', [
-      { operation: 'update', target: 'task', id: 'task-1', changes: { flagged: true } },
-      { operation: 'update', target: 'task', id: 'task-2', changes: { flagged: false } },
-    ]);
+  it('generates syntactically valid JavaScript (launcher + decoded program)', async () => {
+    const { script } = await buildDeleteScript('task', 'task-123');
 
-    expect(result.script).toContain('task-1');
-    expect(result.script).toContain('task-2');
-  });
-
-  it('handles mixed operations', () => {
-    const result = buildBatchScript('task', [
-      { operation: 'create', target: 'task', data: { name: 'New Task' } },
-      { operation: 'update', target: 'task', id: 'task-1', changes: { name: 'Updated' } },
-    ]);
-
-    expect(result.script).toContain('New Task');
-    expect(result.script).toContain('Updated');
-  });
-
-  it('uses OmniJS bridge for project lookup instead of JXA .id()', () => {
-    const result = buildBatchScript('task', [
-      { operation: 'create', target: 'task', data: { name: 'Task', projectId: 'proj-id' } },
-    ]);
-
-    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
-    expect(result.script).toContain('Project.byIdentifier');
-    // Should NOT use JXA .id() comparison which returns a different value
-    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
-  });
-
-  it('supports tempId for parent references', () => {
-    const result = buildBatchScript(
-      'task',
-      [
-        { operation: 'create', target: 'task', data: { name: 'Parent' }, tempId: 'temp-1' },
-        { operation: 'create', target: 'task', data: { name: 'Child' }, parentTempId: 'temp-1' },
-      ],
-      { createSequentially: true },
-    );
-
-    expect(result.script).toContain('temp-1');
-    expect(result.script).toContain('Parent');
-    expect(result.script).toContain('Child');
-  });
-
-  it('respects createSequentially option', () => {
-    const result = buildBatchScript('task', [{ operation: 'create', target: 'task', data: { name: 'Task' } }], {
-      createSequentially: true,
-    });
-
-    expect(result.script).toContain('sequential');
-  });
-
-  it('returns tempId mapping in metadata', () => {
-    const result = buildBatchScript(
-      'task',
-      [{ operation: 'create', target: 'task', data: { name: 'Task' }, tempId: 'temp-1' }],
-      { returnMapping: true },
-    );
-
-    expect(result.script).toContain('tempIdMapping');
-  });
-
-  it('uses OmniJS bridge for batch update task lookup instead of JXA .id()', () => {
-    const result = buildBatchScript('task', [
-      { operation: 'update', target: 'task', id: 'task-abc', changes: { flagged: true } },
-    ]);
-
-    // Should use OmniJS Task.byIdentifier for correct id.primaryKey matching
-    expect(result.script).toContain('Task.byIdentifier');
-    // Should NOT use JXA .id() comparison which returns a different ID format
-    expect(result.script).not.toMatch(/allTasks\[.*\]\.id\(\)\s*===\s*op\.id/);
-  });
-
-  it('returns OmniJS id.primaryKey instead of JXA .id() for batch-created tasks', () => {
-    const result = buildBatchScript('task', [{ operation: 'create', target: 'task', data: { name: 'Batch Task' } }]);
-
-    // Should bridge to OmniJS to get id.primaryKey for the response
-    expect(result.script).toContain('id.primaryKey');
-    // Should NOT use bare `const taskId = task.id();` as the final response ID
-    expect(result.script).not.toMatch(/const taskId = task\.id\(\);/);
+    expect(() => Function(script)).not.toThrow();
+    expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
   });
 });
 
-describe('buildBulkDeleteScript', () => {
-  it('generates valid script for bulk task deletion', async () => {
-    const result = await buildBulkDeleteScript('task', ['task-1', 'task-2', 'task-3']);
+// OMN-128 slice 5: buildBulkDeleteTasksScript emits ONE launcher-wrapped OmniJS
+// program from the mutation AST (dispatchMutation 'bulk_delete/task' →
+// emitProgram → wrapInLauncher). The legacy buildBulkDeleteScript is deleted
+// (OMN-128 slice 5 cleanup) — this is the sole bulk-delete export.
+describe('buildBulkDeleteTasksScript (AST)', () => {
+  it('emits one launcher-wrapped program with per-id blocks', async () => {
+    const result = await buildBulkDeleteTasksScript({ taskIds: ['t1', 't2'] });
 
-    expect(result.script).toContain('task-1');
-    expect(result.script).toContain('task-2');
-    expect(result.script).toContain('task-3');
     expect(result.operation).toBe('bulk_delete');
     expect(result.target).toBe('task');
+    expect(result.script).toContain('evaluateJavascript'); // launcher boundary
+    expect(result.description).toContain('2 task');
+
+    const program = extractOmniJsProgram(result.script);
+    expect(program).toContain('Task.byIdentifier("t1")');
+    expect(program).toContain('Task.byIdentifier("t2")');
   });
 
-  it('generates valid script for bulk project deletion', async () => {
-    const result = await buildBulkDeleteScript('project', ['proj-1', 'proj-2']);
+  it('uses byIdentifier for each id (O(1)) — not flattenedTasks.find', async () => {
+    const { script } = await buildBulkDeleteTasksScript({ taskIds: ['id-1', 'id-2', 'id-3'] });
 
-    expect(result.script).toContain('proj-1');
-    expect(result.script).toContain('proj-2');
-    expect(result.target).toBe('project');
-  });
-
-  it('iterates through IDs', async () => {
-    const result = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
-
-    expect(result.script).toMatch(/forEach|for.*\(|map/);
-  });
-
-  it('returns count of deleted items', async () => {
-    const result = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
-
-    expect(result.script).toContain('deletedCount');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('Task.byIdentifier("id-1")');
+    expect(program).toContain('Task.byIdentifier("id-2")');
+    expect(program).toContain('Task.byIdentifier("id-3")');
+    expect(program).not.toContain('flattenedTasks.find');
   });
 
   it('uses deleteObject() — the correct OmniJS API for deletion', async () => {
-    const taskResult = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
-    const projectResult = await buildBulkDeleteScript('project', ['id-1', 'id-2']);
+    const { script } = await buildBulkDeleteTasksScript({ taskIds: ['id-1'] });
 
-    expect(taskResult.script).toContain('deleteObject(item)');
-    expect(projectResult.script).toContain('deleteObject(item)');
+    const program = extractOmniJsProgram(script);
+    expect(program).toContain('deleteObject(');
   });
 
-  it('does NOT use item.remove() — that method does not exist in OmniJS', async () => {
-    const taskResult = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
-    const projectResult = await buildBulkDeleteScript('project', ['id-1', 'id-2']);
+  it('generates syntactically valid JavaScript (launcher + decoded program)', async () => {
+    const { script } = await buildBulkDeleteTasksScript({ taskIds: ['id-1', 'id-2'] });
 
-    expect(taskResult.script).not.toContain('item.remove()');
-    expect(projectResult.script).not.toContain('item.remove()');
+    expect(() => Function(script)).not.toThrow();
+    expect(() => Function(extractOmniJsProgram(script))).not.toThrow();
+  });
+
+  it('throws when taskIds is empty (defense-in-depth: emitter accumulators require at least one id)', async () => {
+    await expect(buildBulkDeleteTasksScript({ taskIds: [] })).rejects.toThrow(/at least one/);
   });
 });
 
@@ -1004,13 +959,12 @@ describe('script structure consistency', () => {
   it('all scripts return GeneratedMutationScript interface', async () => {
     const scripts: GeneratedMutationScript[] = await Promise.all([
       buildCreateTaskScript({ name: 'Test' }),
-      Promise.resolve(buildCreateProjectScript({ name: 'Test' })),
+      buildCreateProjectScript({ name: 'Test' }),
       buildUpdateTaskScript('id', { name: 'Test' }),
       buildUpdateProjectScript('id', { name: 'Test' }),
       buildCompleteScript('task', 'id'),
       buildDeleteScript('task', 'id'),
-      Promise.resolve(buildBatchScript('task', [])),
-      buildBulkDeleteScript('task', ['id']),
+      buildBulkDeleteTasksScript({ taskIds: ['id'] }),
     ]);
 
     scripts.forEach((result) => {
