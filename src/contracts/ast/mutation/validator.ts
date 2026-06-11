@@ -126,7 +126,10 @@ function assertNotReserved(name: string, where: string): void {
  *     and taskVar itself must not be a reserved identifier. The same
  *     duplicate-index rule applies across a program's bulkDeleteItem nodes:
  *     a duplicate index would double-declare `const _d<i>` / `const _n<i>`
- *     (SyntaxError at runtime).
+ *     (SyntaxError at runtime). Likewise, at most ONE `constructTagPath` per
+ *     statement-list level: its emission declares the fixed `const _tagPath`
+ *     intermediate, so a second at the same level would double-declare it
+ *     (SyntaxError at runtime) — fail loud at build time instead.
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
  *     resolveProjectById, resolveTag, constructProject, constructTask,
  *     constructFolder, constructTag, constructTagPath, assignTags, mergeRetag)
@@ -556,6 +559,10 @@ function validateResolutionGuardDiscipline(statements: Stmt[]): void {
 }
 
 function validateStatementList(statements: Stmt[], ctx: ValidationContext): void {
+  // Rule 9 (constructTagPath altitude): per-LIST counter — the hazard is a
+  // same-block duplicate `const _tagPath`; nested lists get their own scope
+  // via this function's recursion.
+  let tagPathCount = 0;
   for (const stmt of statements) {
     switch (stmt.type) {
       case 'constructProject':
@@ -605,6 +612,18 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'bulkDeleteItem':
         validateBulkDeleteItemStmt(stmt, ctx);
+        break;
+      case 'constructTagPath':
+        // Rule 9 (constructTagPath altitude): emission declares the fixed
+        // `const _tagPath` intermediate — a second at this level would
+        // double-declare it (SyntaxError at runtime).
+        tagPathCount++;
+        if (tagPathCount > 1) {
+          throw new Error(
+            'Invalid mutation program: at most one constructTagPath per statement-list level — ' +
+              'a second would double-declare the reserved "_tagPath" intermediate (SyntaxError at runtime).',
+          );
+        }
         break;
       default:
         break;

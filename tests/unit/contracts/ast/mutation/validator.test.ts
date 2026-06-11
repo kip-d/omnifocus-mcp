@@ -584,6 +584,19 @@ describe('constructTagPath reserved-identifier enforcement (rule 10)', () => {
     };
     expect(() => validateMutationProgram(program)).not.toThrow();
   });
+
+  it('rejects two constructTagPath statements at the same level (duplicate const _tagPath = SyntaxError)', () => {
+    const program: Program = {
+      statements: [
+        constructTagPath('_tag', '_created', json(['Work'])),
+        constructTagPath('_tag2', '_created2', json(['Home'])),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/at most one constructTagPath/i);
+  });
 });
 
 describe('moveTag position (rule 11 at the tag altitude)', () => {

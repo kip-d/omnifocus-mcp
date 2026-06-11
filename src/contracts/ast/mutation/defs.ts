@@ -11,6 +11,8 @@ import type {
   TaskUpdateData,
 } from '../../mutations.js';
 import {
+  isTestMode,
+  TEST_TAG_PREFIX,
   validateBatchTaskSpecs,
   validateFolderCreate,
   validateProjectCreate,
@@ -29,6 +31,8 @@ import {
   callMethod,
   constructFolder,
   constructProject,
+  constructTag,
+  constructTagPath,
   constructTask,
   dateExpr,
   deleteObject,
@@ -46,6 +50,7 @@ import {
   resolveParentTask,
   resolveProject,
   resolveProjectById,
+  resolveTag,
   resolveTask,
   return_,
   setProp,
@@ -55,6 +60,7 @@ import {
   type Program,
   type ProjectMovePosition,
   type Stmt,
+  type TagResolution,
   type TaskMovePosition,
 } from './types.js';
 
@@ -1004,6 +1010,131 @@ export function buildBulkDeleteTasksProgram(input: BulkDeleteTasksInput): Progra
 }
 
 // =============================================================================
+// TAG LOWERINGS (slice 6)
+// =============================================================================
+
+export interface TagCreateInput {
+  tagName: string;
+  parentTagName?: string;
+}
+
+/** Sandbox guard for tag ops (relocated from tag-mutation-script-builder.ts —
+ *  spec §2.1): in test mode every touched tag name must be __test- prefixed.
+ *  Sync (name-based; no DB lookup needed, unlike validateTaskInSandbox). */
+function validateTagMutation(tagName: string): void {
+  if (!isTestMode()) return;
+  if (!tagName.startsWith(TEST_TAG_PREFIX)) {
+    throw new Error(`TEST GUARD: Tag mutations must target "${TEST_TAG_PREFIX}"-prefixed tags. Got: "${tagName}"`);
+  }
+}
+
+/** Build-time ' : ' path split (spec §3): null = not a path. Throws carry the
+ *  legacy empty-segment message — the lowering converts to a constant error
+ *  program so the runtime envelope is unchanged. */
+function parseTagPathSegments(input: string): string[] | null {
+  if (!input.includes(' : ')) return null;
+  const segments = input.split(' : ').map((s) => s.trim());
+  if (segments.some((s) => s.length === 0)) {
+    throw new Error(`Invalid tag path: empty segment in "${input}"`);
+  }
+  return segments;
+}
+
+/** A constant `{error, message}` program (spec §3): build-time-decided input
+ *  errors keep their legacy runtime-envelope shape. */
+function constantErrorProgram(message: string, context: string): Program {
+  return {
+    statements: [return_({ error: json(true), message: json(message), context: json(context) })],
+    context,
+    snippetDeps: [],
+  };
+}
+
+/**
+ * Lower a tag-create request into a typed mutation Program (spec §4.2). Two
+ * build-time-decided forms: a `' : '` path lowers to constructTagPath (find-or-
+ * create walk, createdSegments envelope); a flat name lowers to dup-check →
+ * optional parent resolve+guard → constructTag → live-id envelope (the OMN-27
+ * JXA id bridge and its `'unknown'` sentinel are unrepresentable, spec §2.2).
+ */
+export function buildCreateTagProgram(data: TagCreateInput): Program {
+  // Compile-time exhaustiveness guard (same discipline as the other create
+  // lowerings): a new TagCreateInput field cannot be silently dropped.
+  const _exhaustive: Record<keyof TagCreateInput, true> = { tagName: true, parentTagName: true };
+  void _exhaustive;
+  const context = 'create_tag';
+
+  let segments: string[] | null;
+  try {
+    segments = parseTagPathSegments(data.tagName);
+  } catch (e) {
+    return constantErrorProgram((e as Error).message, context);
+  }
+
+  if (segments) {
+    if (data.parentTagName) {
+      return constantErrorProgram(
+        "Cannot use path syntax (' : ' separator) with parentTag parameter. Use either path syntax OR parentTag, not both.",
+        context,
+      );
+    }
+    const statements: Stmt[] = [
+      bind('_pathStr', json(data.tagName)),
+      constructTagPath('_tag', '_created', json(segments)),
+      return_({
+        action: json('created'),
+        tagName: member(ref('_tag'), 'name'),
+        tagId: member(ref('_tag'), 'id.primaryKey'),
+        path: ref('_pathStr'),
+        createdSegments: ref('_created'),
+        // Builder-internal raw: user data enters via the _pathStr bind, never inline.
+        message: raw(
+          '_created.length === 0 ? "Tag path \'" + _pathStr + "\' already exists" : "Created " + _created.length + " tag(s) in path \'" + _pathStr + "\'"',
+        ),
+      }),
+    ];
+    return { statements, context, snippetDeps: ['createTagPath'] };
+  }
+
+  const statements: Stmt[] = [
+    resolveTag('_dup', data.tagName),
+    guard('_dup !== null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' already exists`),
+      context: json(context),
+    }),
+  ];
+  let parentResolution: TagResolution = { kind: 'none' };
+  if (data.parentTagName) {
+    statements.push(
+      resolveTag('_parent', data.parentTagName),
+      guard('_parent === null', {
+        error: json(true),
+        message: json(`Parent tag not found: ${data.parentTagName}`),
+        context: json(context),
+      }),
+    );
+    parentResolution = { kind: 'resolved', var: '_parent' };
+  }
+  statements.push(
+    constructTag('_tag', json(data.tagName), parentResolution),
+    return_({
+      action: json('created'),
+      tagName: json(data.tagName),
+      tagId: member(ref('_tag'), 'id.primaryKey'),
+      parentTagName: data.parentTagName ? member(ref('_parent'), 'name') : json(null),
+      parentTagId: data.parentTagName ? member(ref('_parent'), 'id.primaryKey') : json(null),
+      message: json(
+        data.parentTagName
+          ? `Tag '${data.tagName}' created under '${data.parentTagName}'`
+          : `Tag '${data.tagName}' created successfully`,
+      ),
+    }),
+  );
+  return { statements, context, snippetDeps: [] };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -1068,6 +1199,15 @@ export const MUTATION_DEFS = {
     },
     build: buildBulkDeleteTasksProgram,
   } as MutationDef<BulkDeleteTasksInput>,
+  'create/tag': {
+    // Spec §2.1: guard EVERY name the op touches (parent included — stricter
+    // than legacy, sandbox-only).
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      if (d.parentTagName) validateTagMutation(d.parentTagName);
+    },
+    build: buildCreateTagProgram,
+  } as MutationDef<TagCreateInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =

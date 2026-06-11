@@ -720,9 +720,13 @@ describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (O
 //                   per-spec fields are covered by the BatchTaskSpec
 //                   exhaustiveness guard in defs.ts
 //   stopOnError  — BatchCreateTasksData option, not a settable data field
+//   tagName, parentTagName — fields of TagCreateInput (the tag-manage seam,
+//                   OMN-128 slice 6), a different schema this gate
+//                   intentionally does not cover (same category as
+//                   parentFolder)
 // A new entry forces a conscious choice rather than silently widening the
 // accepted-but-internal surface.
-const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId', 'specs', 'stopOnError'];
+const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId', 'specs', 'stopOnError', 'tagName', 'parentTagName'];
 
 // Strip comments before scanning the (checked-in, bounded) builder source:
 // it has a maintenance comment (`// ... if (data.X) ...`) that would
