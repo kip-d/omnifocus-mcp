@@ -471,12 +471,22 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
 
-  // Build the AST to check if empty
+  // OMN-157: dropped is the third terminal state, excluded by default. It is
+  // SYNTHETIC in OmniJS (no task.dropped property), so the default MUST route
+  // through the AST emitter (taskStatus !== Task.Status.Dropped) — a raw
+  // script-level check is a silent no-op. Gating mirrors the completed
+  // default: an explicit filter.dropped (incl. status:'dropped', which
+  // compiles onto it) or includeCompleted lifts it. isEmptyFilter and the
+  // description stay keyed to the user's filter (same convention as the
+  // count-path OMN-52 shim).
+  const effectiveFilter = !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+
+  // Build the AST to check if empty (user's filter, not the effective one)
   const ast = buildAST(filter);
   const isEmptyFilter = ast.type === 'literal' && ast.value === true;
 
   // Generate the filter predicate code
-  const filterCode = generateFilterCode(filter);
+  const filterCode = generateFilterCode(effectiveFilter);
 
   // Build description
   const filterDescription = describeFilterForScript(filter);
@@ -489,20 +499,16 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
 
   // Determine completion filter behavior
   // If filter explicitly sets completed, use that; otherwise, use includeCompleted option
+  // (completed IS a real OmniJS property, so the script-level check works here;
+  // the dropped default lives in effectiveFilter above)
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
   const completionCheck = filter.completed !== undefined ? '' : defaultCompletionCheck;
-
-  // OMN-157: dropped is the third terminal state — excluded by default with the
-  // same gating (explicit filter reference or includeCompleted lifts the check;
-  // status:'dropped' compiles to filter.dropped upstream).
-  const defaultDroppedCheck = includeCompleted ? '' : 'if (task.dropped) return;';
-  const droppedCheck = filter.dropped !== undefined ? '' : defaultDroppedCheck;
 
   const ctx: ScriptBuildContext = {
     filterCode,
     filterDescription,
     fieldProjection,
-    completionCheck: [completionCheck, droppedCheck].filter(Boolean).join('\n      '),
+    completionCheck,
     hasProjectPreamble: !!filterCode.preamble,
     projectValue: filter.projectId ?? filter.project,
     limit,
@@ -598,21 +604,21 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
 
-  const filterCode = generateFilterCode(filter);
+  // OMN-157: same default dropped-exclusion as buildFilteredTasksScript —
+  // routed through the AST because task.dropped is synthetic (emitter-only)
+  const effectiveFilter = !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+
+  const filterCode = generateFilterCode(effectiveFilter);
   const filterDescription = describeFilterForScript(filter);
   const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
 
   // Determine completion filter - exclude completed by default for inbox
+  // (completed is a real OmniJS property; dropped is handled in effectiveFilter)
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
-  const baseCompletionCheck =
+  const completionCheck =
     filter.completed !== undefined
       ? '' // AST handles it if explicitly set in filter
       : defaultCompletionCheck;
-
-  // OMN-157: same default exclusion for dropped (third terminal state)
-  const defaultDroppedCheck = includeCompleted ? '' : 'if (task.dropped) return;';
-  const droppedCheck = filter.dropped !== undefined ? '' : defaultDroppedCheck;
-  const completionCheck = [baseCompletionCheck, droppedCheck].filter(Boolean).join('\n      ');
 
   // Only include offset logic when offset > 0
   const useOffset = offset > 0;
