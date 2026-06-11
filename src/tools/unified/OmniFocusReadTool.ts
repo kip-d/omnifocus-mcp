@@ -183,7 +183,7 @@ FILTER OPERATORS:
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
 - folder (projects queries): "<name>" matches folder-name substring; null = top-level projects only (no containing folder)
-- logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
+- logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false
 
 RESPONSE CONTROL:
 - Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available)

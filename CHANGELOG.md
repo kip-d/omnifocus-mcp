@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Unsupported NOT filters reject instead of silently returning ALL tasks** (OMN-131) — `transformLogicalOperator`
+  special-cased only `NOT: { status: 'completed' | 'active' }`; every other NOT payload (e.g. `NOT: { tags: ... }`)
+  logged a console warning and compiled to an _empty_ filter — the query silently matched the whole database, with no
+  diagnostic visible to the caller. Unsupported payloads now throw a validation error (VALIDATION_ERROR in the failure
+  log, InvalidParams over MCP) whose message names the working alternatives: tag exclusion → `tags: { none: [...] }`,
+  flag exclusion → `flagged: false`. Rider fixed: a multi-key NOT (e.g. `{ status: 'completed', flagged: true }`) used
+  to take the status special-case and silently drop the other keys — it now rejects too. The supported status inversions
+  are unchanged.
 - **Task-side `{ matches }` regex patterns may contain `/` and can no longer inject code** (OMN-149) — The AST emitter's
   `matches` case interpolated the user pattern raw into a regex _literal_ (`/pattern/i`), so any in-contract pattern
   containing `/` (e.g. `OMN/142`) produced a syntax-broken script and a crafted pattern could break out of the literal

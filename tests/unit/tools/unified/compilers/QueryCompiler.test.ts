@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { QueryCompiler } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
@@ -686,32 +687,49 @@ describe('QueryCompiler', () => {
       });
     });
 
-    describe('NOT operator — non-status branches simplify to {} + warn', () => {
-      it('NOT: { flagged: true } returns {} and warns', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const result = compiler.transformFilters({ NOT: { flagged: true } });
-        expect(result).toEqual({});
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
-        warnSpy.mockRestore();
+    // OMN-131: unsupported NOT payloads used to warn + return {} — an EMPTY
+    // filter, i.e. match-everything. Silent wrong results are worse than an
+    // error, so they now throw a validation error with actionable
+    // alternatives instead.
+    describe('NOT operator — unsupported payloads reject loudly (OMN-131)', () => {
+      it('NOT: { flagged: true } throws, naming flagged: false as the alternative', () => {
+        expect(() => compiler.transformFilters({ NOT: { flagged: true } })).toThrowError(/flagged: false/);
       });
 
-      it('NOT with a date filter returns {} and warns', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const result = compiler.transformFilters({ NOT: { dueDate: { before: '2026-12-31' } } });
-        expect(result).toEqual({});
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
-        warnSpy.mockRestore();
+      it('NOT with a date filter throws a validation error', () => {
+        expect(() => compiler.transformFilters({ NOT: { dueDate: { before: '2026-12-31' } } })).toThrowError(/NOT/);
       });
 
-      it('NOT with a tag filter returns {} and warns', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const result = compiler.transformFilters({ NOT: { tags: { any: ['@home'] } } });
-        expect(result).toEqual({});
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Complex NOT operator simplified'));
-        warnSpy.mockRestore();
+      it('NOT with a tag filter throws, naming tags: { none } as the alternative', () => {
+        expect(() => compiler.transformFilters({ NOT: { tags: { any: ['@home'] } } })).toThrowError(/none/);
       });
 
-      it("NOT: { status: 'active' } inverts to completed:true (no warn)", () => {
+      it('the thrown error is a ZodError (surfaces as VALIDATION_ERROR / InvalidParams)', () => {
+        try {
+          compiler.transformFilters({ NOT: { tags: { any: ['@home'] } } });
+          expect.unreachable('should have thrown');
+        } catch (e) {
+          expect(e).toBeInstanceOf(z.ZodError);
+          const issue = (e as z.ZodError).issues[0];
+          expect(issue.path).toEqual(['query', 'filters', 'NOT']);
+        }
+      });
+
+      it('multi-key NOT throws even when status is present (no silent key drop)', () => {
+        // Previously NOT:{status:'completed', flagged:true} took the status
+        // special-case and silently DROPPED the flagged key.
+        expect(() => compiler.transformFilters({ NOT: { status: 'completed', flagged: true } })).toThrowError(/NOT/);
+      });
+
+      it('empty NOT: {} throws instead of silently matching everything', () => {
+        expect(() => compiler.transformFilters({ NOT: {} })).toThrowError(/NOT/);
+      });
+
+      it("NOT: { status: 'dropped' } throws (only completed/active invert cleanly)", () => {
+        expect(() => compiler.transformFilters({ NOT: { status: 'dropped' } })).toThrowError(/NOT/);
+      });
+
+      it("NOT: { status: 'active' } still inverts to completed:true (no warn, no throw)", () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const result = compiler.transformFilters({ NOT: { status: 'active' } });
         expect(result.completed).toBe(true);
