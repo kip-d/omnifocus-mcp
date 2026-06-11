@@ -387,12 +387,11 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
   // outer try/catch → error ends up in errors[] → ENTIRE dispatch refused
   // with successCount:0.
   //
-  // NOTE ON RESPONSE SHAPE: unlike single-op guards (which surface as
-  // success:false via createErrorResponseV2), handleBulkDeleteTasks wraps ALL
-  // errors — including the thrown guard error — in its catch block and returns
-  // success:true with data.successCount:0, data.errorCount:1, data.errors[].
-  // Documented current behavior; envelope follow-up tracked in OMN-144. The
-  // test asserts this shape.
+  // NOTE ON RESPONSE SHAPE (OMN-144): a fully-refused bulk delete now returns
+  // top-level success:false with error.code BULK_DELETE_FAILED — consistent
+  // with the single-op guard envelope for the same refusal. Per-item detail
+  // (successCount/errorCount/errors) rides error.details. Partial success
+  // remains success:true with loud data.errors[] (OMN-137 contract).
   //
   // This whole-dispatch refusal IS the OMN-120 non-bypass contract (guard must
   // cover every id before any mutation executes). The unguarded per-item
@@ -402,10 +401,11 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
   // all ids.
   //
   // The test asserts:
-  //   (a) the write response carries success:true but successCount:0, with the
-  //       TEST GUARD error text in data.errors[0].error
+  //   (a) the write response is a top-level failure (success:false,
+  //       BULK_DELETE_FAILED) with the TEST GUARD error text in the error
+  //       and per-item detail in error.details (successCount:0)
   //   (b) BOTH real task fixtures still exist (read-back succeeds for each)
-  it('bulk_delete with a bogus id in the list: guard refusal surfaced in data.errors with successCount:0; both real fixtures survive', async () => {
+  it('bulk_delete with a bogus id in the list: whole-dispatch guard refusal is a top-level failure (OMN-144); both real fixtures survive', async () => {
     const idA = await createTask({ name: BULK_TASK_A_NAME });
     const idB = await createTask({ name: BULK_TASK_B_NAME });
 
@@ -417,20 +417,23 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
       },
     });
 
-    // (a) The bulk handler wraps the guard throw in its catch block, so the
-    // top-level response is success:true with zero deletes and one error entry.
-    // The guard error text is in data.errors[0].error.
-    expect(writeRes.success, `unexpected hard failure, got: ${JSON.stringify(writeRes).slice(0, 400)}`).toBe(true);
-    const data = writeRes.data;
-    expect(data.successCount, `expected zero deletes due to guard refusal, got: ${data.successCount}`).toBe(0);
-    expect(
-      data.errorCount,
-      `expected one guard error entry, got errorCount: ${data.errorCount}`,
-    ).toBeGreaterThanOrEqual(1);
-    // The guard error text is in the errors array — not the top-level response.
-    const errText = JSON.stringify(data.errors ?? []);
-    expect(errText, `guard error text not in data.errors: ${errText}`).toContain('TEST GUARD');
+    // (a) Zero deletes + errors → top-level success:false, matching the
+    // single-op envelope for the same guard refusal (OMN-144).
+    expect(writeRes.success, `expected top-level failure, got: ${JSON.stringify(writeRes).slice(0, 400)}`).toBe(false);
+    expect(writeRes.error?.code, `expected BULK_DELETE_FAILED, got: ${writeRes.error?.code}`).toBe(
+      'BULK_DELETE_FAILED',
+    );
+    // Guard error text surfaces in the top-level error (message and/or details).
+    const errText = JSON.stringify(writeRes.error ?? {});
+    expect(errText, `guard error text not in error: ${errText.slice(0, 400)}`).toContain('TEST GUARD');
     expect(errText).toContain('outside sandbox');
+    // Per-item detail preserved in error.details.
+    const details = writeRes.error?.details as { successCount?: number; errorCount?: number };
+    expect(details?.successCount, `expected zero deletes due to guard refusal, got: ${details?.successCount}`).toBe(0);
+    expect(
+      details?.errorCount,
+      `expected one guard error entry, got errorCount: ${details?.errorCount}`,
+    ).toBeGreaterThanOrEqual(1);
 
     // (b) Both real tasks survive — guard ran before any delete script.
     const taskA = await readTaskById(idA, ['name']);
