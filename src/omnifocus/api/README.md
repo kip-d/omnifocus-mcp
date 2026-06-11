@@ -2,19 +2,26 @@
 
 This directory contains the official TypeScript definitions for OmniFocus automation.
 
-## Current Version: OmniFocus.d.ts → OmniFocus-4.8.6-d.ts
+## Current Version: OmniFocus.d.ts → OmniFocus-4.8.11-d.ts
 
 - **Current**: `OmniFocus.d.ts` (symlink to latest version)
-- **Latest Version**: OmniFocus 4.8.6
-- **Previous Version**: OmniFocus 4.8.3 (kept for reference)
+- **Latest Version**: OmniFocus 4.8.11
+- **Previous Version**: OmniFocus 4.8.6 (kept for reference)
 - **Minimum Required**: OmniFocus 4.7+
+- **Drift note**: 4.8.6 → 4.8.11 export is API-identical (verified 2026-06-11, sorted-content diff) — five patch
+  releases with zero automation-surface change. The regenerate-and-diff step is the platform-drift signal for the
+  OMN-148 behavioral spec (its platform-contract source).
 
 ## File Structure
 
 - `OmniFocus.d.ts` - Symlink to the current version (always points to latest)
-- `OmniFocus-4.8.6-d.ts` - Official TypeScript definitions for OmniFocus 4.8.6
-- `OmniFocus-4.8.3-d.ts` - TypeScript definitions for OmniFocus 4.8.3
+- `OmniFocus-4.8.11-d.ts` - Official TypeScript definitions for OmniFocus 4.8.11
+- `OmniFocus-4.8.6-d.ts` - TypeScript definitions for OmniFocus 4.8.6 (previous)
 - `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
+
+Manual carry-overs each regeneration (the raw export lacks both): the regen-instructions header block, and the
+`type _omnijs_AnonymousProxy = unknown;` placeholder (the export references it in `LanguageModel.Session.withTools()`
+without defining it).
 
 ## Usage
 

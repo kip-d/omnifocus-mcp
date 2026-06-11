@@ -1,9 +1,10 @@
-// TypeScript definitions for OmniFocus 4.8.3 (185.0.53) on macOS 15.5
-// Generated on 2025-10-07 19:59:43 +0000
+// TypeScript definitions for OmniFocus 4.8.11 (185.15) on macOS 26.5.1
+// Generated on 2026-06-11 15:22:57 +0000
 //
 // Generated via: Automation → API Reference → Export (TypeScript format)
 // See src/omnifocus/api/README.md for regeneration instructions
 //
+
 // To use these definitions, save this file as `OmniFocus.d.ts`
 // and create a `tsconfig.json` file with compiler settings which indicate
 // an appropriate set of implicitly defined TypeScript libraries:
@@ -16,6 +17,9 @@
 
 // ActiveObject
 
+// Internal OmniJS type placeholder (not exported by OmniFocus)
+// Used by LanguageModel.Session.withTools() for AI tool proxies
+type _omnijs_AnonymousProxy = unknown;
 declare class ActiveObject extends DatedObject {
   active: boolean;
   readonly effectiveActive: boolean;
@@ -112,6 +116,7 @@ declare class Calendar {
 
 declare namespace Color {
   function RGB(r: number, g: number, b: number, a: number | null): Color;
+  function hex(hexString: string, a: number | null): Color | null;
   function HSB(h: number, s: number, b: number, a: number | null): Color;
   function White(w: number, a: number | null): Color;
   const black: Color;
@@ -138,6 +143,7 @@ declare class Color {
   readonly brightness: number;
   readonly colorSpace: ColorSpace;
   readonly green: number;
+  readonly hex: string;
   readonly hue: number;
   readonly red: number;
   readonly saturation: number;
@@ -386,6 +392,7 @@ declare class Device {
   readonly iOS: boolean;
   readonly iPad: boolean;
   readonly mac: boolean;
+  readonly operatingSystemBuildNumber: string;
   readonly operatingSystemVersion: Version;
   readonly type: DeviceType | null;
   readonly visionPro: boolean;
@@ -840,9 +847,13 @@ declare namespace LanguageModel {
 
 // LanguageModel.Session
 
+declare namespace LanguageModel.Session {
+  function withTools(tools: Array<_omnijs_AnonymousProxy>, instructions: string | null): LanguageModel.Session;
+}
+
 declare namespace LanguageModel {
   class Session {
-    constructor();
+    constructor(instructions: string | null);
     respond(prompt: string): Promise<string>;
     respondWithSchema(
       prompt: string,
