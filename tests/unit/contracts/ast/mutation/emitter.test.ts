@@ -30,6 +30,7 @@ import {
   bulkDeleteItem,
   resolveTag,
   constructTag,
+  moveTag,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
@@ -546,5 +547,29 @@ describe('bulkDeleteItem emission (slice 5)', () => {
   it('emitProgram does NOT declare _deleted/_errors for non-bulk programs', () => {
     const omnijs = emitProgram({ statements: [return_({ ok: json(true) })], context: 'x', snippetDeps: [] });
     expect(omnijs).not.toContain('_deleted');
+  });
+});
+
+describe('moveTag', () => {
+  it('emits moveTags to null for root, wrapped in an error-envelope catch', () => {
+    expect(emitStmt(moveTag(ref('_t'), { kind: 'root' }, 'Failed to unparent tag: '))).toBe(
+      'try { moveTags([_t], null); } catch (e) { return JSON.stringify({ error: true, message: "Failed to unparent tag: " + String(e) }); }',
+    );
+  });
+  it('emits moveTags to the parent var for underTag', () => {
+    expect(emitStmt(moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: '))).toContain(
+      'moveTags([_t], _p);',
+    );
+  });
+});
+
+describe('deleteObject bestEffort', () => {
+  it('stays a bare hard-error call without bestEffort (slice-5 posture untouched)', () => {
+    expect(emitStmt(deleteObject(ref('_t')))).toBe('deleteObject(_t);');
+  });
+  it('wraps in a labeled warnings catch with bestEffort', () => {
+    expect(emitStmt(deleteObject(ref('_t'), true, 'source delete'))).toBe(
+      'try { deleteObject(_t); } catch (e) { _warnings.push("source delete" + \': \' + (e && e.message ? e.message : String(e))); }',
+    );
   });
 });

@@ -23,8 +23,10 @@ import {
   bulkDeleteItem,
   resolveTag,
   constructTag,
+  moveTag,
   type Program,
   type TagResolution,
+  type TagMovePosition,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -541,6 +543,46 @@ describe('bulkDeleteItem uniqueness (rule 9)', () => {
     expect(() => validateMutationProgram(bulkProgram([bulkDeleteItem('a', 0), bulkDeleteItem('b', 0)]))).toThrow(
       /duplicate.*index/i,
     );
+  });
+});
+
+describe('moveTag position (rule 11 at the tag altitude)', () => {
+  it('rejects an untyped position', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_t', 'X'),
+        guard('_t === null', { error: json(true) }),
+        { type: 'moveTag', tag: ref('_t'), position: '_p' as unknown as TagMovePosition, errorPrefix: 'p: ' },
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/typed TagMovePosition/);
+  });
+
+  it('rejects underTag without a var', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_t', 'X'),
+        guard('_t === null', { error: json(true) }),
+        moveTag(ref('_t'), { kind: 'underTag', var: '' }, 'p: '),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/requires a non-empty string "var"/);
+  });
+
+  it('counts moveTag as a rule-7 consumer of its tag ref and underTag var', () => {
+    // resolveTag('_t', 'X') then moveTag(ref('_t'), {kind:'root'}, 'p: ') with no guard → /without a guard/
+    const program: Program = {
+      statements: [resolveTag('_t', 'X'), moveTag(ref('_t'), { kind: 'root' }, 'p: '), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
   });
 });
 

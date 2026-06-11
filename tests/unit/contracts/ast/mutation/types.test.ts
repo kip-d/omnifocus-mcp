@@ -15,6 +15,8 @@ import {
   assignTags,
   resolveTag,
   constructTag,
+  moveTag,
+  deleteObject,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('mutation node factories', () => {
@@ -86,6 +88,34 @@ describe('slice-2 node factories', () => {
     expect(node.taskVar).toBe('_t0');
     expect(node.stopOnError).toBe(true);
     expect(node.statements).toHaveLength(1);
+  });
+});
+
+describe('slice-6 moveTag + deleteObject factories', () => {
+  it('moveTag() with root position has no bestEffort/label keys', () => {
+    const node = moveTag(ref('_t'), { kind: 'root' }, 'Failed to unparent tag: ');
+    expect(node.type).toBe('moveTag');
+    expect(node.tag).toEqual(ref('_t'));
+    expect(node.position).toEqual({ kind: 'root' });
+    expect(node.errorPrefix).toBe('Failed to unparent tag: ');
+  });
+
+  it('moveTag() with underTag position carries the var', () => {
+    const node = moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: ');
+    expect(node.position).toEqual({ kind: 'underTag', var: '_p' });
+  });
+
+  it('deleteObject() bare call has no bestEffort/label keys', () => {
+    const node = deleteObject(ref('_t'));
+    expect(node).toEqual({ type: 'deleteObject', target: ref('_t') });
+    expect('bestEffort' in node).toBe(false);
+    expect('label' in node).toBe(false);
+  });
+
+  it('deleteObject() with bestEffort=true and label has those keys present', () => {
+    const node = deleteObject(ref('_t'), true, 'source delete');
+    expect(node.bestEffort).toBe(true);
+    expect(node.label).toBe('source delete');
   });
 });
 

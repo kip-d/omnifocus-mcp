@@ -2,7 +2,7 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TaskMovePosition } from './types.js';
+import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TagMovePosition, TaskMovePosition } from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -65,6 +65,21 @@ function emitProjectMovePosition(p: ProjectMovePosition): string {
     default: {
       const _x: never = p;
       throw new Error(`Unknown project move position: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+// Exhaustive switch with never default — a future third TagMovePosition kind
+// must be a compile error here, not a silent null fallback.
+function emitTagMovePosition(p: TagMovePosition): string {
+  switch (p.kind) {
+    case 'root':
+      return 'null';
+    case 'underTag':
+      return p.var;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown tag move position: ${JSON.stringify(_x)}`);
     }
   }
 }
@@ -233,8 +248,17 @@ export function emitStmt(node: Stmt): string {
       const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
       return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
     }
-    case 'deleteObject':
-      return `deleteObject(${emitExpr(node.target)});`;
+    case 'moveTag': {
+      const pos = emitTagMovePosition(node.position);
+      const move = `moveTags([${emitExpr(node.tag)}], ${pos});`;
+      // HARD error envelope on failure (legacy-faithful, spec §3) — errorPrefix is
+      // builder-internal constant text; String(e) matches legacy e.toString().
+      return `try { ${move} } catch (e) { return JSON.stringify({ error: true, message: ${JSON.stringify(node.errorPrefix)} + String(e) }); }`;
+    }
+    case 'deleteObject': {
+      const call = `deleteObject(${emitExpr(node.target)});`;
+      return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? 'delete')}` : call;
+    }
     case 'bulkDeleteItem': {
       // Ownership split (bulk-delete composition, mirrors batchItem):
       // - `let _deleted = []` and `let _errors = []` are DECLARED at the

@@ -16,6 +16,7 @@ import type {
   BulkDeleteItemNode,
   MoveTaskNode,
   MoveProjectNode,
+  MoveTagNode,
   CallMethodNode,
   AssignTagsNode,
 } from './types.js';
@@ -117,15 +118,17 @@ function assertNotReserved(name: string, where: string): void {
  *     a duplicate index would double-declare `const _d<i>` / `const _n<i>`
  *     (SyntaxError at runtime).
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
- *     resolveProjectById, constructProject, constructTask, constructFolder,
- *     assignTags) may use a reserved emitter identifier — see
- *     RESERVED_EMITTER_IDENTIFIERS.
+ *     resolveProjectById, resolveTag, constructProject, constructTask,
+ *     constructFolder, constructTag, assignTags) may use a reserved emitter
+ *     identifier — see RESERVED_EMITTER_IDENTIFIERS.
  * 11. A `moveTask` node's `position` must be a typed TaskMovePosition object
  *     with kind ∈ {inboxBeginning, projectBeginning, parentEnding, containerRoot}.
  *     projectBeginning and parentEnding require a non-empty string `var`;
  *     containerRoot requires a non-empty string `taskVar`. A `moveProject` node's
  *     `position` must be a typed ProjectMovePosition with kind ∈
  *     {libraryBeginning, folderBeginning}; folderBeginning requires non-empty `var`.
+ *     A `moveTag` node's `position` must be a typed TagMovePosition with kind ∈
+ *     {root, underTag}; underTag requires a non-empty string `var`.
  * 12. A `callMethod` node's `method` must be in CALL_METHOD_ALLOWLIST. The
  *     allowlist is deliberately minimal (markComplete, drop) — extend per slice.
  * 13. An `assignTags` node's `mode`, when present, must be in {replace, add, remove}.
@@ -332,6 +335,7 @@ function validateReservedBinds(stmt: Stmt): void {
 
 const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 'parentEnding', 'containerRoot']);
 const PROJECT_MOVE_POSITION_KINDS = new Set(['libraryBeginning', 'folderBeginning']);
+const TAG_MOVE_POSITION_KINDS = new Set(['root', 'underTag']);
 
 /**
  * OmniJS task methods that callMethod nodes may invoke (Rule 12).
@@ -379,6 +383,22 @@ function validateMoveProjectStmt(stmt: MoveProjectNode): void {
   const typed = pos as { kind: string; var?: unknown };
   if (typed.kind === 'folderBeginning' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
     throw new Error('Invalid moveProject: position kind "folderBeginning" requires a non-empty string "var".');
+  }
+}
+
+// Rule 11 for moveTag: typed TagMovePosition with kind in {root, underTag};
+// underTag requires a non-empty string var.
+function validateMoveTagStmt(stmt: MoveTagNode): void {
+  const pos = stmt.position as unknown;
+  if (typeof pos !== 'object' || pos === null || !TAG_MOVE_POSITION_KINDS.has((pos as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid moveTag: position must be a typed TagMovePosition object ' +
+        'with kind in {root, underTag}, not a string or untyped value.',
+    );
+  }
+  const typed = pos as { kind: string; var?: unknown };
+  if (typed.kind === 'underTag' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
+    throw new Error('Invalid moveTag: position kind "underTag" requires a non-empty string "var".');
   }
 }
 
@@ -448,6 +468,8 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return [...exprRefs(stmt.task), ...taskMovePositionVars(stmt.position)];
     case 'moveProject':
       return [...exprRefs(stmt.project), ...(stmt.position.kind === 'folderBeginning' ? [stmt.position.var] : [])];
+    case 'moveTag':
+      return [...exprRefs(stmt.tag), ...(stmt.position.kind === 'underTag' ? [stmt.position.var] : [])];
     case 'callMethod':
       return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
     case 'deleteObject':
@@ -542,6 +564,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'moveProject':
         validateMoveProjectStmt(stmt);
+        break;
+      case 'moveTag':
+        validateMoveTagStmt(stmt);
         break;
       case 'callMethod':
         validateCallMethodStmt(stmt);

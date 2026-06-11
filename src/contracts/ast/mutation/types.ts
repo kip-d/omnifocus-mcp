@@ -167,8 +167,8 @@ export interface SetPropNode {
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
 // path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
-// can never receive a missing tag. A typed TagResolution union (mirroring FolderResolution) is
-// deferred until a read-only ResolveTag node is needed (spec §5).
+// can never receive a missing tag. A typed TagResolution union (mirroring FolderResolution) was
+// deferred until a read-only ResolveTag node was needed — both landed in slice 6.
 export interface AssignTagsNode {
   type: 'assignTags';
   target: Expr;
@@ -238,12 +238,31 @@ export interface CallMethodNode {
   label?: string;
 }
 
+/** Typed tag-move destination (slice 6): root (moveTags([t], null)) or under a
+ *  resolved parent tag var. */
+export type TagMovePosition = { kind: 'root' } | { kind: 'underTag'; var: string };
+
+/** Moves one tag via OmniJS `moveTags`. Failure is a HARD error envelope (not a
+ *  warning): legacy nest/unparent/reparent return `{error, message: "<prefix><err>"}`
+ *  on a moveTags throw — errorPrefix is builder-internal constant text, never
+ *  user data (spec §3). */
+export interface MoveTagNode {
+  type: 'moveTag';
+  tag: Expr;
+  position: TagMovePosition;
+  errorPrefix: string;
+}
+
 /** deleteObject(<target>) — OmniJS free function (NOT a method; callMethod
- *  cannot express it). No binding, no bestEffort: a failed delete is a hard
- *  error — there is no partial result to preserve (spec §2.4/§4.1). */
+ *  cannot express it). Default = hard error (no partial result to preserve —
+ *  spec slice-5 §2.4/§4.1). `bestEffort` (slice 6, spec §2.5) exists for ONE
+ *  consumer: merge/tag, where retagging has already happened when the source
+ *  delete runs — the catch records a labeled OMN-137 warning instead. */
 export interface DeleteObjectNode {
   type: 'deleteObject';
   target: Expr;
+  bestEffort?: boolean;
+  label?: string;
 }
 
 /** One id's delete attempt inside a bulk program (spec §4.2): resolve →
@@ -280,6 +299,7 @@ export type Stmt =
   | AssignTagsNode
   | MoveTaskNode
   | MoveProjectNode
+  | MoveTagNode
   | CallMethodNode
   | DeleteObjectNode
   | BulkDeleteItemNode
@@ -448,7 +468,18 @@ export const callMethod = (
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
 });
-export const deleteObject = (target: Expr): DeleteObjectNode => ({ type: 'deleteObject', target });
+export const moveTag = (tag: Expr, position: TagMovePosition, errorPrefix: string): MoveTagNode => ({
+  type: 'moveTag',
+  tag,
+  position,
+  errorPrefix,
+});
+export const deleteObject = (target: Expr, bestEffort = false, label?: string): DeleteObjectNode => ({
+  type: 'deleteObject',
+  target,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});
 export const bulkDeleteItem = (id: string, index: number): BulkDeleteItemNode => ({
   type: 'bulkDeleteItem',
   id,
