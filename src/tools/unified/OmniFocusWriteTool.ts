@@ -991,13 +991,16 @@ SAFETY:
 
     for (const id of ids) {
       try {
-        const deleteResult = await this.handleProjectDelete(id);
-        const success =
-          deleteResult && typeof deleteResult === 'object' && (deleteResult as { success?: boolean }).success;
-        if (success) {
+        const deleteResult = (await this.handleProjectDelete(id)) as {
+          success?: boolean;
+          error?: { message?: string };
+        } | null;
+        if (deleteResult && typeof deleteResult === 'object' && deleteResult.success) {
           deleteResults.push({ projectId: id, status: 'deleted' });
         } else {
-          deleteErrors.push({ projectId: id, error: 'Delete failed' });
+          // Carry the real per-item failure message, not a constant that
+          // discards it — the bulk envelope surfaces the first one top-level.
+          deleteErrors.push({ projectId: id, error: deleteResult?.error?.message ?? 'Delete failed' });
         }
       } catch (err) {
         deleteErrors.push({ projectId: id, error: String(err) });

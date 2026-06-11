@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **A fully-failed `bulk_delete` reports top-level `success: false`** (OMN-144) — A bulk delete in which nothing was
+  deleted (e.g. the whole dispatch was refused by the sandbox guard, or every item failed) returned top-level
+  `success: true` with `successCount: 0` and the failures buried in `data.errors[]` — while the identical refusal on a
+  single-op delete returned `success: false`. A client checking only `success` concluded the delete worked. Zero
+  successes with errors now return `success: false` (code `BULK_DELETE_FAILED`) with per-item detail in `error.details`;
+  partial success keeps `success: true` with loud `data.errors[]`. Rider fixed: an unrecognized bulk script result shape
+  used to yield a `0 deleted / 0 errors` "success" that reported nothing at all — it is now a loud error. Project bulk
+  deletes also carry the real per-item failure message instead of a constant `Delete failed`.
 - **Unsupported NOT filters reject instead of silently returning ALL tasks** (OMN-131) — `transformLogicalOperator`
   special-cased only `NOT: { status: 'completed' | 'active' }`; every other NOT payload (e.g. `NOT: { tags: ... }`)
   logged a console warning and compiled to an _empty_ filter — the query silently matched the whole database, with no

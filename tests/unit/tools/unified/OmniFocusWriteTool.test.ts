@@ -703,6 +703,9 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.error.code).toBe('BULK_DELETE_FAILED');
       expect(result.error.details.successCount).toBe(0);
       expect(result.error.details.errorCount).toBe(2);
+      // The per-item error text must carry the real underlying message, not a
+      // constant 'Delete failed' that discards it.
+      expect(JSON.stringify(result.error)).toContain('Project not found');
     });
 
     it('keeps success:true with loud errors[] on partial project success', async () => {
