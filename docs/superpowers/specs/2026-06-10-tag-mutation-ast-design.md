@@ -11,7 +11,7 @@ After this slice, **zero write-side template-string codegen remains** and every 
 
 ## 1. Scope
 
-`src/contracts/ast/tag-mutation-script-builder.ts` — seven builders, all template-string JXA, four with nested-backtick
+`src/contracts/ast/tag-mutation-script-builder.ts` — seven builders, all template-string JXA, five with nested-backtick
 `evaluateJavascript` islands (the OMN-111/113 injection shape):
 
 | Builder                  | Legacy shape                                                                                   | Island? |
@@ -138,7 +138,12 @@ disappears. Tool-layer behavior is unchanged.
   (best-effort, §2.5).
 - **Nest:** parent required (`"Parent tag name or ID is required for nest action"` — wording preserved verbatim, id
   mention and all); self-nest → `"Cannot nest tag under itself"`; `moveTags([tag], parent)`.
-- **Unparent:** `moveTags([tag], null)`.
+- **Unparent:** root-level move. **(Amended during implementation, 2026-06-11):** this spec originally said
+  `moveTags([tag], null)` — faithful to the legacy template — but live verification (Task 9) proved the real OmniFocus
+  API rejects a null position (`Database.moveTags argument "position" … requires a non-null value`), so legacy unparent
+  and reparent-to-root **never worked in production**; the vm stubs accepted `null` (the wiring-tests-pass trap, cf.
+  OMN-125). Root moves now emit `moveTags([tag], tags.ending)` — §7's "unparent → persisted root" intent wins over
+  byte-fidelity to a broken template. Recorded at the change site in emitter.ts.
 - **Reparent:** parent optional — absent moves to root (legacy quirk, preserved); self-reparent →
   `"Cannot reparent tag under itself"`; envelope branches on with-parent vs to-root (§2.3).
 - **`moveTags` failures** (e.g. nesting under own descendant — legacy never pre-checks) surface as
