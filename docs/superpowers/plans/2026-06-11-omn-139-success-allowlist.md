@@ -276,19 +276,40 @@ export function listResultSchema(
   return variants.length === 1 ? variants[0] : z.union(variants as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
 }
 
-/** countOnly result. */
+/**
+ * countOnly result — WIRE shape from buildTaskCountScript (src/contracts/ast/script-builder.ts,
+ * grep `task_count_omnijs`), NOT the caller's narrower TS cast in executeCountOnly. The caller
+ * reads a subset; the schema must match what the script emits. Verify optionality in source.
+ */
 export const CountResultSchema = z
   .object({
     count: z.number(),
+    filters_applied: z.unknown().optional(),
+    query_time_ms: z.unknown().optional(),
+    optimization: z.unknown().optional(),
+    filter_description: z.unknown().optional(),
+    scanned: z.unknown().optional(),
+    total_tasks: z.unknown().optional(),
+    limited: z.unknown().optional(),
     warning: z.string().optional(),
-    optimization: z.string().optional(),
-    filter_description: z.string().optional(),
   })
   .strict();
 
-/** Export results: {format, data, count, limited?}. */
+/**
+ * Export results — WIRE shape: both export scripts ALWAYS emit `duration`; task-CSV adds
+ * `message`; project-JSON adds `debug` (task export: script-builder.ts; project export:
+ * src/omnifocus/scripts/export/export-projects.ts). Verify in source before tightening.
+ */
 export const ExportResultSchema = z
-  .object({ format: z.string(), data: z.unknown(), count: z.number(), limited: z.boolean().optional() })
+  .object({
+    format: z.string(),
+    data: z.unknown(),
+    count: z.number(),
+    duration: z.unknown(),
+    limited: z.boolean().optional(),
+    message: z.unknown().optional(),
+    debug: z.unknown().optional(),
+  })
   .strict();
 
 /** Review-family success: {success: true, ...op keys}. Factory keeps the literal discriminator mandatory. */
@@ -300,36 +321,39 @@ export function reviewSuccessSchema(shape: Record<string, z.ZodTypeAny>) {
  * Write-tool bare mutation results. Top-level keys enumerated from the audit
  * (docs/superpowers/plans/… appendix); values lenient. One per operation family.
  */
-export const TaskWriteResultSchema = z.union([
-  V3EnvelopeSuccessSchema, // task create/update arrive v3-wrapped
-  z
-    .object({
-      taskId: z.string(),
-      name: z.string(),
-      note: z.unknown().optional(),
-      flagged: z.unknown().optional(),
-      dueDate: z.unknown().optional(),
-      deferDate: z.unknown().optional(),
-      plannedDate: z.unknown().optional(),
-      estimatedMinutes: z.unknown().optional(),
-      tags: z.unknown().optional(),
-      project: z.unknown().optional(),
-      inInbox: z.unknown().optional(),
-      warnings: z.unknown().optional(),
-      created: z.literal(true).optional(),
-      updated: z.literal(true).optional(),
-    })
-    .strict()
-    .refine((o) => o.created === true || o.updated === true, { message: 'missing created/updated discriminator' }),
-]);
+// Plan-review verification (2026-06-11): mutation output is NOT v3-wrapped at top level
+// (wrapInLauncher returns the OmniJS payload raw; defs.ts create/update envelopes match the
+// bare shape field-for-field). unwrapV3Envelope in the write tool is defensive legacy. So no
+// V3EnvelopeSuccessSchema union member here — re-run the Task 5 grep to confirm before relying on it.
+export const TaskWriteResultSchema = z
+  .object({
+    taskId: z.string(),
+    name: z.string(),
+    note: z.unknown().optional(),
+    flagged: z.unknown().optional(),
+    dueDate: z.unknown().optional(),
+    deferDate: z.unknown().optional(),
+    plannedDate: z.unknown().optional(),
+    estimatedMinutes: z.unknown().optional(),
+    tags: z.unknown().optional(),
+    project: z.unknown().optional(),
+    inInbox: z.unknown().optional(),
+    warnings: z.unknown().optional(),
+    created: z.literal(true).optional(),
+    updated: z.literal(true).optional(),
+  })
+  .strict()
+  .refine((o) => o.created === true || o.updated === true, { message: 'missing created/updated discriminator' });
 // …continue per the call-site table in Task 5/6/7: CompleteResultSchema, DeleteResultSchema,
 // BulkDeleteResultSchema, BatchCreateResultSchema, ProjectWriteResultSchema, FolderCreateResultSchema,
 // TagMutationResultSchema (union over the 7 action shapes), RecurringPatternsSchema, SlimmedDataSchema, …
 ```
 
-**Implementation note:** the exact member list and key sets for the remaining schemas come from the per-site tables in
-Tasks 5–7 and the appendix. Where the audit marks a shape "verify in source," READ the script/defs source before writing
-the schema — do not transcribe the audit on faith.
+**Implementation note (HARD RULE, plan-review finding):** read the EMITTING SCRIPT SOURCE for **every** schema before
+writing it — the schema code and tables in this plan are drafts, not ground truth. Three of this plan's own draft
+schemas were initially transcribed from _caller-side TS casts_ and were wrong about the wire (countOnly, export,
+folders) — the caller reads a subset of what scripts emit; closed-world schemas must match the emission. When a schema
+test fails against a payload taken from real source, fix the schema, never loosen to whole-result `z.unknown()`.
 
 - [ ] **Step 4: Run schema tests — PASS. Full unit suite — PASS.**
 - [ ] **Step 5: Commit** — `feat(OMN-139): family success schemas (closed-world, literal discriminators)`
@@ -425,16 +449,16 @@ Per-site mapping (line numbers are pre-change anchors; re-grep before editing):
 
 ### Task 6: Migrate `OmniFocusReadTool.ts` (13 sites)
 
-| Site (line) | Method                 | Schema                                                                                    |
-| ----------- | ---------------------- | ----------------------------------------------------------------------------------------- |
-| 358 / 485   | task query / id lookup | `listResultSchema(['tasks','items'], {metadata: true})`                                   |
-| 432         | countOnly              | `CountResultSchema`                                                                       |
-| 539 / 676   | project lookup/query   | `listResultSchema(['projects','items'], {metadata: true})`                                |
-| 764 / 1184  | tags                   | `astEnvelopeSchema('items')`                                                              |
-| 799         | perspectives           | `listResultSchema(['perspectives','items'], {extras: {summary: z.unknown().optional()}})` |
-| 861         | folders                | `listResultSchema(['folders','items'], {metadata: true})`                                 |
-| 954 / 1141  | task export            | `ExportResultSchema`                                                                      |
-| 1049 / 1162 | project export         | `ExportResultSchema`                                                                      |
+| Site (line) | Method                 | Schema                                                                                                                                                                                                                                                        |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 358 / 485   | task query / id lookup | `listResultSchema(['tasks','items'], {metadata: true})`                                                                                                                                                                                                       |
+| 432         | countOnly              | `CountResultSchema`                                                                                                                                                                                                                                           |
+| 539 / 676   | project lookup/query   | `listResultSchema(['projects','items'], {metadata: true})`                                                                                                                                                                                                    |
+| 764 / 1184  | tags                   | `astEnvelopeSchema('items')`                                                                                                                                                                                                                                  |
+| 799         | perspectives           | `listResultSchema(['items'], {extras: {summary: z.unknown().optional()}})` — script emits `items` only (plan-review verified; the caller's `perspectives \|\|` fallback is dead)                                                                              |
+| 861         | folders                | Dedicated variant: `z.object({success: z.literal(true), folders: z.array(z.unknown()), metadata: z.unknown().optional()}).strict()` — the folders script emits a `success: true` sibling key (plan-review verified); plain `listResultSchema` would reject it |
+| 954 / 1141  | task export            | `ExportResultSchema`                                                                                                                                                                                                                                          |
+| 1049 / 1162 | project export         | `ExportResultSchema`                                                                                                                                                                                                                                          |
 
 - [ ] **Step 1:** TDD any schema variants not yet covered (e.g. the project-by-id wrapped shape at 539 — the audit
       reports `{projects, count, mode, targetId}`; READ `src/contracts/ast/script-builder.ts` and add those keys as
@@ -487,6 +511,15 @@ Per-site mapping (line numbers are pre-change anchors; re-grep before editing):
       `isLegacyScriptError`/`getLegacyErrorMessage` only if still imported elsewhere
       (`grep -rn "isLegacyScriptError\|getLegacyErrorMessage" src/ tests/`); otherwise delete and shrink
       `base-type-guards.test.ts` to surviving exports.
+- [ ] **Step 2b (plan-review finding):** `tests/unit/tools/base.test.ts` (~lines 179–196, "should convert legacy error
+      JSON strings into ScriptError results") pins the deleted `parseStringResult` behavior via a mock whose
+      `executeJson` returns a raw JSON **string**. That mock violates the totality contract (real `executeJson` returns
+      `ScriptResult`, never a string). Update the mock to return a proper `ScriptResult` and re-target the assertion, or
+      delete the test as pinning removed behavior — state which in the commit message.
+- [ ] **Step 2c:** Add a code comment on `JxaEnvelopeSchema` in `safe-io.ts`: it is now consumed detect-only via
+      `detectKnownErrorShape` (which hand-rolls a superset check — it also catches _malformed_ `{ok: false}` envelopes
+      that the schema would reject; spec §3.6). If ts-prune flags it after this ticket, that is expected — do not
+      delete.
 - [ ] **Step 3:** `npm run build` + full unit suite — PASS.
 - [ ] **Step 4: Commit** —
       `refactor(OMN-139): delete executeTyped/normalizeToEnvelope + base.ts shape-sniffing (totality makes them dead)`
@@ -503,10 +536,12 @@ a schema — should be untouched)
       asserting the new exhaustive behavior).
 - [ ] **Step 2:** `npm run build`. Expected: **zero errors** if Tasks 5–7 covered every site. ANY compile error = a
       missed site; fix by adding the right family schema (never `z.unknown()`).
-- [ ] **Step 3:** Mutation-verify the inversion: temporarily revert the `detectKnownErrorShape` call inside
-      `executeJson` (restore old `error === true`-only check), run
-      `npx vitest run tests/unit/omnifocus/OmniAutomation.test.ts` → the `{ok: false}` and unknown-shape tests MUST
-      fail. Restore. State the result in the commit message.
+- [ ] **Step 3:** Mutation-verify the inversion: temporarily restore the **entire pre-OMN-139 `executeJson` body** (from
+      `git show main:src/omnifocus/OmniAutomation.ts` — the `error === true` check + unconditional
+      `createScriptSuccess`), run `npx vitest run tests/unit/omnifocus/OmniAutomation.test.ts` → BOTH the `{ok: false}`
+      test AND the unknown-shape test MUST fail. (A classifier-only revert is insufficient — the fail-closed schema path
+      would keep the unknown-shape test green; plan-review finding.) Restore the new body, confirm tests pass again, and
+      state the mutation-verify result in the commit message.
 - [ ] **Step 4:** Full unit suite — PASS.
 - [ ] **Step 5: Commit** —
       `feat(OMN-139): executeJson/execJson schema parameter REQUIRED — allow-list inversion complete`
