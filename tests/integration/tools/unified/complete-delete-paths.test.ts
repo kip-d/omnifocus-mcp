@@ -34,7 +34,8 @@
  * catch → error ends up in data.errors[]. Response shape: success:true with
  * successCount:0 and errorCount:1. This differs from single-op guard refusals
  * (which return success:false) because the bulk handler collects all errors into
- * data.errors regardless of source. Both real fixtures survive. The per-item
+ * data.errors regardless of source — documented current behavior; envelope
+ * follow-up tracked in OMN-144. Both real fixtures survive. The per-item
  * continue-on-error behavior (AST emitter) is reachable only in production mode;
  * unit tests cover that path.
  *
@@ -65,8 +66,9 @@ import { expectOk } from '../../helpers/expect-ok.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME } from '../../helpers/sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName } from '../../helpers/run-id.js';
 
-// Fixed, unambiguous future completionDate for the roundtrip test.
-// Using :17 past 09:00 — can only be a value we wrote, not a default.
+// Fixed future completionDate for the roundtrip test. Only the DATE part is
+// asserted (see test 1) — a defaulted "now" completion would land on today's
+// date and fail the check.
 const COMPLETION_DATETIME = '2026-12-27 09:17';
 
 const TS = Date.now();
@@ -293,9 +295,9 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
     // Read back with completed:true so the script includes completed tasks.
     const task = await readTaskById(id, ['completed', 'completionDate'], true);
     expect(task.completed).toBe(true);
-    // Date-part match only — OmniFocus may normalize the time-zone on write;
-    // we prove our value reached the DB, not that ISO string serialization is
-    // bit-for-bit identical.
+    // Date-part match only: proves OUR future date reached the DB (a defaulted
+    // "now" completion would carry today's date and fail). Time-of-day is not
+    // asserted — time-zone normalization on write makes it an unstable oracle.
     const persistedDate = task.completionDate ? new Date(task.completionDate).toISOString().slice(0, 10) : null;
     const expectedDate = COMPLETION_DATETIME.slice(0, 10);
     expect(persistedDate, `completionDate not persisted (got ${task.completionDate})`).toBe(expectedDate);
@@ -343,6 +345,11 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
       readRes.success,
       `task ${id} was not deleted — still found on read-back: ${JSON.stringify(readRes).slice(0, 300)}`,
     ).toBe(false);
+    // Pin the error CODE: a transient SCRIPT_ERROR on the read would also be
+    // success:false but must not false-green "deleted".
+    expect(readRes.error?.code, `expected NOT_FOUND, got: ${JSON.stringify(readRes.error).slice(0, 300)}`).toBe(
+      'NOT_FOUND',
+    );
   }, 120000);
 
   // ── 4. delete project → NOT_FOUND ─────────────────────────────────────────
@@ -360,6 +367,11 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
       readRes.success,
       `project ${projId} was not deleted — still found on read-back: ${JSON.stringify(readRes).slice(0, 300)}`,
     ).toBe(false);
+    // Pin the error CODE: a transient SCRIPT_ERROR on the read would also be
+    // success:false but must not false-green "deleted".
+    expect(readRes.error?.code, `expected NOT_FOUND, got: ${JSON.stringify(readRes.error).slice(0, 300)}`).toBe(
+      'NOT_FOUND',
+    );
   }, 120000);
 
   // ── 5. bulk_delete mixed real+bogus ids → whole-dispatch guard refusal ─────
@@ -379,7 +391,8 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
   // success:false via createErrorResponseV2), handleBulkDeleteTasks wraps ALL
   // errors — including the thrown guard error — in its catch block and returns
   // success:true with data.successCount:0, data.errorCount:1, data.errors[].
-  // This is the actual live behavior, not a bug. The test asserts this shape.
+  // Documented current behavior; envelope follow-up tracked in OMN-144. The
+  // test asserts this shape.
   //
   // This whole-dispatch refusal IS the OMN-120 non-bypass contract (guard must
   // cover every id before any mutation executes). The unguarded per-item

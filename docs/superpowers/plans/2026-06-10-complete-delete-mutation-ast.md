@@ -989,7 +989,10 @@ scoping (`__MCP_TEST_SANDBOX__`), fixture creation through the real tool, and RE
    precedent — `project_project_read_field_gate`).
 3. **Delete a task / delete a project:** read back **absence** (query by id-filter or name returns 0 rows).
 4. **Bulk delete:** create 2 sandbox tasks, request deletion of `[id1, id2, 'bogus-id']`; assert response
-   `successCount === 2`, one error entry carrying `taskId: 'bogus-id'`; read back absence of both real tasks.
+   `successCount === 2`, one error entry carrying `taskId: 'bogus-id'`; read back absence of both real tasks. (live
+   test-mode deviation: the all-ids guard pre-flight refuses the whole dispatch — asserted as whole-dispatch refusal +
+   zero deletes; per-item continue-on-error is covered by the vm unit layer + the parent-session unguarded /verify
+   matrix)
 5. **Not-found single ops:** complete + delete with a bogus id → loud `SCRIPT_ERROR` with the entity-named message.
 
 - [ ] **Step 2: Build, then run the integration suite in the background**
