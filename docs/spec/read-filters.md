@@ -96,9 +96,13 @@ tests pinned the defect ("transforms name.contains to search"). Deployments olde
 | `folder` (tasks)                   | Folder-name substring on the containing hierarchy. Zero test coverage (§8 D7).                                                                                            | TaskFilter                                               |
 | `tags: {any}` / `{all}` / `{none}` | OR / AND / NOT-IN over tag names. `{none}` is the supported exclusion path (NOT composition is not — §3.6). Must tolerate case-duplicate and same-name-different-id tags. | `transformTags`; vault Tag Inventory Redesign 2026-06-03 |
 
-**Project root node:** in OmniFocus a project IS a task (its root). A `projectId` task query returns N+1 rows including
-the root. The spec defines this as documented behavior — count reconciliations bake in the +1 (vault diary 2026-05-19) —
-pending an explicit exclusion knob (§10 Q1).
+**Project root node (Q1 resolved 2026-06-11):** in OmniFocus a project IS a task (its root); the root appears in
+`flattenedTasks` and reports its own project as `containingProject`. **Normative:** tasks queries exclude project root
+rows by default; `includeProjectRoot: true` opts back in (Forecast parity — the OF UI shows due projects as items,
+OMN-133); any returned root row carries `isProjectRoot: true`. Rationale: the root row leaks the project-is-a-task
+implementation detail into the GTD domain model — counts diverge from the UI by +1 per project (vault diary 2026-05-19),
+and an unmarked root feeding a write sweep is a P5 hazard (completing/deleting a root completes/deletes the project;
+live-confirmed indistinguishable, 2026-06-11). Current behavior drifts (§8 D12, OMN-153).
 
 ### 3.5 Numeric
 
@@ -172,50 +176,51 @@ reject (type-discriminated field enums — vault Description-Gap Audit gap #2; O
 
 ## 8. Drift register
 
-| ID  | Spec statement                                                            | Current behavior                                                                                                                     | Severity                            | Ticket                                   |
-| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- | ---------------------------------------- |
-| D1  | P3: unsupported NOT errors                                                | Silently compiles to match-ALL                                                                                                       | High (P5: feeds destructive sweeps) | OMN-131 (open, fix decided: hard-reject) |
-| D2  | R6: Forecast-Past parity mode                                             | dueDate-only `overdue`; manual two-query recipe                                                                                      | Medium                              | OMN-133 (open, held on OMN-130)          |
-| D3  | Tag hierarchy readable (P7 symmetry)                                      | Tags query hardcoded basic mode                                                                                                      | Medium                              | OMN-145 (open)                           |
-| D4  | `between` sets the operator for every date field                          | `deferDate` entry lacks `operatorKey`; functional impact likely nil (inclusive bounds equivalent) — verify, then fix for consistency | Low                                 | unticketed                               |
-| D5  | `upcoming` default documented = implemented                               | Code 7 days; some docs say 14                                                                                                        | Low                                 | unticketed                               |
-| D6  | `name:{matches}` safe regex on tasks                                      | Task-side emitter raw-interpolates pattern (`/` breaks script; injection seam); newly reachable since `d89d5b7`                      | High                                | OMN-149 (open)                           |
-| D7  | Tasks `folder` filter tested                                              | Zero unit/integration coverage                                                                                                       | Low                                 | unticketed (conformance case C12 covers) |
-| D8  | `parentTaskId` integration-verified                                       | Builder coverage only; no live validation                                                                                            | Low                                 | OMN-135 adjacent                         |
-| D9  | Combined-filter RESULT correctness integration-tested (text+date+tag, OR) | No integration test exercises OR result correctness                                                                                  | Medium                              | OMN-135 (open)                           |
-| D10 | P4: cache keyed by full compiled predicate                                | 2026-05-19 incident (stale slice served for an OR-of-names query); current state unverified                                          | High if still live                  | unticketed — verify first                |
-| D11 | Docs match shipped composition semantics                                  | ~35 stale doc claims incl. "OR is broken"                                                                                            | Low                                 | OMN-104 (open)                           |
+| ID  | Spec statement                                                            | Current behavior                                                                                                                     | Severity                             | Ticket                                   |
+| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ | ---------------------------------------- |
+| D1  | P3: unsupported NOT errors                                                | Silently compiles to match-ALL                                                                                                       | High (P5: feeds destructive sweeps)  | OMN-131 (open, fix decided: hard-reject) |
+| D2  | R6: Forecast-Past parity mode                                             | dueDate-only `overdue`; manual two-query recipe                                                                                      | Medium                               | OMN-133 (open, held on OMN-130)          |
+| D3  | Tag hierarchy readable (P7 symmetry)                                      | Tags query hardcoded basic mode                                                                                                      | Medium                               | OMN-145 (open)                           |
+| D4  | `between` sets the operator for every date field                          | `deferDate` entry lacks `operatorKey`; functional impact likely nil (inclusive bounds equivalent) — verify, then fix for consistency | Low                                  | unticketed                               |
+| D5  | `upcoming` default documented = implemented                               | Code 7 days; some docs say 14                                                                                                        | Low                                  | unticketed                               |
+| D6  | `name:{matches}` safe regex on tasks                                      | Task-side emitter raw-interpolates pattern (`/` breaks script; injection seam); newly reachable since `d89d5b7`                      | High                                 | OMN-149 (open)                           |
+| D7  | Tasks `folder` filter tested                                              | Zero unit/integration coverage                                                                                                       | Low                                  | unticketed (conformance case C12 covers) |
+| D8  | `parentTaskId` integration-verified                                       | Builder coverage only; no live validation                                                                                            | Low                                  | OMN-135 adjacent                         |
+| D9  | Combined-filter RESULT correctness integration-tested (text+date+tag, OR) | No integration test exercises OR result correctness                                                                                  | Medium                               | OMN-135 (open)                           |
+| D10 | P4: cache keyed by full compiled predicate                                | 2026-05-19 incident (stale slice served for an OR-of-names query); current state unverified                                          | High if still live                   | unticketed — verify first                |
+| D11 | Docs match shipped composition semantics                                  | ~35 stale doc claims incl. "OR is broken"                                                                                            | Low                                  | OMN-104 (open)                           |
+| D12 | §3.4: project root rows excluded by default, marked when opted in         | All tasks queries return roots unmarked, indistinguishable from real tasks (N+1; live-confirmed 2026-06-11)                          | High (P5: root row in a write sweep) | OMN-153 (open)                           |
 
 ## 9. Conformance golden cases (transport-level: MCP request → golden response)
 
 Implementation-independent; each runs against a seeded fixture DB (design per R13).
 
-| #   | Case                                                               | Asserts                                                                                  |
-| --- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| C1  | `name:{contains}` with note-only marker fixture                    | Note-only match NOT returned (R1 regression lock)                                        |
-| C2  | Same term via `name` vs `text`                                     | `text` ⊇ `name`; sets differ on the note-only fixture                                    |
-| C3  | `name` + `text` together                                           | Both apply (AND); neither dropped                                                        |
-| C4  | `mode:overdue` + `tags:{none}`                                     | Mode and exclusion compose (R7)                                                          |
-| C5  | `matches` with regex metacharacters vs `contains` of same string   | Results differ; regex semantics real (R2); include a `/`-bearing pattern (OMN-149 probe) |
-| C6  | `dueDate:{between}` boundary fixtures                              | Inclusive both ends; null-due tasks absent                                               |
-| C7  | `estimatedMinutes:{lessThan}`                                      | No-estimate tasks absent (null ≠ 0)                                                      |
-| C8  | Unsupported `NOT:{tags}`                                           | Validation error, zero rows — never match-all (post-OMN-131)                             |
-| C9  | Each mode against a fixture containing a dropped task              | Dropped task absent from every mode                                                      |
-| C10 | `mode:overdue` vs `plannedDate:{before:now}` union                 | Documented Forecast-Past recipe returns the fixture's expected set (R6)                  |
-| C11 | `limit:5` against a 10-row population                              | `metadata.total_count: 10`; truncation visible (R10)                                     |
-| C12 | `project:null`, `folder:null` (projects), tasks `folder` substring | Inbox / top-level / hierarchy semantics                                                  |
-| C13 | Sequential-project fixture                                         | `available` excludes second-in-sequence; `blocked` includes it (R9)                      |
-| C14 | `projectId` task query                                             | N+1 rows incl. root node, root identifiable (§3.4)                                       |
-| C15 | `countOnly:true` vs same query without                             | count == rows length (same predicate)                                                    |
-| C16 | `fastSearch:true` with note-only marker                            | Note-only match absent                                                                   |
-| C17 | Repeat C-series query after an unrelated cached browse             | Response matches predicate, not cache (R11)                                              |
+| #   | Case                                                               | Asserts                                                                                                                                                              |
+| --- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | `name:{contains}` with note-only marker fixture                    | Note-only match NOT returned (R1 regression lock)                                                                                                                    |
+| C2  | Same term via `name` vs `text`                                     | `text` ⊇ `name`; sets differ on the note-only fixture                                                                                                                |
+| C3  | `name` + `text` together                                           | Both apply (AND); neither dropped                                                                                                                                    |
+| C4  | `mode:overdue` + `tags:{none}`                                     | Mode and exclusion compose (R7)                                                                                                                                      |
+| C5  | `matches` with regex metacharacters vs `contains` of same string   | Results differ; regex semantics real (R2); include a `/`-bearing pattern (OMN-149 probe)                                                                             |
+| C6  | `dueDate:{between}` boundary fixtures                              | Inclusive both ends; null-due tasks absent                                                                                                                           |
+| C7  | `estimatedMinutes:{lessThan}`                                      | No-estimate tasks absent (null ≠ 0)                                                                                                                                  |
+| C8  | Unsupported `NOT:{tags}`                                           | Validation error, zero rows — never match-all (post-OMN-131)                                                                                                         |
+| C9  | Each mode against a fixture containing a dropped task              | Dropped task absent from every mode                                                                                                                                  |
+| C10 | `mode:overdue` vs `plannedDate:{before:now}` union                 | Documented Forecast-Past recipe returns the fixture's expected set (R6)                                                                                              |
+| C11 | `limit:5` against a 10-row population                              | `metadata.total_count: 10`; truncation visible (R10)                                                                                                                 |
+| C12 | `project:null`, `folder:null` (projects), tasks `folder` substring | Inbox / top-level / hierarchy semantics                                                                                                                              |
+| C13 | Sequential-project fixture                                         | `available` excludes second-in-sequence; `blocked` includes it (R9)                                                                                                  |
+| C14 | `projectId` task query on an N-task project                        | Exactly N rows by default (no root); with `includeProjectRoot:true` N+1 and the root row carries `isProjectRoot:true` (§3.4); `countOnly` agrees under both settings |
+| C15 | `countOnly:true` vs same query without                             | count == rows length (same predicate)                                                                                                                                |
+| C16 | `fastSearch:true` with note-only marker                            | Note-only match absent                                                                                                                                               |
+| C17 | Repeat C-series query after an unrelated cached browse             | Response matches predicate, not cache (R11)                                                                                                                          |
 
 ## 10. Open questions (review gate)
 
-| #   | Question                                      | Options                                                                                            |
-| --- | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Q1  | Project root node in `projectId` task queries | Keep N+1 + document (status quo, spec'd in §3.4) vs add `includeRootTask:false` knob               |
-| Q2  | `upcoming` default window                     | Keep 7 + fix docs, or honor the documented 14                                                      |
-| Q3  | Truncation indicator                          | Is `metadata.total_count` always present, or is an explicit `has_more` needed? (verify, then spec) |
-| Q4  | Perspectives `filterRules: null`              | Commit to surfacing rules (new ticket) or formalize as a stated boundary                           |
-| Q5  | D4/D5/D7/D10 tickets                          | File now or batch with the next OMN-148 section                                                    |
+| #   | Question                                          | Options                                                                                                                         |
+| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Q1  | ~~Project root node in `projectId` task queries~~ | **RESOLVED 2026-06-11:** exclude by default + `includeProjectRoot:true` knob + `isProjectRoot:true` marker (§3.4, D12, OMN-153) |
+| Q2  | `upcoming` default window                         | Keep 7 + fix docs, or honor the documented 14                                                                                   |
+| Q3  | Truncation indicator                              | Is `metadata.total_count` always present, or is an explicit `has_more` needed? (verify, then spec)                              |
+| Q4  | Perspectives `filterRules: null`                  | Commit to surfacing rules (new ticket) or formalize as a stated boundary                                                        |
+| Q5  | D4/D5/D7/D10 tickets                              | File now or batch with the next OMN-148 section                                                                                 |
