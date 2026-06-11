@@ -36,8 +36,8 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  *  - `_errors`: the bulk-delete failure accumulator, same ownership.
  *  - `_tagPath`: the constructTagPath emission's intermediate — bound as
  *    `const _tagPath = createTagPath(...)` before the leaf tag and created-
- *    segments are destructured out. At most one constructTagPath per program
- *    (create/tag path form), so a fixed name is safe.
+ *    segments are destructured out. At most one constructTagPath per
+ *    statement-list level (rule 9), so a fixed name is safe.
  *  - `_w<i>` (pattern, see RESERVED_ITEM_VAR_PATTERN): per-item warning
  *    watermarks declared by batchItem emission.
  *  - `_d<i>` (pattern, see RESERVED_DELETE_RESOLVE_PATTERN): per-item task

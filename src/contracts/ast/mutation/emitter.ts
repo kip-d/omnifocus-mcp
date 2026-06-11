@@ -330,7 +330,7 @@ export function emitStmt(node: Stmt): string {
     }
     case 'constructTagPath':
       // `_tagPath` is reserved (validator rule 10) — at most one constructTagPath
-      // per program (create/tag path form), so a fixed intermediate is safe.
+      // per statement-list level (validator-enforced), so a fixed intermediate is safe.
       return [
         `const _tagPath = createTagPath(${emitExpr(node.segments)});`,
         `const ${node.bind} = _tagPath.tag;`,

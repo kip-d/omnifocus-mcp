@@ -23,6 +23,9 @@ export {
   buildDeleteProjectProgram,
   buildBulkDeleteTasksProgram,
   buildCreateTagProgram,
+  buildRenameTagProgram,
+  buildDeleteTagProgram,
+  buildMergeTagsProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
   dispatchMutation,
@@ -38,6 +41,9 @@ export type {
   DeleteProjectInput,
   BulkDeleteTasksInput,
   TagCreateInput,
+  TagRenameInput,
+  TagDeleteInput,
+  TagMergeInput,
 } from './defs.js';
 export { lowerRepetitionRule } from './repetition.js';
 export type { LoweredRepetitionRule } from './repetition.js';

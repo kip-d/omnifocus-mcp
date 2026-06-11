@@ -40,6 +40,7 @@ import {
   guard,
   json,
   member,
+  mergeRetag,
   moveProject,
   moveTask,
   newExpr,
@@ -1134,6 +1135,118 @@ export function buildCreateTagProgram(data: TagCreateInput): Program {
   return { statements, context, snippetDeps: [] };
 }
 
+export interface TagRenameInput {
+  tagName: string;
+  newName: string;
+}
+export interface TagDeleteInput {
+  tagName: string;
+}
+export interface TagMergeInput {
+  tagName: string;
+  targetTag: string;
+}
+
+/** Lower a tag-rename request (spec §4.2): resolve target → not-found guard →
+ *  dup-check resolve on newName → exists guard → direct setProp. Guard order
+ *  preserved from legacy: target-not-found beats duplicate. */
+export function buildRenameTagProgram(data: TagRenameInput): Program {
+  const _exhaustive: Record<keyof TagRenameInput, true> = { tagName: true, newName: true };
+  void _exhaustive;
+  const context = 'rename_tag';
+  const statements: Stmt[] = [
+    resolveTag('_tag', data.tagName),
+    guard('_tag === null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    resolveTag('_dup', data.newName),
+    guard('_dup !== null', {
+      error: json(true),
+      message: json(`Tag '${data.newName}' already exists`),
+      context: json(context),
+    }),
+    setProp(ref('_tag'), 'name', json(data.newName), 'direct'),
+    return_({
+      action: json('renamed'),
+      oldName: json(data.tagName),
+      newName: json(data.newName),
+      message: json(`Tag renamed from '${data.tagName}' to '${data.newName}'`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a tag-delete request (spec §4.2): resolve → not-found guard → HARD
+ *  deleteObject (no bestEffort — there is no partial result to preserve,
+ *  contrast merge). The legacy message's trailing period is byte-preserved. */
+export function buildDeleteTagProgram(data: TagDeleteInput): Program {
+  const _exhaustive: Record<keyof TagDeleteInput, true> = { tagName: true };
+  void _exhaustive;
+  const context = 'delete_tag';
+  const statements: Stmt[] = [
+    resolveTag('_tag', data.tagName),
+    guard('_tag === null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    deleteObject(ref('_tag')),
+    return_({
+      action: json('deleted'),
+      tagName: json(data.tagName),
+      message: json(`Tag '${data.tagName}' deleted successfully.`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a tag-merge request (spec §4.2): resolve src/tgt with guards →
+ *  mergeRetag walk → best-effort source delete (§2.5) → envelope branching on
+ *  whether the delete recorded a warning. User names enter via the _srcName/
+ *  _tgtName binds ONLY — the raw fragments never carry them inline. */
+export function buildMergeTagsProgram(data: TagMergeInput): Program {
+  const _exhaustive: Record<keyof TagMergeInput, true> = { tagName: true, targetTag: true };
+  void _exhaustive;
+  const context = 'merge_tags';
+  const statements: Stmt[] = [
+    resolveTag('_src', data.tagName),
+    guard('_src === null', {
+      error: json(true),
+      message: json(`Source tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    resolveTag('_tgt', data.targetTag),
+    guard('_tgt === null', {
+      error: json(true),
+      message: json(`Target tag '${data.targetTag}' not found`),
+      context: json(context),
+    }),
+    bind('_srcName', json(data.tagName)),
+    bind('_tgtName', json(data.targetTag)),
+    mergeRetag('_src', '_tgt', '_count'),
+    // bestEffort label IS the legacy warning prefix, so _warnings[0] reproduces
+    // the legacy warning shape (spec §2.5). Not byte-identical: legacy appended
+    // deleteError.toString() ("Error: <msg>"); bestEffortCatch appends e.message
+    // ("<msg>"). Tests assert the prefix, not the tail.
+    deleteObject(ref('_src'), true, 'Tags were merged but source tag could not be deleted'),
+    return_({
+      action: raw('_warnings.length ? "merged_with_warning" : "merged"'),
+      sourceTag: ref('_srcName'),
+      targetTag: ref('_tgtName'),
+      tasksMerged: ref('_count'),
+      // undefined-valued keys drop out of JSON.stringify — `warning` appears only
+      // on the failure path (spec §2.3 envelope listing).
+      warning: raw('_warnings.length ? _warnings[0] : undefined'),
+      message: raw(
+        '_warnings.length ? "Merged " + _count + " tasks but could not delete source tag" : "Merged \'" + _srcName + "\' into \'" + _tgtName + "\'. " + _count + " tasks updated."',
+      ),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
 // =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
@@ -1208,6 +1321,26 @@ export const MUTATION_DEFS = {
     },
     build: buildCreateTagProgram,
   } as MutationDef<TagCreateInput>,
+  'rename/tag': {
+    // Spec §2.1: guard EVERY name the op touches — newName included.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      validateTagMutation(d.newName);
+    },
+    build: buildRenameTagProgram,
+  } as MutationDef<TagRenameInput>,
+  'delete/tag': {
+    guard: (d) => validateTagMutation(d.tagName),
+    build: buildDeleteTagProgram,
+  } as MutationDef<TagDeleteInput>,
+  'merge/tag': {
+    // Spec §2.1: guard EVERY name the op touches — targetTag included.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      validateTagMutation(d.targetTag);
+    },
+    build: buildMergeTagsProgram,
+  } as MutationDef<TagMergeInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =
