@@ -76,6 +76,11 @@ Closed-world at the top level is load-bearing, not stylistic: a hybrid output li
 `{tasks: [...], error: "iteration aborted at item 50"}` validates as clean success under open-world (the bug class in
 miniature); closed-world fails it loudly. Top-level key sets are small and stable because we author every script.
 
+**Family schemas model the success branch only; error branches are 3.1 step 1's job.** The envelope families are
+discriminated unions (`JxaEnvelopeSchema`: success carries `data`, never `error`), so success schema and error
+interception partition cleanly. Never write `error: z.unknown().optional()` into a strict success schema — that
+partially reopens the hybrid-output hole closed-world exists to close.
+
 **End state (decision record, Kip 2026-06-11): fully strict including leaves — §3.2 Option 2.** That lands as
 [OMN-158](https://linear.app/omnifocus-mcp/issue/OMN-158) so schema-precision regressions are attributable separately
 from detection changes. OMN-158 carries the leaf field inventory (read from script source), the optionality audit
@@ -138,14 +143,15 @@ nested `isLegacyScriptError` re-check, and the `// Default: wrap as success` fal
 helpers, grep for external usages (tests import some of them). The `omni.execute` fallback branch (for mocks that lack
 `executeJson`) follows the same rule: validate via the provided schema or fail.
 
-### 3.6 Delete `executeTyped` (rider — decision record, Kip 2026-06-11: §7 residual 1a)
+### 3.6 Delete `executeTyped` (rider — decision record, Kip 2026-06-11: v1 §7 residual 1a)
 
 `executeTyped` has zero call sites and the inversion makes it fully redundant — and leaving a second, schema-optional
-execution path open contradicts the no-opt-outs rule (3.3). Delete it in this ticket: the method, its
-`normalizeToEnvelope` fallback usage, and the mock references in `tests/support/setup-unit.ts`. Grep for any other
+execution path open contradicts the no-opt-outs rule (3.3). Delete it in this ticket: the method, the mock references in
+`tests/support/setup-unit.ts`, **and `normalizeToEnvelope`** (reviewer finding: `executeTyped` is its only consumer, so
+it orphans the moment the method goes). `JxaEnvelopeSchema` stays — 3.1 step 1 reuses its `ok: false` branch
+**detect-only** (no unwrapping of success envelopes, per the Alternative-C rejection in §8). Grep for any other
 references before deleting (the ts-prune cascade rule: boundary deletions can unmask further orphans — note them, do not
-chase them in this PR). `normalizeToEnvelope`/`JxaEnvelopeSchema` in `src/utils/safe-io.ts` stay (the envelope error
-shape detection in 3.1 references the same contract).
+chase them in this PR).
 
 ## 4. Testing
 
@@ -206,5 +212,5 @@ precede the call-site migration.
 | ------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | §3.2 strictness    | Option 2: fully strict incl. leaves, staged via OMN-158; closed-world top level in this ticket                 | Top-level-only end state; typed-but-open leaves                                             | Stable interface worth the audit cost; partial leaf validation invites false confidence |
 | §3.4 error surface | Option B2: full canonicalization via OMN-159, no grandfathered strings; mechanical preservation in this ticket | A: permanent preservation; B1: grandfather `'Legacy script error'`; C: minimal preservation | One clean vocabulary; breaking change accepted knowingly with internal matchers updated |
-| §7 residual 1      | 1a: delete `executeTyped` in this ticket                                                                       | 1b: separate cleanup ticket                                                                 | A second schema-optional execution path contradicts no-opt-outs                         |
-| §7 residual 2      | 2b: file OMN-160 now                                                                                           | 2a: defer indefinitely                                                                      | Decomposition makes the follow-up cheap to file while context is fresh                  |
+| v1 §7 residual 1   | 1a: delete `executeTyped` in this ticket                                                                       | 1b: separate cleanup ticket                                                                 | A second schema-optional execution path contradicts no-opt-outs                         |
+| v1 §7 residual 2   | 2b: file OMN-160 now                                                                                           | 2a: defer indefinitely                                                                      | Decomposition makes the follow-up cheap to file while context is fresh                  |
