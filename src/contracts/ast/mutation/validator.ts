@@ -8,6 +8,7 @@ import type {
   Expr,
   ConstructProjectNode,
   ConstructFolderNode,
+  ConstructTagNode,
   SetPropNode,
   ConstructTaskNode,
   GuardNode,
@@ -15,11 +16,13 @@ import type {
   BulkDeleteItemNode,
   MoveTaskNode,
   MoveProjectNode,
+  MoveTagNode,
   CallMethodNode,
   AssignTagsNode,
 } from './types.js';
 
 const FOLDER_KINDS = new Set(['resolved', 'none', 'notFound']);
+const TAG_KINDS = new Set(['resolved', 'none', 'notFound']);
 const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef']);
 
 /**
@@ -31,6 +34,10 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  *  - `_deleted`: the bulk-delete success accumulator declared by emitProgram
  *    when any bulkDeleteItem is present (mirrors the _aborted ownership pattern).
  *  - `_errors`: the bulk-delete failure accumulator, same ownership.
+ *  - `_tagPath`: the constructTagPath emission's intermediate — bound as
+ *    `const _tagPath = createTagPath(...)` before the leaf tag and created-
+ *    segments are destructured out. At most one constructTagPath per
+ *    statement-list level (rule 9), so a fixed name is safe.
  *  - `_w<i>` (pattern, see RESERVED_ITEM_VAR_PATTERN): per-item warning
  *    watermarks declared by batchItem emission.
  *  - `_d<i>` (pattern, see RESERVED_DELETE_RESOLVE_PATTERN): per-item task
@@ -44,7 +51,13 @@ const CONTAINER_KINDS = new Set(['inbox', 'project', 'parentTask', 'tempIdRef'])
  * Exported so the batch program builder (Task 9) can keep its generated names
  * clear of the same set.
  */
-export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = ['_warnings', '_aborted', '_deleted', '_errors'];
+export const RESERVED_EMITTER_IDENTIFIERS: readonly string[] = [
+  '_warnings',
+  '_aborted',
+  '_deleted',
+  '_errors',
+  '_tagPath',
+];
 const RESERVED_ITEM_VAR_PATTERN = /^_w\d+$/;
 const RESERVED_DELETE_RESOLVE_PATTERN = /^_d\d+$/;
 const RESERVED_DELETE_NAME_PATTERN = /^_n\d+$/;
@@ -82,10 +95,10 @@ function assertNotReserved(name: string, where: string): void {
  *  6. A guard with mode 'throw' must have `envelope.message` defined (the
  *     emitter also throws — belt and suspenders at the validation seam).
  *  7. Resolution-guard discipline: a `resolveProject`/`resolveTask`/
- *     `resolveProjectById`/`resolveFolder` bind consumed by ANY later
- *     statement (setProp/moveTask/moveProject/callMethod/assignTags targets,
- *     construct container/folder/parent vars, return envelopes, binds) must
- *     have a `guard` BETWEEN them whose `cond` mentions that bind
+ *     `resolveProjectById`/`resolveFolder`/`resolveTag` bind consumed by ANY
+ *     later statement (setProp/moveTask/moveProject/callMethod/assignTags
+ *     targets, construct container/folder/parent/tag vars, return envelopes,
+ *     binds) must have a `guard` BETWEEN them whose `cond` mentions that bind
  *     (word-boundary match, not substring). String-level check on `cond` —
  *     same trust model as GuardNode.cond generally. Applies at each
  *     statement-list level independently (resolve/guard/consumer triplets
@@ -96,11 +109,13 @@ function assertNotReserved(name: string, where: string): void {
  *     widened it from constructs to ALL consumers — the update lowerings
  *     consume resolve binds in setProp targets, moves, callMethod targets,
  *     and envelopes.)
- *  8. Inside `batchItem.statements`: all per-statement rules recurse, but a
- *     `return` statement is ILLEGAL (it would return from the whole program
- *     IIFE, skipping remaining items and the results envelope — Task 5 review
- *     finding), and for the same reason a return-MODE guard is ILLEGAL —
- *     inner guards must be mode 'throw'.
+ *  8. Inside `batchItem.statements`: all per-statement rules recurse, but ANY
+ *     statement whose emission contains a top-level `return` is ILLEGAL — it
+ *     would return from the whole program IIFE, skipping remaining items and
+ *     the results envelope (Task 5 review finding). Concretely: a `return`
+ *     statement, a return-MODE guard (inner guards must be mode 'throw'), and
+ *     a `moveTag` (its hard-error envelope catch emits a top-level return).
+ *     Extend this rule when a new node's emission gains a top-level return.
  *  9. Across a program's batchItem nodes, `index` AND `taskVar` values must
  *     each be unique. A duplicate index would double-declare `_w<i>`
  *     (SyntaxError at runtime); and since constructTask binds emit as `var`
@@ -113,17 +128,22 @@ function assertNotReserved(name: string, where: string): void {
  *     and taskVar itself must not be a reserved identifier. The same
  *     duplicate-index rule applies across a program's bulkDeleteItem nodes:
  *     a duplicate index would double-declare `const _d<i>` / `const _n<i>`
- *     (SyntaxError at runtime).
+ *     (SyntaxError at runtime). Likewise, at most ONE `constructTagPath` per
+ *     statement-list level: its emission declares the fixed `const _tagPath`
+ *     intermediate, so a second at the same level would double-declare it
+ *     (SyntaxError at runtime) — fail loud at build time instead.
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
- *     resolveProjectById, constructProject, constructTask, constructFolder,
- *     assignTags) may use a reserved emitter identifier — see
- *     RESERVED_EMITTER_IDENTIFIERS.
+ *     resolveProjectById, resolveTag, constructProject, constructTask,
+ *     constructFolder, constructTag, constructTagPath, assignTags, mergeRetag)
+ *     may use a reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
  * 11. A `moveTask` node's `position` must be a typed TaskMovePosition object
  *     with kind ∈ {inboxBeginning, projectBeginning, parentEnding, containerRoot}.
  *     projectBeginning and parentEnding require a non-empty string `var`;
  *     containerRoot requires a non-empty string `taskVar`. A `moveProject` node's
  *     `position` must be a typed ProjectMovePosition with kind ∈
  *     {libraryBeginning, folderBeginning}; folderBeginning requires non-empty `var`.
+ *     A `moveTag` node's `position` must be a typed TagMovePosition with kind ∈
+ *     {root, underTag}; underTag requires a non-empty string `var`.
  * 12. A `callMethod` node's `method` must be in CALL_METHOD_ALLOWLIST. The
  *     allowlist is deliberately minimal (markComplete, drop) — extend per slice.
  * 13. An `assignTags` node's `mode`, when present, must be in {replace, add, remove}.
@@ -201,6 +221,26 @@ function validateConstructFolderStmt(stmt: ConstructFolderNode): void {
     );
   }
   assertNotReserved(stmt.bind, 'constructFolder bind');
+}
+
+// Rules 2/3/10 for constructTag (tag altitude, mirrors constructFolder).
+function validateConstructTagStmt(stmt: ConstructTagNode): void {
+  const parent = stmt.parent as unknown;
+  // Rule 2: typed TagResolution object.
+  if (typeof parent !== 'object' || parent === null || !TAG_KINDS.has((parent as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid constructTag: parent must be a typed TagResolution object ' +
+        'with kind in {resolved, none, notFound}, not a string or untyped value.',
+    );
+  }
+  // Rule 3: notFound is illegal here.
+  if ((parent as { kind: string }).kind === 'notFound') {
+    throw new Error(
+      'Invalid constructTag: parent.kind="notFound" is illegal — ' +
+        'the not-found case must be handled by a preceding guard that returns.',
+    );
+  }
+  assertNotReserved(stmt.bind, 'constructTag bind');
 }
 
 // Rule 4: value/mutations invariants for setProp.
@@ -304,11 +344,18 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveProject') assertNotReserved(stmt.bind, 'resolveProject bind');
   if (stmt.type === 'resolveTask') assertNotReserved(stmt.bind, 'resolveTask bind');
   if (stmt.type === 'resolveProjectById') assertNotReserved(stmt.bind, 'resolveProjectById bind');
+  if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
+  if (stmt.type === 'mergeRetag') assertNotReserved(stmt.bind, 'mergeRetag bind');
+  if (stmt.type === 'constructTagPath') {
+    assertNotReserved(stmt.bind, 'constructTagPath bind');
+    assertNotReserved(stmt.createdBind, 'constructTagPath createdBind');
+  }
 }
 
 const TASK_MOVE_POSITION_KINDS = new Set(['inboxBeginning', 'projectBeginning', 'parentEnding', 'containerRoot']);
 const PROJECT_MOVE_POSITION_KINDS = new Set(['libraryBeginning', 'folderBeginning']);
+const TAG_MOVE_POSITION_KINDS = new Set(['root', 'underTag']);
 
 /**
  * OmniJS task methods that callMethod nodes may invoke (Rule 12).
@@ -356,6 +403,22 @@ function validateMoveProjectStmt(stmt: MoveProjectNode): void {
   const typed = pos as { kind: string; var?: unknown };
   if (typed.kind === 'folderBeginning' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
     throw new Error('Invalid moveProject: position kind "folderBeginning" requires a non-empty string "var".');
+  }
+}
+
+// Rule 11 for moveTag: typed TagMovePosition with kind in {root, underTag};
+// underTag requires a non-empty string var.
+function validateMoveTagStmt(stmt: MoveTagNode): void {
+  const pos = stmt.position as unknown;
+  if (typeof pos !== 'object' || pos === null || !TAG_MOVE_POSITION_KINDS.has((pos as { kind?: string }).kind ?? '')) {
+    throw new Error(
+      'Invalid moveTag: position must be a typed TagMovePosition object ' +
+        'with kind in {root, underTag}, not a string or untyped value.',
+    );
+  }
+  const typed = pos as { kind: string; var?: unknown };
+  if (typed.kind === 'underTag' && (typeof typed.var !== 'string' || typed.var.length === 0)) {
+    throw new Error('Invalid moveTag: position kind "underTag" requires a non-empty string "var".');
   }
 }
 
@@ -425,15 +488,21 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return [...exprRefs(stmt.task), ...taskMovePositionVars(stmt.position)];
     case 'moveProject':
       return [...exprRefs(stmt.project), ...(stmt.position.kind === 'folderBeginning' ? [stmt.position.var] : [])];
+    case 'moveTag':
+      return [...exprRefs(stmt.tag), ...(stmt.position.kind === 'underTag' ? [stmt.position.var] : [])];
     case 'callMethod':
       return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
     case 'deleteObject':
       return exprRefs(stmt.target);
+    case 'mergeRetag':
+      return [stmt.sourceVar, stmt.targetVar];
     case 'constructTask':
       return stmt.container.kind !== 'inbox' ? [stmt.container.var] : [];
     case 'constructProject':
       return stmt.folder.kind === 'resolved' ? [stmt.folder.var] : [];
     case 'constructFolder':
+      return stmt.parent.kind === 'resolved' ? [stmt.parent.var] : [];
+    case 'constructTag':
       return stmt.parent.kind === 'resolved' ? [stmt.parent.var] : [];
     case 'return':
       return Object.values(stmt.envelope).flatMap(exprRefs);
@@ -446,12 +515,16 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
 
 function isResolveStmt(
   stmt: Stmt,
-): stmt is Extract<Stmt, { type: 'resolveProject' | 'resolveTask' | 'resolveProjectById' | 'resolveFolder' }> {
+): stmt is Extract<
+  Stmt,
+  { type: 'resolveProject' | 'resolveTask' | 'resolveProjectById' | 'resolveFolder' | 'resolveTag' }
+> {
   return (
     stmt.type === 'resolveProject' ||
     stmt.type === 'resolveTask' ||
     stmt.type === 'resolveProjectById' ||
-    stmt.type === 'resolveFolder'
+    stmt.type === 'resolveFolder' ||
+    stmt.type === 'resolveTag'
   );
 }
 
@@ -488,6 +561,10 @@ function validateResolutionGuardDiscipline(statements: Stmt[]): void {
 }
 
 function validateStatementList(statements: Stmt[], ctx: ValidationContext): void {
+  // Rule 9 (constructTagPath altitude): per-LIST counter — the hazard is a
+  // same-block duplicate `const _tagPath`; nested lists get their own scope
+  // via this function's recursion.
+  let tagPathCount = 0;
   for (const stmt of statements) {
     switch (stmt.type) {
       case 'constructProject':
@@ -495,6 +572,9 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'constructFolder':
         validateConstructFolderStmt(stmt);
+        break;
+      case 'constructTag':
+        validateConstructTagStmt(stmt);
         break;
       case 'setProp':
         validateSetPropStmt(stmt);
@@ -510,6 +590,19 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'moveProject':
         validateMoveProjectStmt(stmt);
+        break;
+      case 'moveTag':
+        // Rule 8 (moveTag inside batchItem): moveTag's emission contains a
+        // top-level return (the hard-error envelope catch) — same IIFE-escape
+        // hazard as a bare return / return-mode guard inside batchItem.
+        if (ctx.insideBatchItem) {
+          throw new Error(
+            'Invalid batchItem: a moveTag statement inside batchItem.statements emits a top-level return ' +
+              '(its hard-error envelope catch), which would return from the whole program IIFE, ' +
+              'skipping remaining items and the results envelope.',
+          );
+        }
+        validateMoveTagStmt(stmt);
         break;
       case 'callMethod':
         validateCallMethodStmt(stmt);
@@ -531,6 +624,18 @@ function validateStatementList(statements: Stmt[], ctx: ValidationContext): void
         break;
       case 'bulkDeleteItem':
         validateBulkDeleteItemStmt(stmt, ctx);
+        break;
+      case 'constructTagPath':
+        // Rule 9 (constructTagPath altitude): emission declares the fixed
+        // `const _tagPath` intermediate — a second at this level would
+        // double-declare it (SyntaxError at runtime).
+        tagPathCount++;
+        if (tagPathCount > 1) {
+          throw new Error(
+            'Invalid mutation program: at most one constructTagPath per statement-list level — ' +
+              'a second would double-declare the reserved "_tagPath" intermediate (SyntaxError at runtime).',
+          );
+        }
         break;
       default:
         break;

@@ -11,6 +11,8 @@ import type {
   TaskUpdateData,
 } from '../../mutations.js';
 import {
+  isTestMode,
+  TEST_TAG_PREFIX,
   validateBatchTaskSpecs,
   validateFolderCreate,
   validateProjectCreate,
@@ -29,6 +31,8 @@ import {
   callMethod,
   constructFolder,
   constructProject,
+  constructTag,
+  constructTagPath,
   constructTask,
   dateExpr,
   deleteObject,
@@ -36,7 +40,9 @@ import {
   guard,
   json,
   member,
+  mergeRetag,
   moveProject,
+  moveTag,
   moveTask,
   newExpr,
   raw,
@@ -46,6 +52,7 @@ import {
   resolveParentTask,
   resolveProject,
   resolveProjectById,
+  resolveTag,
   resolveTask,
   return_,
   setProp,
@@ -55,6 +62,7 @@ import {
   type Program,
   type ProjectMovePosition,
   type Stmt,
+  type TagResolution,
   type TaskMovePosition,
 } from './types.js';
 
@@ -1004,6 +1012,370 @@ export function buildBulkDeleteTasksProgram(input: BulkDeleteTasksInput): Progra
 }
 
 // =============================================================================
+// TAG LOWERINGS (slice 6)
+// =============================================================================
+
+export interface TagCreateInput {
+  tagName: string;
+  parentTagName?: string;
+}
+
+/** Sandbox guard for tag ops (relocated from tag-mutation-script-builder.ts —
+ *  spec §2.1): in test mode every touched tag name must be __test- prefixed.
+ *  Sync (name-based; no DB lookup needed, unlike validateTaskInSandbox). */
+function validateTagMutation(tagName: string): void {
+  if (!isTestMode()) return;
+  if (!tagName.startsWith(TEST_TAG_PREFIX)) {
+    throw new Error(`TEST GUARD: Tag mutations must target "${TEST_TAG_PREFIX}"-prefixed tags. Got: "${tagName}"`);
+  }
+}
+
+/** Build-time ' : ' path split (spec §3): null = not a path. Throws carry the
+ *  legacy empty-segment message — the lowering converts to a constant error
+ *  program so the runtime envelope is unchanged. */
+function parseTagPathSegments(input: string): string[] | null {
+  if (!input.includes(' : ')) return null;
+  const segments = input.split(' : ').map((s) => s.trim());
+  if (segments.some((s) => s.length === 0)) {
+    throw new Error(`Invalid tag path: empty segment in "${input}"`);
+  }
+  return segments;
+}
+
+/** A constant `{error, message}` program (spec §3): build-time-decided input
+ *  errors keep their legacy runtime-envelope shape. */
+function constantErrorProgram(message: string, context: string): Program {
+  return {
+    statements: [return_({ error: json(true), message: json(message), context: json(context) })],
+    context,
+    snippetDeps: [],
+  };
+}
+
+/**
+ * Lower a tag-create request into a typed mutation Program (spec §4.2). Two
+ * build-time-decided forms: a `' : '` path lowers to constructTagPath (find-or-
+ * create walk, createdSegments envelope); a flat name lowers to dup-check →
+ * optional parent resolve+guard → constructTag → live-id envelope (the OMN-27
+ * JXA id bridge and its `'unknown'` sentinel are unrepresentable, spec §2.2).
+ */
+export function buildCreateTagProgram(data: TagCreateInput): Program {
+  // Compile-time exhaustiveness guard (same discipline as the other create
+  // lowerings): a new TagCreateInput field cannot be silently dropped.
+  const _exhaustive: Record<keyof TagCreateInput, true> = { tagName: true, parentTagName: true };
+  void _exhaustive;
+  const context = 'create_tag';
+
+  let segments: string[] | null;
+  try {
+    segments = parseTagPathSegments(data.tagName);
+  } catch (e) {
+    return constantErrorProgram((e as Error).message, context);
+  }
+
+  if (segments) {
+    if (data.parentTagName) {
+      return constantErrorProgram(
+        "Cannot use path syntax (' : ' separator) with parentTag parameter. Use either path syntax OR parentTag, not both.",
+        context,
+      );
+    }
+    const statements: Stmt[] = [
+      bind('_pathStr', json(data.tagName)),
+      constructTagPath('_tag', '_created', json(segments)),
+      return_({
+        action: json('created'),
+        tagName: member(ref('_tag'), 'name'),
+        tagId: member(ref('_tag'), 'id.primaryKey'),
+        path: ref('_pathStr'),
+        createdSegments: ref('_created'),
+        // Builder-internal raw: user data enters via the _pathStr bind, never inline.
+        message: raw(
+          '_created.length === 0 ? "Tag path \'" + _pathStr + "\' already exists" : "Created " + _created.length + " tag(s) in path \'" + _pathStr + "\'"',
+        ),
+      }),
+    ];
+    return { statements, context, snippetDeps: ['createTagPath'] };
+  }
+
+  const statements: Stmt[] = [
+    resolveTag('_dup', data.tagName),
+    guard('_dup !== null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' already exists`),
+      context: json(context),
+    }),
+  ];
+  let parentResolution: TagResolution = { kind: 'none' };
+  if (data.parentTagName) {
+    statements.push(
+      resolveTag('_parent', data.parentTagName),
+      guard('_parent === null', {
+        error: json(true),
+        message: json(`Parent tag not found: ${data.parentTagName}`),
+        context: json(context),
+      }),
+    );
+    parentResolution = { kind: 'resolved', var: '_parent' };
+  }
+  statements.push(
+    constructTag('_tag', json(data.tagName), parentResolution),
+    return_({
+      action: json('created'),
+      tagName: json(data.tagName),
+      tagId: member(ref('_tag'), 'id.primaryKey'),
+      parentTagName: data.parentTagName ? member(ref('_parent'), 'name') : json(null),
+      parentTagId: data.parentTagName ? member(ref('_parent'), 'id.primaryKey') : json(null),
+      message: json(
+        data.parentTagName
+          ? `Tag '${data.tagName}' created under '${data.parentTagName}'`
+          : `Tag '${data.tagName}' created successfully`,
+      ),
+    }),
+  );
+  return { statements, context, snippetDeps: [] };
+}
+
+export interface TagRenameInput {
+  tagName: string;
+  newName: string;
+}
+export interface TagDeleteInput {
+  tagName: string;
+}
+export interface TagMergeInput {
+  tagName: string;
+  targetTag: string;
+}
+
+/** Lower a tag-rename request (spec §4.2): resolve target → not-found guard →
+ *  dup-check resolve on newName → exists guard → direct setProp. Guard order
+ *  preserved from legacy: target-not-found beats duplicate. */
+export function buildRenameTagProgram(data: TagRenameInput): Program {
+  const _exhaustive: Record<keyof TagRenameInput, true> = { tagName: true, newName: true };
+  void _exhaustive;
+  const context = 'rename_tag';
+  const statements: Stmt[] = [
+    resolveTag('_tag', data.tagName),
+    guard('_tag === null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    resolveTag('_dup', data.newName),
+    guard('_dup !== null', {
+      error: json(true),
+      message: json(`Tag '${data.newName}' already exists`),
+      context: json(context),
+    }),
+    setProp(ref('_tag'), 'name', json(data.newName), 'direct'),
+    return_({
+      action: json('renamed'),
+      oldName: json(data.tagName),
+      newName: json(data.newName),
+      message: json(`Tag renamed from '${data.tagName}' to '${data.newName}'`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a tag-delete request (spec §4.2): resolve → not-found guard → HARD
+ *  deleteObject (no bestEffort — there is no partial result to preserve,
+ *  contrast merge). The legacy message's trailing period is byte-preserved. */
+export function buildDeleteTagProgram(data: TagDeleteInput): Program {
+  const _exhaustive: Record<keyof TagDeleteInput, true> = { tagName: true };
+  void _exhaustive;
+  const context = 'delete_tag';
+  const statements: Stmt[] = [
+    resolveTag('_tag', data.tagName),
+    guard('_tag === null', {
+      error: json(true),
+      message: json(`Tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    deleteObject(ref('_tag')),
+    return_({
+      action: json('deleted'),
+      tagName: json(data.tagName),
+      message: json(`Tag '${data.tagName}' deleted successfully.`),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a tag-merge request (spec §4.2): resolve src/tgt with guards →
+ *  mergeRetag walk → best-effort source delete (§2.5) → envelope branching on
+ *  whether the delete recorded a warning. User names enter via the _srcName/
+ *  _tgtName binds ONLY — the raw fragments never carry them inline. */
+export function buildMergeTagsProgram(data: TagMergeInput): Program {
+  const _exhaustive: Record<keyof TagMergeInput, true> = { tagName: true, targetTag: true };
+  void _exhaustive;
+  const context = 'merge_tags';
+  const statements: Stmt[] = [
+    resolveTag('_src', data.tagName),
+    guard('_src === null', {
+      error: json(true),
+      message: json(`Source tag '${data.tagName}' not found`),
+      context: json(context),
+    }),
+    resolveTag('_tgt', data.targetTag),
+    guard('_tgt === null', {
+      error: json(true),
+      message: json(`Target tag '${data.targetTag}' not found`),
+      context: json(context),
+    }),
+    bind('_srcName', json(data.tagName)),
+    bind('_tgtName', json(data.targetTag)),
+    mergeRetag('_src', '_tgt', '_count'),
+    // bestEffort label IS the legacy warning prefix, so _warnings[0] reproduces
+    // the legacy warning shape (spec §2.5). Not byte-identical: legacy appended
+    // deleteError.toString() ("Error: <msg>"); bestEffortCatch appends e.message
+    // ("<msg>"). Tests assert the prefix, not the tail. INVARIANT: this source
+    // delete must remain the ONLY warnings-pushing statement in this program —
+    // the envelope below branches on `_warnings.length` to mean "the delete
+    // failed", and any other best-effort statement would corrupt that signal.
+    deleteObject(ref('_src'), true, 'Tags were merged but source tag could not be deleted'),
+    return_({
+      action: raw('_warnings.length ? "merged_with_warning" : "merged"'),
+      sourceTag: ref('_srcName'),
+      targetTag: ref('_tgtName'),
+      tasksMerged: ref('_count'),
+      // undefined-valued keys drop out of JSON.stringify — `warning` appears only
+      // on the failure path (spec §2.3 envelope listing).
+      warning: raw('_warnings.length ? _warnings[0] : undefined'),
+      message: raw(
+        '_warnings.length ? "Merged " + _count + " tasks but could not delete source tag" : "Merged \'" + _srcName + "\' into \'" + _tgtName + "\'. " + _count + " tasks updated."',
+      ),
+    }),
+  ];
+  return { statements, context, snippetDeps: [] };
+}
+
+export interface TagNestInput {
+  tagName: string;
+  parentTagName?: string;
+}
+export interface TagUnparentInput {
+  tagName: string;
+}
+export interface TagReparentInput {
+  tagName: string;
+  parentTagName?: string;
+}
+
+/** Shared tag-move lowering: resolve target (+guard) → [resolve parent (+guard)
+ *  → self-check] → moveTag → envelope. nest/unparent/reparent differ only in
+ *  required-parent policy, messages, and envelope keys (spec §4.2). */
+function lowerTagMove(op: 'nest' | 'unparent' | 'reparent', tagName: string, parentTagName?: string): Program {
+  // Local invariant (not caller-enforced): the nest envelope branch below
+  // references _parent unconditionally, so a parentless nest must be
+  // impossible here — buildNestTagProgram gates it with a constant error.
+  if (op === 'nest' && !parentTagName) {
+    throw new Error('lowerTagMove: nest requires parentTagName (buildNestTagProgram gates this)');
+  }
+  const context = `${op}_tag`;
+  const statements: Stmt[] = [
+    resolveTag('_tag', tagName),
+    guard('_tag === null', {
+      error: json(true),
+      message: json(`Tag '${tagName}' not found`),
+      context: json(context),
+    }),
+  ];
+  if (parentTagName) {
+    statements.push(
+      resolveTag('_parent', parentTagName),
+      guard('_parent === null', {
+        error: json(true),
+        message: json(`${op === 'reparent' ? 'New parent tag' : 'Parent tag'} not found: ${parentTagName}`),
+        context: json(context),
+      }),
+      // Self-move check (legacy-faithful, spec §3): identity via primaryKey.
+      guard('_tag.id.primaryKey === _parent.id.primaryKey', {
+        error: json(true),
+        message: json(`Cannot ${op} tag under itself`),
+        context: json(context),
+      }),
+      moveTag(ref('_tag'), { kind: 'underTag', var: '_parent' }, `Failed to ${op} tag: `),
+    );
+  } else {
+    statements.push(moveTag(ref('_tag'), { kind: 'root' }, `Failed to ${op} tag: `));
+  }
+
+  if (op === 'nest') {
+    statements.push(
+      return_({
+        action: json('nested'),
+        tagName: json(tagName),
+        // Live reads off the resolved parent binding (spec §2.2); resolution is
+        // by exact name, so the live name equals the build-time message's name.
+        parentTagName: member(ref('_parent'), 'name'),
+        parentTagId: member(ref('_parent'), 'id.primaryKey'),
+        message: json(`Tag '${tagName}' nested under '${parentTagName}'`),
+      }),
+    );
+  } else if (op === 'unparent') {
+    statements.push(
+      return_({
+        action: json('unparented'),
+        tagName: json(tagName),
+        message: json(`Tag '${tagName}' moved to root level`),
+      }),
+    );
+  } else if (parentTagName) {
+    // reparent with a parent
+    statements.push(
+      return_({
+        action: json('reparented'),
+        tagName: json(tagName),
+        newParentTagName: member(ref('_parent'), 'name'),
+        newParentTagId: member(ref('_parent'), 'id.primaryKey'),
+        message: json(`Tag '${tagName}' moved under '${parentTagName}'`),
+      }),
+    );
+  } else {
+    // Reparent without a parent: the legacy to-root quirk (spec §3) — action
+    // stays 'reparented' and the parent keys are ABSENT (spec §2.3).
+    statements.push(
+      return_({
+        action: json('reparented'),
+        tagName: json(tagName),
+        message: json(`Tag '${tagName}' moved to root level`),
+      }),
+    );
+  }
+  return { statements, context, snippetDeps: [] };
+}
+
+/** Lower a tag-nest request (spec §4.2): parent REQUIRED — its absence is a
+ *  build-time-decided constant error (contrast reparent's to-root quirk). */
+export function buildNestTagProgram(data: TagNestInput): Program {
+  const _exhaustive: Record<keyof TagNestInput, true> = { tagName: true, parentTagName: true };
+  void _exhaustive;
+  if (!data.parentTagName) {
+    // Verbatim legacy message — the wording predates the parentTagId erasure
+    // (§2.4) and is preserved exactly (spec §3).
+    return constantErrorProgram('Parent tag name or ID is required for nest action', 'nest_tag');
+  }
+  return lowerTagMove('nest', data.tagName, data.parentTagName);
+}
+
+/** Lower a tag-unparent request (spec §4.2): always moveTags to root. */
+export function buildUnparentTagProgram(data: TagUnparentInput): Program {
+  const _exhaustive: Record<keyof TagUnparentInput, true> = { tagName: true };
+  void _exhaustive;
+  return lowerTagMove('unparent', data.tagName);
+}
+
+/** Lower a tag-reparent request (spec §4.2): parent OPTIONAL — absent moves to
+ *  root (legacy quirk, preserved; spec §3). */
+export function buildReparentTagProgram(data: TagReparentInput): Program {
+  const _exhaustive: Record<keyof TagReparentInput, true> = { tagName: true, parentTagName: true };
+  void _exhaustive;
+  return lowerTagMove('reparent', data.tagName, data.parentTagName);
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -1068,6 +1440,55 @@ export const MUTATION_DEFS = {
     },
     build: buildBulkDeleteTasksProgram,
   } as MutationDef<BulkDeleteTasksInput>,
+  'create/tag': {
+    // Spec §2.1: guard EVERY name the op touches (parent included — stricter
+    // than legacy, sandbox-only).
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      if (d.parentTagName) validateTagMutation(d.parentTagName);
+    },
+    build: buildCreateTagProgram,
+  } as MutationDef<TagCreateInput>,
+  'rename/tag': {
+    // Spec §2.1: guard EVERY name the op touches — newName included.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      validateTagMutation(d.newName);
+    },
+    build: buildRenameTagProgram,
+  } as MutationDef<TagRenameInput>,
+  'delete/tag': {
+    guard: (d) => validateTagMutation(d.tagName),
+    build: buildDeleteTagProgram,
+  } as MutationDef<TagDeleteInput>,
+  'merge/tag': {
+    // Spec §2.1: guard EVERY name the op touches — targetTag included.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      validateTagMutation(d.targetTag);
+    },
+    build: buildMergeTagsProgram,
+  } as MutationDef<TagMergeInput>,
+  'nest/tag': {
+    // Spec §2.1: guard EVERY name the op touches — parent included when present.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      if (d.parentTagName) validateTagMutation(d.parentTagName);
+    },
+    build: buildNestTagProgram,
+  } as MutationDef<TagNestInput>,
+  'unparent/tag': {
+    guard: (d) => validateTagMutation(d.tagName),
+    build: buildUnparentTagProgram,
+  } as MutationDef<TagUnparentInput>,
+  'reparent/tag': {
+    // Spec §2.1: guard EVERY name the op touches — parent included when present.
+    guard: (d) => {
+      validateTagMutation(d.tagName);
+      if (d.parentTagName) validateTagMutation(d.parentTagName);
+    },
+    build: buildReparentTagProgram,
+  } as MutationDef<TagReparentInput>,
 } as const;
 
 type MutationData<K extends keyof typeof MUTATION_DEFS> =

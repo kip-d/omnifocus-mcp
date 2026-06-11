@@ -22,6 +22,13 @@ export {
   buildDeleteTaskProgram,
   buildDeleteProjectProgram,
   buildBulkDeleteTasksProgram,
+  buildCreateTagProgram,
+  buildRenameTagProgram,
+  buildDeleteTagProgram,
+  buildMergeTagsProgram,
+  buildNestTagProgram,
+  buildUnparentTagProgram,
+  buildReparentTagProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
   dispatchMutation,
@@ -36,6 +43,13 @@ export type {
   DeleteTaskInput,
   DeleteProjectInput,
   BulkDeleteTasksInput,
+  TagCreateInput,
+  TagRenameInput,
+  TagDeleteInput,
+  TagMergeInput,
+  TagNestInput,
+  TagUnparentInput,
+  TagReparentInput,
 } from './defs.js';
 export { lowerRepetitionRule } from './repetition.js';
 export type { LoweredRepetitionRule } from './repetition.js';

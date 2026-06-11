@@ -13,6 +13,11 @@ import {
   batchItem,
   guard,
   assignTags,
+  resolveTag,
+  constructTag,
+  moveTag,
+  deleteObject,
+  mergeRetag,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('mutation node factories', () => {
@@ -84,5 +89,83 @@ describe('slice-2 node factories', () => {
     expect(node.taskVar).toBe('_t0');
     expect(node.stopOnError).toBe(true);
     expect(node.statements).toHaveLength(1);
+  });
+});
+
+describe('slice-6 moveTag + deleteObject factories', () => {
+  it('moveTag() with root position has no bestEffort/label keys', () => {
+    const node = moveTag(ref('_t'), { kind: 'root' }, 'Failed to unparent tag: ');
+    expect(node.type).toBe('moveTag');
+    expect(node.tag).toEqual(ref('_t'));
+    expect(node.position).toEqual({ kind: 'root' });
+    expect(node.errorPrefix).toBe('Failed to unparent tag: ');
+  });
+
+  it('moveTag() with underTag position carries the var', () => {
+    const node = moveTag(ref('_t'), { kind: 'underTag', var: '_p' }, 'Failed to nest tag: ');
+    expect(node.position).toEqual({ kind: 'underTag', var: '_p' });
+  });
+
+  it('deleteObject() bare call has no bestEffort/label keys', () => {
+    const node = deleteObject(ref('_t'));
+    expect(node).toEqual({ type: 'deleteObject', target: ref('_t') });
+    expect('bestEffort' in node).toBe(false);
+    expect('label' in node).toBe(false);
+  });
+
+  it('deleteObject() with bestEffort=true and label has those keys present', () => {
+    const node = deleteObject(ref('_t'), true, 'source delete');
+    expect(node.bestEffort).toBe(true);
+    expect(node.label).toBe('source delete');
+  });
+});
+
+describe('slice-6 tag node factories', () => {
+  it('resolveTag() binds a result var + ref string', () => {
+    expect(resolveTag('_tag', 'Home')).toEqual({ type: 'resolveTag', bind: '_tag', ref: 'Home' });
+  });
+
+  it('resolveTag() carries the ref verbatim (characters survive unescaped)', () => {
+    const node = resolveTag('_t', 'Err"or');
+    expect(node.bind).toBe('_t');
+    expect(node.ref).toBe('Err"or');
+  });
+
+  it('constructTag() with parent kind none', () => {
+    expect(constructTag('_t', json('Home'), { kind: 'none' })).toEqual({
+      type: 'constructTag',
+      bind: '_t',
+      name: json('Home'),
+      parent: { kind: 'none' },
+    });
+  });
+
+  it('constructTag() with parent kind resolved carries the var', () => {
+    const node = constructTag('_t', json('Home'), { kind: 'resolved', var: '_parent' });
+    expect(node.parent).toEqual({ kind: 'resolved', var: '_parent' });
+  });
+
+  it('constructTag() with parent kind notFound preserves the kind for downstream validation', () => {
+    const node = constructTag('_t', json('Home'), { kind: 'notFound' });
+    expect(node.parent).toEqual({ kind: 'notFound' });
+  });
+});
+
+describe('mergeRetag factory (slice 6 §4.1)', () => {
+  it('produces a MergeRetagNode with type, sourceVar, targetVar, and bind', () => {
+    const node = mergeRetag('_src', '_tgt', '_count');
+    expect(node).toEqual({
+      type: 'mergeRetag',
+      sourceVar: '_src',
+      targetVar: '_tgt',
+      bind: '_count',
+    });
+  });
+
+  it('carries all three arguments verbatim', () => {
+    const node = mergeRetag('srcVar', 'tgtVar', 'countVar');
+    expect(node.sourceVar).toBe('srcVar');
+    expect(node.targetVar).toBe('tgtVar');
+    expect(node.bind).toBe('countVar');
   });
 });

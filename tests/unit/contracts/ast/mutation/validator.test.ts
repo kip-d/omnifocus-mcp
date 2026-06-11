@@ -21,7 +21,14 @@ import {
   json,
   deleteObject,
   bulkDeleteItem,
+  resolveTag,
+  constructTag,
+  constructTagPath,
+  moveTag,
+  mergeRetag,
   type Program,
+  type TagResolution,
+  type TagMovePosition,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 const ok = {
@@ -430,6 +437,99 @@ describe('batchItem uniqueness', () => {
   });
 });
 
+describe('constructTag (rules 2/3/10 at the tag altitude)', () => {
+  it('rejects an untyped parent value', () => {
+    const program: Program = {
+      statements: [
+        { type: 'constructTag', bind: '_t', name: json('X'), parent: 'Work' as unknown as TagResolution },
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/typed TagResolution/);
+  });
+
+  it('rejects parent.kind notFound', () => {
+    const program: Program = {
+      statements: [constructTag('_t', json('X'), { kind: 'notFound' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/notFound.*illegal/);
+  });
+
+  it('rejects a reserved bind', () => {
+    const program: Program = {
+      statements: [constructTag('_warnings', json('X'), { kind: 'none' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
+  });
+
+  it('accepts a well-formed constructTag with parent kind none', () => {
+    const program: Program = {
+      statements: [constructTag('_t', json('Home'), { kind: 'none' }), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
+  it('accepts a well-formed constructTag with parent kind resolved (preceded by a guard)', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        guard('_p === null', { error: json(true) }),
+        constructTag('_t', json('Home'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
+describe('rule 7 covers resolveTag binds', () => {
+  it('rejects a constructTag consuming an unguarded resolveTag bind', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        constructTag('_t', json('X'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('accepts the same program with a guard between', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_p', 'Parent'),
+        guard('_p === null', { error: json(true) }),
+        constructTag('_t', json('X'), { kind: 'resolved', var: '_p' }),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
+  it('rejects a reserved resolveTag bind', () => {
+    const program: Program = {
+      statements: [resolveTag('_warnings', 'Home'), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
+  });
+});
+
 describe('bulkDeleteItem uniqueness (rule 9)', () => {
   const bulkProgram = (items: ReturnType<typeof bulkDeleteItem>[]): Program => ({
     context: 'bulk_delete_tasks',
@@ -448,9 +548,122 @@ describe('bulkDeleteItem uniqueness (rule 9)', () => {
   });
 });
 
+describe('constructTagPath reserved-identifier enforcement (rule 10)', () => {
+  it('_tagPath is reserved: a bind(_tagPath, ...) statement in a program throws /reserved emitter identifier/', () => {
+    const program: Program = {
+      statements: [bind('_tagPath', json(1)), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('constructTagPath bind must not be a reserved identifier (_warnings throws)', () => {
+    const program: Program = {
+      statements: [constructTagPath('_warnings', '_created', json(['Work'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('constructTagPath createdBind must not be a reserved identifier (_aborted throws)', () => {
+    const program: Program = {
+      statements: [constructTagPath('_tag', '_aborted', json(['Work'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/i);
+  });
+
+  it('accepts a well-formed constructTagPath with non-reserved binds', () => {
+    const program: Program = {
+      statements: [constructTagPath('_tag', '_created', json(['Work', 'Active'])), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+
+  it('rejects two constructTagPath statements at the same level (duplicate const _tagPath = SyntaxError)', () => {
+    const program: Program = {
+      statements: [
+        constructTagPath('_tag', '_created', json(['Work'])),
+        constructTagPath('_tag2', '_created2', json(['Home'])),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/at most one constructTagPath/i);
+  });
+});
+
+describe('moveTag position (rule 11 at the tag altitude)', () => {
+  it('rejects an untyped position', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_t', 'X'),
+        guard('_t === null', { error: json(true) }),
+        { type: 'moveTag', tag: ref('_t'), position: '_p' as unknown as TagMovePosition, errorPrefix: 'p: ' },
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/typed TagMovePosition/);
+  });
+
+  it('rejects underTag without a var', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_t', 'X'),
+        guard('_t === null', { error: json(true) }),
+        moveTag(ref('_t'), { kind: 'underTag', var: '' }, 'p: '),
+        return_({ ok: json(true) }),
+      ],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/requires a non-empty string "var"/);
+  });
+
+  it('counts moveTag as a rule-7 consumer of its tag ref and underTag var', () => {
+    // resolveTag('_t', 'X') then moveTag(ref('_t'), {kind:'root'}, 'p: ') with no guard → /without a guard/
+    const program: Program = {
+      statements: [resolveTag('_t', 'X'), moveTag(ref('_t'), { kind: 'root' }, 'p: '), return_({ ok: json(true) })],
+      context: 't',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  // Rule 8 generalized: moveTag's emission contains a top-level return (its
+  // hard-error envelope catch) — inside batchItem.statements that return would
+  // escape the whole program IIFE, the exact rule-8 hazard.
+  it('rejects a moveTag inside batchItem.statements (rule 8 — emission contains a top-level return)', () => {
+    const bad: Program = {
+      context: 'batch_create',
+      snippetDeps: [],
+      statements: [
+        bind('results', raw('[]')),
+        batchItem(
+          'a',
+          0,
+          '_t0',
+          [constructTask('_t0', json('A'), { kind: 'inbox' as const }), moveTag(ref('_t0'), { kind: 'root' }, 'p: ')],
+          false,
+        ),
+        return_({ results: ref('results') }),
+      ],
+    };
+    expect(() => validateMutationProgram(bad)).toThrow(/moveTag.*batchItem|batchItem.*moveTag/i);
+  });
+});
+
 describe('reserved emitter identifiers', () => {
   it('exports the reserved list for the batch program builder', () => {
-    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors']);
+    expect(RESERVED_EMITTER_IDENTIFIERS).toEqual(['_warnings', '_aborted', '_deleted', '_errors', '_tagPath']);
   });
 
   it('rejects a bind statement named _warnings', () => {
@@ -518,5 +731,90 @@ describe('reserved emitter identifiers', () => {
       };
       expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
     }
+  });
+});
+
+describe('mergeRetag — rule-7 resolution-guard discipline (slice 6 §4.1)', () => {
+  // mergeRetag is a CONSUMER of both sourceVar and targetVar (rule 7).
+  // An unguarded resolveTag → mergeRetag must throw /without a guard/.
+
+  it('rejects an unguarded resolveTag(_src) consumed by mergeRetag as sourceVar', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('rejects an unguarded resolveTag(_tgt) consumed by mergeRetag as targetVar', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('accepts resolveTag → guard → resolveTag → guard → mergeRetag', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
+describe('mergeRetag — rule-10 reserved bind enforcement (slice 6 §4.1)', () => {
+  it('rejects a mergeRetag whose bind is _warnings (reserved)', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_warnings'),
+        return_({ count: ref('_warnings') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
+  });
+
+  it('accepts a mergeRetag with a non-reserved bind name', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_movedCount'),
+        return_({ count: ref('_movedCount') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
   });
 });

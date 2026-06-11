@@ -2,7 +2,7 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TaskMovePosition } from './types.js';
+import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TagMovePosition, TaskMovePosition } from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -65,6 +65,28 @@ function emitProjectMovePosition(p: ProjectMovePosition): string {
     default: {
       const _x: never = p;
       throw new Error(`Unknown project move position: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+// Exhaustive switch with never default — a future third TagMovePosition kind
+// must be a compile error here, not a silent null fallback.
+function emitTagMovePosition(p: TagMovePosition): string {
+  switch (p.kind) {
+    case 'root':
+      // 'tags.ending' (end of the database's top-level tag list), NOT null.
+      // The legacy template emitted moveTags([t], null) and the slice-6 port
+      // preserved it — but the live API rejects it ('Database.moveTags
+      // argument "position" requires a non-null value'), so unparent and
+      // reparent-to-root NEVER worked against real OmniFocus. Found by the
+      // tag-paths live integration suite (OMN-128 slice 6). 'tags.beginning'
+      // would also work; ending appends, which least disturbs manual order.
+      return 'tags.ending';
+    case 'underTag':
+      return p.var;
+    default: {
+      const _x: never = p;
+      throw new Error(`Unknown tag move position: ${JSON.stringify(_x)}`);
     }
   }
 }
@@ -233,8 +255,17 @@ export function emitStmt(node: Stmt): string {
       const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
       return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
     }
-    case 'deleteObject':
-      return `deleteObject(${emitExpr(node.target)});`;
+    case 'moveTag': {
+      const pos = emitTagMovePosition(node.position);
+      const move = `moveTags([${emitExpr(node.tag)}], ${pos});`;
+      // HARD error envelope on failure (legacy-faithful, spec §3) — errorPrefix is
+      // builder-internal constant text; String(e) matches legacy e.toString().
+      return `try { ${move} } catch (e) { return JSON.stringify({ error: true, message: ${JSON.stringify(node.errorPrefix)} + String(e) }); }`;
+    }
+    case 'deleteObject': {
+      const call = `deleteObject(${emitExpr(node.target)});`;
+      return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? 'delete')}` : call;
+    }
     case 'bulkDeleteItem': {
       // Ownership split (bulk-delete composition, mirrors batchItem):
       // - `let _deleted = []` and `let _errors = []` are DECLARED at the
@@ -262,10 +293,56 @@ export function emitStmt(node: Stmt): string {
         '}',
       ].join('\n');
     }
+    case 'mergeRetag':
+      // Emitter-owned loop internals (the bulkDeleteItem discipline): _hasSrc/_hasTgt
+      // live inside the forEach callback scope — no program-bind collision possible.
+      return [
+        `let ${node.bind} = 0;`,
+        'flattenedTasks.forEach(function (task) {',
+        '  var _hasSrc = false;',
+        '  var _hasTgt = false;',
+        `  task.tags.forEach(function (t) { if (t === ${node.sourceVar}) _hasSrc = true; if (t === ${node.targetVar}) _hasTgt = true; });`,
+        '  if (_hasSrc) {',
+        `    task.removeTag(${node.sourceVar});`,
+        `    if (!_hasTgt) task.addTag(${node.targetVar});`,
+        `    ${node.bind}++;`,
+        '  }',
+        '});',
+      ].join('\n');
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':
       return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
+    case 'resolveTag':
+      return `const ${node.bind} = flattenedTags.find(t => t.name === ${JSON.stringify(node.ref)}) || null;`;
+    case 'constructTag': {
+      // Near-clone of constructFolder at the tag altitude. `new Tag(name, parent)`
+      // nests under the parent; omitted parent = top level (matches legacy
+      // app.make at doc.tags / new Tag(name, null) in the path island).
+      const name = emitExpr(node.name);
+      switch (node.parent.kind) {
+        case 'resolved':
+          return `const ${node.bind} = new Tag(${name}, ${node.parent.var});`;
+        case 'none':
+          return `const ${node.bind} = new Tag(${name});`;
+        case 'notFound':
+          throw new Error(
+            'constructTag with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+          );
+        default: {
+          const _x: never = node.parent;
+          throw new Error(`Unknown tag resolution: ${JSON.stringify(_x)}`);
+        }
+      }
+    }
+    case 'constructTagPath':
+      // `_tagPath` is reserved (validator rule 10) — at most one constructTagPath
+      // per statement-list level (validator-enforced), so a fixed intermediate is safe.
+      return [
+        `const _tagPath = createTagPath(${emitExpr(node.segments)});`,
+        `const ${node.bind} = _tagPath.tag;`,
+        `const ${node.createdBind} = _tagPath.created;`,
+      ].join('\n');
     case 'resolveProjectById':
       return `const ${node.bind} = Project.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
     case 'constructTask': {

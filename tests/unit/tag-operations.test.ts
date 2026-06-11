@@ -14,12 +14,13 @@ describe('Tag Operations Fix Verification', () => {
 
   it('should use OmniJS bridge for merge tag retagging', async () => {
     const { script } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
-    // Merge must use evaluateJavascript (OmniJS bridge) — JXA tag mutations silently fail
-    expect(script).toContain('app.evaluateJavascript(mergeScript)');
+    // The whole merge program crosses to OmniJS via the launcher's
+    // evaluateJavascript call — JXA tag mutations silently fail
+    expect(script).toContain('evaluateJavascript(');
 
-    // Should use singular OmniJS methods inside the bridge
-    expect(script).toContain('task.removeTag(srcTag)');
-    expect(script).toContain('task.addTag(tgtTag)');
+    // Singular OmniJS methods against the resolved tag bindings (mergeRetag node)
+    expect(script).toContain('task.removeTag(_src)');
+    expect(script).toContain('task.addTag(_tgt)');
   });
 
   it('should not use JXA plural tag methods for merge', async () => {
@@ -27,6 +28,18 @@ describe('Tag Operations Fix Verification', () => {
     // JXA plural methods (addTags/removeTags) silently fail — must not be used
     expect(script).not.toContain('task.removeTags(');
     expect(script).not.toContain('task.addTags(');
+  });
+
+  it('should contain zero backticks — the OMN-111/113 nested-template injection class is structurally dead', async () => {
+    // The legacy builders interpolated user data into nested-backtick
+    // evaluateJavascript islands (bit twice: OMN-111, OMN-113). The emitted
+    // script now crosses the JXA→OmniJS boundary as ONE JSON.stringify'd
+    // literal, so a single stray backtick anywhere is a regression.
+    const { script: mergeScript } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
+    expect(mergeScript).not.toContain('`');
+
+    const { script: createScript } = await buildCreateTagScript({ tagName: 'A : B' });
+    expect(createScript).not.toContain('`');
   });
 
   it('should return JSON stringified results', async () => {
@@ -45,24 +58,23 @@ describe('Tag Operations Fix Verification', () => {
 });
 
 describe('Tag mutation builders - nested tag hierarchy syntax', () => {
-  it('should contain parseTagPath helper function', async () => {
-    const { script } = await buildCreateTagScript({ tagName: 'Test' });
-    expect(script).toContain('function parseTagPath(');
+  it('should lower a path-syntax create to the createTagPath snippet', async () => {
+    // ' : ' paths are split at BUILD time; the emitted program calls the
+    // find-or-create walk. (wrapInLauncher JSON-escapes the program, so the
+    // segments array appears with escaped quotes — assert the quote-free call.)
+    const { script } = await buildCreateTagScript({ tagName: 'A : B' });
+    expect(script).toContain('createTagPath(');
   });
 
-  it('should use OmniJS bridge for path tag creation', async () => {
+  it('should not include the path walk for a flat-name create', async () => {
     const { script } = await buildCreateTagScript({ tagName: 'Test' });
-    // Path creation uses evaluateJavascript with new Tag(name, parent)
-    expect(script).toContain('new Tag(segments[i], parent)');
+    expect(script).not.toContain('createTagPath(');
   });
 
-  it('should check for path syntax conflict with parentTagName', async () => {
-    const { script } = await buildCreateTagScript({ tagName: 'Test' });
-    expect(script).toContain('Cannot use path syntax');
-  });
-
-  it('should handle path syntax in create action', async () => {
-    const { script } = await buildCreateTagScript({ tagName: 'Test' });
-    expect(script).toContain('parseTagPath(tagName)');
+  it('should emit a constant error envelope for path syntax combined with parentTagName', async () => {
+    const { script } = await buildCreateTagScript({ tagName: 'A : B', parentTagName: 'P' });
+    expect(script).toContain(
+      "Cannot use path syntax (' : ' separator) with parentTag parameter. Use either path syntax OR parentTag, not both.",
+    );
   });
 });

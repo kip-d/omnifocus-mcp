@@ -45,6 +45,11 @@ export type Expr = RefNode | MemberNode | NewNode | EnumRefNode | DateExprNode |
 // --- Typed fail-able folder resolution ---
 export type FolderResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
 
+// --- Typed fail-able tag resolution (slice 6) ---
+// The TagResolution union deferred since slice 1 (see AssignTagsNode comment):
+// where a constructed tag's parent comes from is a closed set of typed states.
+export type TagResolution = { kind: 'resolved'; var: string } | { kind: 'none' } | { kind: 'notFound' };
+
 // --- Typed fail-able container resolution (slice 2) ---
 // Mirrors FolderResolution's named-states discipline: where a created task goes
 // is a closed set of typed states, never a stringly-typed value.
@@ -87,6 +92,20 @@ export interface ResolveTaskNode {
   type: 'resolveTask';
   bind: string;
   ref: string;
+}
+/** Resolves a tag by exact name — FIRST match in flattenedTags order (spec §3:
+ *  legacy ops diverged first-vs-last; slice 6 unifies on first). Name-only:
+ *  the production seam passes names exclusively (spec §2.4). */
+export interface ResolveTagNode {
+  type: 'resolveTag';
+  bind: string;
+  ref: string;
+}
+export interface ConstructTagNode {
+  type: 'constructTag';
+  bind: string;
+  name: Expr;
+  parent: TagResolution;
 }
 /** Resolves a project strictly by identifier only — spec §2.1 deliberate
  *  contrast with ResolveProjectNode (flexible, id-then-name fallback). Used
@@ -148,8 +167,8 @@ export interface SetPropNode {
 }
 // OMN-128: tag resolutions stay string-shaped (tags: Json(string[])) for the create-or-find
 // path that create/project uses — every tag resolves via resolveOrCreateTagByPath, so AssignTags
-// can never receive a missing tag. A typed TagResolution union (mirroring FolderResolution) is
-// deferred until a read-only ResolveTag node is needed (spec §5).
+// can never receive a missing tag. A typed TagResolution union (mirroring FolderResolution) was
+// deferred until a read-only ResolveTag node was needed — both landed in slice 6.
 export interface AssignTagsNode {
   type: 'assignTags';
   target: Expr;
@@ -219,12 +238,43 @@ export interface CallMethodNode {
   label?: string;
 }
 
+/** Typed tag-move destination (slice 6): root (moveTags([t], tags.ending) —
+ *  the legacy null position is rejected by the live API) or under a resolved
+ *  parent tag var. */
+export type TagMovePosition = { kind: 'root' } | { kind: 'underTag'; var: string };
+
+/** Moves one tag via OmniJS `moveTags`. Failure is a HARD error envelope (not a
+ *  warning): legacy nest/unparent/reparent return `{error, message: "<prefix><err>"}`
+ *  on a moveTags throw — errorPrefix is builder-internal constant text, never
+ *  user data (spec §3). */
+export interface MoveTagNode {
+  type: 'moveTag';
+  tag: Expr;
+  position: TagMovePosition;
+  errorPrefix: string;
+}
+
+/** Find-or-create a tag path (spec §4.1): binds the leaf tag AND the array of
+ *  created segment names. Path parsing happens at BUILD time (spec §3) — this
+ *  node receives the already-split segments as a json Expr. Emission uses the
+ *  reserved `_tagPath` intermediate (validator rule 10). */
+export interface ConstructTagPathNode {
+  type: 'constructTagPath';
+  bind: string;
+  createdBind: string;
+  segments: Expr;
+}
+
 /** deleteObject(<target>) — OmniJS free function (NOT a method; callMethod
- *  cannot express it). No binding, no bestEffort: a failed delete is a hard
- *  error — there is no partial result to preserve (spec §2.4/§4.1). */
+ *  cannot express it). Default = hard error (no partial result to preserve —
+ *  spec slice-5 §2.4/§4.1). `bestEffort` (slice 6, spec §2.5) exists for ONE
+ *  consumer: merge/tag, where retagging has already happened when the source
+ *  delete runs — the catch records a labeled OMN-137 warning instead. */
 export interface DeleteObjectNode {
   type: 'deleteObject';
   target: Expr;
+  bestEffort?: boolean;
+  label?: string;
 }
 
 /** One id's delete attempt inside a bulk program (spec §4.2): resolve →
@@ -240,6 +290,19 @@ export interface BulkDeleteItemNode {
   index: number;
 }
 
+/** Merge retagging (spec §4.1, bespoke per the bulkDeleteItem precedent): walks
+ *  flattenedTasks, moves every task carrying the source tag to the target
+ *  (removeTag + addTag-if-absent, legacy semantics), binds the moved count.
+ *  sourceVar/targetVar are resolveTag bind NAMES (rule 7 applies to both).
+ *  Loop internals (_hasSrc/_hasTgt) are emitter-owned callback-scope vars —
+ *  no program-bind collision possible (same discipline as bulkDeleteItem). */
+export interface MergeRetagNode {
+  type: 'mergeRetag';
+  sourceVar: string;
+  targetVar: string;
+  bind: string;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -250,18 +313,23 @@ export type Stmt =
   | ResolveProjectNode
   | ResolveTaskNode
   | ResolveProjectByIdNode
+  | ResolveTagNode
   | GuardNode
   | ConstructProjectNode
   | ConstructTaskNode
   | ConstructFolderNode
+  | ConstructTagNode
+  | ConstructTagPathNode
   | BatchItemNode
   | SetPropNode
   | AssignTagsNode
   | MoveTaskNode
   | MoveProjectNode
+  | MoveTagNode
   | CallMethodNode
   | DeleteObjectNode
   | BulkDeleteItemNode
+  | MergeRetagNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -299,6 +367,23 @@ export const resolveTask = (bindVar: string, refStr: string): ResolveTaskNode =>
 });
 /** Alias retained for the slice-2 create lowerings' readability (same node). */
 export const resolveParentTask = resolveTask;
+export const resolveTag = (bindVar: string, refStr: string): ResolveTagNode => ({
+  type: 'resolveTag',
+  bind: bindVar,
+  ref: refStr,
+});
+export const constructTag = (bindVar: string, name: Expr, parent: TagResolution): ConstructTagNode => ({
+  type: 'constructTag',
+  bind: bindVar,
+  name,
+  parent,
+});
+export const constructTagPath = (bindVar: string, createdBindVar: string, segments: Expr): ConstructTagPathNode => ({
+  type: 'constructTagPath',
+  bind: bindVar,
+  createdBind: createdBindVar,
+  segments,
+});
 export const resolveProjectById = (bindVar: string, refStr: string): ResolveProjectByIdNode => ({
   type: 'resolveProjectById',
   bind: bindVar,
@@ -416,9 +501,26 @@ export const callMethod = (
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
 });
-export const deleteObject = (target: Expr): DeleteObjectNode => ({ type: 'deleteObject', target });
+export const moveTag = (tag: Expr, position: TagMovePosition, errorPrefix: string): MoveTagNode => ({
+  type: 'moveTag',
+  tag,
+  position,
+  errorPrefix,
+});
+export const deleteObject = (target: Expr, bestEffort = false, label?: string): DeleteObjectNode => ({
+  type: 'deleteObject',
+  target,
+  ...(bestEffort ? { bestEffort } : {}),
+  ...(label ? { label } : {}),
+});
 export const bulkDeleteItem = (id: string, index: number): BulkDeleteItemNode => ({
   type: 'bulkDeleteItem',
   id,
   index,
+});
+export const mergeRetag = (sourceVar: string, targetVar: string, bindVar: string): MergeRetagNode => ({
+  type: 'mergeRetag',
+  sourceVar,
+  targetVar,
+  bind: bindVar,
 });

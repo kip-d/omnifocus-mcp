@@ -32,3 +32,17 @@ describe('resolveProjectFlexible', () => {
     expect(src).toContain('return null'); // not-found is null — guard handles loudness
   });
 });
+
+describe('createTagPath', () => {
+  it('is registered with deps: []', () => {
+    expect(SNIPPETS.createTagPath).toBeDefined();
+    expect(SNIPPETS.createTagPath.deps).toEqual([]);
+  });
+
+  it('source contains created.push(segments[i]) and returns { tag, created }', () => {
+    const src = SNIPPETS.createTagPath.source;
+    expect(src).toContain('function createTagPath');
+    expect(src).toContain('created.push(segments[i])');
+    expect(src).toContain('return { tag: current, created: created }');
+  });
+});
