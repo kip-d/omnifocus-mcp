@@ -2,19 +2,28 @@
 
 This directory contains the official TypeScript definitions for OmniFocus automation.
 
-## Current Version: OmniFocus.d.ts → OmniFocus-4.8.6-d.ts
+## Current Version: OmniFocus.d.ts → OmniFocus-4.8.11-d.ts
 
 - **Current**: `OmniFocus.d.ts` (symlink to latest version)
-- **Latest Version**: OmniFocus 4.8.6
-- **Previous Version**: OmniFocus 4.8.3 (kept for reference)
+- **Latest Version**: OmniFocus 4.8.11
+- **Previous Version**: OmniFocus 4.8.6 (kept for reference)
 - **Minimum Required**: OmniFocus 4.7+
+- **Drift note**: 4.8.6 → 4.8.11 export is API-identical (verified 2026-06-11, sorted-content diff) — five patch
+  releases with zero automation-surface change. The regenerate-and-diff step is the platform-drift signal for the
+  OMN-148 behavioral spec (its platform-contract source).
 
 ## File Structure
 
 - `OmniFocus.d.ts` - Symlink to the current version (always points to latest)
-- `OmniFocus-4.8.6-d.ts` - Official TypeScript definitions for OmniFocus 4.8.6
-- `OmniFocus-4.8.3-d.ts` - TypeScript definitions for OmniFocus 4.8.3
+- `OmniFocus-4.8.11-d.ts` - Official TypeScript definitions for OmniFocus 4.8.11
+- `OmniFocus-4.8.6-d.ts` - TypeScript definitions for OmniFocus 4.8.6 (previous)
 - `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
+
+Manual carry-overs each regeneration (the raw export lacks both): the regen-instructions header block, and the
+`type _omnijs_AnonymousProxy = unknown;` placeholder (the export references it in `LanguageModel.Session.withTools()`
+without defining it). The pre-commit hook prettier-reformats the export (4-space → 2-space indents), so when diffing a
+fresh raw export against the repo copy, normalize first (run the raw export through `npx prettier` or use a
+sorted-content diff) — otherwise indent noise masks real API drift.
 
 ## Usage
 
@@ -66,7 +75,7 @@ The `OmniFocus-extensions.d.ts` file contains properties not included in the off
 - `effectivelyCompleted: boolean` - Whether task or its container is completed
 - `effectivelyDropped: boolean` - Whether task or its container is dropped
 
-**Testing:** Run `node test-extensions.js` to verify these properties on your OmniFocus version.
+**Testing:** Run `node tests/manual/test-extensions.js` to verify these properties on your OmniFocus version.
 
 ## How to Regenerate API Definitions
 
@@ -93,26 +102,28 @@ When a new version of OmniFocus is released, follow these steps to update the Ty
 
    Replace `[VERSION]` with the version number (e.g., `4.8.3`)
 
-3. Archive the previous current version:
+3. Apply the manual carry-overs to the new file (see the checklist above: regen-instructions header block +
+   `_omnijs_AnonymousProxy` placeholder).
 
-   ```bash
-   git mv src/omnifocus/api/OmniFocus.d.ts src/omnifocus/api/OmniFocus-[OLD_VERSION]-d.ts
-   ```
-
-4. Create a symlink to the new version:
+4. Retarget the symlink and apply the retention convention (keep current + previous, delete N-2):
    ```bash
    cd src/omnifocus/api
-   ln -s OmniFocus-[VERSION]-d.ts OmniFocus.d.ts
+   ln -sfn OmniFocus-[VERSION]-d.ts OmniFocus.d.ts
+   git rm OmniFocus-[N-2_VERSION]-d.ts
    ```
+   (`OmniFocus.d.ts` is a symlink — never `git mv` it to "archive" anything.)
 
 ### Step 3: Update Documentation
 
 1. Update the version information at the top of this README
-2. Check for new API features by comparing versions:
+2. Check for new API features by comparing versions — normalize first (the pre-commit hook reformats indents and the
+   export reorders declarations, so a bare `diff` is mostly noise):
    ```bash
-   diff OmniFocus-[OLD_VERSION]-d.ts OmniFocus-[NEW_VERSION]-d.ts
+   diff <(sort OmniFocus-[OLD]-d.ts) <(sort OmniFocus-[NEW]-d.ts)   # or prettier the raw export first
    ```
-3. Document any new features or breaking changes
+3. Document any new features or breaking changes — and skim the OmniFocus release notes
+   (omnigroup.com/releasenotes/omnifocus) for Omni Automation entries: BEHAVIORAL changes ship with identical type
+   signatures and are invisible to any typings diff
 4. Update references in code that use version-specific features
 
 ### Step 4: Test and Verify
@@ -131,12 +142,14 @@ git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
 
 ## Version History
 
-- **4.8.6** - Current version (December 2025)
+- **4.8.11** - Current version (May 2026, regenerated June 2026)
+  - API-identical to 4.8.6 (verified by sorted-content diff) — maintenance releases only
+  - Behavioral (release-notes layer, NOT visible in typings): 4.8.9 enforces mutually exclusive tags in Omni Automation;
+    4.8.10 fixed an Automation note-text crash; 4.8.11 fixed an Automation link-style regression
+- **4.8.6** - Previous version (December 2025)
   - New: LanguageModel API for AI integration
   - New: FolderArray, ProjectArray, SectionArray, TagArray typed arrays
   - New: Library class
-- **4.8.3** - Previous version (October 2025)
-  - New features: Anchor Dates and other 4.8.x improvements
 - **4.7.0** - Minimum required version (August 2025)
   - Required for: planned dates, mutually exclusive tags, enhanced repeats
 
