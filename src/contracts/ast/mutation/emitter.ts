@@ -286,6 +286,22 @@ export function emitStmt(node: Stmt): string {
         '}',
       ].join('\n');
     }
+    case 'mergeRetag':
+      // Emitter-owned loop internals (the bulkDeleteItem discipline): _hasSrc/_hasTgt
+      // live inside the forEach callback scope — no program-bind collision possible.
+      return [
+        `let ${node.bind} = 0;`,
+        'flattenedTasks.forEach(function (task) {',
+        '  var _hasSrc = false;',
+        '  var _hasTgt = false;',
+        `  task.tags.forEach(function (t) { if (t === ${node.sourceVar}) _hasSrc = true; if (t === ${node.targetVar}) _hasTgt = true; });`,
+        '  if (_hasSrc) {',
+        `    task.removeTag(${node.sourceVar});`,
+        `    if (!_hasTgt) task.addTag(${node.targetVar});`,
+        `    ${node.bind}++;`,
+        '  }',
+        '});',
+      ].join('\n');
     case 'resolveProject':
       return `const ${node.bind} = resolveProjectFlexible(${JSON.stringify(node.ref)});`;
     case 'resolveTask':

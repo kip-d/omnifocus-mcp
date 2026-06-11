@@ -32,6 +32,7 @@ import {
   constructTag,
   constructTagPath,
   moveTag,
+  mergeRetag,
   type Program,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
@@ -605,5 +606,104 @@ describe('deleteObject bestEffort', () => {
     expect(emitStmt(deleteObject(ref('_t'), true, 'source delete'))).toBe(
       'try { deleteObject(_t); } catch (e) { _warnings.push("source delete" + \': \' + (e && e.message ? e.message : String(e))); }',
     );
+  });
+});
+
+describe('mergeRetag (slice 6 §4.1)', () => {
+  it('emits the whole-DB retag loop binding the count', () => {
+    const emitted = emitStmt(mergeRetag('_src', '_tgt', '_count'));
+    expect(emitted).toContain('let _count = 0;');
+    expect(emitted).toContain('flattenedTasks.forEach(function (task) {');
+    expect(emitted).toContain('task.removeTag(_src);');
+    expect(emitted).toContain('if (!_hasTgt) task.addTag(_tgt);');
+    expect(emitted).toContain('_count++;');
+  });
+
+  // Emitter-owned loop internals discipline (per the bulkDeleteItem precedent):
+  // _hasSrc/_hasTgt live inside the forEach callback scope — verify that no
+  // program-level binding collision is possible for these internal names.
+  it('uses _hasSrc/_hasTgt as callback-scoped vars (no program-level binding)', () => {
+    const emitted = emitStmt(mergeRetag('_src', '_tgt', '_count'));
+    expect(emitted).toContain('var _hasSrc = false;');
+    expect(emitted).toContain('var _hasTgt = false;');
+    // The declarations must be INSIDE the forEach callback body, not at loop-open level
+    const forEachPos = emitted.indexOf('flattenedTasks.forEach');
+    const hasSrcPos = emitted.indexOf('var _hasSrc');
+    expect(hasSrcPos).toBeGreaterThan(forEachPos);
+  });
+
+  // VM execution test (mirrors the vm harness in complete.test.ts):
+  // three fake tasks — (a) src-only, (b) src+tgt, (c) neither — and assert
+  // the count and side-effects exactly match legacy semantics.
+  it('EXECUTES correctly: count=2, removeTag on both src-carrying tasks, addTag only on src-only task (vm)', () => {
+    const emitted = emitStmt(mergeRetag('_src', '_tgt', '_count'));
+
+    // Wrap the emitted statement in a program IIFE so it can be vm-executed.
+    // The emitted statement itself declares `let _count = 0;` — do NOT
+    // redeclare it here (that causes a SyntaxError for duplicate binding).
+    const program = `(() => {
+${emitted}
+return JSON.stringify({ count: _count });
+})()`;
+
+    const srcTag = { name: 'src' };
+    const tgtTag = { name: 'tgt' };
+
+    const removeTagCalls: Array<{ task: string; tag: unknown }> = [];
+    const addTagCalls: Array<{ task: string; tag: unknown }> = [];
+
+    // Task A: has src only
+    const taskA = {
+      _name: 'A',
+      tags: [srcTag],
+      removeTag(t: unknown) {
+        removeTagCalls.push({ task: 'A', tag: t });
+      },
+      addTag(t: unknown) {
+        addTagCalls.push({ task: 'A', tag: t });
+      },
+    };
+    // Task B: has src + tgt (legacy hasTgt skip — addTag NOT called)
+    const taskB = {
+      _name: 'B',
+      tags: [srcTag, tgtTag],
+      removeTag(t: unknown) {
+        removeTagCalls.push({ task: 'B', tag: t });
+      },
+      addTag(t: unknown) {
+        addTagCalls.push({ task: 'B', tag: t });
+      },
+    };
+    // Task C: has neither — must be untouched
+    const taskC = {
+      _name: 'C',
+      tags: [],
+      removeTag(t: unknown) {
+        removeTagCalls.push({ task: 'C', tag: t });
+      },
+      addTag(t: unknown) {
+        addTagCalls.push({ task: 'C', tag: t });
+      },
+    };
+
+    const sandbox: Record<string, unknown> = {
+      _src: srcTag,
+      _tgt: tgtTag,
+      flattenedTasks: [taskA, taskB, taskC],
+      JSON,
+    };
+
+    const result = JSON.parse(vm.runInNewContext(program, sandbox) as string) as { count: number };
+
+    // count === 2: both src-carrying tasks (A and B)
+    expect(result.count).toBe(2);
+    // removeTag called on both src-carrying tasks, NOT on C
+    expect(removeTagCalls).toHaveLength(2);
+    expect(removeTagCalls.map((c) => c.task).sort()).toEqual(['A', 'B']);
+    expect(removeTagCalls.every((c) => c.tag === srcTag)).toBe(true);
+    // addTag called only on task A (src-only); task B already had tgt — legacy hasTgt skip
+    expect(addTagCalls).toHaveLength(1);
+    expect(addTagCalls[0].task).toBe('A');
+    expect(addTagCalls[0].tag).toBe(tgtTag);
   });
 });

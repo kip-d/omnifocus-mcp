@@ -17,6 +17,7 @@ import {
   constructTag,
   moveTag,
   deleteObject,
+  mergeRetag,
 } from '../../../../../src/contracts/ast/mutation/types.js';
 
 describe('mutation node factories', () => {
@@ -147,5 +148,24 @@ describe('slice-6 tag node factories', () => {
   it('constructTag() with parent kind notFound preserves the kind for downstream validation', () => {
     const node = constructTag('_t', json('Home'), { kind: 'notFound' });
     expect(node.parent).toEqual({ kind: 'notFound' });
+  });
+});
+
+describe('mergeRetag factory (slice 6 §4.1)', () => {
+  it('produces a MergeRetagNode with type, sourceVar, targetVar, and bind', () => {
+    const node = mergeRetag('_src', '_tgt', '_count');
+    expect(node).toEqual({
+      type: 'mergeRetag',
+      sourceVar: '_src',
+      targetVar: '_tgt',
+      bind: '_count',
+    });
+  });
+
+  it('carries all three arguments verbatim', () => {
+    const node = mergeRetag('srcVar', 'tgtVar', 'countVar');
+    expect(node.sourceVar).toBe('srcVar');
+    expect(node.targetVar).toBe('tgtVar');
+    expect(node.bind).toBe('countVar');
   });
 });

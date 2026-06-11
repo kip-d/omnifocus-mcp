@@ -129,8 +129,8 @@ function assertNotReserved(name: string, where: string): void {
  *     (SyntaxError at runtime).
  * 10. No binding statement (bind, resolveFolder, resolveProject, resolveTask,
  *     resolveProjectById, resolveTag, constructProject, constructTask,
- *     constructFolder, constructTag, constructTagPath, assignTags) may use a
- *     reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
+ *     constructFolder, constructTag, constructTagPath, assignTags, mergeRetag)
+ *     may use a reserved emitter identifier — see RESERVED_EMITTER_IDENTIFIERS.
  * 11. A `moveTask` node's `position` must be a typed TaskMovePosition object
  *     with kind ∈ {inboxBeginning, projectBeginning, parentEnding, containerRoot}.
  *     projectBeginning and parentEnding require a non-empty string `var`;
@@ -341,6 +341,7 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveProjectById') assertNotReserved(stmt.bind, 'resolveProjectById bind');
   if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
+  if (stmt.type === 'mergeRetag') assertNotReserved(stmt.bind, 'mergeRetag bind');
   if (stmt.type === 'constructTagPath') {
     assertNotReserved(stmt.bind, 'constructTagPath bind');
     assertNotReserved(stmt.createdBind, 'constructTagPath createdBind');
@@ -488,6 +489,8 @@ function stmtConsumedRefs(stmt: Stmt): string[] {
       return [...exprRefs(stmt.target), ...stmt.args.flatMap(exprRefs)];
     case 'deleteObject':
       return exprRefs(stmt.target);
+    case 'mergeRetag':
+      return [stmt.sourceVar, stmt.targetVar];
     case 'constructTask':
       return stmt.container.kind !== 'inbox' ? [stmt.container.var] : [];
     case 'constructProject':

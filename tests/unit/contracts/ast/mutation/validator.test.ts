@@ -25,6 +25,7 @@ import {
   constructTag,
   constructTagPath,
   moveTag,
+  mergeRetag,
   type Program,
   type TagResolution,
   type TagMovePosition,
@@ -695,5 +696,90 @@ describe('reserved emitter identifiers', () => {
       };
       expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
     }
+  });
+});
+
+describe('mergeRetag — rule-7 resolution-guard discipline (slice 6 §4.1)', () => {
+  // mergeRetag is a CONSUMER of both sourceVar and targetVar (rule 7).
+  // An unguarded resolveTag → mergeRetag must throw /without a guard/.
+
+  it('rejects an unguarded resolveTag(_src) consumed by mergeRetag as sourceVar', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('rejects an unguarded resolveTag(_tgt) consumed by mergeRetag as targetVar', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/without a guard/);
+  });
+
+  it('accepts resolveTag → guard → resolveTag → guard → mergeRetag', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_count'),
+        return_({ count: ref('_count') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
+  });
+});
+
+describe('mergeRetag — rule-10 reserved bind enforcement (slice 6 §4.1)', () => {
+  it('rejects a mergeRetag whose bind is _warnings (reserved)', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_warnings'),
+        return_({ count: ref('_warnings') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved emitter identifier/);
+  });
+
+  it('accepts a mergeRetag with a non-reserved bind name', () => {
+    const program: Program = {
+      statements: [
+        resolveTag('_src', 'OldTag'),
+        guard('_src === null', { error: json(true) }),
+        resolveTag('_tgt', 'NewTag'),
+        guard('_tgt === null', { error: json(true) }),
+        mergeRetag('_src', '_tgt', '_movedCount'),
+        return_({ count: ref('_movedCount') }),
+      ],
+      context: 'merge_tag',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).not.toThrow();
   });
 });

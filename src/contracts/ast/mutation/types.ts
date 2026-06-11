@@ -289,6 +289,19 @@ export interface BulkDeleteItemNode {
   index: number;
 }
 
+/** Merge retagging (spec §4.1, bespoke per the bulkDeleteItem precedent): walks
+ *  flattenedTasks, moves every task carrying the source tag to the target
+ *  (removeTag + addTag-if-absent, legacy semantics), binds the moved count.
+ *  sourceVar/targetVar are resolveTag bind NAMES (rule 7 applies to both).
+ *  Loop internals (_hasSrc/_hasTgt) are emitter-owned callback-scope vars —
+ *  no program-bind collision possible (same discipline as bulkDeleteItem). */
+export interface MergeRetagNode {
+  type: 'mergeRetag';
+  sourceVar: string;
+  targetVar: string;
+  bind: string;
+}
+
 export interface ReturnNode {
   type: 'return';
   envelope: Envelope;
@@ -315,6 +328,7 @@ export type Stmt =
   | CallMethodNode
   | DeleteObjectNode
   | BulkDeleteItemNode
+  | MergeRetagNode
   | ReturnNode;
 
 export type Envelope = Record<string, Expr>;
@@ -502,4 +516,10 @@ export const bulkDeleteItem = (id: string, index: number): BulkDeleteItemNode =>
   type: 'bulkDeleteItem',
   id,
   index,
+});
+export const mergeRetag = (sourceVar: string, targetVar: string, bindVar: string): MergeRetagNode => ({
+  type: 'mergeRetag',
+  sourceVar,
+  targetVar,
+  bind: bindVar,
 });
