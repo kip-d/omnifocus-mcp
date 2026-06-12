@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
-import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
+import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
-import { mergeConflictChecked, emptyOperatorError, type MergeSource } from './filter-merge.js';
+import {
+  mergeConflictChecked,
+  emptyOperatorError,
+  extractTextCondition,
+  STATUS_TO_PROJECT,
+  type MergeSource,
+} from './filter-merge.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -250,12 +256,6 @@ export class QueryCompiler {
     // on-hold. Tracked as a follow-up to OMN-50.
 
     if (input.status) {
-      const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {
-        active: 'active',
-        on_hold: 'onHold',
-        completed: 'done',
-        dropped: 'dropped',
-      };
       const mapped = STATUS_TO_PROJECT[input.status];
       if (mapped) {
         result.projectStatus = [mapped];
@@ -355,29 +355,19 @@ export class QueryCompiler {
   }
 
   private transformTextFilters(input: QueryFilter, result: TaskFilter): void {
-    if (input.text) {
-      const textFilter = input.text as { contains?: string; matches?: string };
-      if ('contains' in textFilter && textFilter.contains) {
-        result.text = textFilter.contains;
-        result.textOperator = 'CONTAINS';
-      } else if ('matches' in textFilter && textFilter.matches) {
-        result.text = textFilter.matches;
-        result.textOperator = 'MATCHES';
-      }
+    const textCond = extractTextCondition(input.text as { contains?: string; matches?: string } | undefined);
+    if (textCond) {
+      result.text = textCond.value;
+      result.textOperator = textCond.operator;
     }
 
     // OMN-142: `name` compiles to the name-scoped fields, NEVER the legacy
     // `search` alias — `search` matches note content too, and that over-match
     // collaterally deleted a real user task (2026-06-09).
-    if (input.name) {
-      const nameFilter = input.name as { contains?: string; matches?: string };
-      if ('contains' in nameFilter && nameFilter.contains) {
-        result.name = nameFilter.contains;
-        result.nameOperator = 'CONTAINS';
-      } else if ('matches' in nameFilter && nameFilter.matches) {
-        result.name = nameFilter.matches;
-        result.nameOperator = 'MATCHES';
-      }
+    const nameCond = extractTextCondition(input.name as { contains?: string; matches?: string } | undefined);
+    if (nameCond) {
+      result.name = nameCond.value;
+      result.nameOperator = nameCond.operator;
     }
   }
 

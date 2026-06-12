@@ -1,5 +1,30 @@
 import { z } from 'zod';
-import type { TaskFilter } from '../../../contracts/filters.js';
+import type { TaskFilter, ProjectStatus } from '../../../contracts/filters.js';
+
+/**
+ * OMN-156: shared status vocabulary for project-level status mapping.
+ * Moved from QueryCompiler.transformStatus to prevent circular imports when
+ * transformProjectFilters (Task 6 wiring) imports from this module.
+ */
+export const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {
+  active: 'active',
+  on_hold: 'onHold',
+  completed: 'done',
+  dropped: 'dropped',
+};
+
+/**
+ * Extract a text condition (contains / matches) from a text filter object.
+ * Returns null when the input is absent or has no recognized operator.
+ */
+export function extractTextCondition(
+  f: { contains?: string; matches?: string } | undefined,
+): { value: string; operator: 'CONTAINS' | 'MATCHES' } | null {
+  if (!f) return null;
+  if ('contains' in f && f.contains) return { value: f.contains, operator: 'CONTAINS' };
+  if ('matches' in f && f.matches) return { value: f.matches, operator: 'MATCHES' };
+  return null;
+}
 
 /**
  * OMN-151: reverse-map from internal TaskFilter keys to the input-schema
