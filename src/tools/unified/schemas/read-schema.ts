@@ -33,10 +33,14 @@ const NumberFilterSchema = z.union([
 // =============================================================================
 // FILTER SCHEMAS (flat — no recursive nesting)
 // =============================================================================
-// QueryCompiler.transformFilters() only handles one level of AND/OR/NOT:
-//   AND: merges via Object.assign (no true nesting)
-//   OR: uses first condition only (logs warning)
-//   NOT: two hardcoded status cases
+// QueryCompiler.transformFilters handles one level of AND/OR/NOT (OMN-151):
+//   base fields + operators AND-compose; key conflicts, empty operator arrays,
+//   and empty operator items reject loudly (VALIDATION_ERROR)
+//   OR: each branch compiles independently → orBranches (ANDed with base keys)
+//   NOT: exactly {status:'completed'} / {status:'active'}; all else rejects (OMN-131)
+// Projects queries compile via transformProjectFilters (OMN-156): supported
+// keys only (status/completed/flagged/name/text/folder/id); AND merges;
+// OR/NOT and task-only keys reject with steering.
 // The schema matches this capability. No z.lazy() needed.
 
 // Shared filter field shape (used by both FlatFilterSchema and FilterSchema)

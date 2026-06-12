@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { buildAST } from '../../../../src/contracts/ast/builder.js';
 import { emitOmniJS } from '../../../../src/contracts/ast/emitters/omnijs.js';
@@ -224,9 +225,8 @@ describe('QueryCompiler.transformFilters', () => {
       expect(result.orBranches).toEqual([{ flagged: true }, { completed: true, projectStatus: ['done'] }]);
     });
 
-    it('returns empty filter for empty OR array', () => {
-      const result = compiler.transformFilters({ OR: [] });
-      expect(Object.keys(result).length).toBe(0);
+    it('rejects empty OR array (OMN-151; was match-all)', () => {
+      expect(() => compiler.transformFilters({ OR: [] })).toThrowError(z.ZodError);
     });
 
     it('transforms OR with date branches', () => {

@@ -9,13 +9,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- **Script-output detection inverted to a success allow-list** (OMN-139) — `executeJson` previously tried to
-  detect failure shapes and fall through to success; unknown output shapes silently returned `success: true`. The
-  logic is now inverted: known error dialects are classified first, then the output is validated against the
-  caller-supplied Zod schema; anything that matches neither fails closed with `'Unrecognized script output shape'`
-  and the truncated raw output in `details`. As a consequence, `{ok: false}` envelope errors that analytics call
-  sites previously received as apparent successes now surface correctly. Every `execJson` call site in the codebase
-  carries an explicit Zod success schema (closed-world top level).
+- **Filter keys beside AND/OR/NOT and all logical-operator edge-cases now compose correctly** (OMN-151) — Filter keys at
+  the same level as `AND`, `OR`, or `NOT` (e.g. `{ flagged: true, OR: [...] }`) were silently dropped instead of
+  AND-composing with the operator group. `AND` merged via `Object.assign` (last-wins), so two AND items setting the same
+  key silently discarded the first value. `OR: []`, `AND: []`, and empty-branch arrays compiled to match-all instead of
+  rejecting. `buildAST` emitted `orBranches` on a separate code path that skipped the base-key block, so mode
+  augmentations (e.g. `mode:'flagged'`) were silently discarded when OR was present — unflagged and dropped tasks leaked
+  into flagged-mode OR queries. Now: all sibling keys AND-compose with operator groups; key conflicts, empty operator
+  arrays, and empty operator items reject with VALIDATION_ERROR naming working alternatives; base keys and mode
+  augmentations AND-compose with OR branches.
+- **Projects queries compile through a typed filter transform with an exhaustive per-key disposition** (OMN-156) —
+  Projects queries silently dropped `OR` and most other filters (flagged, completed, dates, tags) → match-all; the
+  documented `completed:false` idiom was inert on projects. A live probe (2026-06-11) confirmed the 2026-05-19 incident
+  was a predicate-drop, not a cache issue. Now: projects filters compile via `transformProjectFilters` with an
+  exhaustive per-key disposition — supported filters (status, completed, flagged, name, text, folder, id) work;
+  `completed:false` excludes done and dropped projects (active + on-hold only — GTD parity); `flagged` is newly
+  effective; `id` is an exclusive fast path (co-filters reject); OR/NOT reject with steering ("use one query per
+  alternative"); task-only keys reject naming the key.
+
+- **Script-output detection inverted to a success allow-list** (OMN-139) — `executeJson` previously tried to detect
+  failure shapes and fall through to success; unknown output shapes silently returned `success: true`. The logic is now
+  inverted: known error dialects are classified first, then the output is validated against the caller-supplied Zod
+  schema; anything that matches neither fails closed with `'Unrecognized script output shape'` and the truncated raw
+  output in `details`. As a consequence, `{ok: false}` envelope errors that analytics call sites previously received as
+  apparent successes now surface correctly. Every `execJson` call site in the codebase carries an explicit Zod success
+  schema (closed-world top level).
 
 - **Batch `stopOnError`/atomic-rollback failures keep per-item results** (OMN-141) — A batch create halted by
   `stopOnError: true` (or undone by `atomicOperation` rollback) returned a single degenerate row

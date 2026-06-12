@@ -176,6 +176,20 @@ describe('buildFilteredTasksScript', () => {
     });
   });
 
+  describe('OR queries compose with defaults and modes (OMN-151 V6 / OMN-157)', () => {
+    it('buildFilteredTasksScript with orBranches still applies the default dropped-exclusion', () => {
+      const { script } = buildFilteredTasksScript({ orBranches: [{ flagged: true }, { inInbox: true }] });
+      // OMN-157 default now survives beside OR: dropped is SYNTHETIC so it emits as taskStatus comparison
+      expect(script).toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('buildTaskCountScript with orBranches agrees (countOnly path, spec §3.2 / C15)', () => {
+      const { script } = buildTaskCountScript({ orBranches: [{ flagged: true }, { inInbox: true }] });
+      // same buildAST route — count predicate matches the row predicate
+      expect(script).toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+  });
+
   describe('combined filters', () => {
     it('generates script with multiple filter types', () => {
       const filter: TaskFilter = {

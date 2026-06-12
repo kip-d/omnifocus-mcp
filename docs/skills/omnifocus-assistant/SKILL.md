@@ -539,7 +539,8 @@ Combine filters with `AND`, `OR`, `NOT` — one level only (no nesting operators
 ```
 
 **Limitations:** NOT only handles status negation (`completed` → show active, `active` → show completed). For tag
-exclusion, use `tags: { none: [...] }` directly. Items inside AND/OR/NOT cannot contain nested logical operators.
+exclusion, use `tags: { none: [...] }` directly. Items inside AND/OR/NOT cannot contain nested logical operators. OR/NOT
+are **tasks-only** — projects queries reject them with a steering error (use one query per alternative).
 
 ### Planned Date
 

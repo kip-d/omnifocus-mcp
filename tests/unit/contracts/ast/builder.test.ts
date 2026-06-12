@@ -843,6 +843,69 @@ describe('buildAST', () => {
     });
   });
 
+  describe('orBranches composition (OMN-151 V5/V6)', () => {
+    it('ANDs base conditions with the OR group instead of dropping them', () => {
+      const ast = buildAST({
+        flagged: true,
+        completed: false,
+        orBranches: [
+          { name: 'a', nameOperator: 'CONTAINS' },
+          { name: 'b', nameOperator: 'CONTAINS' },
+        ],
+      });
+      // Top-level node must be AND (base keys + OR group)
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Should contain the flagged comparison
+      expect(ast.children).toContainEqual({
+        type: 'comparison',
+        field: 'task.flagged',
+        operator: '==',
+        value: true,
+      });
+      // Should contain the completed comparison
+      expect(ast.children).toContainEqual({
+        type: 'comparison',
+        field: 'task.completed',
+        operator: '==',
+        value: false,
+      });
+      // Should contain an OR node with 2 branches (the name branches)
+      const orChild = ast.children.find((c) => c.type === 'or');
+      expect(orChild).toBeDefined();
+      if (!orChild || orChild.type !== 'or') return;
+      expect(orChild.children).toHaveLength(2);
+    });
+
+    it('pure-OR filters keep their existing shape (no base conditions → bare OR node)', () => {
+      const ast = buildAST({ orBranches: [{ flagged: true }, { inInbox: true }] });
+      // Single or-node at top, no and-wrapper
+      expect(ast.type).toBe('or');
+      if (ast.type !== 'or') return;
+      expect(ast.children).toHaveLength(2);
+    });
+
+    it('single-branch OR with base keys still ANDs', () => {
+      const ast = buildAST({ flagged: true, orBranches: [{ completed: false }] });
+      // and-node containing the flagged comparison and the branch condition
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+      expect(ast.children).toContainEqual({
+        type: 'comparison',
+        field: 'task.flagged',
+        operator: '==',
+        value: true,
+      });
+      expect(ast.children).toContainEqual({
+        type: 'comparison',
+        field: 'task.completed',
+        operator: '==',
+        value: false,
+      });
+    });
+  });
+
   describe('project filter with name', () => {
     it('transforms project string to containingProject comparison', () => {
       const filter: TaskFilter = { project: 'Work Projects' };
