@@ -248,14 +248,18 @@ async function ensureOllama(ollama: Ollama, host: string): Promise<OllamaLifecyc
   if (await isReachable(ollama)) return { startedByUs: false };
   if (!isLocalhostOllamaHost(host)) {
     process.stderr.write(
-      `Ollama not reachable at ${host}. That host is remote, so the probe will not start it — ` +
-        'start it there and re-run.\n',
+      `Ollama not reachable at ${host}. That host is not localhost (or could not be parsed), ` +
+        'so the probe will not start a server for it — start it there and re-run.\n',
     );
     process.exit(2);
   }
   process.stderr.write('Ollama not running — starting `ollama serve` (will be stopped at exit) …\n');
   const stderrTail: string[] = [];
   const proc = spawn('ollama', ['serve'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Backstop registered at spawn time so a crash/signal during the readiness poll
+  // cannot orphan the server. The child is ours by construction on this path, and
+  // kill() on an already-dead process is a no-op. Sync-safe in an exit handler.
+  process.on('exit', () => proc.kill('SIGTERM'));
   proc.stderr?.on('data', (d: Buffer) => {
     stderrTail.push(d.toString());
     if (stderrTail.length > 20) stderrTail.shift();
@@ -514,11 +518,8 @@ async function main(): Promise<void> {
   };
   process.on('SIGINT', () => void teardown().finally(() => process.exit(130)));
   process.on('SIGTERM', () => void teardown().finally(() => process.exit(143)));
-  // Last resort if we exit without teardown (uncaught throw): don't orphan a server
-  // we spawned. kill() is sync-safe in an exit handler; model unload is not possible here.
-  process.on('exit', () => {
-    if (lifecycle.startedByUs) lifecycle.serveProc?.kill('SIGTERM');
-  });
+  // (The orphan backstop for a server we spawned is registered at spawn time inside
+  // ensureOllama, so it also covers the readiness-poll window before we get here.)
 
   try {
     // Which requested models are present?
