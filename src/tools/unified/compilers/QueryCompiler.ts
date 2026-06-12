@@ -3,6 +3,7 @@ import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-sc
 import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
+import { mergeConflictChecked, emptyOperatorError, type MergeSource } from './filter-merge.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -87,12 +88,35 @@ export class QueryCompiler {
   /**
    * Transform FilterValue (API schema) to TaskFilter (internal contract)
    * This is the single translation point for filter property names.
+   *
+   * OMN-151: base fields and ALL present logical operators AND-compose. The old
+   * early-return silently dropped sibling keys (V1) and the second operator (V4).
+   * Same-key conflicts across merge sources reject loudly (V2).
+   * AND: [] / OR: [] reject (V3 — were match-all).
+   * The OMN-131 NOT contract is preserved exactly.
    */
   transformFilters(input: QueryFilter): TaskFilter {
-    // Handle logical operators first — each returns early
-    const logicalResult = this.transformLogicalOperator(input);
-    if (logicalResult) return logicalResult;
-    return this.transformFlatFilter(input as FlatQueryFilter);
+    const sources: MergeSource[] = [{ origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter) }];
+
+    if (input.AND !== undefined && Array.isArray(input.AND)) {
+      if (input.AND.length === 0) throw emptyOperatorError('AND');
+      input.AND.forEach((condition, i) => {
+        sources.push({ origin: `AND[${i}]`, filter: this.transformFlatFilter(condition as FlatQueryFilter) });
+      });
+    }
+
+    if (input.NOT !== undefined) {
+      sources.push({ origin: 'NOT', filter: this.transformNot(input.NOT as FlatQueryFilter) });
+    }
+
+    const merged = mergeConflictChecked(sources);
+
+    if (input.OR !== undefined && Array.isArray(input.OR)) {
+      if (input.OR.length === 0) throw emptyOperatorError('OR');
+      merged.orBranches = input.OR.map((condition) => this.transformFlatFilter(condition as FlatQueryFilter));
+    }
+
+    return merged;
   }
 
   /**
@@ -162,50 +186,25 @@ export class QueryCompiler {
     return result;
   }
 
-  private transformLogicalOperator(input: QueryFilter): TaskFilter | null {
-    if (input.AND && Array.isArray(input.AND)) {
-      const result: TaskFilter = {};
-      for (const condition of input.AND) {
-        Object.assign(result, this.transformFlatFilter(condition as FlatQueryFilter));
-      }
-      return result;
+  private transformNot(notFilter: FlatQueryFilter): TaskFilter {
+    // OMN-131 contract, unchanged: exactly the two status payloads; everything
+    // else hard-rejects (was silent match-all before 5b41534).
+    if (Object.keys(notFilter).length === 1) {
+      if (notFilter.status === 'completed') return { completed: false };
+      if (notFilter.status === 'active') return { completed: true };
     }
-
-    if (input.OR && Array.isArray(input.OR)) {
-      if (input.OR.length === 0) return {};
-      return {
-        orBranches: input.OR.map((condition) => this.transformFlatFilter(condition as FlatQueryFilter)),
-      };
-    }
-
-    if (input.NOT) {
-      const notFilter = input.NOT as FlatQueryFilter;
-      // The status special-case applies only when status is the SOLE key —
-      // otherwise the other keys would be silently dropped (OMN-131 rider).
-      if (Object.keys(notFilter).length === 1) {
-        if (notFilter.status === 'completed') return { completed: false };
-        if (notFilter.status === 'active') return { completed: true };
-      }
-      // OMN-131: every other NOT payload used to warn + return {} — an EMPTY
-      // filter, i.e. the query silently matched EVERYTHING. A caller that
-      // trusts the result set (e.g. a destructive sweep) gets the whole
-      // database. Reject loudly instead; a ZodError surfaces as
-      // VALIDATION_ERROR in the failure log and InvalidParams over MCP.
-      throw new z.ZodError([
-        {
-          code: z.ZodIssueCode.custom,
-          path: ['query', 'filters', 'NOT'],
-          message:
-            `Unsupported NOT filter: ${JSON.stringify(notFilter)}. ` +
-            "NOT supports exactly { status: 'completed' } or { status: 'active' }. " +
-            'Alternatives: tag exclusion → tags: { none: [...] }; ' +
-            'flagged exclusion → flagged: false; ' +
-            'otherwise express the condition directly without NOT.',
-        },
-      ]);
-    }
-
-    return null;
+    throw new z.ZodError([
+      {
+        code: z.ZodIssueCode.custom,
+        path: ['query', 'filters', 'NOT'],
+        message:
+          `Unsupported NOT filter: ${JSON.stringify(notFilter)}. ` +
+          "NOT supports exactly { status: 'completed' } or { status: 'active' }. " +
+          'Alternatives: tag exclusion → tags: { none: [...] }; ' +
+          'flagged exclusion → flagged: false; ' +
+          'otherwise express the condition directly without NOT.',
+      },
+    ]);
   }
 
   private transformStatus(input: QueryFilter, result: TaskFilter): void {

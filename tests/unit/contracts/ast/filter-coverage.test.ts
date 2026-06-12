@@ -224,9 +224,8 @@ describe('QueryCompiler.transformFilters', () => {
       expect(result.orBranches).toEqual([{ flagged: true }, { completed: true, projectStatus: ['done'] }]);
     });
 
-    it('returns empty filter for empty OR array', () => {
-      const result = compiler.transformFilters({ OR: [] });
-      expect(Object.keys(result).length).toBe(0);
+    it('rejects empty OR array (OMN-151; was match-all)', () => {
+      expect(() => compiler.transformFilters({ OR: [] })).toThrow();
     });
 
     it('transforms OR with date branches', () => {

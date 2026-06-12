@@ -28,6 +28,8 @@ const INPUT_KEY_OF: Record<string, string> = {
   estimatedMinutesEquals: 'estimatedMinutes',
   estimatedMinutesLessThan: 'estimatedMinutes',
   estimatedMinutesGreaterThan: 'estimatedMinutes',
+  projectId: 'project/projectId',
+  inInbox: 'project/inInbox',
   nameOperator: 'name',
   textOperator: 'text',
   tagsOperator: 'tags',
@@ -74,7 +76,7 @@ export function mergeConflictChecked(sources: MergeSource[]): TaskFilter {
   for (const { origin, filter } of sources) {
     for (const [key, value] of Object.entries(filter)) {
       if (value === undefined) continue;
-      if (key in result) {
+      if (Object.hasOwn(result, key)) {
         if (!filterDeepEqual(result[key], value)) {
           throw new z.ZodError([
             {

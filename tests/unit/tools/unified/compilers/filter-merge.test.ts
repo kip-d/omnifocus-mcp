@@ -54,6 +54,8 @@ describe('mergeConflictChecked', () => {
       expect(issue.message).toContain('status/completed');
       expect(issue.message).toContain('AND[0]');
       expect(issue.message).toContain('AND[1]');
+      expect(issue.message).toContain('false');
+      expect(issue.message).toContain('true');
       expect(issue.message).toContain('OR'); // steers to OR for alternatives
     }
   });

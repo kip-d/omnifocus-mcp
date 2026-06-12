@@ -738,11 +738,9 @@ describe('QueryCompiler', () => {
       });
     });
 
-    describe('OR: [] short-circuits to {}', () => {
-      it('returns {} (not { orBranches: [] }) for an empty OR', () => {
-        const result = compiler.transformFilters({ OR: [] });
-        expect(result).toEqual({});
-        expect((result as Record<string, unknown>).orBranches).toBeUndefined();
+    describe('OR: [] rejects (OMN-151; was match-all)', () => {
+      it('throws a validation error instead of compiling to {}', () => {
+        expect(() => compiler.transformFilters({ OR: [] })).toThrowError(z.ZodError);
       });
     });
 
@@ -798,6 +796,91 @@ describe('QueryCompiler', () => {
       it('a folder name does not set folderTopLevel', () => {
         const result = compiler.transformFilters({ folder: 'Work' });
         expect(result.folderTopLevel).toBeUndefined();
+      });
+    });
+
+    describe('logical-operator compile honesty (OMN-151)', () => {
+      // V1: siblings beside operators merge (AND semantics), never drop
+      it('merges sibling keys beside NOT (V1)', () => {
+        const result = compiler.transformFilters({ flagged: true, NOT: { status: 'completed' } });
+        expect(result).toEqual({ flagged: true, completed: false });
+      });
+
+      it('merges sibling keys beside AND (V1)', () => {
+        const result = compiler.transformFilters({ flagged: true, AND: [{ status: 'active' }] });
+        expect(result).toEqual({ flagged: true, completed: false, projectStatus: ['active'] });
+      });
+
+      it('keeps sibling keys beside OR as base keys alongside orBranches (V1)', () => {
+        const result = compiler.transformFilters({
+          flagged: true,
+          OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }],
+        });
+        expect(result.flagged).toBe(true);
+        expect(result.orBranches).toHaveLength(2);
+      });
+
+      // V4: AND and OR together both apply
+      it('applies AND and OR together — AND keys merge, OR becomes orBranches (V4)', () => {
+        const result = compiler.transformFilters({
+          AND: [{ flagged: true }],
+          OR: [{ status: 'active' }, { status: 'completed' }],
+        });
+        expect(result.flagged).toBe(true);
+        expect(result.orBranches).toHaveLength(2);
+      });
+
+      // V2: AND conflicts reject loudly
+      it('rejects conflicting status across AND conditions (V2)', () => {
+        expect(() => compiler.transformFilters({ AND: [{ status: 'active' }, { status: 'completed' }] })).toThrowError(
+          z.ZodError,
+        );
+      });
+
+      it('rejects two different name conditions under AND (unrepresentable)', () => {
+        expect(() =>
+          compiler.transformFilters({ AND: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }] }),
+        ).toThrowError(z.ZodError);
+      });
+
+      it('allows complementary date bounds across AND conditions (different internal keys)', () => {
+        const result = compiler.transformFilters({
+          AND: [{ dueDate: { after: '2026-01-01' } }, { dueDate: { before: '2026-02-01' } }],
+        });
+        expect(result.dueAfter).toBe('2026-01-01');
+        expect(result.dueBefore).toBe('2026-02-01');
+      });
+
+      it('rejects base-vs-NOT contradiction: completed:true with NOT completed (cross-source)', () => {
+        expect(() => compiler.transformFilters({ completed: true, NOT: { status: 'completed' } })).toThrowError(
+          z.ZodError,
+        );
+      });
+
+      it('OMN-72 intra-filter precedence still applies WITHIN one flat filter', () => {
+        // status active + completed true in ONE flat filter: completed overrides — no conflict
+        const result = compiler.transformFilters({ status: 'active', completed: true });
+        expect(result.completed).toBe(true);
+        expect(result.projectStatus).toEqual(['active']);
+      });
+
+      // V3 + empty AND: reject, never match-all
+      it('rejects OR: [] (V3 — was match-all)', () => {
+        expect(() => compiler.transformFilters({ OR: [] })).toThrowError(z.ZodError);
+      });
+
+      it('rejects AND: [] (was match-all via vacuous truth)', () => {
+        expect(() => compiler.transformFilters({ AND: [] })).toThrowError(z.ZodError);
+      });
+
+      // OMN-131 contract preserved
+      it('NOT non-status payloads still hard-reject (OMN-131 unchanged)', () => {
+        expect(() => compiler.transformFilters({ NOT: { flagged: true } })).toThrowError(z.ZodError);
+      });
+
+      it('plain single-operator behavior unchanged: OR alone produces only orBranches', () => {
+        const result = compiler.transformFilters({ OR: [{ flagged: true }, { inInbox: true }] });
+        expect(result).toEqual({ orBranches: [{ flagged: true }, { inInbox: true }] });
       });
     });
 
