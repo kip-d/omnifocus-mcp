@@ -352,15 +352,24 @@ describe('OmniAutomation', () => {
     const tasksSchema = z.object({ tasks: z.array(z.unknown()) }).strict();
 
     // The global setup-unit.ts mocks OmniAutomation.prototype.executeJson to prevent real
-    // JXA execution in all other unit tests. Restore the prototype spy here so we can
-    // drive the actual implementation through the mock spawn harness. After each test,
-    // re-apply the mock so other describe blocks are unaffected.
+    // JXA execution in all other unit tests — but ONLY when VITEST_ALLOW_JXA !== '1'.
+    // Restore the prototype spy here so we can drive the actual implementation through
+    // the mock spawn harness, then re-apply the mock so other describe blocks are
+    // unaffected. Both hooks are guarded so that in VITEST_ALLOW_JXA=1 mode (no spy
+    // installed) we neither throw on mockRestore nor install a stub setup never wanted.
     const defaultMockImpl = vi.fn(async (_script: string, _schema?: any) => ({ success: true, data: {} }));
+    let restoredPrototypeSpy = false;
     beforeEach(() => {
-      vi.mocked(OmniAutomation.prototype.executeJson).mockRestore();
+      restoredPrototypeSpy = false;
+      if (vi.isMockFunction(OmniAutomation.prototype.executeJson)) {
+        vi.mocked(OmniAutomation.prototype.executeJson).mockRestore();
+        restoredPrototypeSpy = true;
+      }
     });
     afterEach(() => {
-      vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(defaultMockImpl);
+      if (restoredPrototypeSpy) {
+        vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(defaultMockImpl);
+      }
     });
 
     // 1. Ticket required case: unrecognised shape (not an error dialect, not a valid success payload)

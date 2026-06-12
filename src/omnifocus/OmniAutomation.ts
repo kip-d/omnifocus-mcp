@@ -85,6 +85,10 @@ export class OmniAutomation {
       if (schema) {
         const validation = schema.safeParse(result);
         if (validation.success) return createScriptSuccess(validation.data as T);
+        logger.warn('executeJson fail-closed: output matched no known error dialect and failed the success schema', {
+          issueCount: validation.error.issues.length,
+          raw: truncateRawOutput(result, 500),
+        });
         return createScriptError(
           'Script output did not match the expected success shape',
           'Unrecognized script output shape',
