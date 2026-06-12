@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
@@ -17,6 +18,12 @@ import {
 } from '../../contracts/ast/script-builder.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import {
+  listResultSchema,
+  CountResultSchema,
+  ExportResultSchema,
+  astEnvelopeSchema,
+} from '../../omnifocus/script-response-schemas.js';
 import {
   createTaskResponseV2,
   createListResponseV2,
@@ -39,6 +46,86 @@ import {
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
 import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
+
+// =============================================================================
+// MODULE-SCOPE SUCCESS SCHEMAS (OMN-139)
+// Instantiated once; never constructed per-request.
+// Source-verified against the emitting script before finalizing each schema.
+// =============================================================================
+
+/**
+ * Task list/id-lookup result — emitted by buildListTasksScriptV4 (wraps
+ * buildFilteredTasksScript / buildInboxScript / buildTaskByIdScript).
+ * Wire shape: {tasks, metadata} — the outer JXA wrapper always uses 'tasks'.
+ * The 'items' variant covers any legacy callers that use data.tasks||data.items.
+ *
+ * Source: src/omnifocus/scripts/tasks/list-tasks-ast.ts — return JSON.stringify({tasks, metadata}).
+ */
+const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
+
+/**
+ * Project id-lookup result — emitted by buildProjectByIdScript.
+ * Wire shape: {projects, count, mode, targetId}
+ * NOT the same as filtered-projects (which emits {projects, metadata}).
+ *
+ * Source: src/contracts/ast/script-builder.ts → buildProjectByIdScript →
+ *   return JSON.stringify({ projects, count, mode: 'id_lookup', targetId }).
+ *
+ * Exported for unit-test coverage of the schema shape (not part of the public API).
+ */
+export const PROJECT_BY_ID_SCHEMA = z
+  .object({
+    projects: z.array(z.unknown()),
+    count: z.number(),
+    mode: z.string(),
+    targetId: z.string(),
+  })
+  .strict();
+
+/**
+ * Filtered project list result — emitted by buildFilteredProjectsScript.
+ * Wire shape: {projects, metadata}
+ * The 'items' variant covers any legacy callers using data.projects||data.items.
+ *
+ * Source: src/contracts/ast/script-builder.ts → buildFilteredProjectsScript →
+ *   return JSON.stringify({ projects, metadata: {...} }).
+ */
+const PROJECT_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
+
+/**
+ * Tag list result — emitted by buildTagsScript (all modes).
+ * Wire shape: {ok: true, v: 'ast', items, summary}
+ *
+ * Source: src/contracts/ast/tag-script-builder.ts — return JSON.stringify({ok:true, v:'ast', items, summary}).
+ */
+const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
+
+/**
+ * Perspective list result — emitted by LIST_PERSPECTIVES_SCRIPT.
+ * Wire shape: {items, summary}
+ *
+ * Source: src/omnifocus/scripts/perspectives/list-perspectives.ts →
+ *   return JSON.stringify({ items: perspectives, summary: {...} }).
+ */
+const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], { extras: { summary: z.unknown().optional() } });
+
+/**
+ * Folder list result — emitted by buildFilteredFoldersScript.
+ * Wire shape: {success: true, folders, metadata}
+ * Note: uses {success: true} literal discriminator (not {ok: true, v: 'ast'}).
+ *
+ * Source: src/contracts/ast/script-builder.ts → buildFilteredFoldersScript →
+ *   return JSON.stringify({ success: true, folders: results, metadata: {...} }).
+ *
+ * Exported for unit-test coverage of the schema shape (not part of the public API).
+ */
+export const FOLDER_LIST_SCHEMA = z
+  .object({
+    success: z.literal(true),
+    folders: z.array(z.unknown()),
+    metadata: z.unknown().optional(),
+  })
+  .strict();
 
 /**
  * Post-hoc field projection for project query results.
@@ -355,7 +442,7 @@ PERFORMANCE:
     }
 
     // --- Execute main query ---
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, TASK_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -429,7 +516,7 @@ PERFORMANCE:
     }
 
     const { script } = buildTaskCountScript(countFilter, { maxScan: 10000 });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, CountResultSchema);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -482,7 +569,7 @@ PERFORMANCE:
       fields: idFields,
       limit: 1,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, TASK_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -536,7 +623,7 @@ PERFORMANCE:
    */
   private async executeProjectIdLookup(projectId: string, fields: string[], timer: OperationTimerV2): Promise<unknown> {
     const generated = buildProjectByIdScript(projectId, fields);
-    const result = await this.execJson(generated.script);
+    const result = await this.execJson(generated.script, PROJECT_BY_ID_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -673,7 +760,7 @@ PERFORMANCE:
       performanceMode: includeStats ? 'normal' : 'lite',
     });
 
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, PROJECT_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -761,7 +848,7 @@ PERFORMANCE:
       sortBy: 'name' as TagSortBy,
     };
     const generatedScript = buildTagsScript(tagOptions);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, TAG_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -796,7 +883,7 @@ PERFORMANCE:
 
     try {
       const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
-      const result = await this.execJson(script);
+      const result = await this.execJson(script, PERSPECTIVE_LIST_SCHEMA);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -858,7 +945,7 @@ PERFORMANCE:
 
     // Build and execute AST-generated folder list script
     const { script } = buildFilteredFoldersScript({ limit: 100 });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, FOLDER_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -951,7 +1038,7 @@ PERFORMANCE:
       format,
     });
 
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, ExportResultSchema);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -1046,7 +1133,7 @@ PERFORMANCE:
       format,
       includeStats,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, ExportResultSchema);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -1138,7 +1225,7 @@ PERFORMANCE:
       format,
       limit: 5000,
     });
-    const taskResult = await this.execJson(taskScript);
+    const taskResult = await this.execJson(taskScript, ExportResultSchema);
 
     if (isScriptSuccess(taskResult)) {
       const taskData = taskResult.data as { data?: unknown; count?: number };
@@ -1159,7 +1246,7 @@ PERFORMANCE:
       format,
       includeStats: includeProjectStats,
     });
-    const projectResult = await this.execJson(projectScript);
+    const projectResult = await this.execJson(projectScript, ExportResultSchema);
 
     if (isScriptSuccess(projectResult)) {
       const projData = projectResult.data as { data?: unknown; count?: number };
@@ -1181,7 +1268,7 @@ PERFORMANCE:
       includeEmpty: true,
       sortBy: 'name' as TagSortBy,
     });
-    const tagResult = await this.execJson(tagGeneratedScript.script);
+    const tagResult = await this.execJson(tagGeneratedScript.script, TAG_LIST_SCHEMA);
 
     if (isScriptSuccess(tagResult)) {
       const tagEnvelope = tagResult.data as { items?: unknown[]; summary?: { total?: number } };

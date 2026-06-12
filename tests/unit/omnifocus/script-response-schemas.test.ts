@@ -16,6 +16,10 @@ import {
   BatchCreateResultSchema,
   TagMutationResultSchema,
 } from '../../../src/omnifocus/script-response-schemas.js';
+import {
+  PROJECT_BY_ID_SCHEMA,
+  FOLDER_LIST_SCHEMA,
+} from '../../../src/tools/unified/OmniFocusReadTool.js';
 
 // ---------------------------------------------------------------------------
 // V3EnvelopeSuccessSchema
@@ -936,6 +940,132 @@ describe('TagMutationResultSchema', () => {
       tagName: 'Work',
       message: "Tag 'Work' deleted successfully.",
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PROJECT_BY_ID_SCHEMA (read-tool local constant, exported for coverage)
+// Source: buildProjectByIdScript → {projects, count, mode, targetId}
+// ---------------------------------------------------------------------------
+
+describe('PROJECT_BY_ID_SCHEMA', () => {
+  it('(a) accepts representative project id-lookup payload', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      projects: [{ id: 'abc123', name: 'My Project' }],
+      count: 1,
+      mode: 'id_lookup',
+      targetId: 'abc123',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts empty projects array', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      projects: [],
+      count: 0,
+      mode: 'id_lookup',
+      targetId: 'notfound',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing projects key', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      count: 0,
+      mode: 'id_lookup',
+      targetId: 'abc',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing count key', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      projects: [],
+      mode: 'id_lookup',
+      targetId: 'abc',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: unexpected extra top-level key', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      projects: [],
+      count: 0,
+      mode: 'id_lookup',
+      targetId: 'abc',
+      error: 'something went wrong',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: metadata key not part of this shape', () => {
+    const result = PROJECT_BY_ID_SCHEMA.safeParse({
+      projects: [],
+      count: 0,
+      mode: 'id_lookup',
+      targetId: 'abc',
+      metadata: { total_available: 5 },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FOLDER_LIST_SCHEMA (read-tool local constant, exported for coverage)
+// Source: buildFilteredFoldersScript → {success: true, folders, metadata?}
+// ---------------------------------------------------------------------------
+
+describe('FOLDER_LIST_SCHEMA', () => {
+  it('(a) accepts representative folder list payload', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      success: true,
+      folders: [{ id: 'f1', name: 'Work', path: 'Work', depth: 0, status: 'active' }],
+      metadata: { returned_count: 1, total_available: 3 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload without optional metadata key', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      success: true,
+      folders: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload where success is false (not literal true)', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      success: false,
+      folders: [],
+      metadata: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing success key', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      folders: [],
+      metadata: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing folders key', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      success: true,
+      metadata: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: unexpected extra top-level key (hybrid payload)', () => {
+    const result = FOLDER_LIST_SCHEMA.safeParse({
+      success: true,
+      folders: [],
+      metadata: {},
+      error: 'iteration aborted',
     });
     expect(result.success).toBe(false);
   });
