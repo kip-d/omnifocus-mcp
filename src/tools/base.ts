@@ -472,7 +472,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
    * and fails CLOSED if it doesn't match. The result is returned as-is — no sniffing.
    */
   protected async execJson<T = unknown>(script: string, schema: z.ZodSchema<T>): Promise<ScriptResult<T>> {
-    // Extract the core execution logic for circuit breaker wrapping
+    // Core execution in its own try/catch so circuit-breaker failure accounting
+    // sees rejected promises from mocked executeJson in tests too
     const executeCoreOperation = async (): Promise<ScriptResult<T>> => {
       try {
         const res: unknown = await this.omniAutomation.executeJson(script, schema);

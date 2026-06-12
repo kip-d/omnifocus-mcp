@@ -290,9 +290,11 @@ const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 // MODULE-SCOPE SUCCESS SCHEMAS (OMN-139)
 // Instantiated once; never constructed per-request.
 // Source-verified against each emitting script before finalizing.
-// The `as z.ZodTypeAny` casts at call sites are an interim bridge: the schema
-// parses the full envelope while T is the declared payload type; the cast is
-// removed when Task 9 flips the execJson signature to require a schema.
+// The `as z.ZodTypeAny` casts at call sites are a deliberate variance bridge:
+// each schema validates the full {ok, v, data} wire envelope while T is the
+// declared payload type the caller unwraps from data. TypeScript cannot unify
+// the envelope type with T directly, so the cast is intentional and must stay.
+// Typed-payload schemas (eliminating the cast entirely) are OMN-158 territory.
 // ---------------------------------------------------------------------------
 
 /** Analytics v3 envelope (all four v3 analytics scripts). */

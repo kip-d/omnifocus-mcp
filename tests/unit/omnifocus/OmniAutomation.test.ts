@@ -339,7 +339,7 @@ describe('OmniAutomation', () => {
   });
 
   // Helper: drive a JSON payload through the mock process stdout and return the executeJson result
-  async function emitJsonOutput(output: string, schema?: z.ZodSchema<any>): Promise<any> {
+  async function emitJsonOutput(output: string, schema: z.ZodSchema<any>): Promise<any> {
     const script = 'test script';
     const resultPromise = omniAutomation.executeJson(script, schema);
     await new Promise((resolve) => setImmediate(resolve));
@@ -438,6 +438,17 @@ describe('OmniAutomation', () => {
       const result = await resultPromise;
 
       expect(result.success).toBe(false);
+    });
+
+    // 7. Legacy error dialect: {error: true, message: '...'} → success:false, error text preserved,
+    //    context 'Legacy script error'. End-to-end coverage of the third detection branch.
+    it('detects legacy {error: true, message} dialect with a schema → success:false, context Legacy script error', async () => {
+      const raw = JSON.stringify({ error: true, message: 'boom' });
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('boom');
+      expect(result.context).toBe('Legacy script error');
     });
 
   });
