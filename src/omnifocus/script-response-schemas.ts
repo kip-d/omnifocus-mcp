@@ -12,11 +12,13 @@ export const V3EnvelopeSuccessSchema = z.object({ ok: z.literal(true), v: z.stri
 
 /** AST envelope (tags, recurring): {ok: true, v: 'ast', <items key>, summary?, metadata?}.
  *
- * Source-verified:
- *  - tag-script-builder.ts: emits {ok:true, v:'ast', items, summary} (lines 106-113, 191-197, 370-377, 454-459)
- *  - analyze-recurring-tasks-ast.ts buildRecurringAnalysisScript: emits {ok:true, v:'ast', tasks, summary, metadata} (lines 330-345)
- *  - analyze-recurring-tasks-ast.ts buildRecurringSummaryScript: emits {ok:true, v:'ast', summary, metadata} (lines 427-434)
+ * Source-verified (grep `v: 'ast'`):
+ *  - tag-script-builder.ts: every success branch emits {ok:true, v:'ast', items, summary}
+ *  - analyze-recurring-tasks-ast.ts buildRecurringTasksScript: emits {ok:true, v:'ast', tasks, summary, metadata}
+ *  - analyze-recurring-tasks-ast.ts buildRecurringSummaryScript: emits {ok:true, v:'ast', summary, metadata}
  *    — summary-only has NO items/tasks key; that endpoint does not go through this factory.
+ *
+ * Instantiate once at module scope and reuse; do not construct per request.
  */
 export function astEnvelopeSchema(itemsKey: 'items' | 'tasks') {
   return z
@@ -33,12 +35,16 @@ export function astEnvelopeSchema(itemsKey: 'items' | 'tasks') {
 /**
  * List/query results whose items key varies by script path (tasks|items, projects|items, …).
  * One strict variant per key, unioned. `extras` adds optional sibling keys present on some paths.
+ *
+ * Instantiate once at module scope and reuse; do not construct per request.
  */
 export function listResultSchema(
   itemKeys: readonly string[],
   opts: { metadata?: boolean; extras?: Record<string, z.ZodTypeAny> } = {},
-) {
-  const variants = itemKeys.map((k) =>
+): z.ZodTypeAny {
+  // Annotated as z.ZodTypeAny[]: TS drops the computed [k] key from the inferred
+  // object type, so the unannotated array would not satisfy the tuple cast below.
+  const variants: z.ZodTypeAny[] = itemKeys.map((k) =>
     z
       .object({
         [k]: z.array(z.unknown()),
@@ -52,7 +58,7 @@ export function listResultSchema(
 
 /**
  * countOnly result — WIRE shape from buildTaskCountScript (src/contracts/ast/script-builder.ts,
- * grep `task_count_omnijs`). Source-verified at lines 2050-2058:
+ * grep `task_count_omnijs`). Source-verified against its success JSON.stringify:
  *   {count, filters_applied, query_time_ms, optimization, filter_description, scanned, total_tasks}
  *   plus conditional spread: {limited:true, warning} or {limited:false}.
  */
@@ -74,12 +80,12 @@ export const CountResultSchema = z
  * Export results — WIRE shape union of all script success branches.
  *
  * Source-verified:
- *  - script-builder.ts task export (lines 1621-1723):
- *    csv: {format, data, count, duration, message?}
+ *  - script-builder.ts task export, buildExportTasksScript (grep `context: 'export_tasks'`):
+ *    csv empty: {format, data, count, duration, message?}
  *    csv non-empty: {format, data, count, duration, limited, message?}
  *    markdown: {format, data, count, duration}
  *    json: {format, data, count, duration, limited, debug, message?}
- *  - export-projects.ts (lines 172-239):
+ *  - src/omnifocus/scripts/export/export-projects.ts (grep `export_projects`):
  *    csv: {format, data, count, duration}
  *    markdown: {format, data, count, duration}
  *    json: {format, data, count, duration, debug}
@@ -100,7 +106,8 @@ export const ExportResultSchema = z
   })
   .strict();
 
-/** Review-family success: {success: true, ...op keys}. Factory keeps the literal discriminator mandatory. */
+/** Review-family success: {success: true, ...op keys}. Factory keeps the literal discriminator mandatory.
+ * Instantiate once at module scope and reuse; do not construct per request. */
 export function reviewSuccessSchema(shape: Record<string, z.ZodTypeAny>) {
   return z.object({ success: z.literal(true), ...shape }).strict();
 }
@@ -108,10 +115,10 @@ export function reviewSuccessSchema(shape: Record<string, z.ZodTypeAny>) {
 /**
  * Write-tool task create/update result (NOT v3-wrapped — wrapInLauncher returns the OmniJS payload raw).
  *
- * Source-verified against src/contracts/ast/mutation/defs.ts:
- *  - buildCreateTaskProgram (line 410-425):
+ * Source-verified against src/contracts/ast/mutation/defs.ts (grep the envelope construction):
+ *  - buildCreateTaskProgram envelope:
  *    {taskId, name, note, flagged, dueDate, deferDate, plannedDate, estimatedMinutes, tags, project, inInbox, warnings, created:true}
- *  - buildUpdateTaskProgram (line 751-758):
+ *  - buildUpdateTaskProgram envelope:
  *    {taskId, name, flagged, updated:true, warnings}  ← FEWER keys than create; both must validate.
  *
  * The .refine() enforces at least one discriminator is present.
