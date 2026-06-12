@@ -2,7 +2,13 @@
 // (static ESM imports are evaluated before test mocks are applied)
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
-import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
+import {
+  ScriptResult,
+  createScriptSuccess,
+  createScriptError,
+  detectKnownErrorShape,
+  truncateRawOutput,
+} from './script-result-types.js';
 import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 // Remove conflicting import
@@ -68,29 +74,26 @@ export class OmniAutomation {
     try {
       const result = await this.execute<unknown>(script);
 
-      // Handle raw script errors (back-compat shape from pre-envelope scripts)
-      const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
-      if (isObj(result) && 'error' in result && (result as Record<string, unknown>).error === true) {
-        const obj = result as Record<string, unknown>;
-        const msgVal = obj.message;
-        const message: string = typeof msgVal === 'string' ? msgVal : 'Script execution failed';
-        const details = obj.details ?? 'No additional context';
-        return createScriptError(message, 'Legacy script error', details);
-      }
+      // OMN-139 step 1: known error dialects FIRST, so callers get the script's own
+      // message instead of a generic validation failure. Order vs schema validation
+      // is load-bearing (spec §3.2): error-first makes a lax schema non-catastrophic.
+      const knownError = detectKnownErrorShape(result);
+      if (knownError) return knownError;
 
-      // Validate result against schema if provided
+      // OMN-139 step 2/3: success allow-list. Anything that matches neither a known
+      // error dialect nor the success schema fails CLOSED with the raw output preserved.
       if (schema) {
         const validation = schema.safeParse(result);
-        if (!validation.success) {
-          return createScriptError(
-            'Script result validation failed',
-            `Schema validation errors: ${validation.error.issues.map((i) => i.message).join(', ')}`,
-            { result, errors: validation.error.issues },
-          );
-        }
-        return createScriptSuccess(validation.data as T);
+        if (validation.success) return createScriptSuccess(validation.data as T);
+        return createScriptError(
+          'Script output did not match the expected success shape',
+          'Unrecognized script output shape',
+          { raw: truncateRawOutput(result), issues: validation.error.issues },
+        );
       }
 
+      // TEMPORARY no-schema path (deleted in Task 9 when the parameter becomes required):
+      // legacy fail-open behavior for call sites not yet migrated (Tasks 5-7).
       return createScriptSuccess(result as T);
     } catch (error) {
       if (error instanceof OmniAutomationError) {
