@@ -60,7 +60,7 @@ export interface CompiledQuery {
 
 /**
  * OMN-162: Returns true if the given TaskFilter compiles to a literal(true) AST node —
- * meaning it would match every task (match-all). Used as a defence-in-depth guard at three
+ * meaning it would match every task (match-all). Used as a defense-in-depth guard at three
  * sites in transformFilters to catch filters whose keys are accepted by the schema but
  * produce zero AST conditions (e.g. tags:{any:[]} after transformTags skips empty arrays).
  */
@@ -149,7 +149,7 @@ export class QueryCompiler {
             },
           ]);
         }
-        // OMN-162 depth-in-defense: even if non-zero keys are present, reject if they
+        // OMN-162 defense-in-depth: even if non-zero keys are present, reject if they
         // all compile away to literal(true) — e.g. tags:{any:[]}. Shadowed by the
         // usableKeyCount check for currently-expressible inputs; guards future drift.
         if (compilesToMatchAll(transformed)) {
@@ -215,7 +215,7 @@ export class QueryCompiler {
             },
           ]);
         }
-        // OMN-162 depth-in-defense: even if non-zero keys are present, reject if they
+        // OMN-162 defense-in-depth: even if non-zero keys are present, reject if they
         // all compile away to literal(true). Shadowed by usableKeyCount for currently-
         // expressible inputs; guards future transform drift.
         if (compilesToMatchAll(transformed)) {
