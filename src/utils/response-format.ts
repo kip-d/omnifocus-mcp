@@ -90,6 +90,55 @@ export interface AnalyticsSummary extends Record<string, unknown> {
   health_score?: number;
 }
 
+/**
+ * OMN-154: population counts supplied by handlers when the script reports a
+ * pre-limit match count (`total_matched`).
+ */
+export interface CountHonestyInput {
+  /** Full matching population (post-filter, pre-offset/limit). */
+  population?: number;
+  /** Offset the caller applied; participates in the truncation formula (R2/D5). */
+  offset?: number;
+}
+
+/**
+ * OMN-154 R1/R2/R3: make headline counts report the population and truncation
+ * unmistakable. Mutates the already-built response IN PLACE, after the
+ * metadata spread — population is authoritative over caller metadata.
+ * No-op when no population is supplied (R9: id-lookups, countOnly,
+ * perspectives keep current behavior).
+ */
+export function applyCountHonesty(
+  response: { summary?: Record<string, unknown>; metadata: StandardMetadataV2 },
+  counts: CountHonestyInput | undefined,
+  itemNoun: 'tasks' | 'projects' | 'folders',
+): void {
+  if (counts?.population === undefined) return;
+  const population = counts.population;
+  const offset = counts.offset ?? 0;
+  const returned = typeof response.metadata.returned_count === 'number' ? response.metadata.returned_count : 0;
+  const isTruncated = offset + returned < population;
+
+  response.metadata.total_count = population;
+  if (isTruncated) {
+    response.metadata.truncated = true;
+  }
+
+  const summary = response.summary;
+  if (!summary) return;
+  if ('total_count' in summary) summary.total_count = population;
+  if ('total_projects' in summary) summary.total_projects = population;
+  if (isTruncated) {
+    const notice = `Showing ${returned} of ${population} matching ${itemNoun} (truncated)`;
+    if (Array.isArray(summary.key_insights)) {
+      (summary.key_insights as string[]).unshift(notice);
+    } else {
+      const existing = typeof summary.key_insight === 'string' ? summary.key_insight : undefined;
+      summary.key_insight = existing ? `${notice}; ${existing}` : notice;
+    }
+  }
+}
+
 export interface StandardMetadataV2 {
   // Operation info
   operation: string;
@@ -526,6 +575,7 @@ export function createListResponseV2<T>(
   items: T[],
   itemType: 'tasks' | 'projects' | 'tags' | 'folders' | 'other',
   metadata: Partial<StandardMetadataV2> = {},
+  counts?: CountHonestyInput,
 ): StandardResponseV2<Record<string, T[]>> {
   // Generate summary based on item type
   let summary: TaskSummary | ProjectSummary | undefined;
@@ -538,7 +588,7 @@ export function createListResponseV2<T>(
   // Use entity-specific key, fallback to 'items' for 'other'
   const dataKey = itemType === 'other' ? 'items' : itemType;
 
-  return {
+  const response: StandardResponseV2<Record<string, T[]>> = {
     success: true,
     summary,
     data: {
@@ -553,6 +603,11 @@ export function createListResponseV2<T>(
       ...metadata,
     },
   };
+
+  const noun: 'tasks' | 'projects' | 'folders' =
+    itemType === 'projects' ? 'projects' : itemType === 'folders' ? 'folders' : 'tasks';
+  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, counts, noun);
+  return response;
 }
 
 import { CHARACTER_LIMIT } from './constants.js';
@@ -612,6 +667,7 @@ export function createTaskResponseV2<T>(
   operation: string,
   tasks: T[],
   metadata: Partial<StandardMetadataV2> = {},
+  counts?: CountHonestyInput,
 ): StandardResponseV2<{ tasks: T[] }> {
   const summary = generateTaskSummary(tasks as unknown[]);
 
@@ -625,7 +681,7 @@ export function createTaskResponseV2<T>(
     summary.returned_count = truncatedTasks.length;
   }
 
-  return {
+  const response: StandardResponseV2<{ tasks: T[] }> = {
     success: true,
     summary,
     data: {
@@ -644,6 +700,9 @@ export function createTaskResponseV2<T>(
       ...metadata,
     },
   };
+
+  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, counts, 'tasks');
+  return response;
 }
 
 /**
