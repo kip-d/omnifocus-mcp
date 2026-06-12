@@ -420,7 +420,7 @@ function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
 `;
 }
 
-/** Build script for no-sort fast path: limit during iteration */
+/** Build script for no-sort fast path: full-population iteration; limit caps projected rows */
 function buildUnsortedScript(ctx: ScriptBuildContext): string {
   const useOffset = ctx.offset > 0;
   const offsetVars = useOffset ? `const offset = ${ctx.offset};\n  let skipped = 0;` : '';
@@ -1217,6 +1217,7 @@ export function buildFilteredProjectsScript(
       (() => {
         const results = [];
         let count = 0;
+        let totalMatched = 0;
         const limit = ${limit};
 
         // Helper to get project status string
@@ -1246,10 +1247,12 @@ export function buildFilteredProjectsScript(
         }
 
         flattenedProjects.forEach(project => {
-          if (count >= limit) return;
-
           // Apply AST-generated filter
           if (!matchesFilter(project)) return;
+
+          // OMN-154: count every match; the limit caps only the projected rows
+          totalMatched++;
+          if (count >= limit) return;
 
           const proj = {
             ${fieldProjection}
@@ -1321,6 +1324,7 @@ export function buildFilteredProjectsScript(
         return JSON.stringify({
           projects: results,
           count: results.length,
+          total_matched: totalMatched,
           total_available: flattenedProjects.length
         });
       })()
@@ -1340,6 +1344,7 @@ export function buildFilteredProjectsScript(
       projects: result.projects,
       metadata: {
         total_available: result.total_available,
+        total_matched: result.total_matched,
         returned_count: result.count,
         limit_applied: ${limit},
         performance_mode: '${performanceMode}',

@@ -1175,6 +1175,63 @@ describe('buildFilteredTasksScript preamble and warning injection', () => {
   });
 });
 
+// =============================================================================
+// OMN-154: PROJECTS SCRIPT POPULATION COUNT TESTS
+// =============================================================================
+
+describe('OMN-154: projects script counts the full population', () => {
+  const Project = {
+    Status: { Active: 'Active', Done: 'Done', Dropped: 'Dropped', OnHold: 'OnHold' },
+  };
+  const stubProject = (name: string, status: string) => ({
+    id: { primaryKey: `id-${name}` },
+    name,
+    status,
+    flagged: false,
+    folder: null,
+    rootTask: null,
+    note: '',
+  });
+
+  it('script text includes total_matched and the wrapper forwards it', () => {
+    const result = buildFilteredProjectsScript({ status: ['active'] }, { limit: 2 });
+    expect(result.script).toContain('total_matched: totalMatched');
+    // JXA wrapper forwards it in its metadata block
+    expect(result.script).toContain('total_matched: result.total_matched');
+  });
+
+  it('vm: limit 2 against 4 active → 2 rows, total_matched 4', () => {
+    const projects = [
+      stubProject('p1', Project.Status.Active),
+      stubProject('p2', Project.Status.Active),
+      stubProject('p3', Project.Status.Active),
+      stubProject('p4', Project.Status.Active),
+      stubProject('p5', Project.Status.Done),
+    ];
+    const generated = buildFilteredProjectsScript({ status: ['active'] }, { limit: 2, performanceMode: 'lite' });
+    // Double-vm: the generated artifact is a JXA wrapper embedding OmniJS via
+    // app.evaluateJavascript. Stub Application so evaluateJavascript runs the
+    // inner OmniJS in the same sandbox — exercising BOTH layers as generated.
+    const sandbox: Record<string, unknown> = {
+      flattenedProjects: projects,
+      Project,
+      JSON,
+      Application: () => ({
+        evaluateJavascript: (src: string) => vm.runInNewContext(src, sandbox) as string,
+      }),
+    };
+    const raw = vm.runInNewContext(generated.script, sandbox) as string;
+    const parsed = JSON.parse(raw) as {
+      projects: unknown[];
+      metadata: { total_matched: number; returned_count: number; total_available: number };
+    };
+    expect(parsed.projects).toHaveLength(2);
+    expect(parsed.metadata.returned_count).toBe(2);
+    expect(parsed.metadata.total_matched).toBe(4);
+    expect(parsed.metadata.total_available).toBe(5); // pre-filter total, unchanged
+  });
+});
+
 // OMN-142: the export path threads `name` through ExportFilter as a
 // name-scoped predicate; only `search` (the documented full-text param)
 // may read task.note.
