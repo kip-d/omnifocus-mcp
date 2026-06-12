@@ -1,9 +1,9 @@
 # Read-tool filter semantics — behavioral specification
 
-**OMN-148, section 1.** Status: **DRAFT — pending review.** Baseline: `main` @ `5b41534` (post-OMN-142/149/131; advanced
-from `d89d5b7` at the 2026-06-11 review gate). Statements describe intended behavior; where the implementation diverges,
-the Drift register (§8) records it. Provenance uses stable anchors (paths, ticket IDs, commits, vault note titles) —
-never line numbers.
+**OMN-148, section 1.** Status: **DRAFT — pending review.** Baseline: the OMN-151/156 PR tree (post-OMN-151/156/157;
+previously `main` @ `5b41534`, advanced from `d89d5b7` at the 2026-06-11 review gate). Statements describe intended
+behavior; where the implementation diverges, the Drift register (§8) records it. Provenance uses stable anchors (paths,
+ticket IDs, commits, vault note titles) — never line numbers.
 
 ## 1. Scope and method
 
@@ -122,6 +122,9 @@ live-confirmed indistinguishable, 2026-06-11). Current behavior drifts (§8 D12,
 | `AND: [...]` | Explicit AND; merges one level deep with conflict detection — a key acquiring two different values rejects (was last-wins). Empty arrays and empty items reject.                                                                                                                                                          | `transformFilters` + OMN-151      |
 | `NOT: {...}` | **Supported payloads only:** `{status:'completed'}`, `{status:'active'}`. Everything else hard-rejects with a validation error (OMN-131, shipped `5b41534` 2026-06-11; §8 D1 resolved — previously compiled silently to match-ALL). Tag exclusion belongs to `tags:{none}`. Seam: `transformNot` (QueryCompiler).         | OMN-131                           |
 
+V-numbers (V1–V7) cite the verified-premise catalog in the OMN-151/156 design doc
+(`docs/superpowers/specs/2026-06-12-omn-151-156-logical-operator-honesty-design.md` §1).
+
 ## 4. Modes — tasks queries
 
 Modes defined in `MODE_DEFINITIONS` (today/upcoming/overdue/flagged/available/blocked/smart_suggest) add
@@ -206,26 +209,26 @@ reject (type-discriminated field enums — vault Description-Gap Audit gap #2; O
 
 Implementation-independent; each runs against a seeded fixture DB (design per R13).
 
-| #   | Case                                                               | Asserts                                                                                                                                                                                   |
-| --- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1  | `name:{contains}` with note-only marker fixture                    | Note-only match NOT returned (R1 regression lock)                                                                                                                                         |
-| C2  | Same term via `name` vs `text`                                     | `text` ⊇ `name`; sets differ on the note-only fixture                                                                                                                                     |
-| C3  | `name` + `text` together                                           | Both apply (AND); neither dropped                                                                                                                                                         |
-| C4  | `mode:overdue` + `tags:{none}`                                     | Mode and exclusion compose (R7)                                                                                                                                                           |
-| C5  | `matches` with regex metacharacters vs `contains` of same string   | Results differ; regex semantics real (R2); include a `/`-bearing pattern (OMN-149 probe)                                                                                                  |
-| C6  | `dueDate:{between}` boundary fixtures                              | Inclusive both ends; null-due tasks absent                                                                                                                                                |
-| C7  | `estimatedMinutes:{lessThan}`                                      | No-estimate tasks absent (null ≠ 0)                                                                                                                                                       |
-| C8  | Unsupported `NOT:{tags}`                                           | Validation error, zero rows — never match-all (post-OMN-131)                                                                                                                              |
-| C9  | Each mode against a fixture containing a dropped task              | Dropped task absent from every mode                                                                                                                                                       |
-| C10 | `mode:overdue` vs `plannedDate:{before:now}` union                 | Documented Forecast-Past recipe returns the fixture's expected set (R6)                                                                                                                   |
-| C11 | `limit:5` against a 10-row population                              | `metadata.total_count: 10`; truncation visible (R10)                                                                                                                                      |
-| C12 | `project:null`, `folder:null` (projects), tasks `folder` substring | Inbox / top-level / hierarchy semantics                                                                                                                                                   |
-| C13 | Sequential-project fixture                                         | `available` excludes second-in-sequence; `blocked` includes it (R9)                                                                                                                       |
-| C14 | `projectId` task query on an N-task project                        | Exactly N rows by default (no root); with `includeProjectRoot:true` N+1 and the root row carries `isProjectRoot:true` (§3.4); `countOnly` agrees under both settings                      |
-| C15 | `countOnly:true` vs same query without                             | count == rows length (same predicate)                                                                                                                                                     |
-| C16 | `fastSearch:true` with note-only marker                            | Note-only match absent                                                                                                                                                                    |
-| C17 | Repeat C-series query after an unrelated cached browse             | Response matches predicate, not cache (R11) — re-verify after OMN-156, which removes the predicate-drop that masked this                                                                  |
-| C18 | `OR` of two name filters on projects                               | Steering validation error (never match-all). SHIPPED shape: steering validation error (OMN-156, 2026-06-12); integration-pinned in `tests/integration/projects-filter-rejection.test.ts`. |
+| #   | Case                                                               | Asserts                                                                                                                                                              |
+| --- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | `name:{contains}` with note-only marker fixture                    | Note-only match NOT returned (R1 regression lock)                                                                                                                    |
+| C2  | Same term via `name` vs `text`                                     | `text` ⊇ `name`; sets differ on the note-only fixture                                                                                                                |
+| C3  | `name` + `text` together                                           | Both apply (AND); neither dropped                                                                                                                                    |
+| C4  | `mode:overdue` + `tags:{none}`                                     | Mode and exclusion compose (R7)                                                                                                                                      |
+| C5  | `matches` with regex metacharacters vs `contains` of same string   | Results differ; regex semantics real (R2); include a `/`-bearing pattern (OMN-149 probe)                                                                             |
+| C6  | `dueDate:{between}` boundary fixtures                              | Inclusive both ends; null-due tasks absent                                                                                                                           |
+| C7  | `estimatedMinutes:{lessThan}`                                      | No-estimate tasks absent (null ≠ 0)                                                                                                                                  |
+| C8  | Unsupported `NOT:{tags}`                                           | Validation error, zero rows — never match-all (post-OMN-131)                                                                                                         |
+| C9  | Each mode against a fixture containing a dropped task              | Dropped task absent from every mode                                                                                                                                  |
+| C10 | `mode:overdue` vs `plannedDate:{before:now}` union                 | Documented Forecast-Past recipe returns the fixture's expected set (R6)                                                                                              |
+| C11 | `limit:5` against a 10-row population                              | `metadata.total_count: 10`; truncation visible (R10)                                                                                                                 |
+| C12 | `project:null`, `folder:null` (projects), tasks `folder` substring | Inbox / top-level / hierarchy semantics                                                                                                                              |
+| C13 | Sequential-project fixture                                         | `available` excludes second-in-sequence; `blocked` includes it (R9)                                                                                                  |
+| C14 | `projectId` task query on an N-task project                        | Exactly N rows by default (no root); with `includeProjectRoot:true` N+1 and the root row carries `isProjectRoot:true` (§3.4); `countOnly` agrees under both settings |
+| C15 | `countOnly:true` vs same query without                             | count == rows length (same predicate)                                                                                                                                |
+| C16 | `fastSearch:true` with note-only marker                            | Note-only match absent                                                                                                                                               |
+| C17 | Repeat C-series query after an unrelated cached browse             | Response matches predicate, not cache (R11) — re-verify after OMN-156, which removes the predicate-drop that masked this                                             |
+| C18 | `OR` of two name filters on projects                               | Steering validation error, never match-all — SHIPPED (OMN-156, 2026-06-12); integration-pinned in `tests/integration/projects-filter-rejection.test.ts`.             |
 
 ## 10. Open questions (review gate)
 

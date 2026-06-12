@@ -231,7 +231,6 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
 - inbox, available, blocked, search, smart_suggest, all
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
-- Projects filters: status, completed, flagged, name, text, folder, id. OR/NOT are not supported on projects queries (use one query per alternative).
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
@@ -241,6 +240,7 @@ FILTER OPERATORS:
 - boolean: flagged, blocked, available, inInbox
 - folder (projects queries): "<name>" matches folder-name substring; null = top-level projects only (no containing folder)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false
+- Projects filters: status, completed, flagged, name, text, folder, id. OR/NOT are not supported on projects queries (use one query per alternative).
 
 RESPONSE CONTROL:
 - Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available)
