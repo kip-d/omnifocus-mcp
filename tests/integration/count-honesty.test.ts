@@ -7,6 +7,7 @@
  * - R3: metadata.total_matched is NOT emitted (D3 — removed from public contract)
  * - R4: countOnly query reports same total_count as a row query with sufficient limit
  * - R6: second identical query returns from_cache: true with identical count metadata
+ * (R5 — a single truncated flag, no competing truncation keys — is covered by unit tests.)
  *
  * Deterministic fixture: 10 tasks inside a sandbox project, each named with a
  * run-unique marker. Assertions are keyed on marker-filtered counts, not live DB
@@ -81,7 +82,6 @@ interface ProjectsReadResponse {
 
 interface BatchResponse {
   success: boolean;
-  data: { tempIdMapping?: Record<string, string> };
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,6 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
         operations,
         createSequentially: true,
         atomicOperation: false,
-        returnMapping: true,
         stopOnError: true,
       },
     })) as BatchResponse;
@@ -282,6 +281,14 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
     for (const name of returnedNames) {
       expect(name, `"${name}" must contain the run marker`).toContain(MARKER);
     }
+
+    // Exact check: runScopedName puts the run-id as a PREFIX, so every fixture
+    // name ENDS with its sequence suffix. The lexicographically first 3 must be
+    // exactly -01, -02, -03 (sort-before-limit sanity).
+    expect(
+      returnedNames.map((n) => n.slice(-3)),
+      'returned names must be the first 3 sequence suffixes',
+    ).toEqual(['-01', '-02', '-03']);
   }, 60_000);
 
   // ---------------------------------------------------------------------------
@@ -299,6 +306,10 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
 
     expect(firstResult.success, 'first projects query must succeed').toBe(true);
     const firstMeta = firstResult.metadata;
+
+    // Cache was just cleared — the first call must be a genuine fresh query
+    // (the fresh projects path sets from_cache: false explicitly).
+    expect(firstMeta.from_cache, 'first call must be a cache miss').toBe(false);
 
     // Basic invariants on the first call
     expect(firstMeta.returned_count, 'returned_count must be 1 (limit=1)').toBe(1);
