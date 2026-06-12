@@ -24,11 +24,21 @@
  *   REAL_LLM_MODEL=llama3.1:8b npx tsx scripts/llm-conformance-probe.ts
  *   OLLAMA_HOST=http://host:11434 npx tsx scripts/llm-conformance-probe.ts llama3.1:8b > report.md
  *
+ * Ollama lifecycle (OMN-163): attaches to a running server when one is reachable; otherwise,
+ * for a localhost OLLAMA_HOST only, starts `ollama serve` itself and stops it at exit (an
+ * unreachable remote host is an error — the probe never manages a remote server). Probed
+ * models are unloaded at exit regardless of who started the server, so their RAM is
+ * recovered immediately instead of after Ollama's keep-alive. Chat requests cap the context
+ * window at a measured default (PROBE_NUM_CTX overrides; sizing rationale in
+ * scripts/lib/ollama-lifecycle.ts) — without the cap, Ollama sizes the KV cache to the
+ * model's full advertised context (131k for llama3.1 → 21 GB resident for the 8b).
+ *
  * Output: a Markdown conformance report to stdout (redirect to a file), progress to stderr.
  */
 
 import { spawn, type ChildProcess } from 'child_process';
 import { Ollama, type Tool, type ToolCall } from 'ollama';
+import { isLocalhostOllamaHost, resolveNumCtx } from './lib/ollama-lifecycle.js';
 import type { ZodTypeAny } from 'zod';
 import { ReadSchema } from '../src/tools/unified/schemas/read-schema.js';
 import { WriteSchema } from '../src/tools/unified/schemas/write-schema.js';
@@ -214,6 +224,78 @@ class McpServer {
   }
 }
 
+// ── Ollama lifecycle (OMN-163) ───────────────────────────────────────────────
+
+interface OllamaLifecycle {
+  startedByUs: boolean;
+  serveProc?: ChildProcess;
+}
+
+async function isReachable(ollama: Ollama): Promise<boolean> {
+  try {
+    await ollama.list();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Attach to a running Ollama, or — for a localhost host only — start `ollama serve`
+ * ourselves and record that we own it. We never manage a remote server.
+ */
+async function ensureOllama(ollama: Ollama, host: string): Promise<OllamaLifecycle> {
+  if (await isReachable(ollama)) return { startedByUs: false };
+  if (!isLocalhostOllamaHost(host)) {
+    process.stderr.write(
+      `Ollama not reachable at ${host}. That host is not localhost (or could not be parsed), ` +
+        'so the probe will not start a server for it — start it there and re-run.\n',
+    );
+    process.exit(2);
+  }
+  process.stderr.write('Ollama not running — starting `ollama serve` (will be stopped at exit) …\n');
+  const stderrTail: string[] = [];
+  const proc = spawn('ollama', ['serve'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Backstop registered at spawn time so a crash/signal during the readiness poll
+  // cannot orphan the server. The child is ours by construction on this path, and
+  // kill() on an already-dead process is a no-op. Sync-safe in an exit handler.
+  process.on('exit', () => proc.kill('SIGTERM'));
+  proc.stderr?.on('data', (d: Buffer) => {
+    stderrTail.push(d.toString());
+    if (stderrTail.length > 20) stderrTail.shift();
+  });
+  let spawnError: Error | undefined;
+  proc.on('error', (err) => {
+    spawnError = err;
+  });
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline && !spawnError) {
+    if (await isReachable(ollama)) return { startedByUs: true, serveProc: proc };
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  proc.kill('SIGTERM');
+  const reason = spawnError
+    ? `${String(spawnError)} (is the ollama CLI installed and on PATH?)`
+    : `not ready after 15s. ollama serve output:\n${stderrTail.join('')}`;
+  process.stderr.write(`Failed to start ollama serve: ${reason}\n`);
+  process.exit(2);
+}
+
+/**
+ * Unload a model immediately (keep_alive: 0) so its RAM is recovered now rather than
+ * after Ollama's keep-alive window. Done regardless of who started the server — this is
+ * where most of the memory lives. (Deliberately NOT set per-request: that would reload
+ * the model between every case.)
+ */
+async function unloadModel(ollama: Ollama, model: string): Promise<void> {
+  try {
+    // An empty prompt with keep_alive: 0 unloads without generating.
+    await ollama.generate({ model, prompt: '', keep_alive: 0 });
+  } catch (err) {
+    process.stderr.write(`! failed to unload ${model}: ${String(err)} — it will unload after the keep-alive\n`);
+  }
+}
+
 // ── Grading ─────────────────────────────────────────────────────────────────
 
 type Outcome = 'pass' | 'no_tool_call' | 'wrong_tool' | 'schema_invalid' | 'model_error';
@@ -272,7 +354,7 @@ interface ModelReport {
   error?: string;
 }
 
-async function probeModel(ollama: Ollama, model: string, tools: Tool[]): Promise<ModelReport> {
+async function probeModel(ollama: Ollama, model: string, tools: Tool[], numCtx: number): Promise<ModelReport> {
   const results: CaseResult[] = [];
   for (const c of CASES) {
     process.stderr.write(`  [${model}] ${c.id} … `);
@@ -290,7 +372,9 @@ async function probeModel(ollama: Ollama, model: string, tools: Tool[]): Promise
         ],
         tools,
         stream: false,
-        options: { temperature: 0 },
+        // num_ctx caps the KV cache (OMN-163) — without it Ollama allocates for the
+        // model's full advertised context. Default + sizing rationale: lib/ollama-lifecycle.ts.
+        options: { temperature: 0, num_ctx: numCtx },
       });
       const call = res.message.tool_calls?.[0];
       const graded = gradeToolCall(c, call);
@@ -401,55 +485,83 @@ async function main(): Promise<void> {
   if (models.length === 0) {
     process.stderr.write(
       'Usage: npx tsx scripts/llm-conformance-probe.ts <model> [model ...]\n' +
-        '       (or set REAL_LLM_MODEL). Requires `npm run build` first and a running Ollama.\n',
+        '       (or set REAL_LLM_MODEL). Requires `npm run build` first; a localhost Ollama is\n' +
+        '       started automatically when not already running.\n',
     );
     process.exit(2);
   }
 
-  const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://localhost:11434' });
-
-  // Confirm Ollama is up and which requested models are present.
-  let installed: Set<string>;
+  let numCtx: number;
   try {
-    const list = await ollama.list();
-    installed = new Set(list.models.map((m) => m.name));
+    numCtx = resolveNumCtx(process.env.PROBE_NUM_CTX);
   } catch (err) {
-    process.stderr.write(`Ollama not reachable: ${String(err)}. Start it with \`ollama serve\`.\n`);
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(2);
   }
 
-  process.stderr.write('Starting MCP server for tools/list …\n');
-  const server = new McpServer();
-  let tools: Tool[];
-  try {
-    // Brief settle for the spawned server before the first request.
-    await new Promise((r) => setTimeout(r, 1500));
-    const mcpTools = await server.listTools();
-    tools = mcpTools.map((t) => ({
-      type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema as Tool['function']['parameters'],
-      },
-    }));
-    process.stderr.write(`Advertised tools: ${mcpTools.map((t) => t.name).join(', ')}\n`);
-  } finally {
-    server.stop();
-  }
+  const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  const ollama = new Ollama({ host });
+  const lifecycle = await ensureOllama(ollama, host);
 
-  const reports: ModelReport[] = [];
-  for (const model of models) {
-    if (!installed.has(model)) {
-      process.stderr.write(`! ${model} not installed (ollama pull ${model}) — skipping\n`);
-      reports.push({ model, available: false, results: [], error: 'not installed' });
-      continue;
+  // Teardown must run on normal exit AND on interrupt: unload every probed model
+  // (the RAM), then stop the server only if we started it (never the user's).
+  const probedModels = new Set<string>();
+  let toreDown = false;
+  const teardown = async (): Promise<void> => {
+    if (toreDown) return;
+    toreDown = true;
+    for (const m of probedModels) await unloadModel(ollama, m);
+    if (lifecycle.startedByUs && lifecycle.serveProc) {
+      lifecycle.serveProc.kill('SIGTERM');
+      process.stderr.write('Stopped the `ollama serve` this probe started.\n');
     }
-    process.stderr.write(`Probing ${model} …\n`);
-    reports.push(await probeModel(ollama, model, tools));
-  }
+  };
+  process.on('SIGINT', () => void teardown().finally(() => process.exit(130)));
+  process.on('SIGTERM', () => void teardown().finally(() => process.exit(143)));
+  // (The orphan backstop for a server we spawned is registered at spawn time inside
+  // ensureOllama, so it also covers the readiness-poll window before we get here.)
 
-  process.stdout.write(renderReport(reports) + '\n');
+  try {
+    // Which requested models are present?
+    const list = await ollama.list();
+    const installed = new Set(list.models.map((m) => m.name));
+
+    process.stderr.write('Starting MCP server for tools/list …\n');
+    const server = new McpServer();
+    let tools: Tool[];
+    try {
+      // Brief settle for the spawned server before the first request.
+      await new Promise((r) => setTimeout(r, 1500));
+      const mcpTools = await server.listTools();
+      tools = mcpTools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema as Tool['function']['parameters'],
+        },
+      }));
+      process.stderr.write(`Advertised tools: ${mcpTools.map((t) => t.name).join(', ')}\n`);
+    } finally {
+      server.stop();
+    }
+
+    const reports: ModelReport[] = [];
+    for (const model of models) {
+      if (!installed.has(model)) {
+        process.stderr.write(`! ${model} not installed (ollama pull ${model}) — skipping\n`);
+        reports.push({ model, available: false, results: [], error: 'not installed' });
+        continue;
+      }
+      process.stderr.write(`Probing ${model} (num_ctx=${numCtx}) …\n`);
+      probedModels.add(model);
+      reports.push(await probeModel(ollama, model, tools, numCtx));
+    }
+
+    process.stdout.write(renderReport(reports) + '\n');
+  } finally {
+    await teardown();
+  }
 }
 
 main().catch((err) => {
