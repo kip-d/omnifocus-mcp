@@ -228,9 +228,10 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - today: Due soon (≤3 days) OR flagged, matching OmniFocus Today perspective
 - overdue: Tasks past their due date
 - flagged: Flagged tasks
-- upcoming: Tasks due in next N days (set daysAhead, default 14)
+- upcoming: Tasks due in next N days (set daysAhead, default 7)
 - inbox, available, blocked, search, smart_suggest, all
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
+- Projects filters: status, completed, flagged, name, text, folder, id. OR/NOT are not supported on projects queries (use one query per alternative).
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)

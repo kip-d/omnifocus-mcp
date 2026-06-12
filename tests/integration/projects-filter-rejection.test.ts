@@ -66,6 +66,7 @@ d('OMN-156: projects OR rejects with steering; completed:false and mode+OR compo
     })) as { success: boolean; data?: { projects?: Array<{ id: string; name: string; status: string }> } };
 
     expect(result.success).toBe(true);
+    expect(result.data?.projects, 'envelope missing data.projects').toBeDefined();
 
     const projects = result.data?.projects ?? [];
     if (projects.length === 0) {
@@ -98,6 +99,7 @@ d('OMN-156: projects OR rejects with steering; completed:false and mode+OR compo
     })) as { success: boolean; data?: { tasks?: Array<{ id: string; name: string; flagged: boolean }> } };
 
     expect(result.success).toBe(true);
+    expect(result.data?.tasks, 'envelope missing data.tasks').toBeDefined();
 
     const tasks = result.data?.tasks ?? [];
     if (tasks.length === 0) {
