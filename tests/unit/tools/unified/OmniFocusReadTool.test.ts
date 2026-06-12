@@ -1400,6 +1400,71 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-154: folders surface total_available as total_count (R7)', () => {
+    it('truncated when the 100-cap hides folders', async () => {
+      const folders100 = Array.from({ length: 100 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders100,
+          metadata: { total_available: 120 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(120);
+      expect(result.metadata.returned_count).toBe(100);
+      expect(result.metadata.total_folders).toBe(120);
+      expect(result.metadata.truncated).toBe(true);
+    });
+
+    it('complete when population fits', async () => {
+      const folders30 = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders30,
+          metadata: { total_available: 30 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(30);
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('cached folders response repeats the counts (R6)', async () => {
+      const folders30 = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders30,
+          metadata: { total_available: 30 },
+        },
+      } satisfies ScriptResult);
+
+      const first = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      // Capture what was stored in the cache
+      const cacheSetCall = (mockCache.set as ReturnType<typeof vi.fn>).mock.calls[0];
+      const cachedValue = cacheSetCall[2];
+
+      // Second call — simulate a cache hit with the cached value (includes totalAvailable)
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(cachedValue);
+
+      const second = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(second.metadata.from_cache).toBe(true);
+      expect(second.metadata.total_count).toBe(first.metadata.total_count);
+      // execJson only called once (for the first query; second is cache hit)
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('countOnly through execute() (OMN-35 gap 2)', () => {
     it('returns count + metadata flags + overrides summary.total_count from JXA', async () => {
       execJsonSpy.mockResolvedValueOnce({
@@ -1753,9 +1818,6 @@ describe('OmniFocusReadTool', () => {
         },
       } satisfies ScriptResult);
 
-      // Distinct limit so cache key doesn't collide with the previous test
-      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
-
       const first = (await tool.execute({
         query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
       })) as any;
@@ -1775,6 +1837,7 @@ describe('OmniFocusReadTool', () => {
       expect(second.metadata.from_cache).toBe(true);
       expect(second.metadata.total_count).toBe(160);
       expect(second.metadata.truncated).toBe(true);
+      expect(second.summary.total_projects).toBe(160);
       // execJson only called once (for the first query; second is cache hit)
       expect(execJsonSpy).toHaveBeenCalledTimes(1);
     });
