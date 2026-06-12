@@ -279,7 +279,9 @@ export function listResultSchema(
 /**
  * countOnly result — WIRE shape from buildTaskCountScript (src/contracts/ast/script-builder.ts,
  * grep `task_count_omnijs`), NOT the caller's narrower TS cast in executeCountOnly. The caller
- * reads a subset; the schema must match what the script emits. Verify optionality in source.
+ * reads a subset; the schema must match what the script emits. Plan-review verified: only
+ * `warning` is conditionally emitted; the rest are always present (optional here = safe, may
+ * tighten to required during implementation if the suite agrees).
  */
 export const CountResultSchema = z
   .object({
@@ -296,9 +298,10 @@ export const CountResultSchema = z
   .strict();
 
 /**
- * Export results — WIRE shape: both export scripts ALWAYS emit `duration`; task-CSV adds
- * `message`; project-JSON adds `debug` (task export: script-builder.ts; project export:
- * src/omnifocus/scripts/export/export-projects.ts). Verify in source before tightening.
+ * Export results — WIRE shape: both export scripts ALWAYS emit `format`/`data`/`count`/`duration`;
+ * task export adds `limited`/`message`/`debug` on various branches (csv-empty emits `message` without
+ * `limited`; json emits all three); project-JSON adds `debug` (task export: script-builder.ts;
+ * project export: src/omnifocus/scripts/export/export-projects.ts). Verify in source before tightening.
  */
 export const ExportResultSchema = z
   .object({
@@ -516,10 +519,10 @@ Per-site mapping (line numbers are pre-change anchors; re-grep before editing):
       `executeJson` returns a raw JSON **string**. That mock violates the totality contract (real `executeJson` returns
       `ScriptResult`, never a string). Update the mock to return a proper `ScriptResult` and re-target the assertion, or
       delete the test as pinning removed behavior — state which in the commit message.
-- [ ] **Step 2c:** Add a code comment on `JxaEnvelopeSchema` in `safe-io.ts`: it is now consumed detect-only via
-      `detectKnownErrorShape` (which hand-rolls a superset check — it also catches _malformed_ `{ok: false}` envelopes
-      that the schema would reject; spec §3.6). If ts-prune flags it after this ticket, that is expected — do not
-      delete.
+- [ ] **Step 2c:** Add a code comment on `JxaEnvelopeSchema` in `safe-io.ts`: it is superseded at runtime by
+      `detectKnownErrorShape`'s hand-rolled superset check (which also catches _malformed_ `{ok: false}` envelopes the
+      schema would reject) and retained as the envelope contract's type-level reference — there is no code dependency,
+      so ts-prune WILL flag it after this ticket; that is expected, do not delete (spec §3.6).
 - [ ] **Step 3:** `npm run build` + full unit suite — PASS.
 - [ ] **Step 4: Commit** —
       `refactor(OMN-139): delete executeTyped/normalizeToEnvelope + base.ts shape-sniffing (totality makes them dead)`
