@@ -31,7 +31,9 @@ import {
   createListResponseV2,
   createErrorResponseV2,
   createSuccessResponseV2,
+  applyCountHonesty,
   OperationTimerV2,
+  type StandardMetadataV2,
 } from '../../utils/response-format.js';
 import type { ExportDataV2 } from '../response-types-v2.js';
 import type { TaskFilter, ProjectFilter } from '../../contracts/filters.js';
@@ -222,6 +224,7 @@ COMMON QUERIES:
 - Upcoming (7 days): { query: { type: "tasks", mode: "upcoming", daysAhead: 7 } }
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
 - Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
+- metadata.total_count always reports the FULL matching population; truncated: true marks a partial result (raise limit or paginate with offset)
 - Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
 
 MODES (tasks queries ONLY — not valid on type:"projects"):
@@ -455,7 +458,6 @@ PERFORMANCE:
       offset: compiled.offset || 0,
       sort_applied: sortedInScript || !!sortOptions,
       fields_mode: fieldsMode,
-      ...(totalMatched !== undefined ? { total_matched: totalMatched } : {}),
     };
 
     // Today mode: count categories BEFORE field projection
@@ -470,7 +472,10 @@ PERFORMANCE:
     // Project fields (after counting)
     tasks = projectFields(tasks, compiled.fields);
 
-    return createTaskResponseV2('tasks', tasks, metadata);
+    return createTaskResponseV2('tasks', tasks, metadata, {
+      population: totalMatched,
+      offset: compiled.offset || 0,
+    });
   }
 
   private async executeCountOnly(
@@ -681,13 +686,19 @@ PERFORMANCE:
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
-    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[]; totalMatched?: number }>('projects', cacheKey);
     if (cached) {
-      const cacheResult = createListResponseV2('projects', cached.projects, 'projects', {
-        ...timer.toMetadata(),
-        from_cache: true,
-        operation: 'list',
-      }) as unknown as Record<string, unknown>;
+      const cacheResult = createListResponseV2(
+        'projects',
+        cached.projects,
+        'projects',
+        {
+          ...timer.toMetadata(),
+          from_cache: true,
+          operation: 'list',
+        },
+        { population: cached.totalMatched },
+      ) as unknown as Record<string, unknown>;
 
       if (isNarrowLookup) delete cacheResult.summary;
 
@@ -716,15 +727,26 @@ PERFORMANCE:
     }
 
     // Parse dates and cache
-    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const resultData = result.data as {
+      projects?: unknown[];
+      items?: unknown[];
+      metadata?: { total_matched?: number };
+    };
+    const totalMatched = resultData.metadata?.total_matched;
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
-    this.cache.set('projects', cacheKey, { projects });
+    this.cache.set('projects', cacheKey, { projects, totalMatched });
 
-    const listResult = createListResponseV2('projects', projects, 'projects', {
-      ...timer.toMetadata(),
-      from_cache: false,
-      operation: 'list',
-    }) as unknown as Record<string, unknown>;
+    const listResult = createListResponseV2(
+      'projects',
+      projects,
+      'projects',
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        operation: 'list',
+      },
+      { population: totalMatched },
+    ) as unknown as Record<string, unknown>;
 
     if (isNarrowLookup) delete listResult.summary;
 
@@ -874,15 +896,31 @@ PERFORMANCE:
   private async handleFolderQuery(_compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
 
-    // Check cache first
-    const cacheKey = 'folders_list_basic';
-    const cached = this.cache.get<{ folders: unknown[] }>('folders', cacheKey);
-    if (cached) {
-      return createSuccessResponseV2('folders', { folders: cached.folders }, undefined, {
+    // Helper: build the folders response with honest counts on both paths
+    const buildFoldersResponse = (
+      folders: unknown[],
+      totalAvailable: number | undefined,
+      extraMeta: Partial<StandardMetadataV2>,
+    ) => {
+      const response = createSuccessResponseV2('folders', { folders }, undefined, {
         ...timer.toMetadata(),
         operation: 'list',
-        from_cache: true,
+        returned_count: folders.length,
+        total_folders: folders.length,
+        ...extraMeta,
       });
+      applyCountHonesty(response, { population: totalAvailable }, 'folders');
+      if (typeof response.metadata.total_count === 'number') {
+        response.metadata.total_folders = response.metadata.total_count;
+      }
+      return response;
+    };
+
+    // Check cache first
+    const cacheKey = 'folders_list_basic';
+    const cached = this.cache.get<{ folders: unknown[]; totalAvailable?: number }>('folders', cacheKey);
+    if (cached) {
+      return buildFoldersResponse(cached.folders, cached.totalAvailable, { from_cache: true });
     }
 
     // Build and execute AST-generated folder list script
@@ -900,17 +938,18 @@ PERFORMANCE:
       );
     }
 
-    const resultData = result.data as { folders?: unknown[]; items?: unknown[] };
+    const resultData = result.data as {
+      folders?: unknown[];
+      items?: unknown[];
+      metadata?: { total_available?: number };
+    };
     const folders = resultData.folders || resultData.items || [];
+    const totalAvailable = resultData.metadata?.total_available;
 
     // Cache for 5 minutes (folders change infrequently)
-    this.cache.set('folders', cacheKey, { folders });
+    this.cache.set('folders', cacheKey, { folders, totalAvailable });
 
-    return createSuccessResponseV2('folders', { folders }, undefined, {
-      ...timer.toMetadata(),
-      operation: 'list',
-      total_folders: folders.length,
-    });
+    return buildFoldersResponse(folders, totalAvailable, {});
   }
 
   // =============================================================================

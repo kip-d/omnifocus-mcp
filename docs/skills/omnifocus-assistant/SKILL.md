@@ -510,8 +510,10 @@ To **remove** a repeat rule: `{ changes: { clearRepeatRule: true } }`
 **Sort-before-limit:** When both `sort` and `limit` are specified, the server collects all matching tasks, sorts them,
 then applies the limit. This guarantees correct top-N results (e.g., "10 most overdue" works as expected).
 
-**Pagination metadata:** When sort + limit are used, the response metadata includes `total_matched` — the number of
-tasks that matched before the limit was applied. Use this to know if there are more results to page through.
+**Pagination metadata:** `metadata.total_count` always reports the full matching population (not just the returned
+rows), and `metadata.truncated: true` appears whenever `offset + returned_count < total_count`. Use these to decide
+whether to raise `limit` or page with `offset`; a separate `countOnly` query is no longer needed just to detect
+truncation.
 
 ### Logical Operators
 

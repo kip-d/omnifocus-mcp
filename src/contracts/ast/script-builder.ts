@@ -420,7 +420,7 @@ function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
 `;
 }
 
-/** Build script for no-sort fast path: limit during iteration */
+/** Build script for no-sort fast path: full-population iteration; limit caps projected rows */
 function buildUnsortedScript(ctx: ScriptBuildContext): string {
   const useOffset = ctx.offset > 0;
   const offsetVars = useOffset ? `const offset = ${ctx.offset};\n  let skipped = 0;` : '';
@@ -434,17 +434,21 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
 (() => {
   const results = [];
   let count = 0;
+  let totalMatched = 0;
   const limit = ${ctx.limit};
   ${offsetVars}
 
   ${matchesFilterBlock}
 
   flattenedTasks.forEach(task => {
-    if (count >= limit) return;
     ${ctx.completionCheck}
 
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;
+
+    // OMN-154: count every match; the limit caps only the projected rows
+    totalMatched++;
+    if (count >= limit) return;
 
     ${offsetCheck}
 
@@ -459,6 +463,7 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
   return JSON.stringify({
     tasks: results,
     count: results.length,
+    total_matched: totalMatched,
     ${offsetMetadata}
     mode: 'ast_filtered',
     filter_description: ${JSON.stringify(ctx.filterDescription)},
@@ -630,6 +635,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 (() => {
   const results = [];
   let count = 0;
+  let totalMatched = 0;
   const limit = ${limit};
   ${offsetVars}
 
@@ -641,13 +647,15 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   }
 
   inbox.forEach(task => {
-    if (count >= limit) return;
-
     // Exclude completed tasks by default
     ${completionCheck}
 
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;
+
+    // OMN-154: count every match; the limit caps only the projected rows
+    totalMatched++;
+    if (count >= limit) return;
 
     ${offsetCheck}
 
@@ -660,6 +668,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   return JSON.stringify({
     tasks: results,
     count: results.length,
+    total_matched: totalMatched,
     ${offsetMetadata}
     mode: 'inbox_ast',
     filter_description: ${JSON.stringify(filterDescription)}
@@ -1208,6 +1217,7 @@ export function buildFilteredProjectsScript(
       (() => {
         const results = [];
         let count = 0;
+        let totalMatched = 0;
         const limit = ${limit};
 
         // Helper to get project status string
@@ -1237,10 +1247,12 @@ export function buildFilteredProjectsScript(
         }
 
         flattenedProjects.forEach(project => {
-          if (count >= limit) return;
-
           // Apply AST-generated filter
           if (!matchesFilter(project)) return;
+
+          // OMN-154: count every match; the limit caps only the projected rows
+          totalMatched++;
+          if (count >= limit) return;
 
           const proj = {
             ${fieldProjection}
@@ -1312,6 +1324,7 @@ export function buildFilteredProjectsScript(
         return JSON.stringify({
           projects: results,
           count: results.length,
+          total_matched: totalMatched,
           total_available: flattenedProjects.length
         });
       })()
@@ -1331,6 +1344,7 @@ export function buildFilteredProjectsScript(
       projects: result.projects,
       metadata: {
         total_available: result.total_available,
+        total_matched: result.total_matched,
         returned_count: result.count,
         limit_applied: ${limit},
         performance_mode: '${performanceMode}',

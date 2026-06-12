@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as vm from 'node:vm';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
@@ -775,10 +776,9 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
       expect(result.script).toContain('total_matched: allResults.length');
     });
 
-    it('does not include total_matched when no sort specified', () => {
-      const result = buildFilteredTasksScript({}, { limit: 10 });
-
-      expect(result.script).not.toContain('total_matched');
+    it('includes total_matched on the unsorted path too (OMN-154)', () => {
+      const result = buildFilteredTasksScript({ flagged: true }, { limit: 5 });
+      expect(result.script).toContain('total_matched: totalMatched');
     });
   });
 
@@ -827,6 +827,95 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
       expect(result.script).toContain('return 1'); // null -> end
       expect(result.script).toContain('return -1'); // non-null -> before null
     });
+  });
+});
+
+// =============================================================================
+// OMN-154: VM-EXECUTED POPULATION COUNT TESTS
+// =============================================================================
+
+describe('OMN-154: generated scripts count the full population (vm-executed)', () => {
+  // Minimal stub matching what the generated predicate/projection touches.
+  // The default dropped-exclusion (OMN-157) emits a taskStatus check, so the
+  // sandbox provides Task.Status and per-task taskStatus.
+  const Task = { Status: { Dropped: 'Dropped', Active: 'Active' } };
+  const stubTask = (name: string, flagged: boolean) => ({
+    id: { primaryKey: `id-${name}` },
+    name,
+    flagged,
+    completed: false,
+    taskStatus: Task.Status.Active,
+    inInbox: false,
+    tags: [],
+    notes: '',
+    dueDate: null,
+    deferDate: null,
+    estimatedMinutes: null,
+    effectiveDueDate: null,
+    effectiveDeferDate: null,
+    containingProject: null,
+    available: true,
+    blocked: false,
+  });
+
+  function runTaskScript(script: string, tasks: unknown[]): { tasks: unknown[]; count: number; total_matched: number } {
+    const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('unsorted path: limit 2 against 5 matches → 2 rows, total_matched 5', () => {
+    const tasks = [
+      stubTask('a', true),
+      stubTask('b', true),
+      stubTask('c', true),
+      stubTask('d', true),
+      stubTask('e', true),
+      stubTask('f', false),
+    ];
+    const { script } = buildFilteredTasksScript({ flagged: true }, { limit: 2 });
+    const result = runTaskScript(script, tasks);
+    expect(result.tasks).toHaveLength(2);
+    expect(result.count).toBe(2);
+    expect(result.total_matched).toBe(5);
+  });
+
+  it('unsorted path with offset: total_matched counts offset-skipped matches too', () => {
+    const tasks = [stubTask('a', true), stubTask('b', true), stubTask('c', true), stubTask('d', true)];
+    const { script } = buildFilteredTasksScript({ flagged: true }, { limit: 2, offset: 1 });
+    const result = runTaskScript(script, tasks);
+    expect(result.tasks).toHaveLength(2); // skipped 1, took 2
+    expect(result.total_matched).toBe(4);
+  });
+
+  it('unsorted path: population equal to limit → total_matched == count', () => {
+    const tasks = [stubTask('a', true), stubTask('b', true)];
+    const { script } = buildFilteredTasksScript({ flagged: true }, { limit: 5 });
+    const result = runTaskScript(script, tasks);
+    expect(result.count).toBe(2);
+    expect(result.total_matched).toBe(2);
+  });
+
+  it('inbox path: limit 1 against 3 matches → total_matched 3', () => {
+    const inboxTasks = [
+      { ...stubTask('a', false), inInbox: true },
+      { ...stubTask('b', false), inInbox: true },
+      { ...stubTask('c', false), inInbox: true },
+    ];
+    const { script } = buildInboxScript({}, { limit: 1 });
+    const result = runTaskScript(script, inboxTasks);
+    expect(result.tasks).toHaveLength(1);
+    expect(result.total_matched).toBe(3);
+  });
+
+  it('sorted path still reports total_matched (regression)', () => {
+    const tasks = [stubTask('b', true), stubTask('a', true), stubTask('c', true)];
+    const { script } = buildFilteredTasksScript(
+      { flagged: true },
+      { limit: 2, sort: [{ field: 'name', direction: 'asc' }] },
+    );
+    const result = runTaskScript(script, tasks);
+    expect(result.tasks).toHaveLength(2);
+    expect(result.total_matched).toBe(3);
   });
 });
 
@@ -1083,6 +1172,63 @@ describe('buildFilteredTasksScript preamble and warning injection', () => {
     const result = buildFilteredTasksScript(filter, { limit: 10 });
     expect(result.script).not.toContain('__warnings');
     expect(result.script).not.toContain('__duplicateProjects');
+  });
+});
+
+// =============================================================================
+// OMN-154: PROJECTS SCRIPT POPULATION COUNT TESTS
+// =============================================================================
+
+describe('OMN-154: projects script counts the full population', () => {
+  const Project = {
+    Status: { Active: 'Active', Done: 'Done', Dropped: 'Dropped', OnHold: 'OnHold' },
+  };
+  const stubProject = (name: string, status: string) => ({
+    id: { primaryKey: `id-${name}` },
+    name,
+    status,
+    flagged: false,
+    folder: null,
+    rootTask: null,
+    note: '',
+  });
+
+  it('script text includes total_matched and the wrapper forwards it', () => {
+    const result = buildFilteredProjectsScript({ status: ['active'] }, { limit: 2 });
+    expect(result.script).toContain('total_matched: totalMatched');
+    // JXA wrapper forwards it in its metadata block
+    expect(result.script).toContain('total_matched: result.total_matched');
+  });
+
+  it('vm: limit 2 against 4 active → 2 rows, total_matched 4', () => {
+    const projects = [
+      stubProject('p1', Project.Status.Active),
+      stubProject('p2', Project.Status.Active),
+      stubProject('p3', Project.Status.Active),
+      stubProject('p4', Project.Status.Active),
+      stubProject('p5', Project.Status.Done),
+    ];
+    const generated = buildFilteredProjectsScript({ status: ['active'] }, { limit: 2, performanceMode: 'lite' });
+    // Double-vm: the generated artifact is a JXA wrapper embedding OmniJS via
+    // app.evaluateJavascript. Stub Application so evaluateJavascript runs the
+    // inner OmniJS in the same sandbox — exercising BOTH layers as generated.
+    const sandbox: Record<string, unknown> = {
+      flattenedProjects: projects,
+      Project,
+      JSON,
+      Application: () => ({
+        evaluateJavascript: (src: string) => vm.runInNewContext(src, sandbox) as string,
+      }),
+    };
+    const raw = vm.runInNewContext(generated.script, sandbox) as string;
+    const parsed = JSON.parse(raw) as {
+      projects: unknown[];
+      metadata: { total_matched: number; returned_count: number; total_available: number };
+    };
+    expect(parsed.projects).toHaveLength(2);
+    expect(parsed.metadata.returned_count).toBe(2);
+    expect(parsed.metadata.total_matched).toBe(4);
+    expect(parsed.metadata.total_available).toBe(5); // pre-filter total, unchanged
   });
 });
 

@@ -1400,6 +1400,71 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-154: folders surface total_available as total_count (R7)', () => {
+    it('truncated when the 100-cap hides folders', async () => {
+      const folders100 = Array.from({ length: 100 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders100,
+          metadata: { total_available: 120 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(120);
+      expect(result.metadata.returned_count).toBe(100);
+      expect(result.metadata.total_folders).toBe(120);
+      expect(result.metadata.truncated).toBe(true);
+    });
+
+    it('complete when population fits', async () => {
+      const folders30 = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders30,
+          metadata: { total_available: 30 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(30);
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('cached folders response repeats the counts (R6)', async () => {
+      const folders30 = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, name: `Folder ${i}` }));
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          folders: folders30,
+          metadata: { total_available: 30 },
+        },
+      } satisfies ScriptResult);
+
+      const first = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      // Capture what was stored in the cache
+      const cacheSetCall = (mockCache.set as ReturnType<typeof vi.fn>).mock.calls[0];
+      const cachedValue = cacheSetCall[2];
+
+      // Second call — simulate a cache hit with the cached value (includes totalAvailable)
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(cachedValue);
+
+      const second = (await tool.execute({ query: { type: 'folders' } })) as any;
+
+      expect(second.metadata.from_cache).toBe(true);
+      expect(second.metadata.total_count).toBe(first.metadata.total_count);
+      // execJson only called once (for the first query; second is cache hit)
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('countOnly through execute() (OMN-35 gap 2)', () => {
     it('returns count + metadata flags + overrides summary.total_count from JXA', async () => {
       execJsonSpy.mockResolvedValueOnce({
@@ -1620,6 +1685,161 @@ describe('OmniFocusReadTool', () => {
       expect(result.success).toBe(true);
       const task = result.data.tasks[0];
       expect(task.dueDate).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('OMN-154: tasks envelope reports population', () => {
+    it('total_count = script total_matched; truncated set; metadata.total_matched gone (D3)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: true, completed: false },
+            { id: 't2', name: 'Beta', flagged: true, completed: false },
+          ],
+          metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.returned_count).toBe(2);
+      expect(result.metadata.truncated).toBe(true);
+      expect(result.metadata.total_matched).toBeUndefined(); // D3
+      expect(result.summary.total_count).toBe(48);
+    });
+
+    it('script without total_matched (defensive): falls back to echo, no truncated (R9)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: true, completed: false },
+            { id: 't2', name: 'Beta', flagged: true, completed: false },
+          ],
+          // metadata without total_matched
+          metadata: { sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      // Falls back to echo: total_count = returned count (2)
+      expect(result.metadata.total_count).toBe(2);
+      // No truncated flag when no population is known
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('offset rides into the truncation formula', async () => {
+      // offset=2, limit=2, total_matched=4 → offset + returned = 2 + 2 = 4 = population → not truncated
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't3', name: 'Gamma', flagged: true, completed: false },
+            { id: 't4', name: 'Delta', flagged: true, completed: false },
+          ],
+          metadata: { total_matched: 4, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2, offset: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(4);
+      // offset(2) + returned(2) = population(4) → not truncated
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('smart_suggest mode inherits the contract (population + truncated)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: false, completed: false },
+            { id: 't2', name: 'Beta', flagged: false, completed: false },
+          ],
+          metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.truncated).toBe(true);
+    });
+  });
+
+  describe('OMN-154: projects envelope reports population', () => {
+    it('total_count + summary.total_projects = script total_matched; truncated set', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            { id: 'pp1', name: 'Alpha Project', status: 'active' },
+            { id: 'pp2', name: 'Beta Project', status: 'active' },
+          ],
+          metadata: { total_matched: 160, returned_count: 2, total_available: 200 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(160);
+      expect(result.metadata.truncated).toBe(true);
+      expect(result.summary.total_projects).toBe(160);
+    });
+
+    it('cache hit repeats the honest counts (R6)', async () => {
+      // First call — mock script result with total_matched
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            { id: 'pp3', name: 'Gamma Project', status: 'active' },
+            { id: 'pp4', name: 'Delta Project', status: 'active' },
+          ],
+          metadata: { total_matched: 160, returned_count: 2, total_available: 200 },
+        },
+      } satisfies ScriptResult);
+
+      const first = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      // Capture what was stored in the cache
+      const cacheSetCall = (mockCache.set as ReturnType<typeof vi.fn>).mock.calls[0];
+      const cachedValue = cacheSetCall[2];
+
+      // Second call — simulate a cache hit with the cached value (includes totalMatched)
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(cachedValue);
+
+      const second = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      expect(first.metadata.total_count).toBe(160);
+      expect(second.metadata.from_cache).toBe(true);
+      expect(second.metadata.total_count).toBe(160);
+      expect(second.metadata.truncated).toBe(true);
+      expect(second.summary.total_projects).toBe(160);
+      // execJson only called once (for the first query; second is cache hit)
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
