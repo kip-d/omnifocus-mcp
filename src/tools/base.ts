@@ -575,13 +575,15 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   }
 
   /**
-   * Type-safe wrapper for script execution that returns ScriptResult<T>
-   * Centralizes the logic from individual tool execJson helpers
-   * Now includes circuit breaker protection and error recovery
+   * Circuit-breaker-wrapped script execution returning ScriptResult<T>.
    *
-   * When schema is provided, executeJson performs total classification (OMN-139)
-   * and the result is returned directly — no legacy sniffing.
-   * When schema is omitted (legacy callers), the existing shape-sniffing logic runs unchanged.
+   * When `schema` is provided, `executeJson` performs total classification (OMN-139):
+   * known error dialects win first; anything else is validated against the schema and
+   * fails CLOSED if it doesn't match. The result is returned as-is — no secondary sniffing.
+   *
+   * When `schema` is omitted (legacy path, removed in Task 9), the historical shape-sniffing
+   * runs: ScriptResult envelopes are inspected for nested legacy errors, raw strings are
+   * JSON-parsed, and objects are checked for explicit error indicators.
    */
   protected async execJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     // Extract the core execution logic for circuit breaker wrapping

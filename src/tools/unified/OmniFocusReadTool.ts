@@ -67,12 +67,6 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
  */
 const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
 
-/**
- * Project id-lookup result — moved to src/omnifocus/script-response-schemas.ts (ProjectByIdSchema).
- * Re-exported here so existing tests that import PROJECT_BY_ID_SCHEMA from this module keep working
- * without changes; tests will migrate to the canonical export location in OMN-158.
- */
-export const PROJECT_BY_ID_SCHEMA = ProjectByIdSchema;
 
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
@@ -103,12 +97,6 @@ const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
  */
 const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], { extras: { summary: z.unknown().optional() } });
 
-/**
- * Folder list result — moved to src/omnifocus/script-response-schemas.ts (FolderListSchema).
- * Re-exported here so existing tests that import FOLDER_LIST_SCHEMA from this module keep working
- * without changes; tests will migrate to the canonical export location in OMN-158.
- */
-export const FOLDER_LIST_SCHEMA = FolderListSchema;
 
 /**
  * Post-hoc field projection for project query results.
@@ -606,7 +594,7 @@ PERFORMANCE:
    */
   private async executeProjectIdLookup(projectId: string, fields: string[], timer: OperationTimerV2): Promise<unknown> {
     const generated = buildProjectByIdScript(projectId, fields);
-    const result = await this.execJson(generated.script, PROJECT_BY_ID_SCHEMA);
+    const result = await this.execJson(generated.script, ProjectByIdSchema);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -928,7 +916,7 @@ PERFORMANCE:
 
     // Build and execute AST-generated folder list script
     const { script } = buildFilteredFoldersScript({ limit: 100 });
-    const result = await this.execJson(script, FOLDER_LIST_SCHEMA);
+    const result = await this.execJson(script, FolderListSchema);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

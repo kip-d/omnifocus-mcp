@@ -9,7 +9,6 @@ import {
   detectKnownErrorShape,
   truncateRawOutput,
 } from './script-result-types.js';
-import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 // Remove conflicting import
 
@@ -113,31 +112,6 @@ export class OmniAutomation {
         error,
       );
     }
-  }
-
-  /**
-   * Execute a script that returns a standard JXA envelope and decode to typed data.
-   * The script must stringify an object of shape { ok: true|false, data|error, v }.
-   */
-  public async executeTyped<T extends z.ZodTypeAny>(script: string, dataSchema: T): Promise<z.infer<T>> {
-    const raw = await this.execute<unknown>(script);
-    let env;
-    try {
-      env = JxaEnvelopeSchema.parse(raw);
-    } catch {
-      // Fallback for back-compat scripts: normalize pre-envelope shapes to envelope
-      env = normalizeToEnvelope(raw);
-    }
-    if (env.ok === false) {
-      const msg = env.error.message || 'JXA error';
-      const err = new OmniAutomationError(msg, {
-        stderr: typeof env.error.details === 'string' ? env.error.details : undefined,
-      });
-      throw err;
-    }
-    // Zod parse returns properly typed data based on schema
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return dataSchema.parse(env.data) as z.infer<T>;
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {

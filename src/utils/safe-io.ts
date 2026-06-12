@@ -10,6 +10,9 @@ export type JxaResultOk<T extends JsonValue = JsonValue> = { ok: true; data: T; 
 export type JxaResultErr = { ok: false; error: { code?: string; message: string; details?: JsonValue }; v: string };
 export type JxaEnvelope<T extends JsonValue = JsonValue> = JxaResultOk<T> | JxaResultErr;
 
+// Superseded at runtime by detectKnownErrorShape's hand-rolled superset check (also catches
+// malformed {ok:false} envelopes this schema would reject); retained as the envelope contract's
+// type-level reference; no code dependency — ts-prune WILL flag it; expected, do not delete (spec §3.6).
 export const JxaEnvelopeSchema = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(true), data: JsonValueSchema, v: z.string() }),
   z.object({
@@ -18,41 +21,6 @@ export const JxaEnvelopeSchema = z.discriminatedUnion('ok', [
     v: z.string(),
   }),
 ]);
-
-type LegacyErrorShape = { error: true; message?: unknown; details?: unknown };
-
-function isLegacyErrorShape(val: unknown): val is LegacyErrorShape {
-  return (
-    !!val &&
-    typeof val === 'object' &&
-    Object.prototype.hasOwnProperty.call(val, 'error') &&
-    (val as Record<string, unknown>).error === true
-  );
-}
-
-export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {
-  // Already an envelope
-  const parsed = JxaEnvelopeSchema.safeParse(value);
-  if (parsed.success) return parsed.data as JxaEnvelope<JsonValue>;
-
-  // Legacy error shape: { error: true, message, details? }
-  if (isLegacyErrorShape(value)) {
-    const v = 'legacy-1';
-    const obj = value as Record<string, unknown>;
-    const message = typeof obj.message === 'string' ? obj.message : 'JXA error';
-    const rawDetails = Object.prototype.hasOwnProperty.call(obj, 'details') ? (obj.details as unknown) : undefined;
-    let details: JsonValue | undefined;
-    try {
-      details = rawDetails === undefined ? undefined : (JSON.parse(JSON.stringify(rawDetails)) as JsonValue);
-    } catch {
-      details = undefined;
-    }
-    return { ok: false, error: { message, details }, v };
-  }
-
-  // Legacy success: arbitrary JSON payload
-  return { ok: true, data: (value ?? null) as JsonValue, v: 'legacy-1' };
-}
 
 export function safeStringify(value: unknown): string {
   try {

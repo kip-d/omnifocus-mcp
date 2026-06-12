@@ -177,12 +177,13 @@ describe('BaseTool', () => {
   });
 
   describe('execJson', () => {
-    it('should convert legacy error JSON strings into ScriptError results', async () => {
-      const legacyError = JSON.stringify({ error: true, message: 'Task with ID abc not found' });
-
-      // Provide a minimal omniAutomation stub so execJson calls resolve to our legacy payload
+    it('legacy no-schema path: wraps legacy error object nested inside ScriptResult.data into ScriptError', async () => {
+      // executeJson returns a ScriptResult (correct contract), but data contains a legacy error shape.
+      // The no-schema branch in execJson re-inspects data and converts it to ScriptError.
+      // Task 9 deletes this test together with the no-schema path.
+      const legacyPayload = { error: true, message: 'Task with ID abc not found' };
       const fakeAutomation = {
-        executeJson: vi.fn().mockResolvedValue(legacyError),
+        executeJson: vi.fn().mockResolvedValue({ success: true, data: legacyPayload }),
         execute: vi.fn(),
       } as unknown as OmniAutomation;
 
@@ -211,6 +212,35 @@ describe('BaseTool', () => {
       expect(result).toBe(successResult);
       // executeJson must have been called with BOTH args (schema as 2nd arg)
       expect(fakeAutomation.executeJson).toHaveBeenCalledWith('script', schema);
+    });
+
+    it('schema path passes through {success:true,data:{error:true}} AS-IS; no-schema path converts it (OMN-139 discriminating)', async () => {
+      // Fixture is discriminating because {error:true} inside data would trigger the legacy
+      // isLegacyScriptError check on the no-schema branch and convert it to ScriptError.
+      // With a schema, executeJson is total and execJson returns the result untouched.
+      const ambiguousData = { error: true, message: 'x' };
+      const successResult = { success: true as const, data: ambiguousData };
+      const schema = z.object({ tasks: z.array(z.unknown()) }); // schema arg present → schema path
+
+      const fakeWithSchema = {
+        executeJson: vi.fn().mockResolvedValue(successResult),
+      } as unknown as OmniAutomation;
+
+      testTool.omniAutomation = fakeWithSchema;
+      const schemaResult = await (testTool as any).execJson('script', schema);
+      // Schema path: returned as-is, success preserved
+      expect(schemaResult).toBe(successResult);
+      expect(schemaResult.success).toBe(true);
+
+      // No-schema path: same payload → legacy sniffing converts to ScriptError
+      const fakeNoSchema = {
+        executeJson: vi.fn().mockResolvedValue(successResult),
+      } as unknown as OmniAutomation;
+
+      testTool.omniAutomation = fakeNoSchema;
+      const noSchemaResult = await (testTool as any).execJson('script'); // no schema arg
+      expect(noSchemaResult.success).toBe(false);
+      expect(noSchemaResult.error).toContain('x');
     });
 
     it('should return fail-closed ScriptError from executeJson untouched when schema provided (OMN-139)', async () => {
