@@ -67,7 +67,6 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
  */
 const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
 
-
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
  * Wire shape: {projects, metadata}
@@ -96,7 +95,6 @@ const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
  *   return JSON.stringify({ items: perspectives, summary: {...} }).
  */
 const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], { extras: { summary: z.unknown().optional() } });
-
 
 /**
  * Post-hoc field projection for project query results.

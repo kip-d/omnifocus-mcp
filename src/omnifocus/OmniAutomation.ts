@@ -68,36 +68,32 @@ export class OmniAutomation {
     return result;
   }
 
-  // New type-safe execution with discriminated unions and schema validation
-  public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+  // Type-safe execution with discriminated unions and schema validation (OMN-139).
+  // schema is REQUIRED: unknown output that matches no known error dialect and fails
+  // the success schema is rejected fail-closed (spec §3.2). The two-step order is
+  // load-bearing — error dialects win before schema validation.
+  public async executeJson<T = unknown>(script: string, schema: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     try {
       const result = await this.execute<unknown>(script);
 
-      // OMN-139 step 1: known error dialects FIRST, so callers get the script's own
-      // message instead of a generic validation failure. Order vs schema validation
-      // is load-bearing (spec §3.2): error-first makes a lax schema non-catastrophic.
+      // Step 1: known error dialects FIRST, so callers get the script's own
+      // message instead of a generic validation failure.
       const knownError = detectKnownErrorShape(result);
       if (knownError) return knownError;
 
-      // OMN-139 step 2/3: success allow-list. Anything that matches neither a known
-      // error dialect nor the success schema fails CLOSED with the raw output preserved.
-      if (schema) {
-        const validation = schema.safeParse(result);
-        if (validation.success) return createScriptSuccess(validation.data as T);
-        logger.warn('executeJson fail-closed: output matched no known error dialect and failed the success schema', {
-          issueCount: validation.error.issues.length,
-          raw: truncateRawOutput(result, 500),
-        });
-        return createScriptError(
-          'Script output did not match the expected success shape',
-          'Unrecognized script output shape',
-          { raw: truncateRawOutput(result), issues: validation.error.issues },
-        );
-      }
-
-      // TEMPORARY no-schema path (deleted in Task 9 when the parameter becomes required):
-      // legacy fail-open behavior for call sites not yet migrated (Tasks 5-7).
-      return createScriptSuccess(result as T);
+      // Step 2: success allow-list — anything that matches neither a known error
+      // dialect nor the success schema fails CLOSED with the raw output preserved.
+      const validation = schema.safeParse(result);
+      if (validation.success) return createScriptSuccess(validation.data as T);
+      logger.warn('executeJson fail-closed: output matched no known error dialect and failed the success schema', {
+        issueCount: validation.error.issues.length,
+        raw: truncateRawOutput(result, 500),
+      });
+      return createScriptError(
+        'Script output did not match the expected success shape',
+        'Unrecognized script output shape',
+        { raw: truncateRawOutput(result), issues: validation.error.issues },
+      );
     } catch (error) {
       if (error instanceof OmniAutomationError) {
         return createScriptError(error.message, 'OmniAutomation execution error', {

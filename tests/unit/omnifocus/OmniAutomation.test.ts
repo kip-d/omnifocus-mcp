@@ -440,23 +440,5 @@ describe('OmniAutomation', () => {
       expect(result.success).toBe(false);
     });
 
-    // 7. No-schema back-compat (temporary until Task 9 — pin it):
-    //    pins the temporary no-schema path; Task 9 deletes it deliberately
-    describe('no-schema back-compat (temporary — Task 9 deletes this)', () => {
-      it('returns success:false with Legacy script error context for {error:true} without schema', async () => {
-        const raw = JSON.stringify({ error: true, message: 'boom' });
-        const result = await emitJsonOutput(raw, undefined);
-
-        expect(result.success).toBe(false);
-        expect(result.context).toBe('Legacy script error');
-      });
-
-      it('returns success:true for arbitrary object without schema (legacy fail-open)', async () => {
-        const raw = JSON.stringify({ anything: 1 });
-        const result = await emitJsonOutput(raw, undefined);
-
-        expect(result.success).toBe(true);
-      });
-    });
   });
 });

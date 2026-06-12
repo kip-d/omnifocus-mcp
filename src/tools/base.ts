@@ -17,120 +17,10 @@ import { recordToolExecution, ToolExecutionMetrics } from '../utils/metrics.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { ScriptResult, createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
+import { ScriptResult, createScriptError } from '../omnifocus/script-result-types.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { classifyErrorWithContext } from '../utils/error-recovery.js';
 import { parseWithNormalization } from './normalization/normalize-input.js';
-
-// Type for raw data structure from OmniFocus scripts (used in execJson)
-interface RawOmniFocusData {
-  projects?: unknown[];
-  tasks?: unknown[];
-  tags?: unknown[];
-  perspectives?: unknown[];
-  folders?: unknown[];
-  items?: unknown[];
-  summary?: unknown;
-  metadata?: unknown;
-  count?: number;
-  ok?: boolean;
-  updated?: number;
-  success?: boolean;
-  error?: unknown;
-  message?: string;
-  context?: unknown;
-  details?: unknown;
-}
-
-/**
- * Back-compat error shape from older OmniFocus scripts that pre-date the
- * ScriptResult envelope. The `Legacy*` symbol names are retained because they
- * appear in wire-observable error categories (e.g. `'Legacy script error'`)
- * that MCP clients may match on. "Legacy" here means "older wire shape we
- * still parse," not "deprecated and scheduled for removal."
- */
-interface LegacyScriptError {
-  error?: boolean | string;
-  success?: boolean;
-  message?: string;
-  details?: unknown;
-}
-
-/**
- * Type guard: checks if an unknown value is a back-compat script error object.
- * Matches objects with error flags (true/'true') or explicit success: false.
- */
-export function isLegacyScriptError(value: unknown): value is LegacyScriptError {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const obj = value as Record<string, unknown>;
-  return obj.error === true || obj.error === 'true' || obj.success === false;
-}
-
-/**
- * Safely extract error message from a back-compat error object.
- */
-export function getLegacyErrorMessage(error: LegacyScriptError): string {
-  return typeof error.message === 'string' ? error.message : 'Script execution failed';
-}
-
-/**
- * Type guard: checks if an unknown value looks like a successful raw OmniFocus response
- * containing data arrays or success indicators.
- */
-export function isRawSuccessResponse(value: unknown): value is RawOmniFocusData {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const obj = value as Record<string, unknown>;
-  return (
-    Array.isArray(obj.folders) ||
-    Array.isArray(obj.items) ||
-    Array.isArray(obj.tasks) ||
-    Array.isArray(obj.projects) ||
-    obj.ok === true ||
-    typeof obj.updated === 'number'
-  );
-}
-
-/**
- * Parse a raw string result from OmniFocus script execution.
- * Attempts JSON parsing and checks for legacy error format.
- */
-function parseStringResult<T>(res: string): ScriptResult<T> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const parsed = JSON.parse(res);
-
-    if (isLegacyScriptError(parsed)) {
-      const details = parsed.details !== undefined ? parsed.details : parsed;
-      // 'Legacy script error' is wire-observable; preserve verbatim for client back-compat.
-      return createScriptError(getLegacyErrorMessage(parsed), 'Legacy script error', details);
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    return createScriptSuccess<T>(parsed);
-  } catch {
-    return createScriptSuccess<T>(res as T);
-  }
-}
-
-/**
- * Check if an object response indicates an explicit error.
- * Returns a ScriptResult error if found, or null if the object is not an error.
- */
-function checkObjectForError<T>(res: object): ScriptResult<T> | null {
-  const obj = res as RawOmniFocusData;
-  if (obj.success === false || obj.error) {
-    return createScriptError(
-      (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
-      typeof obj.context === 'string' ? obj.context : undefined,
-      obj.details,
-    );
-  }
-  return null;
-}
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -577,15 +467,11 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   /**
    * Circuit-breaker-wrapped script execution returning ScriptResult<T>.
    *
-   * When `schema` is provided, `executeJson` performs total classification (OMN-139):
-   * known error dialects win first; anything else is validated against the schema and
-   * fails CLOSED if it doesn't match. The result is returned as-is — no secondary sniffing.
-   *
-   * When `schema` is omitted (legacy path, removed in Task 9), the historical shape-sniffing
-   * runs: ScriptResult envelopes are inspected for nested legacy errors, raw strings are
-   * JSON-parsed, and objects are checked for explicit error indicators.
+   * `schema` is REQUIRED (OMN-139). `executeJson` performs total classification:
+   * known error dialects win first; anything else is validated against the schema
+   * and fails CLOSED if it doesn't match. The result is returned as-is — no sniffing.
    */
-  protected async execJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+  protected async execJson<T = unknown>(script: string, schema: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     // Extract the core execution logic for circuit breaker wrapping
     const executeCoreOperation = async (): Promise<ScriptResult<T>> => {
       try {
@@ -596,48 +482,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
           return createScriptError('NULL_RESULT', 'Script returned null or undefined');
         }
 
-        if (schema) {
-          // executeJson did total classification (OMN-139); no sniffing needed.
-          return res as ScriptResult<T>;
-        }
-
-        // ===== legacy no-schema path: unchanged sniffing until Tasks 5-7 migrate all call sites =====
-
-        // If already in ScriptResult format, inspect for nested legacy errors before returning
-        if (res && typeof res === 'object' && 'success' in res) {
-          const scriptResult = res as ScriptResult<T>;
-
-          if (scriptResult.success === true && isLegacyScriptError(scriptResult.data)) {
-            return createScriptError(
-              getLegacyErrorMessage(scriptResult.data),
-              'Legacy script error',
-              scriptResult.data,
-            );
-          }
-
-          return scriptResult;
-        }
-
-        // Handle raw string results (try to parse JSON)
-        if (typeof res === 'string') {
-          return parseStringResult<T>(res);
-        }
-
-        // Handle object responses that indicate success patterns
-        if (isRawSuccessResponse(res)) {
-          return createScriptSuccess<T>(res as T);
-        }
-
-        // Check for explicit error indication in object responses
-        if (res && typeof res === 'object') {
-          const errorResult = checkObjectForError<T>(res);
-          if (errorResult) {
-            return errorResult;
-          }
-        }
-
-        // Default: wrap as success
-        return createScriptSuccess<T>(res as T);
+        // executeJson did total classification (OMN-139); no sniffing needed.
+        return res as ScriptResult<T>;
       } catch (error) {
         return createScriptError(
           error instanceof Error ? error.message : String(error),

@@ -51,6 +51,9 @@ export function createScriptError(error: string, context?: string, details?: unk
  * Discriminators are effectively disjoint on real wire shapes; if-order breaks ties (ok → error → success);
  * the order of THIS function vs schema validation is load-bearing — see spec §3.2.
  * Returns null when the value matches no known error dialect.
+ *
+ * Wire-contract: the context strings emitted here ('Script error envelope', 'Legacy script error')
+ * are wire-observable — MCP clients may pattern-match on them. Rename only with a deprecation window.
  */
 export function detectKnownErrorShape(value: unknown): ScriptError | null {
   if (!value || typeof value !== 'object') return null;
