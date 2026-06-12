@@ -610,6 +610,11 @@ describe('OR queries compose with defaults and modes (OMN-151 V6 / OMN-157)', ()
     const { script } = buildFilteredTasksScript({ orBranches: [{ flagged: true }, { inInbox: true }] });
     expect(script).toContain('dropped'); // OMN-157 default now survives beside OR
   });
+
+  it('buildTaskCountScript with orBranches agrees (countOnly path, spec §3.2 / C15)', () => {
+    const { script } = buildTaskCountScript({ orBranches: [{ flagged: true }, { inInbox: true }] });
+    expect(script).toContain('dropped'); // same buildAST route — count predicate matches the row predicate
+  });
 });
 ```
 
@@ -640,12 +645,15 @@ git commit -m "fix(OMN-151): buildAST composes base conditions with orBranches �
 
 - Create: `src/tools/unified/compilers/transform-project-filters.ts`
 - Create: `tests/unit/tools/unified/compilers/transform-project-filters.test.ts`
-- Modify: `src/tools/unified/compilers/QueryCompiler.ts` (export `STATUS_TO_PROJECT` as a module const; export
-  `extractTextCondition` helper)
+- Modify: `src/tools/unified/compilers/filter-merge.ts` (receives `STATUS_TO_PROJECT` + `extractTextCondition`)
+- Modify: `src/tools/unified/compilers/QueryCompiler.ts` (imports them from filter-merge)
 
-Pre-step: in `QueryCompiler.ts`, lift the `STATUS_TO_PROJECT` map out of `transformStatus` to an exported module-level
-`export const STATUS_TO_PROJECT: Record<string, ProjectStatus>` (same content), and extract the contains/matches pattern
-into:
+Pre-step — IMPORTANT, avoids a circular import (QueryCompiler will import transformProjectFilters in Task 6, so
+transform-project-filters must NOT import from QueryCompiler): move the shared helpers into `filter-merge.ts`, which
+both modules import. Lift the `STATUS_TO_PROJECT` map out of `transformStatus` (QueryCompiler.ts) into an exported
+module-level `export const STATUS_TO_PROJECT: Record<string, ProjectStatus>` in `filter-merge.ts` (same content; import
+`ProjectStatus` type from `../../../contracts/filters.js`), update `transformStatus` to import it, and add the
+contains/matches helper to `filter-merge.ts`:
 
 ```typescript
 export function extractTextCondition(
@@ -787,8 +795,7 @@ describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () 
 import { z } from 'zod';
 import type { FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
 import type { ProjectFilter, ProjectStatus } from '../../../contracts/filters.js';
-import { STATUS_TO_PROJECT, extractTextCondition } from './QueryCompiler.js';
-import { filterDeepEqual, emptyOperatorError } from './filter-merge.js';
+import { STATUS_TO_PROJECT, extractTextCondition, filterDeepEqual, emptyOperatorError } from './filter-merge.js';
 
 type ProjectInputKey = keyof FlatFilterValue | 'AND' | 'OR' | 'NOT';
 type Disposition = 'map' | 'merge' | 'reject';
@@ -979,8 +986,9 @@ describe('compile() projects branch (OMN-156 C-lite)', () => {
       query: { type: 'projects', filters: { flagged: true, status: 'active' } },
     } as never);
     expect(compiled.projectFilter).toEqual({ flagged: true, status: ['active'] });
-    expect(compiled.filters).toEqual(expect.objectContaining({})); // normalized empty
-    expect(Object.keys(compiled.filters).filter((k) => k !== undefined)).not.toContain('flagged');
+    // compiled.filters is the empty normalized filter — nothing leaks through the old path
+    expect(compiled.filters.flagged).toBeUndefined();
+    expect(compiled.filters.projectStatus).toBeUndefined();
   });
   it('throws from compile() for OR on projects (reaches BaseTool as VALIDATION_ERROR)', () => {
     expect(() =>
