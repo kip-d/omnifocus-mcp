@@ -62,10 +62,16 @@ implementing (a) later is a pure widening.
 ### 3.1 `TASK_KEY_DISPOSITION` registry (mirror of OMN-156's `PROJECT_KEY_DISPOSITION`)
 
 New `satisfies Record<TaskInputKey, Disposition>` registry covering every input-schema filter key with an explicit
-**tasks-side** disposition: every currently-working key is `'map'`; `folder` is `'reject'`. A future schema field
+**tasks-side** disposition: every currently-working flat key is `'map'`; `folder` is `'reject'`. A future schema field
 becomes a compile error here until someone decides its tasks behavior — the same structural close as
 OMN-156/MUTATION_DEFS. Lives beside the tasks transform (in `QueryCompiler.ts` or a sibling module, implementer's
 choice; export it for the parity test).
+
+Key universe (resolves the mirror-vs-enforcement-point tension): the registry covers the FULL
+`keyof FlatFilterValue | 'AND' | 'OR' | 'NOT'` universe like `PROJECT_KEY_DISPOSITION`, with
+`Disposition = 'map' | 'compose' | 'reject'` — `AND`/`OR`/`NOT` are `'compose'` (handled structurally by
+`transformFilters`, neither mapped nor rejected). The parity test asserts every schema key has a disposition over that
+full universe; flat-key enforcement happens in `transformFlatFilter`, which only ever sees flat keys.
 
 Enforcement point: `transformFlatFilter`, so base filters, `AND[i]` items, and `OR[i]` branches all reject uniformly
 with the offending path in the error. (`NOT` already hard-restricts to two status payloads — unchanged, OMN-131
@@ -73,29 +79,44 @@ contract.)
 
 Error text (folder, string or null):
 
-> `filters.folder is not supported on tasks queries — it currently matches nothing and was silently returning all tasks. To get tasks in a folder: query projects with filters.folder first, then query tasks by projectId. folder remains supported on projects queries.`
+> `filters.folder is not supported on tasks or export queries — it previously matched nothing and silently returned all tasks. To get tasks in a folder: query projects with filters.folder first, then query tasks by projectId. folder remains supported on projects queries.`
+
+(The rejection fires on the shared tasks/export compile path, so the text names both query types statically — no
+per-type message adaptation.)
 
 ### 3.2 `status:'on_hold'` value-level rejection on tasks
 
 In `transformStatus` (tasks path): `'on_hold'` throws instead of silently mapping to the dead `projectStatus` key. The
-existing `projectStatus` assignment for other values stays (harmless, conflict-naming in filter-merge uses it).
+existing `projectStatus` assignment for other values stays (harmless; filter-merge uses it for conflict naming — note
+conflicts on it surface under the internal name `projectStatus`, not the user-facing `status`; known and accepted).
 
 Error text:
 
-> `status:'on_hold' is not supported on tasks queries — on-hold is a project status. Query projects with status:'on_hold' first, then tasks by projectId. (Tasks whose project is on hold also match available:false.)`
+> `status:'on_hold' is not supported on tasks or export queries — on-hold is a project status. Query projects with status:'on_hold' first, then tasks by projectId. (Tasks whose project is on hold also match available:false.)`
 
 The `available:false` claim must be verified live during implementation; drop the parenthetical if it doesn't hold.
 
 ### 3.3 Match-all branch guard (defense-in-depth; the ticket's "either way" item)
 
 With 3.1/3.2 the two known inert keys can no longer reach `buildAST`, but the `literal(true)` hazard must die
-structurally for _future_ inert keys. In `transformFilters`, after transforming each `AND[i]` item and `OR[i]` branch,
-compile it (`buildAST(branch)`) and reject if the result is the match-all literal. Replace-or-augment `usableKeyCount`
-(keep the cheap zero-key check for its better "empty item" message; the AST check catches
-has-keys-but-compiles-to-nothing). `buildAST` is pure and cheap; layering is fine (compilers already import from
+structurally for _future_ inert keys. In `transformFilters`, after transforming, compile (`buildAST`) and reject the
+match-all literal at THREE sites:
+
+- each `AND[i]` item and each `OR[i]` branch (the OMN-162 widening shape), and
+- the **base filter**, when the input had at least one defined flat key but the merged base (excluding `orBranches`)
+  compiles to match-all. A legitimately empty `filters: {}` / absent filters (browse) has zero defined input keys and is
+  untouched.
+
+Replace-or-augment `usableKeyCount` (keep the cheap zero-key check for its better "empty item" message; the AST check
+catches has-keys-but-compiles-to-nothing). `buildAST` is pure and cheap; layering is fine (compilers already import from
 `contracts/ast`).
 
-Error text (OR shown; AND analogous):
+**Safety invariant (must hold for zero false positives):** every `TaskFilter` key that `transformFlatFilter` can produce
+from a flat input is either consumed by a `FILTER_DEFS` entry or accompanied by one that is. Verified for current keys
+(all `status` values set an AST-consumed twin beside the dead `projectStatus`; `fastSearch` is not a filters key). The
+unit tests must enumerate one minimal branch per supported key family and assert the guard does NOT fire.
+
+Error text (OR shown; AND and base analogous):
 
 > `OR[i] contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, which would silently match every task. Remove the branch or use a supported tasks filter.`
 
@@ -114,7 +135,8 @@ Error text (OR shown; AND analogous):
 
 - **Unit (compiler):** folder string/null reject on tasks at base, `AND[i]`, `OR[i]` paths with correct error paths;
   on_hold rejects on tasks; on_hold still works on projects; folder still works on projects (regression); export path
-  rejects folder; match-all branch guard fires on a synthetic inert-key branch and does NOT fire on valid branches;
+  rejects folder; match-all guard fires on a synthetic inert-key branch AND on a synthetic inert-key base filter, does
+  NOT fire on browse (`filters: {}` / absent) nor on one minimal branch per supported key family (the §3.3 invariant);
   `TASK_KEY_DISPOSITION` parity test (every schema key has a disposition — mirror the OMN-156 parity test).
 - **Integration (live):** tasks query with folder → VALIDATION_ERROR with steering text; OR variant → VALIDATION_ERROR;
   projects folder query unchanged. (Suite ~15–16 min; run via `run_in_background`, npm not bun, never kill — OMN-143.)
@@ -122,6 +144,9 @@ Error text (OR shown; AND analogous):
   2026-06-12 baselines (95%/89%) before merge.
 
 ## 4. Out of scope
+
+- `omnifocus_analyze` — verified NOT to share this path: `AnalysisCompiler` has no `transformFilters` call and no
+  folder/on_hold filter handling. No change needed.
 
 - Implementing tasks-folder semantics (OMN-161 owns the per-query-type contract; this rejection makes later
   implementation purely additive).
