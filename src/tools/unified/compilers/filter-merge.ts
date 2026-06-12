@@ -15,6 +15,7 @@ const INPUT_KEY_OF: Record<string, string> = {
   dueDateOperator: 'dueDate',
   deferBefore: 'deferDate',
   deferAfter: 'deferDate',
+  deferDateOperator: 'deferDate',
   plannedBefore: 'plannedDate',
   plannedAfter: 'plannedDate',
   plannedDateOperator: 'plannedDate',
