@@ -108,7 +108,9 @@ pre-offset, pre-limit, within the mode's collection (inbox mode counts inbox mat
   metadata), so unification is non-breaking.
 - **D3: `metadata.total_matched` is removed** once `total_count` is truthful. Alternatives: keep both (two fields, one
   meaning — invites drift; the redundancy was live evidence in §1) or alias indefinitely. It appeared only weeks ago
-  (sort-before-limit fix), only on the sorted path, and is undocumented. The external fork sees a cleaner contract.
+  (sort-before-limit fix) and only on the sorted path. Its one documentation site —
+  `docs/skills/omnifocus-assistant/SKILL.md` "Pagination metadata" — is rewritten to the `total_count`/`truncated`
+  contract as part of this change. The external fork sees a cleaner contract.
 - **D4: breakdown/preview stay row-scoped** (see R3) — population breakdowns would require duplicating TS date logic in
   OmniJS; the truncation insight line covers the honesty requirement.
 - **D5: offset participates in the truncation formula** (R2) — `returned < total` alone would brand every non-first page

@@ -604,6 +604,14 @@ describe('OMN-154: tasks envelope reports population', () => {
     const result = await callReadTool({ type: 'tasks', filters: { flagged: true }, limit: 2, offset: 2 });
     expect('truncated' in result.metadata).toBe(false);
   });
+
+  it('smart_suggest mode inherits the contract (population + truncated)', async () => {
+    // Same handler path; post-script re-ranking does not change row count.
+    // Mock: 2 rows, total_matched 48, mode smart_suggest.
+    const result = await callReadTool({ type: 'tasks', mode: 'smart_suggest', limit: 2 });
+    expect(result.metadata.total_count).toBe(48);
+    expect(result.metadata.truncated).toBe(true);
+  });
 });
 ```
 
@@ -781,7 +789,8 @@ return response;
 ```
 
 (Import `applyCountHonesty` from `../../utils/response-format.js`. The folders query has no filter — pre-filter total =
-population, spec R7.)
+population, spec R7. Type note: the helper's first parameter expects `summary?: Record<string, unknown>` — apply the
+same `as` cast shown in Task 1 step 3(b) if `StandardResponseV2`'s typed summary union doesn't assign directly.)
 
 - [ ] **Step 4: Run the tool's unit file**
 
@@ -796,12 +805,13 @@ git commit -m "feat(OMN-154): folders surface total_available with truncation ho
 
 ---
 
-### Task 7: Tool description note + full unit suite
+### Task 7: Tool description note + SKILL.md contract update + full unit suite
 
 **Files:**
 
 - Modify: `src/tools/unified/OmniFocusReadTool.ts` (description string, near the countOnly COMMON QUERIES line
   ~line 223)
+- Modify: `docs/skills/omnifocus-assistant/SKILL.md` (the "Pagination metadata" paragraph, ~line 513)
 
 - [ ] **Step 1: Add one line to the tool description**
 
@@ -813,17 +823,30 @@ In the `description` string, directly under the `- Count only (fast): ...` COMMO
 
 (The MCP-facing `inputSchema` is untouched — this is response-shape documentation only, spec §5.5.)
 
-- [ ] **Step 2: Build and run the FULL unit suite**
+- [ ] **Step 2: Rewrite the SKILL.md pagination paragraph (D3)**
+
+`docs/skills/omnifocus-assistant/SKILL.md` (~line 513) documents the now-removed `metadata.total_matched` ("Pagination
+metadata: When sort + limit are used, the response metadata includes `total_matched`…"). Replace that paragraph with the
+new contract:
+
+```markdown
+**Pagination metadata:** `metadata.total_count` always reports the full matching population (not just the returned
+rows), and `metadata.truncated: true` appears whenever `offset + returned_count < total_count`. Use these to decide
+whether to raise `limit` or page with `offset`; a separate `countOnly` query is no longer needed just to detect
+truncation.
+```
+
+- [ ] **Step 3: Build and run the FULL unit suite**
 
 Run: `npm run build && npm run test:unit` Expected: ALL PASS. Pay attention to `tests/unit/docs/claude-md-paths.test.ts`
 and `tests/unit/architecture/schema-impl-parity.test.ts` — they guard description/docs drift. Fix forward if they flag
 the new line.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/tools/unified/OmniFocusReadTool.ts
-git commit -m "docs(OMN-154): describe total_count population semantics + truncated flag"
+git add src/tools/unified/OmniFocusReadTool.ts docs/skills/omnifocus-assistant/SKILL.md
+git commit -m "docs(OMN-154): document total_count population semantics + truncated flag"
 ```
 
 ---
@@ -863,14 +886,14 @@ d('OMN-154: read-metadata count honesty', () => {
 
   beforeAll(async () => {
     client = await getSharedClient();
-    await ensureSandboxFolder(client);
+    await ensureSandboxFolder(); // NOTE: takes no arguments (see name-filter-scope.test.ts) — same for fullCleanup()
     // Create POPULATION tasks named `${MARKER}-NN` inside a sandbox project
     // (NOT the inbox), batch-create per the sandbox-manager / name-filter-scope
     // precedent. Read back with countOnly to confirm the fixture landed.
   }, 120_000);
 
   afterAll(async () => {
-    await fullCleanup(client);
+    await fullCleanup();
   }, 120_000);
 
   it('C11: limit 5 against the 10-row population → total_count 10, truncated, countOnly agrees', async () => {
