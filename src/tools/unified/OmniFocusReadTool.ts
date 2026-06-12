@@ -683,13 +683,19 @@ PERFORMANCE:
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
-    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[]; totalMatched?: number }>('projects', cacheKey);
     if (cached) {
-      const cacheResult = createListResponseV2('projects', cached.projects, 'projects', {
-        ...timer.toMetadata(),
-        from_cache: true,
-        operation: 'list',
-      }) as unknown as Record<string, unknown>;
+      const cacheResult = createListResponseV2(
+        'projects',
+        cached.projects,
+        'projects',
+        {
+          ...timer.toMetadata(),
+          from_cache: true,
+          operation: 'list',
+        },
+        { population: cached.totalMatched },
+      ) as unknown as Record<string, unknown>;
 
       if (isNarrowLookup) delete cacheResult.summary;
 
@@ -718,15 +724,26 @@ PERFORMANCE:
     }
 
     // Parse dates and cache
-    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const resultData = result.data as {
+      projects?: unknown[];
+      items?: unknown[];
+      metadata?: { total_matched?: number };
+    };
+    const totalMatched = resultData.metadata?.total_matched;
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
-    this.cache.set('projects', cacheKey, { projects });
+    this.cache.set('projects', cacheKey, { projects, totalMatched });
 
-    const listResult = createListResponseV2('projects', projects, 'projects', {
-      ...timer.toMetadata(),
-      from_cache: false,
-      operation: 'list',
-    }) as unknown as Record<string, unknown>;
+    const listResult = createListResponseV2(
+      'projects',
+      projects,
+      'projects',
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        operation: 'list',
+      },
+      { population: totalMatched },
+    ) as unknown as Record<string, unknown>;
 
     if (isNarrowLookup) delete listResult.summary;
 

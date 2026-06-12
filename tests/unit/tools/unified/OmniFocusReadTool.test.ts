@@ -1716,4 +1716,67 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.truncated).toBe(true);
     });
   });
+
+  describe('OMN-154: projects envelope reports population', () => {
+    it('total_count + summary.total_projects = script total_matched; truncated set', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            { id: 'pp1', name: 'Alpha Project', status: 'active' },
+            { id: 'pp2', name: 'Beta Project', status: 'active' },
+          ],
+          metadata: { total_matched: 160, returned_count: 2, total_available: 200 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(160);
+      expect(result.metadata.truncated).toBe(true);
+      expect(result.summary.total_projects).toBe(160);
+    });
+
+    it('cache hit repeats the honest counts (R6)', async () => {
+      // First call — mock script result with total_matched
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            { id: 'pp3', name: 'Gamma Project', status: 'active' },
+            { id: 'pp4', name: 'Delta Project', status: 'active' },
+          ],
+          metadata: { total_matched: 160, returned_count: 2, total_available: 200 },
+        },
+      } satisfies ScriptResult);
+
+      // Distinct limit so cache key doesn't collide with the previous test
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
+
+      const first = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      // Capture what was stored in the cache
+      const cacheSetCall = (mockCache.set as ReturnType<typeof vi.fn>).mock.calls[0];
+      const cachedValue = cacheSetCall[2];
+
+      // Second call — simulate a cache hit with the cached value (includes totalMatched)
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce(cachedValue);
+
+      const second = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, limit: 2 },
+      })) as any;
+
+      expect(first.metadata.total_count).toBe(160);
+      expect(second.metadata.from_cache).toBe(true);
+      expect(second.metadata.total_count).toBe(160);
+      expect(second.metadata.truncated).toBe(true);
+      // execJson only called once (for the first query; second is cache hit)
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });
