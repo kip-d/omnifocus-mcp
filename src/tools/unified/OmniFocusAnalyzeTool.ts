@@ -12,6 +12,15 @@ import {
   StandardResponseV2,
 } from '../../utils/response-format.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import {
+  V3EnvelopeSuccessSchema,
+  astEnvelopeSchema,
+  listResultSchema,
+  reviewSuccessSchema,
+  SlimmedDataSchema,
+  RecurringPatternsSchema,
+} from '../../omnifocus/script-response-schemas.js';
+import { z } from 'zod';
 
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
@@ -278,6 +287,51 @@ interface ExtractionResult {
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 // ---------------------------------------------------------------------------
+// MODULE-SCOPE SUCCESS SCHEMAS (OMN-139)
+// Instantiated once; never constructed per-request.
+// Source-verified against each emitting script before finalizing.
+// The `as z.ZodTypeAny` casts at call sites are a deliberate variance bridge:
+// each schema validates the full {ok, v, data} wire envelope while T is the
+// declared payload type the caller unwraps from data. TypeScript cannot unify
+// the envelope type with T directly, so the cast is intentional and must stay.
+// Typed-payload schemas (eliminating the cast entirely) are OMN-158 territory.
+// ---------------------------------------------------------------------------
+
+/** Analytics v3 envelope (all four v3 analytics scripts). */
+const ANALYZE_V3_SCHEMA = V3EnvelopeSuccessSchema;
+
+/** AST recurring-tasks envelope: {ok:true, v:'ast', tasks, summary, metadata}. */
+const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks');
+
+/** AST tag items envelope: {ok:true, v:'ast', items, summary?}. */
+const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items');
+
+/** Filtered-projects list: {projects|items, metadata?}. */
+const PROJECTS_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
+
+/** Task list: {tasks|items, metadata?}. */
+const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
+
+/** projects-for-review script: {success:true, projects, metadata?}. */
+const REVIEWS_LIST_SCHEMA = reviewSuccessSchema({
+  projects: z.array(z.unknown()),
+  metadata: z.unknown().optional(),
+});
+
+/** mark-project-reviewed script: {success:true, project, changes?, message?}. */
+const MARK_REVIEWED_SCHEMA = reviewSuccessSchema({
+  project: z.unknown(),
+  changes: z.unknown().optional(),
+  message: z.unknown().optional(),
+});
+
+/** set-review-schedule / clear-review-schedule script: {success:true, results, message?}. */
+const SET_SCHEDULE_SCHEMA = reviewSuccessSchema({
+  results: z.unknown(),
+  message: z.unknown().optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Main tool
 // ---------------------------------------------------------------------------
 
@@ -453,7 +507,7 @@ SCOPE FILTERING:
       const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, {
         options: { period, includeProjectStats, includeTagStats, includeInactive: false },
       });
-      const result = await this.execJson<ProductivityStatsData>(script);
+      const result = await this.execJson<ProductivityStatsData>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -698,7 +752,7 @@ SCOPE FILTERING:
         options: { period: groupBy, startDate: rangeStart, endDate: rangeEnd },
       });
 
-      const result = await this.execJson<TaskVelocityV3Data>(script);
+      const result = await this.execJson<TaskVelocityV3Data>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -888,7 +942,7 @@ SCOPE FILTERING:
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
-      const result = await this.execJson<OverdueDataUnion>(script);
+      const result = await this.execJson<OverdueDataUnion>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -1360,7 +1414,7 @@ SCOPE FILTERING:
       return JSON.stringify({ tasks, projects, tags });
     })()`;
 
-    const scriptResult = await this.execJson(taskScript);
+    const scriptResult = await this.execJson(taskScript, SlimmedDataSchema);
 
     if (isScriptError(scriptResult)) {
       this.patternLogger.error('fetchSlimmedData failed', { error: scriptResult.error });
@@ -1936,7 +1990,7 @@ SCOPE FILTERING:
         options: { analysisDepth, focusAreas, maxInsights, includeRawData },
       });
 
-      const result = await this.execJson<WorkflowAnalysisData>(script);
+      const result = await this.execJson<WorkflowAnalysisData>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -2169,7 +2223,7 @@ SCOPE FILTERING:
     }
 
     const generatedScript = buildRecurringTasksScript(analyzeOptions);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, RECURRING_TASKS_SCHEMA);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -2236,7 +2290,7 @@ SCOPE FILTERING:
     const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
       options: patternsOptions,
     });
-    const patternsScriptResult = await this.execJson(patternsScript);
+    const patternsScriptResult = await this.execJson(patternsScript, RecurringPatternsSchema);
 
     if (isScriptError(patternsScriptResult)) {
       return createErrorResponseV2(
@@ -2589,7 +2643,7 @@ SCOPE FILTERING:
   /** Read existing project names (lite, no stats). Returns [] on script error. */
   private async fetchExistingProjectNames(): Promise<string[]> {
     const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
-    const result = await this.execJson(gen.script);
+    const result = await this.execJson(gen.script, PROJECTS_LIST_SCHEMA);
     if (!isScriptSuccess(result)) return [];
     return this.unwrapList(result.data, ['projects', 'items'])
       .map((p) => (p as { name?: unknown }).name)
@@ -2599,7 +2653,7 @@ SCOPE FILTERING:
   /** Read existing tag names (basic mode). Returns empty set on script error. */
   private async fetchExistingTagNames(): Promise<Set<string>> {
     const gen = buildTagsScript({ mode: 'basic', includeEmpty: true, sortBy: 'name' });
-    const result = await this.execJson(gen.script);
+    const result = await this.execJson(gen.script, TAG_ITEMS_SCHEMA);
     if (!isScriptSuccess(result)) return new Set();
     const names = this.unwrapList(result.data, ['tags', 'items'])
       .map((t) => (typeof t === 'string' ? t : (t as { name?: unknown }).name))
@@ -2624,7 +2678,7 @@ SCOPE FILTERING:
       fields: ['name', 'project'],
       limit: 2000,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, TASKS_LIST_SCHEMA);
     if (!isScriptSuccess(result)) return [];
     return this.unwrapList(result.data, ['tasks', 'items'])
       .map((t) => {
@@ -3082,7 +3136,7 @@ SCOPE FILTERING:
     }
 
     const script = buildProjectsForReviewScript({ filter: args });
-    const result = await this.execJson<ReviewListData>(script);
+    const result = await this.execJson<ReviewListData>(script, REVIEWS_LIST_SCHEMA as z.ZodTypeAny);
     if (isScriptError(result)) {
       return createErrorResponseV2(
         'manage_reviews',
@@ -3199,7 +3253,7 @@ SCOPE FILTERING:
       reviewDate,
       updateNextReviewDate: true,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, MARK_REVIEWED_SCHEMA);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -3243,7 +3297,7 @@ SCOPE FILTERING:
       reviewInterval: compiled.params?.reviewInterval ?? null,
       nextReviewDate: compiled.params?.reviewDate ?? null,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, SET_SCHEDULE_SCHEMA);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -3283,7 +3337,7 @@ SCOPE FILTERING:
       reviewInterval: null,
       nextReviewDate: null,
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, SET_SCHEDULE_SCHEMA);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(

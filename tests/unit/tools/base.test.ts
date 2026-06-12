@@ -177,22 +177,61 @@ describe('BaseTool', () => {
   });
 
   describe('execJson', () => {
-    it('should convert legacy error JSON strings into ScriptError results', async () => {
-      const legacyError = JSON.stringify({ error: true, message: 'Task with ID abc not found' });
+    it('should pass schema to executeJson and return its result untouched (OMN-139)', async () => {
+      const schema = z.object({ tasks: z.array(z.unknown()) });
+      const successResult = { success: true as const, data: { tasks: [] } };
 
-      // Provide a minimal omniAutomation stub so execJson calls resolve to our legacy payload
       const fakeAutomation = {
-        executeJson: vi.fn().mockResolvedValue(legacyError),
-        execute: vi.fn(),
+        executeJson: vi.fn().mockResolvedValue(successResult),
       } as unknown as OmniAutomation;
 
       testTool.omniAutomation = fakeAutomation;
 
-      const result = await (testTool as any).execJson('ignored-script');
+      const result = await (testTool as any).execJson('script', schema);
 
+      // Result must be the exact object returned by executeJson — not re-wrapped
+      expect(result).toBe(successResult);
+      // executeJson must have been called with BOTH args (schema as 2nd arg)
+      expect(fakeAutomation.executeJson).toHaveBeenCalledWith('script', schema);
+    });
+
+    it('schema path passes through {success:true,data:{error:true}} AS-IS (OMN-139)', async () => {
+      // executeJson is total: execJson returns the result untouched, no secondary sniffing.
+      const ambiguousData = { error: true, message: 'x' };
+      const successResult = { success: true as const, data: ambiguousData };
+      const schema = z.object({ tasks: z.array(z.unknown()) });
+
+      const fakeAutomation = {
+        executeJson: vi.fn().mockResolvedValue(successResult),
+      } as unknown as OmniAutomation;
+
+      testTool.omniAutomation = fakeAutomation;
+      const result = await (testTool as any).execJson('script', schema);
+      // Schema path: returned as-is, success preserved — no legacy sniffing
+      expect(result).toBe(successResult);
+      expect(result.success).toBe(true);
+    });
+
+    it('should return fail-closed ScriptError from executeJson untouched when schema provided (OMN-139)', async () => {
+      const schema = z.object({ tasks: z.array(z.unknown()) });
+      const failResult = {
+        success: false as const,
+        error: 'Unrecognized script output shape',
+        context: 'Unrecognized script output shape',
+      };
+
+      const fakeAutomation = {
+        executeJson: vi.fn().mockResolvedValue(failResult),
+      } as unknown as OmniAutomation;
+
+      testTool.omniAutomation = fakeAutomation;
+
+      const result = await (testTool as any).execJson('script', schema);
+
+      // Fail-closed result must be returned as-is, not re-wrapped or sniffed
+      expect(result).toBe(failResult);
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Task with ID abc not found');
-      expect(fakeAutomation.executeJson).toHaveBeenCalled();
+      expect(fakeAutomation.executeJson).toHaveBeenCalledWith('script', schema);
     });
   });
 

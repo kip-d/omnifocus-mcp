@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { OmniAutomation, OmniAutomationError } from '../../../src/omnifocus/OmniAutomation';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -335,5 +336,120 @@ describe('OmniAutomation', () => {
 
       await expect(executePromise).rejects.toThrow('Script execution failed with code 143');
     });
+  });
+
+  // Helper: drive a JSON payload through the mock process stdout and return the executeJson result
+  async function emitJsonOutput(output: string, schema: z.ZodSchema<any>): Promise<any> {
+    const script = 'test script';
+    const resultPromise = omniAutomation.executeJson(script, schema);
+    await new Promise((resolve) => setImmediate(resolve));
+    mockProcess.stdout.emit('data', output);
+    mockProcess.emit('close', 0);
+    return resultPromise;
+  }
+
+  describe('executeJson detection (OMN-139)', () => {
+    const tasksSchema = z.object({ tasks: z.array(z.unknown()) }).strict();
+
+    // The global setup-unit.ts mocks OmniAutomation.prototype.executeJson to prevent real
+    // JXA execution in all other unit tests — but ONLY when VITEST_ALLOW_JXA !== '1'.
+    // Restore the prototype spy here so we can drive the actual implementation through
+    // the mock spawn harness, then re-apply the mock so other describe blocks are
+    // unaffected. Both hooks are guarded so that in VITEST_ALLOW_JXA=1 mode (no spy
+    // installed) we neither throw on mockRestore nor install a stub setup never wanted.
+    const defaultMockImpl = vi.fn(async (_script: string, _schema?: any) => ({ success: true, data: {} }));
+    let restoredPrototypeSpy = false;
+    beforeEach(() => {
+      restoredPrototypeSpy = false;
+      if (vi.isMockFunction(OmniAutomation.prototype.executeJson)) {
+        vi.mocked(OmniAutomation.prototype.executeJson).mockRestore();
+        restoredPrototypeSpy = true;
+      }
+    });
+    afterEach(() => {
+      if (restoredPrototypeSpy) {
+        vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(defaultMockImpl);
+      }
+    });
+
+    // 1. Ticket required case: unrecognised shape (not an error dialect, not a valid success payload)
+    //    → fail-closed with 'Unrecognized script output shape' context, raw output in details
+    it('fails closed with Unrecognized shape context when output does not match schema', async () => {
+      const raw = JSON.stringify({ failure: { code: 9, reason: 'new shape' } });
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe('Unrecognized script output shape');
+      // raw text (including 'new shape') must appear somewhere in details
+      const detailsStr = JSON.stringify(result.details);
+      expect(detailsStr).toContain('new shape');
+    });
+
+    // 2. Live-hole regression: {ok: false, error: {message}, v} → detected as modern envelope error
+    it('detects modern envelope error {ok: false} before schema validation', async () => {
+      const raw = JSON.stringify({ ok: false, error: { message: 'x' }, v: '3' });
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('x');
+    });
+
+    // 3. Context precedence: {success: false, context, message} → script's own context wins
+    it('preserves the script-supplied context when success:false dialect detected', async () => {
+      const raw = JSON.stringify({ success: false, context: 'projects_for_review', message: 'm' });
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('m');
+      expect(result.context).toBe('projects_for_review');
+    });
+
+    // 4. Valid payload: output matches schema → success:true, data equals payload
+    it('returns success:true with data when output matches schema', async () => {
+      const payload = { tasks: [] };
+      const raw = JSON.stringify(payload);
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(payload);
+    });
+
+    // 5. Bare string closed: non-JSON string + object schema → success:false
+    //    (executeInternal resolves non-JSON strings as the raw string; object schema rejects string)
+    it('fails closed when output is a bare non-JSON string with an object schema', async () => {
+      const script = 'test script';
+      const resultPromise = omniAutomation.executeJson(script, tasksSchema);
+      await new Promise((resolve) => setImmediate(resolve));
+      // Non-JSON output without braces/brackets resolves as a raw string
+      mockProcess.stdout.emit('data', 'Error: AppleEvent timed out');
+      mockProcess.emit('close', 0);
+      const result = await resultPromise;
+
+      expect(result.success).toBe(false);
+    });
+
+    // 6. Null closed: empty output resolves to null; object schema rejects null → success:false
+    it('fails closed when output is empty (null) with an object schema', async () => {
+      const script = 'test script';
+      const resultPromise = omniAutomation.executeJson(script, tasksSchema);
+      await new Promise((resolve) => setImmediate(resolve));
+      mockProcess.stdout.emit('data', '');
+      mockProcess.emit('close', 0);
+      const result = await resultPromise;
+
+      expect(result.success).toBe(false);
+    });
+
+    // 7. Legacy error dialect: {error: true, message: '...'} → success:false, error text preserved,
+    //    context 'Legacy script error'. End-to-end coverage of the third detection branch.
+    it('detects legacy {error: true, message} dialect with a schema → success:false, context Legacy script error', async () => {
+      const raw = JSON.stringify({ error: true, message: 'boom' });
+      const result = await emitJsonOutput(raw, tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('boom');
+      expect(result.context).toBe('Legacy script error');
+    });
+
   });
 });

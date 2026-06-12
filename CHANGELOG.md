@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Script-output detection inverted to a success allow-list** (OMN-139) — `executeJson` previously tried to
+  detect failure shapes and fall through to success; unknown output shapes silently returned `success: true`. The
+  logic is now inverted: known error dialects are classified first, then the output is validated against the
+  caller-supplied Zod schema; anything that matches neither fails closed with `'Unrecognized script output shape'`
+  and the truncated raw output in `details`. As a consequence, `{ok: false}` envelope errors that analytics call
+  sites previously received as apparent successes now surface correctly. Every `execJson` call site in the codebase
+  carries an explicit Zod success schema (closed-world top level).
+
 - **Batch `stopOnError`/atomic-rollback failures keep per-item results** (OMN-141) — A batch create halted by
   `stopOnError: true` (or undone by `atomicOperation` rollback) returned a single degenerate row
   `{ operation: "unknown", id: "unknown", error: "undefined" }` instead of the per-item rows — which item succeeded,

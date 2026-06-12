@@ -45,6 +45,16 @@ import type {
   TaskCreateData,
 } from '../../contracts/mutations.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import {
+  TaskWriteResultSchema,
+  CompleteResultSchema,
+  DeleteResultSchema,
+  BulkDeleteResultSchema,
+  ProjectWriteResultSchema,
+  FolderCreateResultSchema,
+  BatchCreateResultSchema,
+  TagMutationResultSchema,
+} from '../../omnifocus/script-response-schemas.js';
 import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import { localToUTC } from '../../utils/timezone.js';
@@ -541,7 +551,7 @@ SAFETY:
 
     let createResult: unknown;
     try {
-      const scriptResult = await this.execJson(script);
+      const scriptResult = await this.execJson(script, TaskWriteResultSchema);
       this.logger.debug('execJson returned result', { scriptResult });
 
       if (isScriptError(scriptResult)) {
@@ -702,7 +712,7 @@ SAFETY:
 
     // Use AST-powered mutation builder
     const updateScript = (await buildUpdateTaskScript(taskId, safeUpdates)).script;
-    const updateResult = await this.execJson(updateScript);
+    const updateResult = await this.execJson(updateScript, TaskWriteResultSchema);
     if (isScriptError(updateResult)) {
       this.logger.error(`Update task script error: ${updateResult.error}`);
       return createErrorResponseV2(
@@ -865,7 +875,7 @@ SAFETY:
         taskId,
         compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : undefined,
       );
-      const result = await this.execJson(generated.script);
+      const result = await this.execJson(generated.script, CompleteResultSchema);
 
       if (isScriptError(result)) {
         const errorMessage = result.error || 'Failed to complete task';
@@ -926,7 +936,7 @@ SAFETY:
 
     try {
       const generated = await buildDeleteScript('task', taskId);
-      const result = await this.execJson(generated.script);
+      const result = await this.execJson(generated.script, DeleteResultSchema);
 
       if (isScriptError(result)) {
         const errorMessage = result.error || 'Failed to delete task';
@@ -1031,7 +1041,7 @@ SAFETY:
       const generated = await buildBulkDeleteTasksScript({
         taskIds: taskIds.map((id) => id as string),
       });
-      const result = await this.execJson(generated.script);
+      const result = await this.execJson(generated.script, BulkDeleteResultSchema);
 
       if (isScriptError(result)) {
         errors.push({ error: result.error || 'Bulk delete failed' });
@@ -1218,7 +1228,7 @@ SAFETY:
     };
 
     const generatedScript = await buildCreateProjectScript(projectData);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, ProjectWriteResultSchema);
 
     if (isScriptError(result)) {
       const errorMessage = result.error || 'Failed to create project';
@@ -1261,7 +1271,7 @@ SAFETY:
     const timer = new OperationTimerV2();
 
     const generatedScript = await buildCompleteScript('project', projectId, completionDate);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, CompleteResultSchema);
 
     if (isScriptError(result)) {
       const errorMessage = result.error || 'Failed to complete project';
@@ -1295,7 +1305,7 @@ SAFETY:
     const timer = new OperationTimerV2();
 
     const generatedScript = await buildDeleteScript('project', projectId);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, DeleteResultSchema);
 
     if (isScriptError(result)) {
       const errorMessage = result.error || 'Failed to delete project';
@@ -1350,7 +1360,7 @@ SAFETY:
     };
 
     const generatedScript = await buildCreateFolderScript(folderData);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, FolderCreateResultSchema);
 
     if (isScriptError(result)) {
       const errorMessage = result.error || 'Failed to create folder';
@@ -1403,7 +1413,7 @@ SAFETY:
       convertedChanges.plannedDate = localToUTC(changes.plannedDate, 'planned');
 
     const script = (await buildUpdateProjectScript(projectId, convertedChanges)).script;
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, ProjectWriteResultSchema);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -1872,7 +1882,7 @@ SAFETY:
     });
 
     const { script } = await buildBatchCreateTasksScript(specs, { stopOnError });
-    const result = await this.execJson(script);
+    const result = await this.execJson(script, BatchCreateResultSchema);
 
     if (isScriptError(result)) {
       // Whole-script failure: mark every item failed so atomic rollback / error
@@ -2008,7 +2018,7 @@ SAFETY:
     };
 
     const generatedScript = await buildCreateProjectScript(projectData);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, ProjectWriteResultSchema);
 
     if (isScriptError(result)) {
       return {
@@ -2085,7 +2095,7 @@ SAFETY:
     };
 
     const generatedScript = await buildCreateTaskScript(taskData);
-    const result = await this.execJson(generatedScript.script);
+    const result = await this.execJson(generatedScript.script, TaskWriteResultSchema);
 
     if (isScriptError(result)) {
       return { tempId: item.tempId, realId: null, success: false, error: result.error, type: 'task' };
@@ -2191,7 +2201,7 @@ SAFETY:
       const item = createdItems[i];
       try {
         const generatedScript = await buildDeleteScript(item.type, item.realId);
-        await this.execJson(generatedScript.script);
+        await this.execJson(generatedScript.script, DeleteResultSchema);
         this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
       } catch (error) {
         this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);
@@ -2299,7 +2309,7 @@ SAFETY:
         );
       }
     }
-    const result = await this.execJson(generated.script);
+    const result = await this.execJson(generated.script, TagMutationResultSchema);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

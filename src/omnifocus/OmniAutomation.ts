@@ -2,8 +2,13 @@
 // (static ESM imports are evaluated before test mocks are applied)
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
-import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
-import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
+import {
+  ScriptResult,
+  createScriptSuccess,
+  createScriptError,
+  detectKnownErrorShape,
+  truncateRawOutput,
+} from './script-result-types.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 // Remove conflicting import
 
@@ -63,35 +68,32 @@ export class OmniAutomation {
     return result;
   }
 
-  // New type-safe execution with discriminated unions and schema validation
-  public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+  // Type-safe execution with discriminated unions and schema validation (OMN-139).
+  // schema is REQUIRED: unknown output that matches no known error dialect and fails
+  // the success schema is rejected fail-closed (spec §3.2). The two-step order is
+  // load-bearing — error dialects win before schema validation.
+  public async executeJson<T = unknown>(script: string, schema: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     try {
       const result = await this.execute<unknown>(script);
 
-      // Handle raw script errors (back-compat shape from pre-envelope scripts)
-      const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
-      if (isObj(result) && 'error' in result && (result as Record<string, unknown>).error === true) {
-        const obj = result as Record<string, unknown>;
-        const msgVal = obj.message;
-        const message: string = typeof msgVal === 'string' ? msgVal : 'Script execution failed';
-        const details = obj.details ?? 'No additional context';
-        return createScriptError(message, 'Legacy script error', details);
-      }
+      // Step 1: known error dialects FIRST, so callers get the script's own
+      // message instead of a generic validation failure.
+      const knownError = detectKnownErrorShape(result);
+      if (knownError) return knownError;
 
-      // Validate result against schema if provided
-      if (schema) {
-        const validation = schema.safeParse(result);
-        if (!validation.success) {
-          return createScriptError(
-            'Script result validation failed',
-            `Schema validation errors: ${validation.error.issues.map((i) => i.message).join(', ')}`,
-            { result, errors: validation.error.issues },
-          );
-        }
-        return createScriptSuccess(validation.data as T);
-      }
-
-      return createScriptSuccess(result as T);
+      // Step 2: success allow-list — anything that matches neither a known error
+      // dialect nor the success schema fails CLOSED with the raw output preserved.
+      const validation = schema.safeParse(result);
+      if (validation.success) return createScriptSuccess(validation.data as T);
+      logger.warn('executeJson fail-closed: output matched no known error dialect and failed the success schema', {
+        issueCount: validation.error.issues.length,
+        raw: truncateRawOutput(result, 500),
+      });
+      return createScriptError(
+        'Script output did not match the expected success shape',
+        'Unrecognized script output shape',
+        { raw: truncateRawOutput(result), issues: validation.error.issues },
+      );
     } catch (error) {
       if (error instanceof OmniAutomationError) {
         return createScriptError(error.message, 'OmniAutomation execution error', {
@@ -106,31 +108,6 @@ export class OmniAutomation {
         error,
       );
     }
-  }
-
-  /**
-   * Execute a script that returns a standard JXA envelope and decode to typed data.
-   * The script must stringify an object of shape { ok: true|false, data|error, v }.
-   */
-  public async executeTyped<T extends z.ZodTypeAny>(script: string, dataSchema: T): Promise<z.infer<T>> {
-    const raw = await this.execute<unknown>(script);
-    let env;
-    try {
-      env = JxaEnvelopeSchema.parse(raw);
-    } catch {
-      // Fallback for back-compat scripts: normalize pre-envelope shapes to envelope
-      env = normalizeToEnvelope(raw);
-    }
-    if (env.ok === false) {
-      const msg = env.error.message || 'JXA error';
-      const err = new OmniAutomationError(msg, {
-        stderr: typeof env.error.details === 'string' ? env.error.details : undefined,
-      });
-      throw err;
-    }
-    // Zod parse returns properly typed data based on schema
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return dataSchema.parse(env.data) as z.infer<T>;
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
