@@ -120,7 +120,16 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
   let statusSet: ProjectStatus[] | undefined;
   if (typeof merged.status === 'string') {
     const mapped = STATUS_TO_PROJECT[merged.status];
-    if (mapped) statusSet = [mapped];
+    // Defense-in-depth: schema rejects unknown status values upstream, but a
+    // future schema-enum addition without a STATUS_TO_PROJECT entry must not
+    // silently widen on the status dimension.
+    if (!mapped) {
+      throw projectsError(
+        ['status'],
+        `Unknown status value '${String(merged.status)}' for projects queries. Supported: active, on_hold, completed, dropped.`,
+      );
+    }
+    statusSet = [mapped];
   }
   if (typeof merged.completed === 'boolean') {
     // Decision record (design spec §3.3): completed:false is the GTD "still

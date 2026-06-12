@@ -655,8 +655,13 @@ PERFORMANCE:
 
     // OMN-156 (C-lite): the compiler emits a typed ProjectFilter; the old
     // cherry-pick re-narrowing seam (silently dropped unmapped keys → match-all,
-    // D10) is deleted, not guarded.
-    const projectFilter: ProjectFilter = compiled.projectFilter ?? {};
+    // D10) is deleted, not guarded. A missing projectFilter is an invariant
+    // violation — falling back to {} would silently degrade to match-all,
+    // exactly the bug class this seam closes.
+    if (!compiled.projectFilter) {
+      throw new Error('Invariant violation: projects query compiled without projectFilter (OMN-156)');
+    }
+    const projectFilter: ProjectFilter = compiled.projectFilter;
 
     if (projectFilter.id) {
       return this.executeProjectIdLookup(projectFilter.id, effectiveFields, timer);

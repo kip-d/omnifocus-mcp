@@ -115,6 +115,9 @@ describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () 
   it('empty filters object compiles to empty ProjectFilter (bare browse unchanged)', () => {
     expect(transformProjectFilters({})).toEqual({});
   });
+  it('unknown status value rejects instead of silently widening (defense-in-depth — schema rejects upstream)', () => {
+    reject({ status: 'bogus' });
+  });
 });
 
 describe('disposition parity — every map key actually maps (MUTATION_DEFS pattern)', () => {
