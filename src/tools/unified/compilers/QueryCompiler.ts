@@ -11,7 +11,7 @@ import {
   type MergeSource,
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
-import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION } from './task-key-disposition.js';
+import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION, ON_HOLD_TASKS_REJECTION } from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -281,9 +281,16 @@ export class QueryCompiler {
       result.completed = false;
     } else if (input.status === 'dropped') {
       result.dropped = true;
+    } else if (input.status === 'on_hold') {
+      // OMN-166: was a silent match-all — on_hold set only the dead projectStatus key.
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters', 'status'],
+          message: ON_HOLD_TASKS_REJECTION,
+        },
+      ]);
     }
-    // Note: `on_hold` has no task-level equivalent — only projects can be
-    // on-hold. Tracked as a follow-up to OMN-50.
 
     if (input.status) {
       const mapped = STATUS_TO_PROJECT[input.status];

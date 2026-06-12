@@ -665,11 +665,9 @@ describe('QueryCompiler', () => {
     });
 
     describe("status: 'on_hold'", () => {
-      it('maps to projectStatus only; leaves completed/dropped untouched', () => {
-        const result = compiler.transformFilters({ status: 'on_hold' });
-        expect(result.projectStatus).toEqual(['onHold']);
-        expect(result.completed).toBeUndefined();
-        expect(result.dropped).toBeUndefined();
+      it('OMN-166: throws ZodError (was silently mapping to projectStatus only — now rejected with steering)', () => {
+        // on_hold is a project status; tasks/export path must reject it, not silently match-all
+        expect(() => compiler.transformFilters({ status: 'on_hold' })).toThrow(z.ZodError);
       });
     });
 
@@ -1032,6 +1030,60 @@ describe('QueryCompiler', () => {
     it('tasks queries do NOT get a projectFilter', () => {
       const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);
       expect(compiled.projectFilter).toBeUndefined();
+    });
+  });
+
+  // OMN-166: status:'on_hold' must reject on tasks/export queries (was silently inert — returned ALL tasks)
+  describe('OMN-166: status on_hold rejects on tasks/export queries', () => {
+    it('base: tasks query with filters {status:"on_hold"} throws ZodError with full steering message', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { status: 'on_hold' } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.message).toMatch(/not supported on tasks or export/);
+        expect(issue.message).toMatch(/on-hold is a project status/);
+        expect(issue.message).toMatch(/projectId/);
+        expect(issue.path).toEqual(['query', 'filters', 'status']);
+      }
+    });
+
+    it('OR branch: filters {OR: [{status:"on_hold"}, {flagged: true}]} throws (was silent match-all widening)', () => {
+      expect(() =>
+        compiler.compile({
+          query: { type: 'tasks', filters: { OR: [{ status: 'on_hold' }, { flagged: true }] } },
+        } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('export type: {type:"export", filters:{status:"on_hold"}} throws', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { status: 'on_hold' } } } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('control: status "active" compiles without throwing (completed:false)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'active' } } } as never);
+      expect(compiled.filters.completed).toBe(false);
+    });
+
+    it('control: status "completed" compiles without throwing (completed:true)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'completed' } } } as never);
+      expect(compiled.filters.completed).toBe(true);
+    });
+
+    it('control: status "dropped" compiles without throwing (dropped:true)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'dropped' } } } as never);
+      expect(compiled.filters.dropped).toBe(true);
+    });
+
+    it('projects regression: {type:"projects", filters:{status:"on_hold"}} does NOT throw and maps to onHold', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { status: 'on_hold' } },
+      } as never);
+      expect(compiled.projectFilter).toBeDefined();
+      expect((compiled.projectFilter as Record<string, unknown>).status).toEqual(['onHold']);
     });
   });
 });
