@@ -71,7 +71,14 @@ Key universe (resolves the mirror-vs-enforcement-point tension): the registry co
 `keyof FlatFilterValue | 'AND' | 'OR' | 'NOT'` universe like `PROJECT_KEY_DISPOSITION`, with
 `Disposition = 'map' | 'compose' | 'reject'` — `AND`/`OR`/`NOT` are `'compose'` (handled structurally by
 `transformFilters`, neither mapped nor rejected). The parity test asserts every schema key has a disposition over that
-full universe; flat-key enforcement happens in `transformFlatFilter`, which only ever sees flat keys.
+full universe. The tasks module defines its OWN `Disposition` union (the projects one is `'map' | 'merge' | 'reject'`;
+do not import/share it).
+
+**Enforcement rule (load-bearing):** the check inside `transformFlatFilter` rejects on `disposition === 'reject'` ONLY —
+not the projects-style `!== 'map'` check. The base call (`QueryCompiler.ts` `transformFilters` line ~118) passes the
+FULL top-level input including any `AND`/`OR`/`NOT` properties, so a `!== 'map'` mirror would reject every
+operator-using query. `'compose'` keys are skipped by enforcement; they exist so the parity test covers the full key
+universe.
 
 Enforcement point: `transformFlatFilter`, so base filters, `AND[i]` items, and `OR[i]` branches all reject uniformly
 with the offending path in the error. (`NOT` already hard-restricts to two status payloads — unchanged, OMN-131
@@ -103,9 +110,10 @@ structurally for _future_ inert keys. In `transformFilters`, after transforming,
 match-all literal at THREE sites:
 
 - each `AND[i]` item and each `OR[i]` branch (the OMN-162 widening shape), and
-- the **base filter**, when the input had at least one defined flat key but the merged base (excluding `orBranches`)
-  compiles to match-all. A legitimately empty `filters: {}` / absent filters (browse) has zero defined input keys and is
-  untouched.
+- the **base filter**, when the input had at least one defined (`!== undefined`) top-level key EXCLUDING
+  `AND`/`OR`/`NOT`, but the merged base (excluding `orBranches`) compiles to match-all. AND items are covered by their
+  own per-item check, so they don't count here. A legitimately empty `filters: {}` / absent filters (browse) has zero
+  such keys and is untouched.
 
 Replace-or-augment `usableKeyCount` (keep the cheap zero-key check for its better "empty item" message; the AST check
 catches has-keys-but-compiles-to-nothing). `buildAST` is pure and cheap; layering is fine (compilers already import from
