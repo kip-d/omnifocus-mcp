@@ -8,6 +8,13 @@ import {
   ExportResultSchema,
   reviewSuccessSchema,
   TaskWriteResultSchema,
+  CompleteResultSchema,
+  DeleteResultSchema,
+  BulkDeleteResultSchema,
+  ProjectWriteResultSchema,
+  FolderCreateResultSchema,
+  BatchCreateResultSchema,
+  TagMutationResultSchema,
 } from '../../../src/omnifocus/script-response-schemas.js';
 
 // ---------------------------------------------------------------------------
@@ -414,6 +421,521 @@ describe('TaskWriteResultSchema', () => {
       name: 'Task',
       flagged: false,
       created: false,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CompleteResultSchema
+// ---------------------------------------------------------------------------
+
+describe('CompleteResultSchema', () => {
+  it('(a) accepts task-complete envelope', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completed: true,
+      completionDate: '2026-06-11T12:00:00.000Z',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts project-complete envelope', () => {
+    const result = CompleteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'My Project',
+      completed: true,
+      completionDate: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing discriminating key completed', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completionDate: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload where completed is false (not literal true)', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completed: false,
+      completionDate: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing both taskId and projectId', () => {
+    const result = CompleteResultSchema.safeParse({
+      name: 'Buy milk',
+      completed: true,
+      completionDate: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completed: true,
+      completionDate: null,
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DeleteResultSchema
+// ---------------------------------------------------------------------------
+
+describe('DeleteResultSchema', () => {
+  it('(a) accepts task-delete envelope', () => {
+    const result = DeleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      deleted: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts project-delete envelope', () => {
+    const result = DeleteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'My Project',
+      deleted: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing discriminating key deleted', () => {
+    const result = DeleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload where deleted is false (not literal true)', () => {
+    const result = DeleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      deleted: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing both taskId and projectId', () => {
+    const result = DeleteResultSchema.safeParse({
+      name: 'Buy milk',
+      deleted: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key', () => {
+    const result = DeleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      deleted: true,
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BulkDeleteResultSchema
+// ---------------------------------------------------------------------------
+
+describe('BulkDeleteResultSchema', () => {
+  it('(a) accepts full bulk-delete envelope with errors', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 'abc', name: 'Task 1' }],
+      errors: [{ taskId: 'xyz', error: 'Task not found' }],
+      message: 'Deleted 1 of 2 tasks',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts bulk-delete envelope with no errors (all deleted)', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 'abc', name: 'Task 1' }, { id: 'def', name: 'Task 2' }],
+      errors: [],
+      message: 'Deleted 2 of 2 tasks',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing deleted key', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      errors: [],
+      message: 'Deleted 0 of 0 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing errors key', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [],
+      message: 'Deleted 0 of 0 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing message key', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [],
+      errors: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [],
+      errors: [],
+      message: 'Deleted 0 of 0 tasks',
+      error: 'something',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProjectWriteResultSchema
+// ---------------------------------------------------------------------------
+
+describe('ProjectWriteResultSchema', () => {
+  it('(a) accepts full project-create envelope', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'New Project',
+      note: '',
+      flagged: false,
+      sequential: false,
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      folder: null,
+      tags: [],
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts project-update envelope (fewer keys than create)', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'Updated Project',
+      flagged: true,
+      status: 'active',
+      updated: true,
+      warnings: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing both created and updated discriminators', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'Project',
+      flagged: false,
+      status: 'active',
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing projectId', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      name: 'Project',
+      flagged: false,
+      created: true,
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key on create variant', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'Project',
+      note: '',
+      flagged: false,
+      sequential: false,
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      folder: null,
+      tags: [],
+      warnings: [],
+      created: true,
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key on update variant', () => {
+    const result = ProjectWriteResultSchema.safeParse({
+      projectId: 'p123',
+      name: 'Project',
+      flagged: false,
+      status: 'active',
+      updated: true,
+      warnings: [],
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FolderCreateResultSchema
+// ---------------------------------------------------------------------------
+
+describe('FolderCreateResultSchema', () => {
+  it('(a) accepts folder-create envelope with parent', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: 'Parent',
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts folder-create envelope without parent (null)', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'Top Level Folder',
+      parentFolder: null,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing discriminating key created', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload where created is false', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: [],
+      created: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing folderId', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: [],
+      created: true,
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BatchCreateResultSchema
+// ---------------------------------------------------------------------------
+
+describe('BatchCreateResultSchema', () => {
+  it('(a) accepts batch-create envelope with results array', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [
+        { tempId: 't1', taskId: 'abc', success: true },
+        { tempId: 't2', taskId: null, success: false, error: 'Not found' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts empty results array', () => {
+    const result = BatchCreateResultSchema.safeParse({ results: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing the results key', () => {
+    const result = BatchCreateResultSchema.safeParse({ data: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [],
+      error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TagMutationResultSchema
+// ---------------------------------------------------------------------------
+
+describe('TagMutationResultSchema', () => {
+  it('(a) accepts tag-created (flat) envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'created',
+      tagName: 'Work',
+      tagId: 'tid1',
+      parentTagName: null,
+      parentTagId: null,
+      message: "Tag 'Work' created successfully",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-created (path) envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'created',
+      tagName: 'Work',
+      tagId: 'tid1',
+      path: 'Context : Work',
+      createdSegments: ['Work'],
+      message: "Created 1 tag(s) in path 'Context : Work'",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-renamed envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'renamed',
+      oldName: 'Work',
+      newName: 'Career',
+      message: "Tag renamed from 'Work' to 'Career'",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-deleted envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'deleted',
+      tagName: 'Work',
+      message: "Tag 'Work' deleted successfully.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-merged envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: 5,
+      message: "Merged 'OldTag' into 'NewTag'. 5 tasks updated.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-merged_with_warning envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged_with_warning',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: 3,
+      warning: 'Tags were merged but source tag could not be deleted: ...',
+      message: 'Merged 3 tasks but could not delete source tag',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-nested envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'nested',
+      tagName: 'Work',
+      parentTagName: 'Context',
+      parentTagId: 'pid1',
+      message: "Tag 'Work' nested under 'Context'",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-unparented envelope', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'unparented',
+      tagName: 'Work',
+      message: "Tag 'Work' moved to root level",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-reparented envelope (with new parent)', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'reparented',
+      tagName: 'Work',
+      newParentTagName: 'NewContext',
+      newParentTagId: 'npid1',
+      message: "Tag 'Work' moved under 'NewContext'",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts tag-reparented envelope (to root, no parent keys)', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'reparented',
+      tagName: 'Work',
+      message: "Tag 'Work' moved to root level",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing action discriminator', () => {
+    const result = TagMutationResultSchema.safeParse({
+      tagName: 'Work',
+      message: 'something',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload with unknown action value', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'exploded',
+      tagName: 'Work',
+      message: 'something',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra top-level key on deleted variant', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'deleted',
+      tagName: 'Work',
+      message: "Tag 'Work' deleted successfully.",
+      error: 'aborted',
     });
     expect(result.success).toBe(false);
   });

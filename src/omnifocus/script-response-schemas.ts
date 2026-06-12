@@ -144,3 +144,256 @@ export const TaskWriteResultSchema = z
   .refine((o) => o.created === true || o.updated === true, {
     message: 'missing created/updated discriminator',
   });
+
+/**
+ * Complete result — task or project variant.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (lowerComplete):
+ *  - task variant:    {taskId,    name, completed: true, completionDate}
+ *  - project variant: {projectId, name, completed: true, completionDate}
+ *
+ * Union: one of taskId OR projectId required (each variant strict).
+ */
+export const CompleteResultSchema = z.union([
+  z
+    .object({
+      taskId: z.string(),
+      name: z.string(),
+      completed: z.literal(true),
+      completionDate: z.unknown(),
+    })
+    .strict(),
+  z
+    .object({
+      projectId: z.string(),
+      name: z.string(),
+      completed: z.literal(true),
+      completionDate: z.unknown(),
+    })
+    .strict(),
+]);
+
+/**
+ * Delete result — task or project variant.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (lowerDelete):
+ *  - task variant:    {taskId,    name, deleted: true}
+ *  - project variant: {projectId, name, deleted: true}
+ */
+export const DeleteResultSchema = z.union([
+  z
+    .object({
+      taskId: z.string(),
+      name: z.string(),
+      deleted: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      projectId: z.string(),
+      name: z.string(),
+      deleted: z.literal(true),
+    })
+    .strict(),
+]);
+
+/**
+ * Bulk task delete result.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (buildBulkDeleteTasksProgram):
+ *  {deleted: _deleted, errors: _errors, message}
+ *
+ * NUANCE (OMN-144): `errors` here is per-item partial-failure DATA (success contract);
+ * it is NOT the top-level {error: true} error dialect. The script never emits
+ * success:false — zero-deletion failure is detected in the TOOL LAYER (handleBulkDeleteTasks)
+ * and expressed as a tool-level error envelope, not a script-level one. So
+ * BulkDeleteResultSchema is success-only and includes the errors array.
+ */
+export const BulkDeleteResultSchema = z
+  .object({
+    deleted: z.array(z.unknown()),
+    errors: z.array(z.unknown()),
+    message: z.string(),
+  })
+  .strict();
+
+/**
+ * Project write result — create or update variant.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts:
+ *  - buildCreateProjectProgram envelope:
+ *    {projectId, name, note, flagged, sequential, dueDate, deferDate, plannedDate,
+ *     folder, tags, warnings, created: true}
+ *  - buildUpdateProjectProgram envelope:
+ *    {projectId, name, flagged, status, updated: true, warnings}
+ */
+export const ProjectWriteResultSchema = z.union([
+  z
+    .object({
+      projectId: z.string(),
+      name: z.string(),
+      note: z.unknown(),
+      flagged: z.unknown(),
+      sequential: z.unknown(),
+      dueDate: z.unknown(),
+      deferDate: z.unknown(),
+      plannedDate: z.unknown(),
+      folder: z.unknown(),
+      tags: z.unknown(),
+      warnings: z.unknown(),
+      created: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      projectId: z.string(),
+      name: z.string(),
+      flagged: z.unknown(),
+      status: z.unknown(),
+      updated: z.literal(true),
+      warnings: z.unknown(),
+    })
+    .strict(),
+]);
+
+/**
+ * Folder create result.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (buildCreateFolderProgram):
+ *  {folderId, name, parentFolder, warnings, created: true}
+ */
+export const FolderCreateResultSchema = z
+  .object({
+    folderId: z.string(),
+    name: z.string(),
+    parentFolder: z.unknown(),
+    warnings: z.unknown(),
+    created: z.literal(true),
+  })
+  .strict();
+
+/**
+ * Batch create result.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (buildBatchCreateTasksProgram):
+ *  return_({results: ref('results')})  — an array of per-item result objects.
+ *
+ * Leaf contents are unknown (OMN-158 will add per-item shape strictness).
+ */
+export const BatchCreateResultSchema = z
+  .object({
+    results: z.array(z.unknown()),
+  })
+  .strict();
+
+/**
+ * Tag mutation result — discriminated union over all tag action variants.
+ *
+ * Source-verified against src/contracts/ast/mutation/defs.ts (each tag program):
+ *
+ *  created (path):  {action: 'created', tagName, tagId, path, createdSegments, message}
+ *                   — buildCreateTagProgram, path variant
+ *  created (flat):  {action: 'created', tagName, tagId, parentTagName, parentTagId, message}
+ *                   — buildCreateTagProgram, flat variant
+ *  renamed:         {action: 'renamed', oldName, newName, message}
+ *                   — buildRenameTagProgram
+ *  deleted:         {action: 'deleted', tagName, message}
+ *                   — buildDeleteTagProgram
+ *  merged:          {action: 'merged', sourceTag, targetTag, tasksMerged, message}
+ *                   — buildMergeTagsProgram (delete succeeded)
+ *  merged_with_warning: {action: 'merged_with_warning', sourceTag, targetTag, tasksMerged, warning, message}
+ *                   — buildMergeTagsProgram (best-effort delete failed; warning key appears)
+ *  nested:          {action: 'nested', tagName, parentTagName, parentTagId, message}
+ *                   — buildNestTagProgram / lowerTagMove('nest')
+ *  unparented:      {action: 'unparented', tagName, message}
+ *                   — buildUnparentTagProgram / lowerTagMove('unparent')
+ *  reparented:      {action: 'reparented', tagName, [newParentTagName, newParentTagId,] message}
+ *                   — buildReparentTagProgram / lowerTagMove('reparent')
+ *                   NOTE: the reparent-to-root variant omits newParentTagName/newParentTagId
+ *                   (keys are conditionally absent — JSON.stringify drops undefined);
+ *                   the schema makes them optional so both sub-variants pass.
+ */
+export const TagMutationResultSchema = z.union([
+  // created (path variant): has path + createdSegments keys, no parentTagName/parentTagId
+  z
+    .object({
+      action: z.literal('created'),
+      tagName: z.string(),
+      tagId: z.string(),
+      path: z.string(),
+      createdSegments: z.array(z.unknown()),
+      message: z.string(),
+    })
+    .strict(),
+  // created (flat variant): has parentTagName/parentTagId keys, no path/createdSegments
+  z
+    .object({
+      action: z.literal('created'),
+      tagName: z.string(),
+      tagId: z.string(),
+      parentTagName: z.unknown(),
+      parentTagId: z.unknown(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('renamed'),
+      oldName: z.string(),
+      newName: z.string(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('deleted'),
+      tagName: z.string(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('merged'),
+      sourceTag: z.string(),
+      targetTag: z.string(),
+      tasksMerged: z.number(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('merged_with_warning'),
+      sourceTag: z.string(),
+      targetTag: z.string(),
+      tasksMerged: z.number(),
+      warning: z.unknown(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('nested'),
+      tagName: z.string(),
+      parentTagName: z.string(),
+      parentTagId: z.string(),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('unparented'),
+      tagName: z.string(),
+      message: z.string(),
+    })
+    .strict(),
+  // reparented: newParentTagName/newParentTagId are optional (to-root variant omits them)
+  z
+    .object({
+      action: z.literal('reparented'),
+      tagName: z.string(),
+      newParentTagName: z.string().optional(),
+      newParentTagId: z.string().optional(),
+      message: z.string(),
+    })
+    .strict(),
+]);
