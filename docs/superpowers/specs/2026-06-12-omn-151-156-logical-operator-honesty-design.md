@@ -80,6 +80,11 @@ names to input vocabulary via a small static table (`completed`→`status`/`comp
 but an empty operator array is a caller bug in every observed case, and the kickoff guidance is explicit — empty logic
 yields VALIDATION_ERROR naming alternatives, never match-all. Message: omit the operator or supply ≥1 condition.
 
+**Empty conditions (rider, found at Task 3 quality review):** an AND item or OR branch whose transform yields zero
+TaskFilter keys (`{}` itself, or a no-op shape like `tags: {any: []}`) is the same silent-widening class — an empty OR
+branch makes the whole OR match-all. Reject, naming the operator and index ("OR[0] contains no usable conditions"). The
+top-level bare `{}` filter stays valid (a bare browse is intentional match-all).
+
 ### 3.2 AST: compose base conditions with OR branches (`buildAST`)
 
 Replace the `orBranches` early-return: build the OR node **and** the base-key conditions, returning
