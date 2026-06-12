@@ -46,14 +46,15 @@ describe('OMN-154 applyCountHonesty via createTaskResponseV2', () => {
 
   it('R3: summary.total_count = population; returned_count stays rows; insight line present', () => {
     const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48 });
-    expect(r.summary.total_count).toBe(48);
-    expect(r.summary.returned_count).toBe(2);
-    expect(r.summary.key_insights?.[0]).toBe('Showing 2 of 48 matching tasks (truncated)');
+    expect(r.summary?.total_count).toBe(48);
+    expect(r.summary?.returned_count).toBe(2);
+    const insights = r.summary?.key_insights as string[] | undefined;
+    expect(insights?.[0]).toBe('Showing 2 of 48 matching tasks (truncated)');
   });
 
   it('R3: complete response gets no insight line', () => {
     const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 2 });
-    expect(r.summary.key_insights ?? []).not.toContain('Showing 2 of 2 matching tasks (truncated)');
+    expect(r.summary?.key_insights ?? []).not.toContain('Showing 2 of 2 matching tasks (truncated)');
   });
 
   it('R9: no counts argument → exact current behavior (echo, no truncated)', () => {
