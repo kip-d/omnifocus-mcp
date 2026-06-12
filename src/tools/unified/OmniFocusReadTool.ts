@@ -455,7 +455,6 @@ PERFORMANCE:
       offset: compiled.offset || 0,
       sort_applied: sortedInScript || !!sortOptions,
       fields_mode: fieldsMode,
-      ...(totalMatched !== undefined ? { total_matched: totalMatched } : {}),
     };
 
     // Today mode: count categories BEFORE field projection
@@ -470,7 +469,10 @@ PERFORMANCE:
     // Project fields (after counting)
     tasks = projectFields(tasks, compiled.fields);
 
-    return createTaskResponseV2('tasks', tasks, metadata);
+    return createTaskResponseV2('tasks', tasks, metadata, {
+      population: totalMatched,
+      offset: compiled.offset || 0,
+    });
   }
 
   private async executeCountOnly(

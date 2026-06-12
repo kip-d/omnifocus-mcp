@@ -1622,4 +1622,98 @@ describe('OmniFocusReadTool', () => {
       expect(task.dueDate).toBeInstanceOf(Date);
     });
   });
+
+  describe('OMN-154: tasks envelope reports population', () => {
+    it('total_count = script total_matched; truncated set; metadata.total_matched gone (D3)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: true, completed: false },
+            { id: 't2', name: 'Beta', flagged: true, completed: false },
+          ],
+          metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.returned_count).toBe(2);
+      expect(result.metadata.truncated).toBe(true);
+      expect(result.metadata.total_matched).toBeUndefined(); // D3
+      expect(result.summary.total_count).toBe(48);
+    });
+
+    it('script without total_matched (defensive): falls back to echo, no truncated (R9)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: true, completed: false },
+            { id: 't2', name: 'Beta', flagged: true, completed: false },
+          ],
+          // metadata without total_matched
+          metadata: { sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      // Falls back to echo: total_count = returned count (2)
+      expect(result.metadata.total_count).toBe(2);
+      // No truncated flag when no population is known
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('offset rides into the truncation formula', async () => {
+      // offset=2, limit=2, total_matched=4 → offset + returned = 2 + 2 = 4 = population → not truncated
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't3', name: 'Gamma', flagged: true, completed: false },
+            { id: 't4', name: 'Delta', flagged: true, completed: false },
+          ],
+          metadata: { total_matched: 4, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, limit: 2, offset: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(4);
+      // offset(2) + returned(2) = population(4) → not truncated
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('smart_suggest mode inherits the contract (population + truncated)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha', flagged: false, completed: false },
+            { id: 't2', name: 'Beta', flagged: false, completed: false },
+          ],
+          metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.truncated).toBe(true);
+    });
+  });
 });
