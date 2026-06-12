@@ -224,6 +224,7 @@ COMMON QUERIES:
 - Upcoming (7 days): { query: { type: "tasks", mode: "upcoming", daysAhead: 7 } }
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
 - Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
+- metadata.total_count always reports the FULL matching population; truncated: true marks a partial result (raise limit or paginate with offset)
 - Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
 
 MODES (tasks queries ONLY — not valid on type:"projects"):
