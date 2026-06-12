@@ -604,8 +604,12 @@ export function createListResponseV2<T>(
     },
   };
 
-  const noun: 'tasks' | 'projects' | 'folders' =
-    itemType === 'projects' ? 'projects' : itemType === 'folders' ? 'folders' : 'tasks';
+  // 'tasks' is a fallback label only: no tags/other caller supplies counts today,
+  // so the truncation insight noun is exercised solely for projects and folders.
+  let noun: 'tasks' | 'projects' | 'folders' = 'tasks';
+  if (itemType === 'projects' || itemType === 'folders') {
+    noun = itemType;
+  }
   applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, counts, noun);
   return response;
 }
