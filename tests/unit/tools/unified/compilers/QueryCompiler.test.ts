@@ -165,10 +165,12 @@ describe('QueryCompiler', () => {
         expect(result.tagsOperator).toBe('NOT_IN');
       });
 
-      it('handles empty tags object', () => {
+      // OMN-162: {tags:{}} now throws — the tags key is present but has no
+      // populated sub-keys, which compiles to no conditions (match-all hazard).
+      // Callers must use a populated tags filter or omit the key entirely.
+      it('rejects empty tags object as base filter (OMN-162 — was silently skipped, now throws)', () => {
         const compiler = new QueryCompiler();
-        const result = compiler.transformFilters({ tags: {} });
-        expect(result.tags).toBeUndefined();
+        expect(() => compiler.transformFilters({ tags: {} })).toThrow(z.ZodError);
       });
     });
 
@@ -1030,6 +1032,105 @@ describe('QueryCompiler', () => {
     it('tasks queries do NOT get a projectFilter', () => {
       const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);
       expect(compiled.projectFilter).toBeUndefined();
+    });
+  });
+
+  // OMN-162: match-all compile guard — filters that compile to literal(true) reject
+  describe('OMN-162: match-all compile guard (literal(true) hazard)', () => {
+    // Import the exported helper directly for unit-level assertions
+    it('compilesToMatchAll({folder:"X"}) === true — synthetic inert key (TaskFilter type still has folder even though input-level rejection precedes this path)', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      // folder is in the TaskFilter type but has no AST builder entry → literal(true)
+      expect(compilesToMatchAll({ folder: 'X' } as import('../../../../../src/contracts/filters.js').TaskFilter)).toBe(
+        true,
+      );
+    });
+
+    it('compilesToMatchAll({flagged: true}) === false — flagged produces a real condition', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      expect(compilesToMatchAll({ flagged: true })).toBe(false);
+    });
+
+    it('compilesToMatchAll({}) === true — empty filter matches everything (CALLERS gate on key count; this is intentional for bare browse)', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      // {} is a valid bare browse; the guard fires only when the INPUT had ≥1
+      // non-operator key but those keys compiled away (e.g. tags:{any:[]}).
+      expect(compilesToMatchAll({})).toBe(true);
+    });
+
+    // BASE SITE: live bug today — tags:{any:[]} is accepted by schema but transformTags
+    // skips empty arrays, so the transformed base has zero conditions → literal(true).
+    it('BASE SITE FIRES (live bug): tasks query with filters {tags:{any:[]}} throws ZodError matching /contains no executable conditions/', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { tags: { any: [] } } } });
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.message).toMatch(/contains no executable conditions/);
+        expect(issue.path).toEqual(['query', 'filters']);
+      }
+    });
+
+    // Boundary: {flagged:true, tags:{any:[]}} does NOT throw — flagged produces a real
+    // condition (the guard is whole-filter, not per-key; per-key is OMN-161 territory).
+    it('boundary: filters {flagged:true, tags:{any:[]}} does NOT throw — sibling produces conditions', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'tasks', filters: { flagged: true, tags: { any: [] } } } }),
+      ).not.toThrow();
+    });
+
+    // Browse controls: bare {} and absent filters must not throw
+    it('browse: filters {} does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks', filters: {} } })).not.toThrow();
+    });
+
+    it('browse: absent filters does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks' } })).not.toThrow();
+    });
+
+    // Invariant non-firing sweep: one minimal filter per supported key family,
+    // as (a) base filters and (b) a single OR branch paired with {flagged:true}.
+    // None should throw. This confirms the guard fires only when all conditions compile away.
+    describe('invariant non-firing sweep — no supported filter throws', () => {
+      const supportedFilters: Array<[string, Record<string, unknown>]> = [
+        ['id', { id: 'x' }],
+        ['status:active', { status: 'active' }],
+        ['completed:false', { completed: false }],
+        ['tags any', { tags: { any: ['x'] } }],
+        ['project', { project: 'P' }],
+        ['projectId', { projectId: 'p1' }],
+        ['parentTaskId', { parentTaskId: 't1' }],
+        ['dueDate before', { dueDate: { before: '2026-01-01' } }],
+        ['deferDate after', { deferDate: { after: '2026-01-01' } }],
+        ['plannedDate before', { plannedDate: { before: '2026-01-01' } }],
+        ['completionDate after', { completionDate: { after: '2020-01-01' } }],
+        ['added after', { added: { after: '2020-01-01' } }],
+        ['flagged', { flagged: true }],
+        ['blocked', { blocked: false }],
+        ['available', { available: true }],
+        ['inInbox', { inInbox: true }],
+        ['text contains', { text: { contains: 'x' } }],
+        ['name contains', { name: { contains: 'x' } }],
+        ['estimatedMinutes lessThan', { estimatedMinutes: { lessThan: 30 } }],
+      ];
+
+      for (const [label, filter] of supportedFilters) {
+        it(`(a) base: ${label} does not throw`, () => {
+          expect(() => compiler.compile({ query: { type: 'tasks', filters: filter as never } })).not.toThrow();
+        });
+
+        it(`(b) OR branch: ${label} paired with {flagged:true} does not throw`, () => {
+          expect(() =>
+            compiler.compile({
+              query: {
+                type: 'tasks',
+                filters: { OR: [filter as never, { flagged: true }] },
+              },
+            }),
+          ).not.toThrow();
+        });
+      }
     });
   });
 

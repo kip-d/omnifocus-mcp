@@ -131,9 +131,10 @@ describe('QueryCompiler.transformFilters', () => {
       expect(result.tagsOperator).toBe('NOT_IN');
     });
 
-    it('skips empty tag arrays', () => {
-      const result = compiler.transformFilters({ tags: { any: [] } });
-      expect(result.tags).toBeUndefined();
+    // OMN-162: {tags:{any:[]}} no longer silently skips — it now throws because
+    // the only input key compiles away to literal(true) (match-all hazard).
+    it('rejects empty tag arrays as base filter (OMN-162 — was silently skipped, now throws)', () => {
+      expect(() => compiler.transformFilters({ tags: { any: [] } })).toThrow(z.ZodError);
     });
   });
 

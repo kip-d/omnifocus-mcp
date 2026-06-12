@@ -3,6 +3,8 @@ import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-sc
 import type { TaskFilter, NormalizedTaskFilter, ProjectFilter } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
+import { buildAST } from '../../../contracts/ast/builder.js';
+import { isLiteralNode } from '../../../contracts/ast/types.js';
 import {
   mergeConflictChecked,
   emptyOperatorError,
@@ -54,6 +56,17 @@ export interface CompiledQuery {
    * compiled.filters stays empty normalized TaskFilter for projects.
    */
   projectFilter?: ProjectFilter;
+}
+
+/**
+ * OMN-162: Returns true if the given TaskFilter compiles to a literal(true) AST node —
+ * meaning it would match every task (match-all). Used as a defence-in-depth guard at three
+ * sites in transformFilters to catch filters whose keys are accepted by the schema but
+ * produce zero AST conditions (e.g. tags:{any:[]} after transformTags skips empty arrays).
+ */
+export function compilesToMatchAll(filter: TaskFilter): boolean {
+  const node = buildAST(filter);
+  return isLiteralNode(node) && node.value === true;
 }
 
 /**
@@ -136,6 +149,20 @@ export class QueryCompiler {
             },
           ]);
         }
+        // OMN-162 depth-in-defense: even if non-zero keys are present, reject if they
+        // all compile away to literal(true) — e.g. tags:{any:[]}. Shadowed by the
+        // usableKeyCount check for currently-expressible inputs; guards future drift.
+        if (compilesToMatchAll(transformed)) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'AND', i],
+              message:
+                `AND[${i}] contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ` +
+                'which would silently match every task. Remove the branch or use a supported tasks filter.',
+            },
+          ]);
+        }
         sources.push({ origin: `AND[${i}]`, filter: transformed });
       });
     }
@@ -145,6 +172,32 @@ export class QueryCompiler {
     }
 
     const merged = mergeConflictChecked(sources);
+
+    // OMN-162 BASE SITE: if the input had ≥1 defined non-operator top-level key but
+    // those keys all compiled away to literal(true), reject. This is the live bug path:
+    // {tags:{any:[]}} passes schema validation, transformTags skips empty arrays,
+    // the base has zero conditions, and buildAST returns literal(true) — silently
+    // matching every task.
+    //
+    // Gate: at least one non-operator key must be defined (=== not undefined) at the
+    // input level. Bare {} and absent filters are intentional browse; {} → compilesToMatchAll
+    // but we do NOT reject those (they have zero input-level intent).
+    // Operator keys (AND, OR, NOT) are excluded — they contribute via their own sites.
+    const OPERATOR_KEYS = new Set(['AND', 'OR', 'NOT']);
+    const hasNonOperatorInputKey = Object.keys(input).some(
+      (k) => !OPERATOR_KEYS.has(k) && (input as Record<string, unknown>)[k] !== undefined,
+    );
+    if (hasNonOperatorInputKey && compilesToMatchAll(merged)) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters'],
+          message:
+            'filters contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ' +
+            'which would silently match every task. Remove the filter or use a supported tasks filter.',
+        },
+      ]);
+    }
 
     if (input.OR !== undefined && Array.isArray(input.OR)) {
       // Non-array values are unreachable past schema validation (defense-in-depth for readers)
@@ -159,6 +212,20 @@ export class QueryCompiler {
               message:
                 `OR[${i}] contains no usable conditions. ` +
                 'An empty OR branch would match everything; remove the empty item or add a condition.',
+            },
+          ]);
+        }
+        // OMN-162 depth-in-defense: even if non-zero keys are present, reject if they
+        // all compile away to literal(true). Shadowed by usableKeyCount for currently-
+        // expressible inputs; guards future transform drift.
+        if (compilesToMatchAll(transformed)) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'OR', i],
+              message:
+                `OR[${i}] contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ` +
+                'which would silently match every task. Remove the branch or use a supported tasks filter.',
             },
           ]);
         }
