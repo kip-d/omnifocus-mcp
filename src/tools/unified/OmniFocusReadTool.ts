@@ -653,44 +653,13 @@ PERFORMANCE:
     const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
     const effectiveFields = resolveEffectiveProjectFields(userExplicitFields, compiled.details);
 
-    // OMN-40: id-lookup fast path. The generic project query previously ignored
-    // `compiled.filters.id` and shared a cache key keyed only by status/folder/
-    // text/limit, so id-filtered queries returned arbitrary cached projects.
-    // Use Project.byIdentifier() for O(1) lookup with id-mismatch verification.
-    if (compiled.filters.id) {
-      return this.executeProjectIdLookup(compiled.filters.id, effectiveFields, timer);
-    }
+    // OMN-156 (C-lite): the compiler emits a typed ProjectFilter; the old
+    // cherry-pick re-narrowing seam (silently dropped unmapped keys → match-all,
+    // D10) is deleted, not guarded.
+    const projectFilter: ProjectFilter = compiled.projectFilter ?? {};
 
-    // Build ProjectFilter from compiled query
-    const projectFilter: ProjectFilter = {};
-
-    // Map status filter (QueryCompiler puts status info into filters.completed)
-    // The read schema doesn't have a direct status field for projects —
-    // status filtering comes through the compiled filters
-    if (compiled.filters.projectStatus) {
-      projectFilter.status = compiled.filters.projectStatus;
-    }
-    // OMN-96: `folder: null` compiled to folderTopLevel → top-level projects
-    // only (no containing folder). A folder string is a name substring filter.
-    if (compiled.filters.folderTopLevel) {
-      projectFilter.topLevelOnly = true;
-    } else if (compiled.filters.folder) {
-      projectFilter.folderName = compiled.filters.folder;
-    }
-    if (compiled.filters.search) {
-      projectFilter.text = compiled.filters.search;
-    }
-    // OMN-142: `filters.text` is the full-text (name OR note) filter. Before
-    // OMN-142 it was silently dropped on projects queries — the only working
-    // text search was the name filter's accidental note over-match.
-    if (compiled.filters.text) {
-      projectFilter.text = compiled.filters.text;
-      projectFilter.textOperator = compiled.filters.textOperator;
-    }
-    // OMN-142: `filters.name` is name-scoped — matches project.name only.
-    if (compiled.filters.name) {
-      projectFilter.name = compiled.filters.name;
-      projectFilter.nameOperator = compiled.filters.nameOperator;
+    if (projectFilter.id) {
+      return this.executeProjectIdLookup(projectFilter.id, effectiveFields, timer);
     }
 
     // OMN-19: suppress review/bottleneck summary on narrow lookups (name or id).
@@ -699,9 +668,7 @@ PERFORMANCE:
     // Status- and folder-only browses still return the summary — those look
     // dashboard-ish and users may be scanning review state. See Linear OMN-19
     // for the full option trade-off (explicit param vs heuristic vs slim mode).
-    const isNarrowLookup = Boolean(
-      compiled.filters.search || compiled.filters.name || compiled.filters.text || compiled.filters.id,
-    );
+    const isNarrowLookup = Boolean(projectFilter.name || projectFilter.text || projectFilter.id);
 
     // Build cache key
     const cacheParams = { ...projectFilter, limit, includeStats };

@@ -954,4 +954,25 @@ describe('QueryCompiler', () => {
       });
     });
   });
+
+  describe('compile() projects branch (OMN-156 C-lite)', () => {
+    it('populates projectFilter and leaves filters empty for projects queries', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { flagged: true, status: 'active' } },
+      } as never);
+      expect(compiled.projectFilter).toEqual({ flagged: true, status: ['active'] });
+      // compiled.filters is the empty normalized filter — nothing leaks through the old path
+      expect(compiled.filters.flagged).toBeUndefined();
+      expect(compiled.filters.projectStatus).toBeUndefined();
+    });
+    it('throws from compile() for OR on projects (reaches BaseTool as VALIDATION_ERROR)', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'projects', filters: { OR: [{ name: { contains: 'a' } }] } } } as never),
+      ).toThrowError(z.ZodError);
+    });
+    it('tasks queries do NOT get a projectFilter', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);
+      expect(compiled.projectFilter).toBeUndefined();
+    });
+  });
 });

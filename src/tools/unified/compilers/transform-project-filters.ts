@@ -13,7 +13,7 @@ type Disposition = 'map' | 'merge' | 'reject';
  * impossible (the MUTATION_DEFS registration pattern; spec P1).
  * Full per-query-type contracts: OMN-161.
  */
-const PROJECT_KEY_DISPOSITION = {
+export const PROJECT_KEY_DISPOSITION = {
   id: 'map',
   status: 'map',
   completed: 'map',
@@ -45,18 +45,10 @@ function projectsError(path: Array<string | number>, message: string): z.ZodErro
   return new z.ZodError([{ code: z.ZodIssueCode.custom, path: ['query', 'filters', ...path], message }]);
 }
 
-const COMPLETED_STATUS: Record<'true' | 'false', ProjectStatus[]> = {
-  // Decision record (design spec §3.3): completed:false is the GTD "still
-  // live?" question — dropped is a terminal verdict, excluded for parity with
-  // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
-  true: ['done'],
-  false: ['active', 'onHold'],
-};
-
 export function transformProjectFilters(input: FilterValue): ProjectFilter {
   // 1. AND merges in INPUT space (then the merged input transforms below).
-  const merged: Record<string, unknown> = {};
-  const originOf: Record<string, string> = {};
+  const merged: Record<string, unknown> = Object.create(null);
+  const originOf: Record<string, string> = Object.create(null);
   const mergeFrom = (origin: string, flat: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(flat)) {
       if (value === undefined) continue;
@@ -82,12 +74,19 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
   }
 
   // 2. OR / NOT: unsupported on projects — loud, with working alternatives (P3; OMN-131 pattern).
-  if (OR !== undefined || NOT !== undefined) {
-    const op = OR !== undefined ? 'OR' : 'NOT';
+  if (OR !== undefined) {
     throw projectsError(
-      [op],
-      `Logical operator ${op} is not supported on projects queries. ` +
+      ['OR'],
+      'Logical operator OR is not supported on projects queries. ' +
         'Use a single filters.name / filters.text / filters.status condition, or run one query per alternative.',
+    );
+  }
+  if (NOT !== undefined) {
+    throw projectsError(
+      ['NOT'],
+      'NOT is not supported on projects queries. ' +
+        "Express the condition directly: e.g. instead of NOT {status:'completed'} use status:'active', " +
+        'or use the status filter for the states you want.',
     );
   }
 
@@ -98,7 +97,7 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
   if (offenders.length > 0) {
     throw projectsError(
       [],
-      `Unsupported filter${offenders.length > 1 ? 's' : ''} on projects queries: ${offenders.join(', ')}. ${SUPPORTED}`,
+      `Unsupported filter${offenders.length > 1 ? 's' : ''} on projects queries: ${offenders.join(', ')}. ${SUPPORTED} These are task-query filters — did you mean type:'tasks' with a project filter?`,
     );
   }
 
@@ -124,15 +123,18 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
     if (mapped) statusSet = [mapped];
   }
   if (typeof merged.completed === 'boolean') {
-    const completedSet = COMPLETED_STATUS[String(merged.completed) as 'true' | 'false'];
+    // Decision record (design spec §3.3): completed:false is the GTD "still
+    // live?" question — dropped is a terminal verdict, excluded for parity with
+    // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
+    const completedSet: ProjectStatus[] = merged.completed ? ['done'] : ['active', 'onHold'];
     if (statusSet) {
       const intersection = statusSet.filter((s) => completedSet.includes(s));
       if (intersection.length === 0) {
         throw projectsError(
           [],
           `'completed: ${merged.completed}' contradicts 'status: ${String(merged.status)}' on projects ` +
-            '(completed:false means active/on-hold). For dropped projects use status:\'dropped\' alone; ' +
-            'for done projects use status:\'completed\' or completed:true.',
+            "(completed:false means active/on-hold). For dropped projects use status:'dropped' alone; " +
+            "for done projects use status:'completed' or completed:true.",
         );
       }
       statusSet = intersection;

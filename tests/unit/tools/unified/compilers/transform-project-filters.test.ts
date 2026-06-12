@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { transformProjectFilters } from '../../../../../src/tools/unified/compilers/transform-project-filters.js';
+import {
+  transformProjectFilters,
+  PROJECT_KEY_DISPOSITION,
+} from '../../../../../src/tools/unified/compilers/transform-project-filters.js';
 
 const reject = (input: unknown) => expect(() => transformProjectFilters(input as never)).toThrowError(z.ZodError);
 const msgOf = (input: unknown): string => {
   try {
     transformProjectFilters(input as never);
   } catch (e) {
+    if (!(e instanceof z.ZodError)) throw e;
     return (e as z.ZodError).issues.map((i) => i.message).join(' | ');
   }
   throw new Error('expected throw');
@@ -110,5 +114,27 @@ describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () 
   });
   it('empty filters object compiles to empty ProjectFilter (bare browse unchanged)', () => {
     expect(transformProjectFilters({})).toEqual({});
+  });
+});
+
+describe('disposition parity — every map key actually maps (MUTATION_DEFS pattern)', () => {
+  const MAP_KEY_PROBES: Record<string, unknown> = {
+    id: { id: 'abc' },
+    status: { status: 'active' },
+    completed: { completed: true },
+    flagged: { flagged: true },
+    folder: { folder: 'Work' },
+    text: { text: { contains: 'x' } },
+    name: { name: { contains: 'x' } },
+  };
+  const mapKeys = Object.entries(PROJECT_KEY_DISPOSITION)
+    .filter(([, d]) => d === 'map')
+    .map(([k]) => k);
+  it('probe table covers exactly the map keys', () => {
+    expect(Object.keys(MAP_KEY_PROBES).sort()).toEqual(mapKeys.sort());
+  });
+  it.each(mapKeys)('map key %s produces non-empty ProjectFilter output', (key) => {
+    const result = transformProjectFilters(MAP_KEY_PROBES[key] as never);
+    expect(Object.keys(result).length).toBeGreaterThan(0);
   });
 });

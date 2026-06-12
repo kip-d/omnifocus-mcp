@@ -334,6 +334,27 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── OMN-156 (C-lite): compiled.projectFilter wiring ──────────────
+
+  describe('OMN-156 projectFilter wiring', () => {
+    it('projects query with flagged filter reaches the script builder (was silently dropped, V7)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_available: 0 } },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'projects', filters: { flagged: true } },
+      });
+
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      // buildFilteredProjectsScript receives flagged:true — the generated script
+      // must reference project.flagged (not just match all)
+      expect(script).toMatch(/project\.flagged/i);
+    });
+  });
+
   // ─── OMN-19: summary suppression on narrow lookups ─────────────
   // Linear OMN-19 — trim review/bottleneck summary from project lookup responses.
   // Decision: heuristic over explicit param. Skip summary iff the caller

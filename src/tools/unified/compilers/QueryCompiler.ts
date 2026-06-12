@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
-import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
+import type { TaskFilter, NormalizedTaskFilter, ProjectFilter } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
 import {
@@ -10,6 +10,7 @@ import {
   STATUS_TO_PROJECT,
   type MergeSource,
 } from './filter-merge.js';
+import { transformProjectFilters } from './transform-project-filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -46,6 +47,12 @@ export interface CompiledQuery {
   outputDirectory?: string;
   includeStats?: boolean;
   includeCompleted?: boolean;
+  /**
+   * OMN-156 (C-lite): typed ProjectFilter compiled from projects-query filters.
+   * Present only when type === 'projects'. handleProjectQuery consumes ONLY this;
+   * compiled.filters stays empty normalized TaskFilter for projects.
+   */
+  projectFilter?: ProjectFilter;
 }
 
 /**
@@ -55,8 +62,13 @@ export class QueryCompiler {
   compile(input: ReadInput): CompiledQuery {
     const { query } = input;
 
-    // Transform filters from API schema to internal contract, then normalize
-    const rawFilters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
+    // OMN-156 (C-lite): projects filters compile to a typed ProjectFilter in
+    // INPUT vocabulary. compiled.filters stays an empty normalized TaskFilter for
+    // projects — handleProjectQuery must consume ONLY projectFilter.
+    const isProjects = query.type === 'projects';
+    const projectFilter = isProjects ? transformProjectFilters(query.filters ?? {}) : undefined;
+    const rawFilters: TaskFilter = !isProjects && query.filters ? this.transformFilters(query.filters) : {};
+
     // OMN-115: fastSearch is a query-level param, but the AST search builder only
     // sees the filter object. Thread it onto the filter so `fastSearch: true`
     // emits a name-only predicate (skips the note body) per the documented
@@ -72,6 +84,7 @@ export class QueryCompiler {
       // Task-specific — default mode to 'all' for task queries only
       mode: query.type === 'tasks' ? taskMode : undefined,
       filters,
+      projectFilter,
       fields: 'fields' in query ? query.fields : undefined,
       sort: 'sort' in query ? query.sort : undefined,
       limit: 'limit' in query ? query.limit : undefined,
