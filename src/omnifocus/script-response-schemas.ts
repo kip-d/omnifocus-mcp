@@ -113,6 +113,81 @@ export function reviewSuccessSchema(shape: Record<string, z.ZodTypeAny>) {
 }
 
 /**
+ * Slimmed-data bulk read — emitted by the inline JXA script in fetchSlimmedData
+ * (src/tools/unified/OmniFocusAnalyzeTool.ts, method fetchSlimmedData).
+ *
+ * Wire shape verified against the inline return statement:
+ *   return JSON.stringify({ tasks, projects, tags })
+ * where tasks/projects/tags are arrays built by JXA iteration.
+ */
+export const SlimmedDataSchema = z
+  .object({
+    tasks: z.array(z.unknown()),
+    projects: z.array(z.unknown()),
+    tags: z.array(z.unknown()),
+  })
+  .strict();
+
+/**
+ * Recurring patterns result — emitted by GET_RECURRING_PATTERNS_SCRIPT
+ * (src/omnifocus/scripts/recurring/get-recurring-patterns.ts).
+ *
+ * Wire shape verified against the outer JXA spread:
+ *   return JSON.stringify({ ...parsed, duration, debug })
+ * where parsed = { totalRecurring, patterns, byProject, mostCommon }
+ * and mostCommon may be null when no patterns exist.
+ */
+export const RecurringPatternsSchema = z
+  .object({
+    totalRecurring: z.number(),
+    patterns: z.array(z.unknown()),
+    byProject: z.array(z.unknown()),
+    mostCommon: z.unknown(),
+    duration: z.unknown(),
+    debug: z.unknown().optional(),
+  })
+  .strict();
+
+/**
+ * Project id-lookup result — emitted by buildProjectByIdScript.
+ * Wire shape: {projects, count, mode, targetId}
+ * NOT the same as filtered-projects (which emits {projects, metadata}).
+ *
+ * Source: src/contracts/ast/script-builder.ts → buildProjectByIdScript →
+ *   return JSON.stringify({ projects, count, mode: 'id_lookup', targetId }).
+ *
+ * Moved here from OmniFocusReadTool.ts (Task 7 carry-forward) so dedicated
+ * variants live in the schemas module alongside the families they belong to.
+ */
+export const ProjectByIdSchema = z
+  .object({
+    projects: z.array(z.unknown()),
+    count: z.number(),
+    mode: z.string(),
+    targetId: z.string(),
+  })
+  .strict();
+
+/**
+ * Folder list result — emitted by buildFilteredFoldersScript.
+ * Wire shape: {success: true, folders, metadata}
+ * Note: uses {success: true} literal discriminator (not {ok: true, v: 'ast'}).
+ *
+ * Source: src/contracts/ast/script-builder.ts → buildFilteredFoldersScript →
+ *   return JSON.stringify({ success: true, folders: results, metadata: {...} }).
+ *
+ * Moved here from OmniFocusReadTool.ts (Task 7 carry-forward) so dedicated
+ * variants live in the schemas module alongside the families they belong to.
+ */
+export const FolderListSchema = z
+  .object({
+    success: z.literal(true),
+    folders: z.array(z.unknown()),
+    metadata: z.unknown().optional(),
+  })
+  .strict();
+
+/**
  * Write-tool task create/update result (NOT v3-wrapped — wrapInLauncher returns the OmniJS payload raw).
  *
  * Source-verified against src/contracts/ast/mutation/defs.ts (grep the envelope construction):

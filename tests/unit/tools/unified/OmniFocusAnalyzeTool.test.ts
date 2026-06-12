@@ -3,6 +3,7 @@ import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAna
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
+import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
 
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
@@ -286,7 +287,8 @@ describe('OmniFocusAnalyzeTool', () => {
     it('returns velocity metrics with v3 envelope unwrapping', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({
+      // OMN-139: executeJson now returns ScriptResult (schema validated); mock must match
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
         ok: true,
         v: '3',
         data: {
@@ -306,7 +308,7 @@ describe('OmniFocusAnalyzeTool', () => {
           projections: { tasksPerDay: '6.5', tasksPerWeek: '45.5', tasksPerMonth: '195' },
           optimization: 'Current velocity is sustainable',
         },
-      });
+      }));
 
       const res: any = await tool.execute({
         analysis: { type: 'task_velocity', params: { groupBy: 'day' } },
@@ -426,16 +428,20 @@ describe('OmniFocusAnalyzeTool', () => {
     it('returns analytics response with key findings', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({
-        insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
-        patterns: { bottlenecks: 3, projects: 2 },
-        recommendations: [{ recommendation: 'Batch similar tasks' }],
-        data: { raw: true },
-        totalTasks: 123,
-        totalProjects: 12,
-        analysisTime: 250,
-        dataPoints: 4000,
-      });
+      // OMN-139: executeJson returns ScriptResult; wrap V3 envelope
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
+        ok: true,
+        v: '3',
+        data: {
+          insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
+          patterns: { bottlenecks: 3, projects: 2 },
+          recommendations: [{ recommendation: 'Batch similar tasks' }],
+          totalTasks: 123,
+          totalProjects: 12,
+          analysisTime: 250,
+          dataPoints: 4000,
+        },
+      }));
 
       const res: any = await tool.execute({
         analysis: { type: 'workflow_analysis' },
@@ -448,7 +454,12 @@ describe('OmniFocusAnalyzeTool', () => {
     it('extractKeyFindings falls back to default message', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({ insights: [], patterns: {}, recommendations: [] });
+      // OMN-139: executeJson returns ScriptResult; wrap V3 envelope
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
+        ok: true,
+        v: '3',
+        data: { insights: [], patterns: {}, recommendations: [] },
+      }));
 
       const res: any = await tool.execute({
         analysis: { type: 'workflow_analysis' },
@@ -513,12 +524,14 @@ describe('OmniFocusAnalyzeTool', () => {
     it('handles patterns operation', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({
+      // OMN-139: executeJson returns ScriptResult; mock must match RecurringPatternsSchema
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
         totalRecurring: 5,
         patterns: [{ pattern: 'weekly', count: 3 }],
         byProject: [{ project: 'Work', count: 2 }],
         mostCommon: { pattern: 'weekly', count: 3 },
-      });
+        duration: 250,
+      }));
 
       const res: any = await tool.execute({
         analysis: { type: 'recurring_tasks', params: { operation: 'patterns' } },
@@ -760,10 +773,14 @@ describe('OmniFocusAnalyzeTool', () => {
 
       it('validates against the live DB by default: resolves projects, dedupes, classifies tags', async () => {
         // execJson reads run via Promise.all in array order: projects, tags, tasks.
+        // OMN-139: executeJson now returns ScriptResult; shapes must match per-site schemas:
+        //   projects → PROJECTS_LIST_SCHEMA {projects:[...], metadata?}
+        //   tags     → TAG_ITEMS_SCHEMA {ok:true, v:'ast', items:[...]}
+        //   tasks    → TASKS_LIST_SCHEMA {tasks:[...], metadata?}
         const dbResponses = [
-          { projects: [{ name: 'Hardware' }] },
-          { tags: [{ name: '@errand' }] },
-          { tasks: [{ name: 'Order scanners', project: 'Hardware' }] },
+          createScriptSuccess({ projects: [{ name: 'Hardware' }] }),
+          createScriptSuccess({ ok: true, v: 'ast', items: [{ name: '@errand' }] }),
+          createScriptSuccess({ tasks: [{ name: 'Order scanners', project: 'Hardware' }] }),
         ];
         let call = 0;
         mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
@@ -815,10 +832,11 @@ describe('OmniFocusAnalyzeTool', () => {
         // an existing "Order scanners" lives in "Hardware Refresh". Since the task
         // would be created under the *requested* "Hardware" (a different project),
         // it must NOT be flagged a duplicate.
+        // OMN-139: shapes must match per-site schemas (see prior test for details)
         const dbResponses = [
-          { projects: [{ name: 'Hardware Refresh' }] },
-          { tags: [] },
-          { tasks: [{ name: 'Order scanners', project: 'Hardware Refresh' }] },
+          createScriptSuccess({ projects: [{ name: 'Hardware Refresh' }] }),
+          createScriptSuccess({ ok: true, v: 'ast', items: [] }),
+          createScriptSuccess({ tasks: [{ name: 'Order scanners', project: 'Hardware Refresh' }] }),
         ];
         let call = 0;
         mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
@@ -905,14 +923,16 @@ describe('OmniFocusAnalyzeTool', () => {
 
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({
+      // OMN-139: executeJson returns ScriptResult; mock must match REVIEWS_LIST_SCHEMA
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
+        success: true,
         projects: [
           { id: 'p1', name: 'Overdue', nextReviewDate: yesterday },
           { id: 'p2', name: 'Due Today', nextReviewDate: today },
           { id: 'p3', name: 'Due Soon', nextReviewDate: soon },
           { id: 'p4', name: 'No Schedule' },
         ],
-      });
+      }));
 
       const res: any = await tool.execute({
         analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },

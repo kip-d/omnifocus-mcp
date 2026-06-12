@@ -15,11 +15,15 @@ import {
   FolderCreateResultSchema,
   BatchCreateResultSchema,
   TagMutationResultSchema,
+  SlimmedDataSchema,
+  RecurringPatternsSchema,
+  ProjectByIdSchema,
+  FolderListSchema,
 } from '../../../src/omnifocus/script-response-schemas.js';
-import {
-  PROJECT_BY_ID_SCHEMA,
-  FOLDER_LIST_SCHEMA,
-} from '../../../src/tools/unified/OmniFocusReadTool.js';
+
+// Backward-compatible aliases — schemas moved here from OmniFocusReadTool.ts (Task 7 carry-forward)
+const PROJECT_BY_ID_SCHEMA = ProjectByIdSchema;
+const FOLDER_LIST_SCHEMA = FolderListSchema;
 
 // ---------------------------------------------------------------------------
 // V3EnvelopeSuccessSchema
@@ -1066,6 +1070,126 @@ describe('FOLDER_LIST_SCHEMA', () => {
       folders: [],
       metadata: {},
       error: 'iteration aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SlimmedDataSchema
+// Source: fetchSlimmedData inline JXA script → return JSON.stringify({tasks, projects, tags})
+// ---------------------------------------------------------------------------
+
+describe('SlimmedDataSchema', () => {
+  it('(a) accepts representative slimmed-data payload', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [{ id: 't1', name: 'Buy milk' }],
+      projects: [{ id: 'p1', name: 'Errands' }],
+      tags: [{ id: 'tag1', name: 'home' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts empty arrays for all keys', () => {
+    const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [], tags: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing tasks key', () => {
+    const result = SlimmedDataSchema.safeParse({ projects: [], tags: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing projects key', () => {
+    const result = SlimmedDataSchema.safeParse({ tasks: [], tags: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing tags key', () => {
+    const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: unexpected extra top-level key', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [],
+      projects: [],
+      tags: [],
+      error: 'iteration aborted at item 50',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RecurringPatternsSchema
+// Source: GET_RECURRING_PATTERNS_SCRIPT → JSON.stringify({...parsed, duration, debug})
+// where parsed = {totalRecurring, patterns, byProject, mostCommon}
+// ---------------------------------------------------------------------------
+
+describe('RecurringPatternsSchema', () => {
+  it('(a) accepts representative recurring-patterns payload', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 12,
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 5 }],
+      byProject: [{ project: 'Work', recurringCount: 3 }],
+      mostCommon: { pattern: 'days_1', count: 5 },
+      duration: 2300,
+      debug: { optimizationUsed: 'OmniJS bridge' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload where mostCommon is null (no patterns found)', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 0,
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload without optional debug key', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 3,
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 50,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload missing totalRecurring key', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing patterns key', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 0,
+      byProject: [],
+      mostCommon: null,
+      duration: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: unexpected extra top-level key', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 5,
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+      error: 'iteration error at item 3',
     });
     expect(result.success).toBe(false);
   });

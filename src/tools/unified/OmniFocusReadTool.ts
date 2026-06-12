@@ -23,6 +23,8 @@ import {
   CountResultSchema,
   ExportResultSchema,
   astEnvelopeSchema,
+  ProjectByIdSchema,
+  FolderListSchema,
 } from '../../omnifocus/script-response-schemas.js';
 import {
   createTaskResponseV2,
@@ -60,27 +62,17 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
  * The 'items' variant covers any legacy callers that use data.tasks||data.items.
  *
  * Source: src/omnifocus/scripts/tasks/list-tasks-ast.ts — return JSON.stringify({tasks, metadata}).
+ *
+ * OMN-158: remove the dormant items variant and the caller `|| data.items` fallback together.
  */
 const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
 
 /**
- * Project id-lookup result — emitted by buildProjectByIdScript.
- * Wire shape: {projects, count, mode, targetId}
- * NOT the same as filtered-projects (which emits {projects, metadata}).
- *
- * Source: src/contracts/ast/script-builder.ts → buildProjectByIdScript →
- *   return JSON.stringify({ projects, count, mode: 'id_lookup', targetId }).
- *
- * Exported for unit-test coverage of the schema shape (not part of the public API).
+ * Project id-lookup result — moved to src/omnifocus/script-response-schemas.ts (ProjectByIdSchema).
+ * Re-exported here so existing tests that import PROJECT_BY_ID_SCHEMA from this module keep working
+ * without changes; tests will migrate to the canonical export location in OMN-158.
  */
-export const PROJECT_BY_ID_SCHEMA = z
-  .object({
-    projects: z.array(z.unknown()),
-    count: z.number(),
-    mode: z.string(),
-    targetId: z.string(),
-  })
-  .strict();
+export const PROJECT_BY_ID_SCHEMA = ProjectByIdSchema;
 
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
@@ -89,6 +81,8 @@ export const PROJECT_BY_ID_SCHEMA = z
  *
  * Source: src/contracts/ast/script-builder.ts → buildFilteredProjectsScript →
  *   return JSON.stringify({ projects, metadata: {...} }).
+ *
+ * OMN-158: remove the dormant items variant and the caller `|| data.items` fallback together.
  */
 const PROJECT_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
 
@@ -110,22 +104,11 @@ const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
 const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], { extras: { summary: z.unknown().optional() } });
 
 /**
- * Folder list result — emitted by buildFilteredFoldersScript.
- * Wire shape: {success: true, folders, metadata}
- * Note: uses {success: true} literal discriminator (not {ok: true, v: 'ast'}).
- *
- * Source: src/contracts/ast/script-builder.ts → buildFilteredFoldersScript →
- *   return JSON.stringify({ success: true, folders: results, metadata: {...} }).
- *
- * Exported for unit-test coverage of the schema shape (not part of the public API).
+ * Folder list result — moved to src/omnifocus/script-response-schemas.ts (FolderListSchema).
+ * Re-exported here so existing tests that import FOLDER_LIST_SCHEMA from this module keep working
+ * without changes; tests will migrate to the canonical export location in OMN-158.
  */
-export const FOLDER_LIST_SCHEMA = z
-  .object({
-    success: z.literal(true),
-    folders: z.array(z.unknown()),
-    metadata: z.unknown().optional(),
-  })
-  .strict();
+export const FOLDER_LIST_SCHEMA = FolderListSchema;
 
 /**
  * Post-hoc field projection for project query results.
