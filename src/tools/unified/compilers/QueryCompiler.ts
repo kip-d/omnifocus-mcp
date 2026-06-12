@@ -92,7 +92,16 @@ export class QueryCompiler {
     // Handle logical operators first — each returns early
     const logicalResult = this.transformLogicalOperator(input);
     if (logicalResult) return logicalResult;
+    return this.transformFlatFilter(input as FlatQueryFilter);
+  }
 
+  /**
+   * Translate a flat (non-logical) filter into the internal TaskFilter contract.
+   * Called by transformFilters after logical operators have been handled, and
+   * directly by transformLogicalOperator for AND/OR branch items (which are
+   * always schema-flat).
+   */
+  private transformFlatFilter(input: FlatQueryFilter): TaskFilter {
     const result: TaskFilter = {};
 
     this.transformStatus(input, result);
@@ -157,7 +166,7 @@ export class QueryCompiler {
     if (input.AND && Array.isArray(input.AND)) {
       const result: TaskFilter = {};
       for (const condition of input.AND) {
-        Object.assign(result, this.transformFilters(condition as FlatQueryFilter));
+        Object.assign(result, this.transformFlatFilter(condition as FlatQueryFilter));
       }
       return result;
     }
@@ -165,7 +174,7 @@ export class QueryCompiler {
     if (input.OR && Array.isArray(input.OR)) {
       if (input.OR.length === 0) return {};
       return {
-        orBranches: input.OR.map((condition) => this.transformFilters(condition as FlatQueryFilter)),
+        orBranches: input.OR.map((condition) => this.transformFlatFilter(condition as FlatQueryFilter)),
       };
     }
 
