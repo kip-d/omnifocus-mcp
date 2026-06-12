@@ -948,35 +948,16 @@ describe('QueryCompiler', () => {
 
   // OMN-162: filters.folder must reject on tasks/export queries (was silently inert — returned ALL tasks)
   describe('OMN-162: folder rejects on tasks/export queries', () => {
-    it('base: tasks query with filters {folder:"Work"} throws with steering message', () => {
-      expect(() => compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } })).toThrow(
-        expect.objectContaining({
-          issues: expect.arrayContaining([
-            expect.objectContaining({
-              message: expect.stringMatching(/not supported on tasks or export/),
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it('base: throws with message matching /filters\\.folder/', () => {
+    it('base: tasks query with filters {folder:"Work"} throws ZodError with full steering message', () => {
       try {
         compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
         expect.unreachable('should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(z.ZodError);
-        expect((e as z.ZodError).issues[0].message).toMatch(/filters\.folder/);
-      }
-    });
-
-    it('base: throws with message mentioning projectId steering', () => {
-      try {
-        compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
-        expect.unreachable('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(z.ZodError);
-        expect((e as z.ZodError).issues[0].message).toMatch(/projectId/);
+        const message = (e as z.ZodError).issues[0].message;
+        expect(message).toMatch(/not supported on tasks or export/);
+        expect(message).toMatch(/filters\.folder/);
+        expect(message).toMatch(/projectId/);
       }
     });
 
