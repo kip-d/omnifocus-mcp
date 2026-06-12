@@ -99,9 +99,22 @@ export class QueryCompiler {
     const sources: MergeSource[] = [{ origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter) }];
 
     if (input.AND !== undefined && Array.isArray(input.AND)) {
+      // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.AND.length === 0) throw emptyOperatorError('AND');
       input.AND.forEach((condition, i) => {
-        sources.push({ origin: `AND[${i}]`, filter: this.transformFlatFilter(condition as FlatQueryFilter) });
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        if (this.usableKeyCount(transformed) === 0) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'AND', i],
+              message:
+                `AND[${i}] contains no usable conditions. ` +
+                'Every AND item must contain at least one filter; remove the empty item or add a condition.',
+            },
+          ]);
+        }
+        sources.push({ origin: `AND[${i}]`, filter: transformed });
       });
     }
 
@@ -112,8 +125,23 @@ export class QueryCompiler {
     const merged = mergeConflictChecked(sources);
 
     if (input.OR !== undefined && Array.isArray(input.OR)) {
+      // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.OR.length === 0) throw emptyOperatorError('OR');
-      merged.orBranches = input.OR.map((condition) => this.transformFlatFilter(condition as FlatQueryFilter));
+      merged.orBranches = input.OR.map((condition, i) => {
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        if (this.usableKeyCount(transformed) === 0) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'OR', i],
+              message:
+                `OR[${i}] contains no usable conditions. ` +
+                'An empty OR branch would match everything; remove the empty item or add a condition.',
+            },
+          ]);
+        }
+        return transformed;
+      });
     }
 
     return merged;
@@ -121,9 +149,8 @@ export class QueryCompiler {
 
   /**
    * Translate a flat (non-logical) filter into the internal TaskFilter contract.
-   * Called by transformFilters after logical operators have been handled, and
-   * directly by transformLogicalOperator for AND/OR branch items (which are
-   * always schema-flat).
+   * Called by transformFilters for the top-level base fields and for each AND/OR
+   * item (which are always schema-flat by the input schema contract).
    */
   private transformFlatFilter(input: FlatQueryFilter): TaskFilter {
     const result: TaskFilter = {};
@@ -352,5 +379,14 @@ export class QueryCompiler {
         result.nameOperator = 'MATCHES';
       }
     }
+  }
+
+  /**
+   * Count the number of defined (non-undefined) keys in a TaskFilter.
+   * Used to detect empty operator items (AND items or OR branches that
+   * transformed to zero usable conditions — match-all silent widening).
+   */
+  private usableKeyCount(filter: TaskFilter): number {
+    return Object.values(filter).filter((v) => v !== undefined).length;
   }
 }

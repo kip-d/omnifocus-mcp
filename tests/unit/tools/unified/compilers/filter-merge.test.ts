@@ -67,6 +67,20 @@ describe('mergeConflictChecked', () => {
     ]);
     expect(merged).toEqual({ name: 'x', flagged: true });
   });
+
+  it('conflict on project/projectId vocabulary uses the mapped alias label in the error', () => {
+    try {
+      mergeConflictChecked([
+        { origin: 'filters', filter: { projectId: 'id-aaa' } },
+        { origin: 'AND[0]', filter: { projectId: 'id-bbb' } },
+      ]);
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      const issue = (e as z.ZodError).issues[0];
+      // Reverse-mapped vocabulary: internal `projectId` is labeled project/projectId
+      expect(issue.message).toContain('project/projectId');
+    }
+  });
 });
 
 describe('emptyOperatorError', () => {

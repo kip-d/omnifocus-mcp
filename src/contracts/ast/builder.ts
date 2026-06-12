@@ -243,13 +243,6 @@ export const REGISTRY_KNOWN_FIELDS: readonly string[] = Array.from(new Set(FILTE
  * @returns FilterNode representing the filter logic
  */
 export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode {
-  // Handle OR branches: each branch becomes a separate AST subtree
-  if (filter.orBranches && filter.orBranches.length > 0) {
-    const branchNodes = filter.orBranches.map((branch) => buildAST(branch));
-    if (branchNodes.length === 1) return branchNodes[0];
-    return or(...branchNodes);
-  }
-
   const conditions: FilterNode[] = [];
 
   for (const def of FILTER_DEFS) {
@@ -257,15 +250,17 @@ export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode 
     if (node) conditions.push(node);
   }
 
-  // Return appropriate node based on number of conditions
-  if (conditions.length === 0) {
-    return literal(true);
+  // OMN-151: OR branches AND-compose with base conditions. The old early
+  // return dropped every base key beside orBranches — including the keys
+  // augmentFilterForMode adds, so mode:'flagged' + OR silently ignored the
+  // mode (V6).
+  if (filter.orBranches && filter.orBranches.length > 0) {
+    const branchNodes = filter.orBranches.map((branch) => buildAST(branch));
+    conditions.push(branchNodes.length === 1 ? branchNodes[0] : or(...branchNodes));
   }
 
-  if (conditions.length === 1) {
-    return conditions[0];
-  }
-
+  if (conditions.length === 0) return literal(true);
+  if (conditions.length === 1) return conditions[0];
   return and(...conditions);
 }
 

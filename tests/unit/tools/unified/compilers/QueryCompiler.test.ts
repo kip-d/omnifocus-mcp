@@ -882,6 +882,41 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({ OR: [{ flagged: true }, { inInbox: true }] });
         expect(result).toEqual({ orBranches: [{ flagged: true }, { inInbox: true }] });
       });
+
+      it('tasks: {completed:false, status:"dropped"} remains ACCEPTED (returns dropped semantics, no reject)', () => {
+        const result = compiler.transformFilters({ status: 'dropped', completed: false });
+        expect(result.dropped).toBe(true);
+        expect(result.completed).toBe(false);
+      });
+
+      // Part B: empty AND/OR branch rejection (spec §3.1 "Empty conditions")
+      it('rejects OR: [{}] — empty branch would match everything', () => {
+        expect(() => compiler.transformFilters({ OR: [{}] })).toThrowError(z.ZodError);
+      });
+
+      it('rejects AND: [{}] — empty AND item yields match-all', () => {
+        expect(() => compiler.transformFilters({ AND: [{}] })).toThrowError(z.ZodError);
+      });
+
+      it('rejects OR: [{flagged:true}, {}] — names the empty index (1)', () => {
+        try {
+          compiler.transformFilters({ OR: [{ flagged: true }, {}] });
+          expect.unreachable('should have thrown');
+        } catch (e) {
+          expect(e).toBeInstanceOf(z.ZodError);
+          const issue = (e as z.ZodError).issues[0];
+          // Should reference the second branch (index 1)
+          expect(issue.message).toContain('OR[1]');
+        }
+      });
+
+      it('rejects OR: [{tags: {any: []}}] — tags any:[] transforms to nothing (no usable conditions)', () => {
+        expect(() => compiler.transformFilters({ OR: [{ tags: { any: [] } }] })).toThrowError(z.ZodError);
+      });
+
+      it('top-level bare {} filter stays valid (intentional bare browse, not an OR/AND item)', () => {
+        expect(() => compiler.transformFilters({})).not.toThrow();
+      });
     });
 
     describe('compile() export passthrough', () => {
