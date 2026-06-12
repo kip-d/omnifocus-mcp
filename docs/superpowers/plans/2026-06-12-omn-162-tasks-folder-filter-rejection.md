@@ -187,8 +187,9 @@ rejection thrown); all pre-existing tests PASS.
 
 - [ ] **Step 3: Implement**
 
-In `transformFlatFilter`, add an `origin` parameter (default `'filters'`, e.g. `AND[0]`, `OR[1]` from the call sites —
-the call sites already build those strings for `MergeSource.origin`; reuse them). At the TOP of the method:
+In `transformFlatFilter`, add an `origin` parameter (default `'filters'`, e.g. `AND[0]`, `OR[1]`). The base and AND call
+sites already build those strings for `MergeSource.origin` (reuse them); the OR branch loop does NOT (OR branches aren't
+`MergeSource`s) — build `` `OR[${i}]` `` there yourself. At the TOP of the method:
 
 ```typescript
 // OMN-162: tasks-side key dispositions. Reject on disposition === 'reject' ONLY —
@@ -211,9 +212,10 @@ for (const key of Object.keys(input)) {
 Implement `originToPath` as a tiny private helper (parse `AND[i]`/`OR[i]`; plain `'filters'` → `['query','filters']`).
 Note: today `folder` is the only `'reject'` key, so a single message constant is fine; if a second reject key is ever
 added, switch to a per-key message map (leave a one-line comment saying so). Remove the now-dead
-`folder`/`folderTopLevel` mapping at lines ~211-221 **only if** nothing else reaches it through this path —
-`transformProjectFilters` has its own folder mapping, so the tasks-side mapping IS dead once rejection precedes it;
-delete it and the OMN-96 comment block pointer (the decision record in read-schema.ts stays).
+`folder`/`folderTopLevel` mapping — the OMN-96 comment block plus the `if (input.folder === null) … else if …` block at
+lines ~213-221; **KEEP the `if (input.id) result.id = input.id;` line at 212** — **only if** nothing else reaches it
+through this path — `transformProjectFilters` has its own folder mapping, so the tasks-side mapping IS dead once
+rejection precedes it; delete it and the OMN-96 comment block pointer (the decision record in read-schema.ts stays).
 
 - [ ] **Step 4: Run the full unit suite**
 
@@ -287,14 +289,24 @@ git add -A && git commit -m "fix(OMN-166): tasks/export queries reject status:'o
 
 - [ ] **Step 1: Write the failing tests**
 
-The guard's firing condition can no longer be reached through the public input (folder/on_hold reject earlier), so test
-the exported helper directly with a hand-built `TaskFilter`, plus non-firing paths through `transformFilters`:
+Reachability (state this in test comments too): the BASE site is reachable through public input TODAY —
+`filters: { tags: { any: [] } }` transforms to `{}` (transformTags skips empty arrays), has one defined non-operator
+input key, and no base zero-key check exists, so it is currently a live silent match-all; it becomes the base firing
+test. The AND/OR sites are shadowed by the earlier `usableKeyCount === 0` checks for any currently-expressible input
+(every input key that survives transform with keys is FILTER_DEFS-consumed) — accept helper-only firing coverage for the
+branch sites; they are defense-in-depth for future transform drift.
+
+Known and accepted boundary (state in a test comment): the guard is whole-filter, not per-key — `{ tags: { any: [] } }`
+alone rejects, but `{ flagged: true, tags: { any: [] } }` still silently ignores the empty tags object (the sibling
+produces conditions). Per-key emptiness validation is OMN-161 contract territory; do not add it here.
 
 ```typescript
 describe('OMN-162: match-all compile guard (literal(true) hazard)', () => {
   // helper: compilesToMatchAll({ folder: 'X' } as TaskFilter) === true   (synthetic inert key — type still has folder)
   // helper: compilesToMatchAll({ flagged: true }) === false
   // helper: compilesToMatchAll({}) === true (matches everything — callers gate on key count)
+  // BASE SITE FIRES (live bug today): transformFilters({ tags: { any: [] } }) → throws
+  //   /contains no executable conditions/ with path ['query','filters']
   // transformFilters does NOT throw for one minimal filter per supported key family (spec §3.3 invariant):
   //   id, status:'active', completed, tags:{any:['x']}, project, projectId, parentTaskId,
   //   dueDate:{before:...}, deferDate, plannedDate, completionDate, added,
