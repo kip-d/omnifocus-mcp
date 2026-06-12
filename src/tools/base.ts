@@ -578,26 +578,28 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
    * Type-safe wrapper for script execution that returns ScriptResult<T>
    * Centralizes the logic from individual tool execJson helpers
    * Now includes circuit breaker protection and error recovery
+   *
+   * When schema is provided, executeJson performs total classification (OMN-139)
+   * and the result is returned directly — no legacy sniffing.
+   * When schema is omitted (legacy callers), the existing shape-sniffing logic runs unchanged.
    */
-  protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
+  protected async execJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     // Extract the core execution logic for circuit breaker wrapping
     const executeCoreOperation = async (): Promise<ScriptResult<T>> => {
       try {
-        const omni = this.omniAutomation as {
-          executeJson?: (script: string) => Promise<unknown>;
-          execute?: (script: string) => Promise<unknown>;
-        };
-        let res: unknown = null;
-        if (typeof omni.executeJson === 'function') {
-          res = await omni.executeJson(script);
-        } else if (typeof omni.execute === 'function') {
-          res = await omni.execute(script);
-        }
+        const res: unknown = await this.omniAutomation.executeJson(script, schema);
 
-        // Handle null/undefined results
+        // Handle null/undefined results (mock safety — some test mocks resolve null)
         if (res === null || res === undefined) {
           return createScriptError('NULL_RESULT', 'Script returned null or undefined');
         }
+
+        if (schema) {
+          // executeJson did total classification (OMN-139); no sniffing needed.
+          return res as ScriptResult<T>;
+        }
+
+        // ===== legacy no-schema path: unchanged sniffing until Tasks 5-7 migrate all call sites =====
 
         // If already in ScriptResult format, inspect for nested legacy errors before returning
         if (res && typeof res === 'object' && 'success' in res) {

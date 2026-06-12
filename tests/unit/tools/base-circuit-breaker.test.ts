@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BaseTool } from '../../../src/tools/base.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
-import { createScriptError, createScriptSuccess } from '../../../src/omnifocus/script-result-types.js';
 
 /**
  * Mock CacheManager for testing
@@ -52,7 +51,7 @@ describe('BaseTool Circuit Breaker Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toEqual({ test: 'data' });
-    expect(mockExecuteJson).toHaveBeenCalledWith('test-script');
+    expect(mockExecuteJson).toHaveBeenCalledWith('test-script', undefined);
   });
 
   it('should open circuit breaker after multiple failures', async () => {
@@ -129,7 +128,7 @@ describe('BaseTool Circuit Breaker Integration', () => {
     const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error').mockImplementation(() => {});
 
     // Execute when circuit is open
-    const result = await tool.execJson('test-script');
+    await tool.execJson('test-script');
 
     // Should have logged enhanced error context
     expect(loggerErrorSpy).toHaveBeenCalled();
