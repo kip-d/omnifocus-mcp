@@ -260,11 +260,14 @@ export function astEnvelopeSchema(itemsKey: 'items' | 'tasks') {
  * List/query results whose items key varies by script path (tasks|items, projects|items, …).
  * One strict variant per key, unioned. `extras` adds optional sibling keys present on some paths.
  */
+// NOTE (Task 2 quality review): variants MUST be typed z.ZodTypeAny[] and the return type MUST be
+// declared z.ZodTypeAny — TypeScript drops the computed [k] key from the inferred object type, so the
+// untyped version fails tsc (TS2352) AND breaks explicit-type-param call sites in Tasks 5-7.
 export function listResultSchema(
   itemKeys: readonly string[],
   opts: { metadata?: boolean; extras?: Record<string, z.ZodTypeAny> } = {},
-) {
-  const variants = itemKeys.map((k) =>
+): z.ZodTypeAny {
+  const variants: z.ZodTypeAny[] = itemKeys.map((k) =>
     z
       .object({
         [k]: z.array(z.unknown()),
@@ -358,8 +361,12 @@ schemas were initially transcribed from _caller-side TS casts_ and were wrong ab
 folders) — the caller reads a subset of what scripts emit; closed-world schemas must match the emission. When a schema
 test fails against a payload taken from real source, fix the schema, never loosen to whole-result `z.unknown()`.
 
-- [ ] **Step 4: Run schema tests — PASS. Full unit suite — PASS.**
+- [ ] **Step 4: Run schema tests — PASS. Full unit suite — PASS. `npm run build` — PASS** (vitest transpiles without
+      typechecking; a green suite does NOT prove the code compiles — Task 2 execution finding).
 - [ ] **Step 5: Commit** — `feat(OMN-139): family success schemas (closed-world, literal discriminators)`
+
+> **EXECUTION RULE (added after Task 2's quality review): every task's verification step includes `npm run build`,
+> regardless of what the task text says.** Vitest passed 47/47 over code that tsc rejected.
 
 ---
 
