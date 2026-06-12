@@ -184,9 +184,9 @@ describe('QueryCompiler.transformFilters', () => {
       expect(result.inInbox).toBe(true);
     });
 
-    it('passes through folder', () => {
-      const result = compiler.transformFilters({ folder: 'Work' });
-      expect(result.folder).toBe('Work');
+    // OMN-162: folder rejects on tasks path (was silently inert — returned all tasks)
+    it('folder throws ZodError on tasks path (OMN-162)', () => {
+      expect(() => compiler.transformFilters({ folder: 'Work' })).toThrow(z.ZodError);
     });
 
     it('passes through id', () => {

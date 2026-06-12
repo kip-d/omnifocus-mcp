@@ -778,24 +778,15 @@ describe('QueryCompiler', () => {
         expect(result.id).toBe('task-xyz');
       });
 
-      it('input.folder is passed through as result.folder', () => {
-        const result = compiler.transformFilters({ folder: 'Work' });
-        expect(result.folder).toBe('Work');
+      // OMN-162: folder is now rejected on tasks queries — was previously silently
+      // mapping to result.folder or result.folderTopLevel (both inert on tasks,
+      // returning all tasks). The old tests are updated to assert the new contract.
+      it('input.folder throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
+        expect(() => compiler.transformFilters({ folder: 'Work' })).toThrow(z.ZodError);
       });
 
-      // OMN-96: `folder: null` is the model's natural guess for "top-level
-      // projects, no containing folder." Map it to the internal folderTopLevel
-      // flag (NOT result.folder, which does substring matching on the folder
-      // name and would never match a null).
-      it('input.folder: null maps to folderTopLevel and not result.folder', () => {
-        const result = compiler.transformFilters({ folder: null });
-        expect(result.folderTopLevel).toBe(true);
-        expect(result.folder).toBeUndefined();
-      });
-
-      it('a folder name does not set folderTopLevel', () => {
-        const result = compiler.transformFilters({ folder: 'Work' });
-        expect(result.folderTopLevel).toBeUndefined();
+      it('input.folder: null throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
+        expect(() => compiler.transformFilters({ folder: null } as never)).toThrow(z.ZodError);
       });
     });
 
@@ -952,6 +943,93 @@ describe('QueryCompiler', () => {
         });
         expect(compiled.includeStats).toBe(true);
       });
+    });
+  });
+
+  // OMN-162: filters.folder must reject on tasks/export queries (was silently inert — returned ALL tasks)
+  describe('OMN-162: folder rejects on tasks/export queries', () => {
+    it('base: tasks query with filters {folder:"Work"} throws with steering message', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } })).toThrow(
+        expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              message: expect.stringMatching(/not supported on tasks or export/),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('base: throws with message matching /filters\\.folder/', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        expect((e as z.ZodError).issues[0].message).toMatch(/filters\.folder/);
+      }
+    });
+
+    it('base: throws with message mentioning projectId steering', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        expect((e as z.ZodError).issues[0].message).toMatch(/projectId/);
+      }
+    });
+
+    it('base null shape: filters {folder: null} rejects with same message', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { folder: null } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        expect((e as z.ZodError).issues[0].message).toMatch(/not supported on tasks or export/);
+      }
+    });
+
+    it('AND item: filters {AND: [{folder: "Work"}]} throws; path includes AND,0', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { AND: [{ folder: 'Work' }] } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.path).toEqual(['query', 'filters', 'AND', 0]);
+      }
+    });
+
+    it('OR branch: filters {OR: [{folder: "Work"}, {flagged: true}]} throws; path includes OR,0', () => {
+      try {
+        compiler.compile({
+          query: { type: 'tasks', filters: { OR: [{ folder: 'Work' }, { flagged: true }] } },
+        } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.path).toEqual(['query', 'filters', 'OR', 0]);
+      }
+    });
+
+    it('export type: {type:"export", filters:{folder:"Work"}} throws (shared path)', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { folder: 'Work' } } } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('control: filters {flagged: true} does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } })).not.toThrow();
+    });
+
+    it('projects regression: {type:"projects", filters:{folder:"Work"}} still maps folder to folderName (does NOT throw)', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { folder: 'Work' } },
+      } as never);
+      expect(compiled.projectFilter).toBeDefined();
+      expect((compiled.projectFilter as Record<string, unknown>).folderName).toBe('Work');
     });
   });
 

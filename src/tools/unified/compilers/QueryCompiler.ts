@@ -11,6 +11,7 @@ import {
   type MergeSource,
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
+import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION } from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -115,13 +116,15 @@ export class QueryCompiler {
    * The OMN-131 NOT contract is preserved exactly.
    */
   transformFilters(input: QueryFilter): TaskFilter {
-    const sources: MergeSource[] = [{ origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter) }];
+    const sources: MergeSource[] = [
+      { origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter, 'filters') },
+    ];
 
     if (input.AND !== undefined && Array.isArray(input.AND)) {
       // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.AND.length === 0) throw emptyOperatorError('AND');
       input.AND.forEach((condition, i) => {
-        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter, `AND[${i}]`);
         if (this.usableKeyCount(transformed) === 0) {
           throw new z.ZodError([
             {
@@ -147,7 +150,7 @@ export class QueryCompiler {
       // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.OR.length === 0) throw emptyOperatorError('OR');
       merged.orBranches = input.OR.map((condition, i) => {
-        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter, `OR[${i}]`);
         if (this.usableKeyCount(transformed) === 0) {
           throw new z.ZodError([
             {
@@ -170,8 +173,29 @@ export class QueryCompiler {
    * Translate a flat (non-logical) filter into the internal TaskFilter contract.
    * Called by transformFilters for the top-level base fields and for each AND/OR
    * item (which are always schema-flat by the input schema contract).
+   *
+   * `origin` is the dot-path segment used for ZodError paths ('filters', 'AND[0]',
+   * 'OR[1]', etc.). Defaults to 'filters' for the base call.
    */
-  private transformFlatFilter(input: FlatQueryFilter): TaskFilter {
+  private transformFlatFilter(input: FlatQueryFilter, origin: string = 'filters'): TaskFilter {
+    // OMN-162: tasks-side key dispositions. Reject on disposition === 'reject' ONLY —
+    // the base call passes the full input (AND/OR/NOT included), so a !== 'map'
+    // check would reject every operator-using query.
+    // NOTE: folder is currently the only 'reject' key; a second reject key would
+    // need a per-key message map rather than the single constant.
+    for (const key of Object.keys(input)) {
+      if ((input as Record<string, unknown>)[key] === undefined) continue;
+      if ((TASK_KEY_DISPOSITION as Record<string, string>)[key] === 'reject') {
+        throw new z.ZodError([
+          {
+            code: z.ZodIssueCode.custom,
+            path: this.originToPath(origin),
+            message: FOLDER_TASKS_REJECTION,
+          },
+        ]);
+      }
+    }
+
     const result: TaskFilter = {};
 
     this.transformStatus(input, result);
@@ -208,17 +232,10 @@ export class QueryCompiler {
       result.parentTaskId = input.parentTaskId;
     }
 
-    // ID/folder passthrough
+    // ID passthrough
     if (input.id) result.id = input.id;
-    // OMN-96: `folder: null` means "top-level projects only" (the model's
-    // natural guess); a string is a folder-name substring filter. Distinguish
-    // them explicitly — `null` is falsy, so the old `if (input.folder)` truthy
-    // check silently dropped it. See the decision record in read-schema.ts.
-    if (input.folder === null) {
-      result.folderTopLevel = true;
-    } else if (typeof input.folder === 'string') {
-      result.folder = input.folder;
-    }
+    // folder is rejected above (OMN-162) — no tasks-side mapping here.
+    // The projects path maps folder in transform-project-filters.ts.
 
     // Safety net: warn on unknown properties that survived schema validation
     const unknownProps = validateFilterProperties(result as Record<string, unknown>);
@@ -382,6 +399,20 @@ export class QueryCompiler {
       result.name = nameCond.value;
       result.nameOperator = nameCond.operator;
     }
+  }
+
+  /**
+   * Convert an origin string into a ZodError path array.
+   * 'filters'    → ['query', 'filters']
+   * 'AND[0]'     → ['query', 'filters', 'AND', 0]
+   * 'OR[2]'      → ['query', 'filters', 'OR', 2]
+   */
+  private originToPath(origin: string): (string | number)[] {
+    const match = origin.match(/^(AND|OR)\[(\d+)\]$/);
+    if (match) {
+      return ['query', 'filters', match[1], parseInt(match[2], 10)];
+    }
+    return ['query', 'filters'];
   }
 
   /**
