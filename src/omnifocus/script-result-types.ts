@@ -48,7 +48,7 @@ export function createScriptError(error: string, context?: string, details?: unk
 
 /**
  * Known error dialects intercepted BEFORE success-schema validation (OMN-139 §3.1 step 1).
- * Order of checks inside is irrelevant (the dialects' discriminators are disjoint);
+ * Discriminators are effectively disjoint on real wire shapes; if-order breaks ties (ok → error → success);
  * the order of THIS function vs schema validation is load-bearing — see spec §3.2.
  * Returns null when the value matches no known error dialect.
  */
@@ -86,7 +86,7 @@ export function detectKnownErrorShape(value: unknown): ScriptError | null {
 export function truncateRawOutput(value: unknown, max = 2000): string {
   let s: string;
   try {
-    s = typeof value === 'string' ? value : JSON.stringify(value);
+    s = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
   } catch {
     s = String(value);
   }

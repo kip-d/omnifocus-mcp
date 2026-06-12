@@ -52,4 +52,15 @@ describe('truncateRawOutput', () => {
   it('passes short output through unchanged', () => {
     expect(truncateRawOutput({ a: 1 })).toBe('{"a":1}');
   });
+  it('passes strings through as-is', () => {
+    expect(truncateRawOutput('plain')).toBe('plain');
+  });
+  it("returns 'undefined' for undefined input without throwing", () => {
+    expect(truncateRawOutput(undefined)).toBe('undefined');
+  });
+  it('falls back to String(value) for circular references (catch branch)', () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(truncateRawOutput(circular)).toBe('[object Object]');
+  });
 });
