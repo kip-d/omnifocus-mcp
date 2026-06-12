@@ -3,6 +3,8 @@ import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-sc
 import type { TaskFilter, NormalizedTaskFilter, ProjectFilter } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
+import { buildAST } from '../../../contracts/ast/builder.js';
+import { isLiteralNode } from '../../../contracts/ast/types.js';
 import {
   mergeConflictChecked,
   emptyOperatorError,
@@ -11,6 +13,7 @@ import {
   type MergeSource,
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
+import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION, ON_HOLD_TASKS_REJECTION } from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -53,6 +56,17 @@ export interface CompiledQuery {
    * compiled.filters stays empty normalized TaskFilter for projects.
    */
   projectFilter?: ProjectFilter;
+}
+
+/**
+ * OMN-162: Returns true if the given TaskFilter compiles to a literal(true) AST node —
+ * meaning it would match every task (match-all). Used as a defense-in-depth guard at three
+ * sites in transformFilters to catch filters whose keys are accepted by the schema but
+ * produce zero AST conditions (e.g. tags:{any:[]} after transformTags skips empty arrays).
+ */
+export function compilesToMatchAll(filter: TaskFilter): boolean {
+  const node = buildAST(filter);
+  return isLiteralNode(node) && node.value === true;
 }
 
 /**
@@ -115,13 +129,15 @@ export class QueryCompiler {
    * The OMN-131 NOT contract is preserved exactly.
    */
   transformFilters(input: QueryFilter): TaskFilter {
-    const sources: MergeSource[] = [{ origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter) }];
+    const sources: MergeSource[] = [
+      { origin: 'filters', filter: this.transformFlatFilter(input as FlatQueryFilter, 'filters') },
+    ];
 
     if (input.AND !== undefined && Array.isArray(input.AND)) {
       // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.AND.length === 0) throw emptyOperatorError('AND');
       input.AND.forEach((condition, i) => {
-        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter, `AND[${i}]`);
         if (this.usableKeyCount(transformed) === 0) {
           throw new z.ZodError([
             {
@@ -130,6 +146,20 @@ export class QueryCompiler {
               message:
                 `AND[${i}] contains no usable conditions. ` +
                 'Every AND item must contain at least one filter; remove the empty item or add a condition.',
+            },
+          ]);
+        }
+        // OMN-162 defense-in-depth: even if non-zero keys are present, reject if they
+        // all compile away to literal(true) — e.g. tags:{any:[]}. Shadowed by the
+        // usableKeyCount check for currently-expressible inputs; guards future drift.
+        if (compilesToMatchAll(transformed)) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'AND', i],
+              message:
+                `AND[${i}] contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ` +
+                'which would silently match every task. Remove the branch or use a supported tasks filter.',
             },
           ]);
         }
@@ -143,11 +173,37 @@ export class QueryCompiler {
 
     const merged = mergeConflictChecked(sources);
 
+    // OMN-162 BASE SITE: if the input had ≥1 defined non-operator top-level key but
+    // those keys all compiled away to literal(true), reject. This is the live bug path:
+    // {tags:{any:[]}} passes schema validation, transformTags skips empty arrays,
+    // the base has zero conditions, and buildAST returns literal(true) — silently
+    // matching every task.
+    //
+    // Gate: at least one non-operator key must be defined (=== not undefined) at the
+    // input level. Bare {} and absent filters are intentional browse; {} → compilesToMatchAll
+    // but we do NOT reject those (they have zero input-level intent).
+    // Operator keys (AND, OR, NOT) are excluded — they contribute via their own sites.
+    const OPERATOR_KEYS = new Set(['AND', 'OR', 'NOT']);
+    const hasNonOperatorInputKey = Object.keys(input).some(
+      (k) => !OPERATOR_KEYS.has(k) && (input as Record<string, unknown>)[k] !== undefined,
+    );
+    if (hasNonOperatorInputKey && compilesToMatchAll(merged)) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters'],
+          message:
+            'filters contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ' +
+            'which would silently match every task. Remove the filter or use a supported tasks filter.',
+        },
+      ]);
+    }
+
     if (input.OR !== undefined && Array.isArray(input.OR)) {
       // Non-array values are unreachable past schema validation (defense-in-depth for readers)
       if (input.OR.length === 0) throw emptyOperatorError('OR');
       merged.orBranches = input.OR.map((condition, i) => {
-        const transformed = this.transformFlatFilter(condition as FlatQueryFilter);
+        const transformed = this.transformFlatFilter(condition as FlatQueryFilter, `OR[${i}]`);
         if (this.usableKeyCount(transformed) === 0) {
           throw new z.ZodError([
             {
@@ -156,6 +212,20 @@ export class QueryCompiler {
               message:
                 `OR[${i}] contains no usable conditions. ` +
                 'An empty OR branch would match everything; remove the empty item or add a condition.',
+            },
+          ]);
+        }
+        // OMN-162 defense-in-depth: even if non-zero keys are present, reject if they
+        // all compile away to literal(true). Shadowed by usableKeyCount for currently-
+        // expressible inputs; guards future transform drift.
+        if (compilesToMatchAll(transformed)) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'OR', i],
+              message:
+                `OR[${i}] contains no executable conditions — its keys are accepted by the schema but compile to no task-level filter, ` +
+                'which would silently match every task. Remove the branch or use a supported tasks filter.',
             },
           ]);
         }
@@ -170,8 +240,29 @@ export class QueryCompiler {
    * Translate a flat (non-logical) filter into the internal TaskFilter contract.
    * Called by transformFilters for the top-level base fields and for each AND/OR
    * item (which are always schema-flat by the input schema contract).
+   *
+   * `origin` is the dot-path segment used for ZodError paths ('filters', 'AND[0]',
+   * 'OR[1]', etc.). Defaults to 'filters' for the base call.
    */
-  private transformFlatFilter(input: FlatQueryFilter): TaskFilter {
+  private transformFlatFilter(input: FlatQueryFilter, origin: string = 'filters'): TaskFilter {
+    // OMN-162: tasks-side key dispositions. Reject on disposition === 'reject' ONLY —
+    // the base call passes the full input (AND/OR/NOT included), so a !== 'map'
+    // check would reject every operator-using query.
+    // NOTE: folder is currently the only 'reject' key; a second reject key would
+    // need a per-key message map rather than the single constant.
+    for (const key of Object.keys(input)) {
+      if ((input as Record<string, unknown>)[key] === undefined) continue;
+      if ((TASK_KEY_DISPOSITION as Record<string, string>)[key] === 'reject') {
+        throw new z.ZodError([
+          {
+            code: z.ZodIssueCode.custom,
+            path: this.originToPath(origin),
+            message: FOLDER_TASKS_REJECTION,
+          },
+        ]);
+      }
+    }
+
     const result: TaskFilter = {};
 
     this.transformStatus(input, result);
@@ -208,17 +299,10 @@ export class QueryCompiler {
       result.parentTaskId = input.parentTaskId;
     }
 
-    // ID/folder passthrough
+    // ID passthrough
     if (input.id) result.id = input.id;
-    // OMN-96: `folder: null` means "top-level projects only" (the model's
-    // natural guess); a string is a folder-name substring filter. Distinguish
-    // them explicitly — `null` is falsy, so the old `if (input.folder)` truthy
-    // check silently dropped it. See the decision record in read-schema.ts.
-    if (input.folder === null) {
-      result.folderTopLevel = true;
-    } else if (typeof input.folder === 'string') {
-      result.folder = input.folder;
-    }
+    // folder is rejected above (OMN-162) — no tasks-side mapping here.
+    // The projects path maps folder in transform-project-filters.ts.
 
     // Safety net: warn on unknown properties that survived schema validation
     const unknownProps = validateFilterProperties(result as Record<string, unknown>);
@@ -264,9 +348,16 @@ export class QueryCompiler {
       result.completed = false;
     } else if (input.status === 'dropped') {
       result.dropped = true;
+    } else if (input.status === 'on_hold') {
+      // OMN-166: was a silent match-all — on_hold set only the dead projectStatus key.
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters', 'status'],
+          message: ON_HOLD_TASKS_REJECTION,
+        },
+      ]);
     }
-    // Note: `on_hold` has no task-level equivalent — only projects can be
-    // on-hold. Tracked as a follow-up to OMN-50.
 
     if (input.status) {
       const mapped = STATUS_TO_PROJECT[input.status];
@@ -382,6 +473,20 @@ export class QueryCompiler {
       result.name = nameCond.value;
       result.nameOperator = nameCond.operator;
     }
+  }
+
+  /**
+   * Convert an origin string into a ZodError path array.
+   * 'filters'    → ['query', 'filters']
+   * 'AND[0]'     → ['query', 'filters', 'AND', 0]
+   * 'OR[2]'      → ['query', 'filters', 'OR', 2]
+   */
+  private originToPath(origin: string): (string | number)[] {
+    const match = origin.match(/^(AND|OR)\[(\d+)\]$/);
+    if (match) {
+      return ['query', 'filters', match[1], parseInt(match[2], 10)];
+    }
+    return ['query', 'filters'];
   }
 
   /**

@@ -165,10 +165,12 @@ describe('QueryCompiler', () => {
         expect(result.tagsOperator).toBe('NOT_IN');
       });
 
-      it('handles empty tags object', () => {
+      // OMN-162: {tags:{}} now throws — the tags key is present but has no
+      // populated sub-keys, which compiles to no conditions (match-all hazard).
+      // Callers must use a populated tags filter or omit the key entirely.
+      it('rejects empty tags object as base filter (OMN-162 — was silently skipped, now throws)', () => {
         const compiler = new QueryCompiler();
-        const result = compiler.transformFilters({ tags: {} });
-        expect(result.tags).toBeUndefined();
+        expect(() => compiler.transformFilters({ tags: {} })).toThrow(z.ZodError);
       });
     });
 
@@ -665,11 +667,9 @@ describe('QueryCompiler', () => {
     });
 
     describe("status: 'on_hold'", () => {
-      it('maps to projectStatus only; leaves completed/dropped untouched', () => {
-        const result = compiler.transformFilters({ status: 'on_hold' });
-        expect(result.projectStatus).toEqual(['onHold']);
-        expect(result.completed).toBeUndefined();
-        expect(result.dropped).toBeUndefined();
+      it('OMN-166: throws ZodError (was silently mapping to projectStatus only — now rejected with steering)', () => {
+        // on_hold is a project status; tasks/export path must reject it, not silently match-all
+        expect(() => compiler.transformFilters({ status: 'on_hold' })).toThrow(z.ZodError);
       });
     });
 
@@ -778,24 +778,15 @@ describe('QueryCompiler', () => {
         expect(result.id).toBe('task-xyz');
       });
 
-      it('input.folder is passed through as result.folder', () => {
-        const result = compiler.transformFilters({ folder: 'Work' });
-        expect(result.folder).toBe('Work');
+      // OMN-162: folder is now rejected on tasks queries — was previously silently
+      // mapping to result.folder or result.folderTopLevel (both inert on tasks,
+      // returning all tasks). The old tests are updated to assert the new contract.
+      it('input.folder throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
+        expect(() => compiler.transformFilters({ folder: 'Work' })).toThrow(z.ZodError);
       });
 
-      // OMN-96: `folder: null` is the model's natural guess for "top-level
-      // projects, no containing folder." Map it to the internal folderTopLevel
-      // flag (NOT result.folder, which does substring matching on the folder
-      // name and would never match a null).
-      it('input.folder: null maps to folderTopLevel and not result.folder', () => {
-        const result = compiler.transformFilters({ folder: null });
-        expect(result.folderTopLevel).toBe(true);
-        expect(result.folder).toBeUndefined();
-      });
-
-      it('a folder name does not set folderTopLevel', () => {
-        const result = compiler.transformFilters({ folder: 'Work' });
-        expect(result.folderTopLevel).toBeUndefined();
+      it('input.folder: null throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
+        expect(() => compiler.transformFilters({ folder: null } as never)).toThrow(z.ZodError);
       });
     });
 
@@ -955,6 +946,74 @@ describe('QueryCompiler', () => {
     });
   });
 
+  // OMN-162: filters.folder must reject on tasks/export queries (was silently inert — returned ALL tasks)
+  describe('OMN-162: folder rejects on tasks/export queries', () => {
+    it('base: tasks query with filters {folder:"Work"} throws ZodError with full steering message', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const message = (e as z.ZodError).issues[0].message;
+        expect(message).toMatch(/not supported on tasks or export/);
+        expect(message).toMatch(/filters\.folder/);
+        expect(message).toMatch(/projectId/);
+      }
+    });
+
+    it('base null shape: filters {folder: null} rejects with same message', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { folder: null } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        expect((e as z.ZodError).issues[0].message).toMatch(/not supported on tasks or export/);
+      }
+    });
+
+    it('AND item: filters {AND: [{folder: "Work"}]} throws; path includes AND,0', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { AND: [{ folder: 'Work' }] } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.path).toEqual(['query', 'filters', 'AND', 0]);
+      }
+    });
+
+    it('OR branch: filters {OR: [{folder: "Work"}, {flagged: true}]} throws; path includes OR,0', () => {
+      try {
+        compiler.compile({
+          query: { type: 'tasks', filters: { OR: [{ folder: 'Work' }, { flagged: true }] } },
+        } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.path).toEqual(['query', 'filters', 'OR', 0]);
+      }
+    });
+
+    it('export type: {type:"export", filters:{folder:"Work"}} throws (shared path)', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { folder: 'Work' } } } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('control: filters {flagged: true} does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } })).not.toThrow();
+    });
+
+    it('projects regression: {type:"projects", filters:{folder:"Work"}} still maps folder to folderName (does NOT throw)', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { folder: 'Work' } },
+      } as never);
+      expect(compiled.projectFilter).toBeDefined();
+      expect((compiled.projectFilter as Record<string, unknown>).folderName).toBe('Work');
+    });
+  });
+
   describe('compile() projects branch (OMN-156 C-lite)', () => {
     it('populates projectFilter and leaves filters empty for projects queries', () => {
       const compiled = compiler.compile({
@@ -973,6 +1032,159 @@ describe('QueryCompiler', () => {
     it('tasks queries do NOT get a projectFilter', () => {
       const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);
       expect(compiled.projectFilter).toBeUndefined();
+    });
+  });
+
+  // OMN-162: match-all compile guard — filters that compile to literal(true) reject
+  describe('OMN-162: match-all compile guard (literal(true) hazard)', () => {
+    // Import the exported helper directly for unit-level assertions
+    it('compilesToMatchAll({folder:"X"}) === true — synthetic inert key (TaskFilter type still has folder even though input-level rejection precedes this path)', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      // folder is in the TaskFilter type but has no AST builder entry → literal(true)
+      expect(compilesToMatchAll({ folder: 'X' } as import('../../../../../src/contracts/filters.js').TaskFilter)).toBe(
+        true,
+      );
+    });
+
+    it('compilesToMatchAll({flagged: true}) === false — flagged produces a real condition', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      expect(compilesToMatchAll({ flagged: true })).toBe(false);
+    });
+
+    it('compilesToMatchAll({}) === true — empty filter matches everything (CALLERS gate on key count; this is intentional for bare browse)', async () => {
+      const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
+      // {} is a valid bare browse; the guard fires only when the INPUT had ≥1
+      // non-operator key but those keys compiled away (e.g. tags:{any:[]}).
+      expect(compilesToMatchAll({})).toBe(true);
+    });
+
+    // BASE SITE: live bug today — tags:{any:[]} is accepted by schema but transformTags
+    // skips empty arrays, so the transformed base has zero conditions → literal(true).
+    it('BASE SITE FIRES (live bug): tasks query with filters {tags:{any:[]}} throws ZodError matching /contains no executable conditions/', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { tags: { any: [] } } } });
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.message).toMatch(/contains no executable conditions/);
+        expect(issue.path).toEqual(['query', 'filters']);
+      }
+    });
+
+    // Boundary: {flagged:true, tags:{any:[]}} does NOT throw — flagged produces a real
+    // condition (the guard is whole-filter, not per-key; per-key is OMN-161 territory).
+    it('boundary: filters {flagged:true, tags:{any:[]}} does NOT throw — sibling produces conditions', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'tasks', filters: { flagged: true, tags: { any: [] } } } }),
+      ).not.toThrow();
+    });
+
+    // Browse controls: bare {} and absent filters must not throw
+    it('browse: filters {} does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks', filters: {} } })).not.toThrow();
+    });
+
+    it('browse: absent filters does NOT throw', () => {
+      expect(() => compiler.compile({ query: { type: 'tasks' } })).not.toThrow();
+    });
+
+    // Invariant non-firing sweep: one minimal filter per supported key family,
+    // as (a) base filters and (b) a single OR branch paired with {flagged:true}.
+    // None should throw. This confirms the guard fires only when all conditions compile away.
+    describe('invariant non-firing sweep — no supported filter throws', () => {
+      const supportedFilters: Array<[string, Record<string, unknown>]> = [
+        ['id', { id: 'x' }],
+        ['status:active', { status: 'active' }],
+        ['completed:false', { completed: false }],
+        ['tags any', { tags: { any: ['x'] } }],
+        ['project', { project: 'P' }],
+        ['projectId', { projectId: 'p1' }],
+        ['parentTaskId', { parentTaskId: 't1' }],
+        ['dueDate before', { dueDate: { before: '2026-01-01' } }],
+        ['deferDate after', { deferDate: { after: '2026-01-01' } }],
+        ['plannedDate before', { plannedDate: { before: '2026-01-01' } }],
+        ['completionDate after', { completionDate: { after: '2020-01-01' } }],
+        ['added after', { added: { after: '2020-01-01' } }],
+        ['flagged', { flagged: true }],
+        ['blocked', { blocked: false }],
+        ['available', { available: true }],
+        ['inInbox', { inInbox: true }],
+        ['text contains', { text: { contains: 'x' } }],
+        ['name contains', { name: { contains: 'x' } }],
+        ['estimatedMinutes lessThan', { estimatedMinutes: { lessThan: 30 } }],
+      ];
+
+      for (const [label, filter] of supportedFilters) {
+        it(`(a) base: ${label} does not throw`, () => {
+          expect(() => compiler.compile({ query: { type: 'tasks', filters: filter as never } })).not.toThrow();
+        });
+
+        it(`(b) OR branch: ${label} paired with {flagged:true} does not throw`, () => {
+          expect(() =>
+            compiler.compile({
+              query: {
+                type: 'tasks',
+                filters: { OR: [filter as never, { flagged: true }] },
+              },
+            }),
+          ).not.toThrow();
+        });
+      }
+    });
+  });
+
+  // OMN-166: status:'on_hold' must reject on tasks/export queries (was silently inert — returned ALL tasks)
+  describe('OMN-166: status on_hold rejects on tasks/export queries', () => {
+    it('base: tasks query with filters {status:"on_hold"} throws ZodError with full steering message', () => {
+      try {
+        compiler.compile({ query: { type: 'tasks', filters: { status: 'on_hold' } } } as never);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        const issue = (e as z.ZodError).issues[0];
+        expect(issue.message).toMatch(/not supported on tasks or export/);
+        expect(issue.message).toMatch(/on-hold is a project status/);
+        expect(issue.message).toMatch(/projectId/);
+        expect(issue.path).toEqual(['query', 'filters', 'status']);
+      }
+    });
+
+    it('OR branch: filters {OR: [{status:"on_hold"}, {flagged: true}]} throws (was silent match-all widening)', () => {
+      expect(() =>
+        compiler.compile({
+          query: { type: 'tasks', filters: { OR: [{ status: 'on_hold' }, { flagged: true }] } },
+        } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('export type: {type:"export", filters:{status:"on_hold"}} throws', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { status: 'on_hold' } } } as never),
+      ).toThrow(z.ZodError);
+    });
+
+    it('control: status "active" compiles without throwing (completed:false)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'active' } } } as never);
+      expect(compiled.filters.completed).toBe(false);
+    });
+
+    it('control: status "completed" compiles without throwing (completed:true)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'completed' } } } as never);
+      expect(compiled.filters.completed).toBe(true);
+    });
+
+    it('control: status "dropped" compiles without throwing (dropped:true)', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'dropped' } } } as never);
+      expect(compiled.filters.dropped).toBe(true);
+    });
+
+    it('projects regression: {type:"projects", filters:{status:"on_hold"}} does NOT throw and maps to onHold', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { status: 'on_hold' } },
+      } as never);
+      expect(compiled.projectFilter).toBeDefined();
+      expect((compiled.projectFilter as Record<string, unknown>).status).toEqual(['onHold']);
     });
   });
 });

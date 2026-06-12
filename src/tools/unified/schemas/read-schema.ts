@@ -99,7 +99,7 @@ const filterFields = {
   // (TaskFilter) → `topLevelOnly` (ProjectFilter); null never reaches the
   // emitter as a folder *name*. See QueryCompiler.transformFilters and
   // generateProjectFilterCode.
-  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96)
+  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96). tasks/export queries REJECT this key with a steering error (OMN-162); enforcement in QueryCompiler via TASK_KEY_DISPOSITION.
 };
 
 // Flat filter: base fields only, no logical operators.

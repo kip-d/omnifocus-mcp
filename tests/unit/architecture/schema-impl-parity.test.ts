@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 
 import {
   TaskFieldEnum,
@@ -109,13 +110,20 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
     it(`compiler recognizes "${fieldName}" filter field`, () => {
       const compiler = new QueryCompiler();
       const value = FILTER_SAMPLES[fieldName];
+      const input = { [fieldName]: value };
+
+      // OMN-162: 'folder' is explicitly rejected on the tasks path with a
+      // steering message — that IS recognition (not silent drop). Assert
+      // the new contract without weakening unrelated assertions.
+      if (fieldName === 'folder') {
+        expect(() => compiler.transformFilters(input as any)).toThrow(z.ZodError);
+        return;
+      }
 
       // Spy on console.warn — the QueryCompiler emits this on unknown
       // properties. A field the compiler doesn't recognize would slip
       // through and trigger the warning.
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const input = { [fieldName]: value };
 
       const result = compiler.transformFilters(input as any);
 
