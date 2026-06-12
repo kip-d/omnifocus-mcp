@@ -241,7 +241,7 @@ FILTER OPERATORS:
 - text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
-- folder (projects queries): "<name>" matches folder-name substring; null = top-level projects only (no containing folder)
+- folder (projects queries ONLY): "<name>" matches folder-name substring; null = top-level projects only. On tasks/export queries folder and status: "on_hold" are rejected with guidance (query projects first, then tasks by projectId)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false
 - Projects filters: status, completed, flagged, name, text, folder, id. OR/NOT are not supported on projects queries (use one query per alternative).
 
