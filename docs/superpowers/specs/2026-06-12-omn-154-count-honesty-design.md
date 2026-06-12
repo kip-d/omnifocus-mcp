@@ -84,7 +84,8 @@ pre-offset, pre-limit, within the mode's collection (inbox mode counts inbox mat
   character truncation additionally keeps `truncation_message`. The flag means "data rows are not the full matching
   population." `truncated` is never set without `total_count` present.
 - **R6 — caches stay honest.** The projects cache entry stores the population alongside rows; cached responses rebuild
-  counts from stored values, never from row length. (Tags/folders caches: same rule where touched.)
+  counts from stored values, never from row length. The folders cache entry likewise stores the total (the cached
+  folders response currently returns no count at all). (Tags cache: same rule where touched.)
 - **R7 — folders rider.** `handleFolderQuery` surfaces the script's existing `total_available` as `metadata.total_count`
   with R2 truncation semantics (`total_folders` keyed alias retained for compatibility). The folders query has no
   filter, so pre-filter total = population. This converts the known silent-false-pass gotcha (absence checks beyond the
@@ -92,7 +93,12 @@ pre-offset, pre-limit, within the mode's collection (inbox mode counts inbox mat
 - **R8 — script changes.** Unsorted tasks, inbox, and projects scripts count all matches: hoist the `count >= limit`
   short-circuit so the predicate runs for every element, increment `totalMatched` per match, and push rows only within
   the offset/limit window. Scripts return `total_matched` beside the existing fields. Sorted tasks path already
-  complies.
+  complies. (`buildFilteredProjectsScript` has no offset option — the projects arm of the R2 formula always runs with
+  offset 0; do not add projects pagination here.)
+- **R9 — no-population fallback.** When a caller supplies no population, the response builders keep today's behavior:
+  `total_count` = row count, no `truncated` flag, and the trailing metadata spread still wins. This is honest for the
+  0/1-row id-lookup paths and preserves the countOnly path, which injects its truthful `total_count` (and patches the
+  summary) via that spread — R1's "countOnly unchanged" depends on it.
 
 ### Decisions recorded (alternatives not taken)
 
