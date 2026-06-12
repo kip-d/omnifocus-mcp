@@ -163,9 +163,9 @@ Error text (OR shown; AND and base analogous):
 
 ## 5. Linear hygiene
 
-- OMN-162: comment with premise correction (description already hedged; schema/behavior confirmed) + live probe numbers;
-  close via PR.
-- New ticket for the `status:'on_hold'` inert sibling (rider-audit finding), fixed in this same PR as an attributed task
-  — referenced from both tickets.
-- OMN-161: comment noting (1) the metadata self-contradiction detector, (2) that OMN-162 chose rejection explicitly to
-  leave folder semantics to 161.
+- OMN-162: premise-correction comment posted (2026-06-12); close via PR.
+- **OMN-166** (created): the `status:'on_hold'` inert sibling — fixed in this same PR as an attributed task.
+- **OMN-167** (created): option (a) — FILTER_DEF + OmniJS ancestor walk — preserved for post-OMN-161 review per Kip's
+  fork decision (2026-06-12).
+- OMN-161: comment noting (1) the metadata self-contradiction detector (`filters_applied` vs `filter_description`), (2)
+  that OMN-162 chose rejection explicitly to leave folder semantics to 161/167.
