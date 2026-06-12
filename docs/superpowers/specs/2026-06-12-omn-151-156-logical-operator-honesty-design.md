@@ -116,6 +116,11 @@ Rejection throws `z.ZodError` from `compile()` — exactly the OMN-131 surface (
 InvalidParams over MCP), and it fires **before** any cache interaction. No cache poisoning: legacy match-all cache
 entries are keyed by the empty `projectFilter`, which only legitimately-bare queries hit.
 
+**`id` is an exclusive fast path:** when `id` co-occurs with any other filter key, reject with steering ("id is an exact
+lookup; remove the other filters, or drop id to search"). Today's handler silently ignores co-filters once it sees `id`
+— the same drop class this design closes. (The tasks-side id fast path has the same shape; audit noted in §7, not in
+scope here.)
+
 Execution-phase verification tasks: confirm `compiled.filters.search` on projects is dead code (the compiler never sets
 `search`); grep all `compiled.filters` consumers on the projects path (`executeProjectIdLookup`, narrow-lookup,
 countOnly availability on the projects schema) and migrate them to `projectFilter`.
@@ -169,13 +174,14 @@ VALIDATION_ERROR and over MCP as InvalidParams.
 
 TDD per task (superpowers): the V1–V7 probes are the failing-test seeds. Unit: compiler merge/conflict/empty/multi-
 operator matrix, `buildAST` composition, projects disposition table exhaustiveness. Integration: C18-shape rejection
-
-- one mode+OR narrowing assertion. Full `npm run test:unit`, `npm run test:integration` (backgrounded), and
-  `npm run conformance` before PR.
+plus one mode+OR narrowing assertion. Full `npm run test:unit`, `npm run test:integration` (backgrounded), and
+`npm run conformance` before PR.
 
 ## 7. Follow-ups
 
 1. **OMN-161 (filed 2026-06-12):** per-query-type filter contracts redesign — absorbs "implement OR on projects" and the
    NOT-status array-complement mapping.
 2. Folders/tags handler seam audit findings (if non-trivial, ticket; likely fold into OMN-161 scope notes).
-3. Linear comment on OMN-151/156 noting V4/V5/V6 under-claims and that V6 (mode+OR) ships here.
+3. Tasks-side `id` fast path silently ignores co-occurring filters (same shape as the projects id rule pinned in §3.3) —
+   audit and fold into OMN-161 scope notes.
+4. Linear comment on OMN-151/156 noting V4/V5/V6 under-claims and that V6 (mode+OR) ships here.
