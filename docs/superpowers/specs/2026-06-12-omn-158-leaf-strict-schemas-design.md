@@ -59,8 +59,8 @@ unverified hope pre-OMN-139. For each schema:
 - Discriminators stay literals (`z.literal(true)`, `z.literal('created')`) per the parent spec — unchanged.
 - Success-branch-only modeling is unchanged: never add `error`-ish keys to a success schema.
 - Factories (`listResultSchema`, `astEnvelopeSchema`, `reviewSuccessSchema`) evolve so call sites pass typed row schemas
-  instead of getting `z.array(z.unknown())` — this is what retires the `z.ZodTypeAny` returns and with them the ~14
-  ESLint `@typescript-eslint/no-unsafe-argument` warnings (rider 6). Module-scope single instantiation is preserved.
+  instead of getting `z.array(z.unknown())` — this is what retires the `z.ZodTypeAny` returns and with them the ESLint
+  `@typescript-eslint/no-unsafe-argument` warnings (rider 6). Module-scope single instantiation is preserved.
 
 ## 4. Riders (scope additions from the OMN-139 reviews — Linear comments 2026-06-12)
 
