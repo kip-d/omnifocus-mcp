@@ -94,8 +94,9 @@ export function detectKnownErrorShape(value: unknown): ScriptError | null {
   }
 
   // Legacy: {error: true | 'true', message?, details?} — uses canonical SCRIPT_REPORTED context.
-  // The legacy dialect carries no `context` field, so there is no scriptContext to preserve;
-  // details passes through verbatim (asymmetry vs. the {success:false} branch below).
+  // The legacy dialect MAY carry a `context` field (some AST scripts emit one), but B2 does not
+  // preserve it in details — only the {success:false} dialect does, per spec §3. details passes
+  // through verbatim (asymmetry vs. the {success:false} branch below).
   if (obj.error === true || obj.error === 'true') {
     const message = typeof obj.message === 'string' ? obj.message : 'Script execution failed';
     return createScriptError(message, SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED, obj.details ?? 'No additional context');
