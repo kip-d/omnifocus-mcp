@@ -9,6 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING: canonical script-error `context` vocabulary** (OMN-159) — the wire-observable `context` strings on
+  `ScriptError` responses are normalized into one documented closed vocabulary. `'Legacy script error'` →
+  `'Script reported an error'`; `'OmniAutomation execution error'` → `'Script execution error'`; and `{success:false}`
+  scripts no longer surface their own `context` string on the wire — it canonicalizes to `'Script reported an error'`
+  with the script's original context preserved in `details.scriptContext` (no information loss). MCP clients that
+  pattern-match on the old `context` strings must update. The `error` value `'NULL_RESULT'` is unchanged. Alongside:
+  **returned `ScriptError`s are now logged to the tool-failures JSONL and counted as metrics failures** — previously
+  only _thrown_ errors were logged and a returned error (including the OMN-139 `'Unrecognized script output shape'`
+  fail-closed class) was silently counted as a success. The weekly diagnose-failures job now sees returned-error signal;
+  the failure log is no longer a lower bound for returned errors.
+
 - **Response schemas are now leaf-strict** (OMN-158) — the OMN-139 family schemas in
   `src/omnifocus/script-response-schemas.ts` validated only the top-level envelope structure, leaving every leaf as
   `z.unknown()`. They now carry full, source-verified field inventories (read from each emitting script, not from TS
