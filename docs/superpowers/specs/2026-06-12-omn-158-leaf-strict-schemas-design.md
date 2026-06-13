@@ -56,6 +56,9 @@ unverified hope pre-OMN-139. For each schema:
   different declared payload types. Leaf-strictness requires a `v3EnvelopeSchema(dataSchema)` factory with one
   per-operation data schema. "Module-scope single instantiation" means one instance **per operation**, created once at
   module scope — not one shared schema across operations.
+- **Name-keyed maps** (objects whose keys are user data — project/tag names, frequency labels: e.g. `projectStats`,
+  `tagStats`, `groupedByUrgency`, `byFrequency` in analytics payloads): use `z.record(<valueSchema>)` with a strict
+  value schema. The open key space there is the data model, not drift; leaf-strictness applies to the VALUE shape.
 - Discriminators stay literals (`z.literal(true)`, `z.literal('created')`) per the parent spec — unchanged.
 - Success-branch-only modeling is unchanged: never add `error`-ish keys to a success schema.
 - Factories (`listResultSchema`, `astEnvelopeSchema`, `reviewSuccessSchema`) evolve so call sites pass typed row schemas
