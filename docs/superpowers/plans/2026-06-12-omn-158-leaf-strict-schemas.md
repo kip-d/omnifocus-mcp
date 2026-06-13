@@ -81,8 +81,9 @@ const warningsArray = z.array(z.string());
 | reparented (to root)                  |                | action R · tagName R · message R — newParent\* keys structurally ABSENT (separate envelope literal)                                                                                                                                                                 |
 
 Note: `reparented` becomes TWO strict variants (with-parent / to-root) replacing today's single optional-keys variant.
-`batch_create` failure items: `taskId: z.null()`, `success: z.literal(false)` — these are SUCCESS-contract per-item data
-(like BulkDelete's `errors`), not the error dialect; rule 6 is not violated.
+The update-task variant is deliberately minimal — do NOT "helpfully" mirror create's keys (no `note`, no dates, no tags
+on update; verified defs.ts ~752-758). `batch_create` failure items: `taskId: z.null()`, `success: z.literal(false)` —
+these are SUCCESS-contract per-item data (like BulkDelete's `errors`), not the error dialect; rule 6 is not violated.
 
 - [ ] **Step 1: Write failing schema tests.** In `script-response-schemas.test.ts`, per schema above add: (a) a full
       representative payload passes; (b) payload with one extra leaf key inside a nested object (e.g.
@@ -129,11 +130,17 @@ Note: `reparented` becomes TWO strict variants (with-parent / to-root) replacing
   taskCounts:{total,available,completed:number}.strict() · nextTask:{id,name:string, flagged:boolean,
   dueDate:string|null}.strict() · stats:{active,completed,total,completionRate,overdue,flagged:number}.strict(). ALL
   optional. Re-verify against generateProjectFieldProjection + the performanceMode/includeStats branches.
-- Metadata schemas (`.strict()`, keys required unless noted): `TaskListMetadataSchema` {total_count,
-  total_matched:number · sorted_in_script:boolean · limit_applied, offset:number · offset_applied:number O · mode,
-  filter_description, optimization, architecture:string}; `ProjectListMetadataSchema` {total_available, total_matched,
+- Metadata schemas (`.strict()`): `TaskListMetadataSchema` {total_count:number R · total_matched:number **O** ·
+  sorted_in_script:boolean R · limit_applied, offset:number R · offset_applied:number O · mode:string R ·
+  filter_description:string **O** · optimization, architecture:string R}. **PATH TRAP:** the wrapper literal
+  (`list-tasks-ast.ts` ~96-106) writes every key and LOOKS unconditional, but it copies values from the inner script's
+  result and `JSON.stringify` drops the undefined ones — the id_lookup inner return (`buildTaskByIdScript`,
+  script-builder.ts ~705-710) emits only {tasks, count, mode, targetId}-shaped data, so
+  `total_matched`/`filter_description`/`offset_applied` are ABSENT on id-lookup reads. Trace BOTH the wrapper literal
+  AND every inner-script return (filtered / inbox / id_lookup) and mark optional any key missing on any path; getting
+  this wrong fail-closes live id-lookup reads. `ProjectListMetadataSchema` {total_available, total_matched,
   returned_count, limit_applied:number · performance_mode, optimization, filter_description:string ·
-  stats_included:boolean}.
+  stats_included:boolean} — all R, re-verify the same way against buildFilteredProjectsScript's single emission.
 
 **Factory evolution:**
 
@@ -148,11 +155,20 @@ export function listResultSchema<TRow extends z.ZodTypeAny, TMeta extends z.ZodT
 }
 ```
 
-`astEnvelopeSchema(itemsKey, itemSchema, summarySchema?, metadataSchema?)` analogous. Update ALL call sites in
-OmniFocusReadTool.ts (TASK_LIST_SCHEMA/PROJECT_LIST_SCHEMA with row+metadata schemas; TAG_LIST_SCHEMA with the
-basic-mode item `{id,name}.strict()` BUT see branch note below; PERSPECTIVE_LIST_SCHEMA with
-`{name:string, type:string, isBuiltIn:boolean, identifier:string|null, filterRules:z.null()}.strict()` rows and summary
-`{total:number, insights:string[]}.strict()`).
+`astEnvelopeSchema(itemsKey, itemSchema, summarySchema?, metadataSchema?)` analogous. **Update ALL factory call sites in
+BOTH tools in THIS task's commit** — the signature change otherwise compile-breaks the tree between Task 2 and Task 3:
+
+- OmniFocusReadTool.ts: TASK_LIST_SCHEMA/PROJECT_LIST_SCHEMA (row+metadata schemas); TAG_LIST_SCHEMA (basic-mode item
+  BUT see branch note below); PERSPECTIVE_LIST_SCHEMA with
+  `{name:string, type:string, isBuiltIn:boolean, identifier:string|null, filterRules:z.null()}.strict()` rows and
+  summary `{total:number, insights:string[]}.strict()`. Also the call sites at ~716/~850 — identify which schema each
+  passes and thread the typed versions.
+- OmniFocusAnalyzeTool.ts (~304-314): RECURRING_TASKS_SCHEMA (use the RecurringTaskRowSchema + summary/metadata schemas
+  — define them in THIS task in the schemas module, using the inventory in Task 3's RECURRING_TASKS bullet),
+  TAG_ITEMS_SCHEMA (tag-mode union per the hazard note), PROJECTS_LIST_SCHEMA/TASKS_LIST_SCHEMA (reuse
+  ProjectRowSchema/TaskRowSchema + the corrected metadata schemas — but VERIFY which script feeds the
+  parse_meeting_notes sites ~2646/2656/2681 and whether its metadata shape matches the read-tool wrapper's; if a site
+  receives the inner shape directly, give it the matching schema, not the wrapper's).
 
 **Tag-mode branch hazard:** `buildTagsScript` emits items as plain strings (mode 'names'), `{id,name}` (mode 'basic'),
 or the full shape with optional parentId/parentName/childrenAreMutuallyExclusive/usage (mode 'full'). Check which modes
@@ -164,39 +180,51 @@ tag-script-builder source. Tag summary:
 
 **Dedicated schemas:**
 
-- `CountResultSchema`: count:number R · filters_applied:z.unknown() O (passthrough echo — keep, comment why) ·
-  query_time_ms:number O · optimization:string O · filter_description:string O · scanned:number O · total_tasks:number O
-  · limited:boolean O · warning:string O. (limited/warning co-occur; keep both optional.)
+- `CountResultSchema`: count:number R · filters_applied:z.unknown() R (passthrough echo — keep unknown, comment why) ·
+  query_time_ms:number R · optimization:string R · filter_description:string R · scanned:number R · total_tasks:number R
+  · limited:boolean R (emitted on BOTH branches: `{warning, limited:true}` or `{limited:false}` — script-builder.ts
+  ~2063-2071) · warning:string O (the only conditional key). Over-optionality is the laxity this ticket removes — do not
+  blanket-optional these.
 - `FolderListSchema`: success:literal(true) · folders: array of {id,name,status,path:string · depth:number ·
   parentId:string O · parentName:string O · children: array of {id,name:string}.strict() O · childCount:number O ·
   projects: array of {id,name,status:string}.strict() O · projectCount:number O}.strict() ·
   metadata:{returned_count,total_available:number}.strict() O.
 - `ProjectByIdSchema`: projects:z.array(ProjectRowSchema) · count:number · mode:string · targetId:string.
-- `ExportResultSchema` → union (rider 4). Variants (each `.strict()`):
-  - csv: {format:literal('csv'), data:string, count:number, duration:number, limited:boolean O, message:string O}
-  - markdown: {format:literal('markdown'), data:string, count:number, duration:number}
-  - json: {format:literal('json'), data:z.array(ExportTaskRowSchema or ExportProjectRowSchema — see below),
-    count:number, duration:number, limited:boolean O, debug:DebugSchema O, message:string O}
+- `ExportResultSchema` → **replaced by TWO per-script unions** (rider 4); the call sites are distinct (task export vs
+  project export handlers in OmniFocusReadTool.ts ~1022/1209 vs ~1117/1230 — verify which handler runs which script and
+  pass the matching schema):
+  - `ExportTasksResultSchema` = union of (each `.strict()`; R/O verified against script-builder.ts ~1613-1747):
+    - csv empty: {format:literal('csv'), data:string, count:number, duration:number, message:string}
+    - csv non-empty: {format:literal('csv'), data:string, count:number, duration:number, limited:boolean R (always
+      emitted: `tasksAdded >= maxTasks`), message:string O (undefined-drop)}
+    - markdown: {format:literal('markdown'), data:string, count:number, duration:number}
+    - json: {format:literal('json'), data:z.array(ExportTaskRowSchema), count:number, duration:number, limited:boolean
+      R, debug:TaskExportDebugSchema R (both always emitted), message:string O}
+    - (if csv empty/non-empty can't be cleanly two variants — e.g. shared keys make the union ambiguous — a single csv
+      variant with limited:boolean O and message:string O is acceptable; note the choice in a comment)
+  - `ExportProjectsResultSchema` = union of (verify against export-projects.ts):
+    - csv / markdown: {format:literal, data:string, count:number, duration:number} — no limited/message/debug
+    - json: {format:literal('json'), data:z.array(ExportProjectRowSchema), count:number, duration:number,
+      debug:{totalProjectsProcessed:number, includeStats:boolean, optimizationUsed:string}.strict() R}
   - Task json debug: {totalTasksProcessed:number, maxTasksAllowed:number, filterDescription:string,
-    fieldsRequested:string[], optimizationUsed:string}.strict(). Project json debug: re-verify export-projects.ts — its
-    debug keys differ; inventory them from source.
+    fieldsRequested:string[], optimizationUsed:string}.strict().
   - `ExportTaskRowSchema`: closed set = EXPORT_FIELD_MAP keys (id,name,note,project,projectId,tags,deferDate,
     dueDate,plannedDate,completed,completionDate,flagged,estimated,created,createdDate,modified,modifiedDate), all
     optional; values: tags:string[] · completed/flagged:boolean · estimated:number · rest:string (empty-string
     fallbacks, no nulls). `ExportProjectRowSchema`: id,name,status:string R · note,parentId,parentName,deferDate,
     dueDate,plannedDate,effectivePlannedDate,completionDate,modifiedDate:string O · stats:{totalTasks,
     completedTasks,availableTasks,completionRate,overdueCount,flaggedCount:number}.strict() O.
-  - If task-export and project-export branch sets can't share one union cleanly, split into `ExportTasksResultSchema` /
-    `ExportProjectsResultSchema` and use each at its call site — the call sites are distinct; verify which handler
-    executes which script and pass the matching schema.
 
-- [ ] **Step 1: Write the projection-parity test** (`tests/unit/omnifocus/projection-parity.test.ts`): extract the case
-      labels from `generateFieldProjection` / `generateProjectFieldProjection` (export a `PROJECTABLE_TASK_KEYS` /
-      `PROJECTABLE_PROJECT_KEYS` const from script-builder.ts listing the switch's labels — and add a unit assertion
-      that every const entry has a switch case by grepping the built source, OR refactor the switch to iterate the
-      exported const so parity is by construction; prefer the const-driven switch if the diff is small, else the
-      grep-the-source assertion). Assert `Object.keys(TaskRowSchema.shape)` equals the exported const (plus
-      mode-injected reason/daysOverdue if not in the const). Run → FAILS (schema doesn't exist yet).
+- [ ] **Step 1: Write the projection-parity test** (`tests/unit/omnifocus/projection-parity.test.ts`). Mechanism (scoped
+      source-scan — do NOT grep the whole file, it has several unrelated `case` switches; do NOT read dist/):
+      `fs.readFileSync('src/contracts/ast/script-builder.ts')`, slice the text between
+      `function generateFieldProjection` and the next top-level `\nfunction ` declaration, extract `case '(\w+)':`
+      labels from that slice only; same for `generateProjectFieldProjection`. Assert the extracted label set equals
+      `Object.keys(TaskRowSchema.shape)` exactly (note: `reason`/`daysOverdue` ARE switch cases, no special-casing
+      needed for tasks). For projects, assert extracted labels ⊆ `Object.keys(ProjectRowSchema.shape)` and that the
+      difference is exactly {taskCounts, nextTask, stats} — those come from the performanceMode/includeStats branches,
+      not the switch. Run → FAILS (schema doesn't exist yet). (Alternative const-driven switch refactor rejected: larger
+      behavioral-risk diff for the same protection.)
 - [ ] **Step 2: Write failing fixture tests** for every schema above (same pattern as Task 1: full payload passes,
       nested extra key fails, wrong type fails, per-variant union checks: a csv payload with `debug` FAILS).
 - [ ] **Step 3: Implement** row schemas, metadata schemas, factory evolution, call-site updates, dedicated schemas.
@@ -249,8 +277,9 @@ templates, read the emission carefully):**
   daysUntilDue:number O · isOverdue:boolean O · overdueDays:number O · lastCompleted:string O}.strict(); summary
   {totalRecurring,returned,overdue,dueThisWeek:number, byFrequency:z.record(z.number())}.strict(); metadata
   {query_time_ms:number, optimization:string, options:z.unknown() O (echo)}.strict(). **Also check
-  buildRecurringSummaryScript's summary-only shape and which schema validates that endpoint today — if it flows through
-  a schema this task touches, give it its own strict schema.**
+  buildRecurringSummaryScript's summary-only shape and which schema validates that endpoint today — expected answer: it
+  appears EXPORTED BUT NEVER INVOKED from any tool (likely dead). If it truly has no call site, do NOT invent a schema;
+  note it in the PR body as a candidate orphan. Only if a call site exists give it its own strict schema.**
 - RecurringPatternsSchema: totalRecurring:number · patterns: array of PatternSchema{pattern:string, unit:string,
   steps:z.union([z.number(),z.string()]), count:number, percentage:number, examples:string[]}.strict() · byProject:
   array of {project:string, recurringCount:number, patterns: array of {pattern:string,count:number}.strict()}.strict() ·
@@ -356,6 +385,11 @@ only the `details.issues` payload of the `'Unrecognized script output shape'` Sc
 - [ ] **Step 3: Conformance gate:** run `npm run conformance` on this branch AND a same-day control on main (baselines
       drifted — OMN-168); llama3.1:8b + qwen2.5:7b; expect parity with the control (~84% qwen until OMN-168 lands).
       Probe owns the Ollama lifecycle (OMN-163).
+- [ ] **Step 3.5: Scope note for the PR body:** `VersionResponseSchema` in `src/omnifocus/version-detection.ts` (~33-37)
+      is an executeJson schema OUTSIDE the family module — explicitly out of OMN-158 scope (spec covers
+      `script-response-schemas.ts` families). State this in the PR body so reviewers don't flag it as a miss. OPTIONAL
+      freebie if trivial: `.strict()` + `ok: z.literal(true)` — only after verifying the version script emits `ok: true`
+      on success; skip if any doubt.
 - [ ] **Step 4:** Update CHANGELOG.md (Unreleased → leaf-strict response schemas, no wire-visible change on the success
       path; rejection `details.issues` slimmed for union schemas).
 - [ ] **Step 5: Commit + PR** targeting kip-d/omnifocus-mcp main, title
