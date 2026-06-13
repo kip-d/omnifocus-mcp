@@ -97,6 +97,38 @@ describe('Phase 3 AST Builders', () => {
       const code = generateProjectFilterCode(filter);
       expect(code).toContain('&&');
     });
+
+    // OMN-171 (S3): OR branches compile to a ||-joined group of recursive predicates
+    it('should generate OR branches joined with ||', () => {
+      const filter: ProjectFilter = {
+        orBranches: [{ flagged: true }, { status: ['active'] }],
+      };
+      const code = generateProjectFilterCode(filter);
+      expect(code).toContain('project.flagged === true');
+      expect(code).toContain('Project.Status.Active');
+      expect(code).toContain('||');
+    });
+
+    it('should AND base conditions with the OR group', () => {
+      const filter: ProjectFilter = {
+        flagged: true,
+        orBranches: [{ status: ['active'] }, { status: ['done'] }],
+      };
+      const code = generateProjectFilterCode(filter);
+      // base flagged AND (branch1 || branch2)
+      expect(code).toContain('project.flagged === true');
+      expect(code).toContain('&&');
+      expect(code).toContain('||');
+      expect(code).toContain('Project.Status.Active');
+      expect(code).toContain('Project.Status.Done');
+    });
+
+    it('should emit a single OR branch without a || operator', () => {
+      const filter: ProjectFilter = { orBranches: [{ flagged: true }] };
+      const code = generateProjectFilterCode(filter);
+      expect(code).toContain('project.flagged === true');
+      expect(code).not.toContain('||');
+    });
   });
 
   describe('isEmptyProjectFilter', () => {
@@ -125,6 +157,11 @@ describe('Phase 3 AST Builders', () => {
     it('should return false for filter with topLevelOnly', () => {
       expect(isEmptyProjectFilter({ topLevelOnly: true })).toBe(false);
     });
+
+    // OMN-171: OR branches are a real constraint
+    it('should return false for filter with orBranches', () => {
+      expect(isEmptyProjectFilter({ orBranches: [{ flagged: true }] })).toBe(false);
+    });
   });
 
   describe('describeProjectFilter', () => {
@@ -148,6 +185,14 @@ describe('Phase 3 AST Builders', () => {
     it('should describe top-level-only filter', () => {
       const desc = describeProjectFilter({ topLevelOnly: true });
       expect(desc).toContain('top-level');
+    });
+
+    // OMN-171: OR branches are described as (...) OR (...)
+    it('should describe OR branches', () => {
+      const desc = describeProjectFilter({ orBranches: [{ flagged: true }, { status: ['active'] }] });
+      expect(desc).toContain('OR');
+      expect(desc).toContain('flagged');
+      expect(desc).toContain('status');
     });
   });
 

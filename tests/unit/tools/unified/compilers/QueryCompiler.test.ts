@@ -1027,10 +1027,21 @@ describe('QueryCompiler', () => {
       // projectFilter no longer exists on CompiledQuery
       expect((compiled as any).projectFilter).toBeUndefined();
     });
-    it('throws from compile() for OR on projects (reaches BaseTool as VALIDATION_ERROR)', () => {
-      expect(() =>
-        compiler.compile({ query: { type: 'projects', filters: { OR: [{ name: { contains: 'a' } }] } } } as never),
-      ).toThrowError(z.ZodError);
+    it('OR on projects compiles to orBranches on compiled.filters (OMN-171 S3 — was reject)', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }] } },
+      } as never);
+      expect(compiled.type).toBe('projects');
+      expect((compiled.filters as Record<string, unknown>).orBranches).toEqual([
+        { name: 'a', nameOperator: 'CONTAINS' },
+        { name: 'b', nameOperator: 'CONTAINS' },
+      ]);
+    });
+    it('NOT on projects compiles to a status complement (OMN-171 S3 — was reject)', () => {
+      const compiled = compiler.compile({
+        query: { type: 'projects', filters: { NOT: { status: 'completed' } } },
+      } as never);
+      expect((compiled.filters as Record<string, unknown>).status).toEqual(['active', 'onHold', 'dropped']);
     });
     it('tasks queries have NormalizedTaskFilter on compiled.filters (not ProjectFilter shape)', () => {
       const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);

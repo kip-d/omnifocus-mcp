@@ -81,15 +81,6 @@ describe('transformProjectFilters — AND input-space merge', () => {
 });
 
 describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () => {
-  it('OR rejects with steering naming working alternatives (OMN-156 / C18)', () => {
-    const m = msgOf({ OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }] });
-    expect(m).toMatch(/not supported on projects/i);
-    expect(m).toMatch(/filters\.name|filters\.text|filters\.status/);
-    expect(m).toMatch(/one query per alternative/i);
-  });
-  it('NOT rejects with steering', () => {
-    expect(msgOf({ NOT: { status: 'completed' } })).toMatch(/not supported on projects/i);
-  });
   it.each([
     ['tags', { tags: { any: ['x'] } }],
     ['dueDate', { dueDate: { before: '2026-01-01' } }],
@@ -117,6 +108,94 @@ describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () 
   });
   it('unknown status value rejects instead of silently widening (defense-in-depth — schema rejects upstream)', () => {
     reject({ status: 'bogus' });
+  });
+});
+
+// OMN-171 (OMN-161 S3): OR/NOT are now SUPPORTED on projects queries.
+describe('transformProjectFilters — NOT (OMN-171): four-state status complement', () => {
+  it('NOT:{status:completed} → complement of done: [active, onHold, dropped]', () => {
+    expect(transformProjectFilters({ NOT: { status: 'completed' } } as never)).toEqual({
+      status: ['active', 'onHold', 'dropped'],
+    });
+  });
+  it('NOT:{status:active} → complement of active: [onHold, done, dropped]', () => {
+    expect(transformProjectFilters({ NOT: { status: 'active' } } as never)).toEqual({
+      status: ['onHold', 'done', 'dropped'],
+    });
+  });
+  it('NOT:{status:dropped} → complement of dropped: [active, onHold, done]', () => {
+    expect(transformProjectFilters({ NOT: { status: 'dropped' } } as never)).toEqual({
+      status: ['active', 'onHold', 'done'],
+    });
+  });
+  it('NOT:{status:on_hold} → complement of onHold: [active, done, dropped]', () => {
+    expect(transformProjectFilters({ NOT: { status: 'on_hold' } } as never)).toEqual({
+      status: ['active', 'done', 'dropped'],
+    });
+  });
+  it('NOT complement intersects with a compatible base status', () => {
+    // status:active ∩ complement-of-completed([active,onHold,dropped]) = [active]
+    expect(transformProjectFilters({ status: 'active', NOT: { status: 'completed' } } as never)).toEqual({
+      status: ['active'],
+    });
+  });
+  it('NOT complement contradicting the base status rejects (empty intersection)', () => {
+    // status:active ∩ complement-of-active([onHold,done,dropped]) = ∅
+    reject({ status: 'active', NOT: { status: 'active' } });
+  });
+  it('NOT with a non-status payload rejects with steering', () => {
+    const m = msgOf({ NOT: { flagged: true } });
+    expect(m).toMatch(/NOT/);
+    expect(m).toMatch(/status/i);
+  });
+  it('NOT with multiple keys rejects', () => {
+    reject({ NOT: { status: 'active', flagged: true } });
+  });
+});
+
+describe('transformProjectFilters — OR (OMN-171): branch compilation', () => {
+  it('pure OR of two name filters → orBranches with mapped flat ProjectFilters', () => {
+    expect(
+      transformProjectFilters({ OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }] } as never),
+    ).toEqual({
+      orBranches: [
+        { name: 'a', nameOperator: 'CONTAINS' },
+        { name: 'b', nameOperator: 'CONTAINS' },
+      ],
+    });
+  });
+  it('OR with base keys → base keys AND-compose with orBranches', () => {
+    expect(
+      transformProjectFilters({ flagged: true, OR: [{ status: 'active' }, { status: 'dropped' }] } as never),
+    ).toEqual({
+      flagged: true,
+      orBranches: [{ status: ['active'] }, { status: ['dropped'] }],
+    });
+  });
+  it('OR:[] rejects (empty operator)', () => reject({ OR: [] }));
+  it('OR with an empty branch rejects (would match everything)', () => {
+    reject({ OR: [{ name: { contains: 'a' } }, {}] });
+  });
+  it('OR branch with an unsupported key rejects naming the key', () => {
+    expect(msgOf({ OR: [{ name: { contains: 'a' } }, { tags: { any: ['x'] } }] })).toContain('tags');
+  });
+  it('OR branch with id + co-filter rejects (id exclusivity holds per branch)', () => {
+    reject({ OR: [{ id: 'abc', flagged: true }, { name: { contains: 'b' } }] });
+  });
+  it('NOT and OR compose: NOT folds into base status, OR adds orBranches (combined-operator lock)', () => {
+    // NOT:{status:completed} → base status [active,onHold,dropped]; OR adds branches alongside.
+    expect(
+      transformProjectFilters({
+        NOT: { status: 'completed' },
+        OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }],
+      } as never),
+    ).toEqual({
+      status: ['active', 'onHold', 'dropped'],
+      orBranches: [
+        { name: 'a', nameOperator: 'CONTAINS' },
+        { name: 'b', nameOperator: 'CONTAINS' },
+      ],
+    });
   });
 });
 

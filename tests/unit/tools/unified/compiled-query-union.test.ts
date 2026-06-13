@@ -36,6 +36,20 @@ describe('CompiledQuery discriminated union (OMN-161 S1)', () => {
       expect(String(e.issues?.[0]?.message ?? e.message)).toMatch(/folders queries/i);
     }
   });
+  it('projects: OR now compiles onto compiled.filters.orBranches (OMN-171 S3)', () => {
+    const compiled = c.compile({
+      query: { type: 'projects', filters: { OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }] } },
+    } as any);
+    expect(compiled.type).toBe('projects');
+    expect((compiled as any).filters.orBranches).toEqual([
+      { name: 'a', nameOperator: 'CONTAINS' },
+      { name: 'b', nameOperator: 'CONTAINS' },
+    ]);
+  });
+  it('projects: NOT now compiles onto a status complement (OMN-171 S3)', () => {
+    const compiled = c.compile({ query: { type: 'projects', filters: { NOT: { status: 'completed' } } } } as any);
+    expect((compiled as any).filters).toEqual({ status: ['active', 'onHold', 'dropped'] });
+  });
   it('tasks: unchanged — full task filter compiles onto filters', () => {
     const compiled = c.compile({ query: { type: 'tasks', filters: { flagged: true } } } as any);
     expect((compiled as any).filters.flagged).toBe(true);
