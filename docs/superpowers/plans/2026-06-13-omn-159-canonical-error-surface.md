@@ -92,10 +92,22 @@ branch uses `SCRIPT_ERROR_CONTEXT.EXECUTION_EXCEPTION`.
       references, OR (cleaner) by asserting the constant exists and the modules import from it and use no bare string
       literal as a context arg. Also assert `'Legacy script error'` and `'OmniAutomation execution error'` appear
       NOWHERE in `src/`. Run → FAILS (const doesn't exist; old strings present).
-- [ ] **Step 2: dialect/behavioral tests (failing).** In `script-result-types.test.ts`: legacy `{error:true}` → context
-      `SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED`; `{success:false, context:'X', message:'m'}` → context
-      `Script reported an error` AND `details` contains the original `'X'` (the context-to-details move); `{ok:false}` →
-      `ERROR_ENVELOPE`. In `OmniAutomation.test.ts`: the execution-error path → `Script execution error`. Run → FAIL.
+- [ ] **Step 2: dialect/behavioral tests — including the contradicting existing assertions (I1) and a NEW
+      execution-error kill-test (C2).** These existing assertions DIRECTLY contradict B2 and must be flipped (a
+      grep-for-renamed-strings sweep will NOT surface the first one because it pins a script-supplied value, so name
+      them explicitly): - `tests/unit/omnifocus/OmniAutomation.test.ts` ~line 405 asserts
+      `result.context === 'projects_for_review'` (the `{success:false}` own-context-wins behavior B2 deletes) → flip to
+      `'Script reported an error'` AND add an assertion that `'projects_for_review'` is now preserved in `details`. -
+      `OmniAutomation.test.ts` ~line 452 asserts `'Legacy script error'` → `'Script reported an error'`. -
+      `tests/unit/omnifocus/script-result-types.test.ts` ~lines 27-38 (the `{success:false}` / legacy tests pinning
+      own-context / `'Legacy script error'`) → canonical vocabulary + context-to-details. Then ADD (create, not update —
+      it's asserted nowhere today) an `OmniAutomation.test.ts` case that drives `executeJson` to CATCH an
+      `OmniAutomationError`: mock `execute` to throw `new OmniAutomationError(...)`, call `executeJson(script, schema)`,
+      assert the RETURNED `result.context === SCRIPT_ERROR_CONTEXT.EXECUTION_ERROR` (`'Script execution error'`). (The
+      existing OmniAutomationError test only asserts a throw, not the executeJson-returns-ScriptError path — without
+      this the headline rename has no kill-test.) Also: legacy `{error:true}` → `SCRIPT_REPORTED`;
+      `{success:false, context:'X', message:'m'}` → `Script reported an error` + `details` has `'X'`; `{ok:false}` →
+      `ERROR_ENVELOPE`. Run → FAIL.
 - [ ] **Step 3: implement** the constant + the three modules' emissions per above.
 - [ ] **Step 4: run** `npx vitest run tests/unit/omnifocus/` → PASS; `npm run test:unit` → green (update any other test
       pinning the old strings; the `NULL_RESULT` `error`-value tests must still pass unchanged). `npm run build`.
@@ -120,35 +132,47 @@ const execContext = new AsyncLocalStorage<{ returnedErrors: ScriptError[] }>();
 ```
 
 - `execute(args)`: wrap the existing body in
-  `return execContext.run({ returnedErrors: [] }, async () => { ...existing... })`.
+  `return execContext.run({ returnedErrors: [] }, async () => { ...existing... })`. **The success-metrics block (the
+  post-`executeValidated` `success: true` record) MUST stay INSIDE the `run()` callback** — do not hoist it out, or
+  `getStore()` returns undefined and the reconciliation breaks (I3). ALS propagates across the
+  `await this.executeValidated(...)` boundary by design, so the push in `execJson` (called deep inside the tool's
+  `executeValidated`) and this read share one store.
 - `execJson`: immediately before `return result;`, if `!result.success`, push it:
   `execContext.getStore()?.returnedErrors.push(result);` (optional-chain: a direct `execJson` caller outside `execute()`
-  has no store — harmless no-op; note version-detection uses `executeJson` directly, not `execJson`, so it never reaches
+  has no store — harmless no-op; version-detection uses `executeJson` directly, not `execJson`, so it never reaches
   here).
 - `execute()` success path (the post-`executeValidated` block that currently records `success: true`): read
   `const returned = execContext.getStore()?.returnedErrors ?? []`. If `returned.length > 0`:
-  - for EACH `err` in `returned`:
-    `this.logToolFailure(args, 'EXECUTION_ERROR', err.error, undefined, categorizeError(err, this.name))` (one JSONL
-    entry per returned ScriptError; reuses the existing writer + `failureLogSuppression()` gate; include the canonical
-    `err.context`).
-  - record the execution metric with `success: false` and an `errorType` (derive from the first/most-severe error's
-    categorization), NOT `success: true`.
+  - for EACH `err` in `returned`: **categorize on the MESSAGE STRING, not the ScriptError object** (C1 —
+    `categorizeError` does `String(error)` for non-Error inputs, so passing `err` yields `"[object Object]"` →
+    everything degrades to INTERNAL_ERROR). Use `const cat = categorizeError(err.error, this.name);` then
+    `this.logToolFailure(args, cat.errorType, err.error, undefined, cat)` (one JSONL entry per returned ScriptError;
+    reuses the existing writer + `failureLogSuppression()` gate; the canonical `err.context` rides in the entry via the
+    categorization/message).
+  - record the execution metric with `success: false` and `errorType` = the first error's `cat.errorType`, NOT
+    `success: true`.
   - else (no returned errors): record `success: true` as today.
-- `handleExecuteError` (thrown path) — add a guard so a returned error that was pushed AND then rethrown isn't logged
-  twice: before its `logToolFailure`, check whether the thrown error corresponds to an already-pushed store entry (e.g.
-  same `ScriptError` reference / message) and skip the duplicate. (In practice returned ScriptErrors are converted to
-  responses, not rethrown, so the common path is disjoint — but add the guard to be safe and test it.)
+- **No double-log guard on `handleExecuteError` (I4).** The paths are provably disjoint: `execJson` RETURNS the
+  ScriptError, the tool converts it to a response and returns normally — `handleExecuteError` (the catch path) is never
+  entered for a returned error, so it cannot double-log. Add a one-line code comment at `handleExecuteError` noting this
+  (returned errors are logged at the execJson/execute seam; thrown errors here; the two never overlap) so a future
+  reader doesn't think a guard is missing. Do NOT add a guard or a contrived returned-then-rethrown test.
 
 **Partial-success exclusion:** only `result.success === false` pushes. Bulk ops return `success:true` with per-item
 `errors[]` (OMN-144) — they never push. Add an explicit test.
 
-- [ ] **Step 1: failing routing tests.** With a concrete test BaseTool subclass whose `executeValidated` calls
-      `execJson` against a mocked `omniAutomation.executeJson`: (a) mock returns a `ScriptError` → assert exactly ONE
-      `logToolFailure` JSONL write (spy/mock the writer or `recordToolExecution`) AND the recorded metric is
-      `success:false` (not true); (b) mock returns `success:true` with a populated `errors[]` array (bulk shape) →
-      assert NO failure log + metric `success:true`; (c) `executeValidated` throws → still exactly one log (no double
-      via the guard); (d) a returned error then rethrown → exactly one log. Run → FAIL.
-- [ ] **Step 2: implement** the ALS context + the four edits above.
+- [ ] **Step 1: failing routing tests — CREATE a new harness (I2).** The existing `tests/unit/tools/base.test.ts` drives
+      `execJson` DIRECTLY (`(testTool as any).execJson(...)`), which bypasses `execute()`'s `execContext.run` wrapper →
+      no store → routing wouldn't fire. You MUST create a tool subclass whose `executeValidated` calls
+      `this.execJson(script, schema)`, and invoke it via `tool.execute(args)` (NOT direct execJson) so the ALS context
+      is established. Cases against a mocked `omniAutomation.executeJson`: (a) mock returns a `ScriptError` whose
+      `.error` contains `'timed out'` → assert exactly ONE `logToolFailure` JSONL write (mock the writer /
+      `recordToolExecution`), the recorded metric is `success:false`, AND its `errorType` is the real categorized type
+      (e.g. `SCRIPT_TIMEOUT`), NOT `INTERNAL_ERROR` (this is the C1 kill-test); (b) mock returns `success:true` with a
+      populated `errors[]` array (bulk shape) → NO failure log, metric `success:true`; (c) `executeValidated` throws →
+      exactly one log via the existing thrown path (handleExecuteError), and the returned-error path recorded nothing
+      (disjointness). Run → FAIL.
+- [ ] **Step 2: implement** the ALS context + the edits above (no guard).
 - [ ] **Step 3: run** the routing tests → PASS. `npm run test:unit` → green (the existing execute() success-metric tests
       may need updating to the ALS-aware shape — update them, don't loosen). `npm run build`.
 - [ ] **Step 4: mutation-verify the metrics fix (report result).** Temporarily revert the `execute()` block to
