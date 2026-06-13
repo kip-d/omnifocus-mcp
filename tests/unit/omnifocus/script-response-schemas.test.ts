@@ -1355,6 +1355,29 @@ describe('SlimmedDataSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('(a) accepts a task with estimatedMinutes: null (unset estimate — emitter assigns the raw JXA null)', () => {
+    // Regression guard: the slim emitter does `taskData.estimatedMinutes = task.estimatedMinutes()`
+    // with no ?./coalesce, so an unset estimate serializes as null and must validate (was z.number()
+    // .optional(), which fail-closed the whole fetchSlimmedData read for any un-estimated task).
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [
+        {
+          id: 't1',
+          name: 'No estimate',
+          completed: false,
+          flagged: false,
+          status: 'available',
+          tags: [],
+          estimatedMinutes: null,
+        },
+      ],
+      projects: [],
+      tags: [],
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
   it('(b) rejects payload missing tasks key', () => {
     const result = SlimmedDataSchema.safeParse({ projects: [], tags: [] });
     expect(result.success).toBe(false);
@@ -2927,7 +2950,6 @@ describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
           estimatedMinutes: 15,
           noteHead: 'Get 2%',
           children: 0,
-          note: 'Get 2% milk',
         },
       ],
       projects: [

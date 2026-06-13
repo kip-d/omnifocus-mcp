@@ -1103,10 +1103,11 @@ const SlimTaskSchema = z
     completionDate: z.string().optional(),
     creationDate: z.string().optional(),
     modificationDate: z.string().optional(),
-    estimatedMinutes: z.number().optional(),
+    // emitter assigns task.estimatedMinutes() with no ?./coalesce, so an unset estimate
+    // serializes as null (kept by JSON.stringify) — required-nullable, NOT optional.
+    estimatedMinutes: z.number().nullable().optional(),
     noteHead: z.string().optional(),
     children: z.number().optional(),
-    note: z.string().optional(),
   })
   .strict();
 
