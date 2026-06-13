@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   V3EnvelopeSuccessSchema,
+  v3EnvelopeSchema,
   astEnvelopeSchema,
   listResultSchema,
   CountResultSchema,
@@ -30,6 +31,13 @@ import {
   RecurringTasksMetadataSchema,
   PerspectiveItemSchema,
   PerspectiveSummarySchema,
+  PRODUCTIVITY_STATS_V3_SCHEMA,
+  TASK_VELOCITY_V3_SCHEMA,
+  OVERDUE_ANALYSIS_V3_SCHEMA,
+  WORKFLOW_ANALYSIS_V3_SCHEMA,
+  REVIEWS_LIST_TYPED_SCHEMA,
+  MARK_REVIEWED_TYPED_SCHEMA,
+  SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../../src/omnifocus/script-response-schemas.js';
 
 // Backward-compatible aliases — schemas moved here from OmniFocusReadTool.ts (Task 7 carry-forward)
@@ -1329,10 +1337,14 @@ describe('FOLDER_LIST_SCHEMA', () => {
 
 describe('SlimmedDataSchema', () => {
   it('(a) accepts representative slimmed-data payload', () => {
+    // Fixture corrected per OMN-158 spec §5: wire shapes for slimmed rows.
+    // tasks: id, name, completed, flagged, status, tags are always emitted.
+    // projects: id, name, status always emitted.
+    // tags: id, name, taskCount always emitted.
     const result = SlimmedDataSchema.safeParse({
-      tasks: [{ id: 't1', name: 'Buy milk' }],
-      projects: [{ id: 'p1', name: 'Errands' }],
-      tags: [{ id: 'tag1', name: 'home' }],
+      tasks: [{ id: 't1', name: 'Buy milk', completed: false, flagged: false, status: 'available', tags: [] }],
+      projects: [{ id: 'p1', name: 'Errands', status: 'active' }],
+      tags: [{ id: 'tag1', name: 'home', taskCount: 3 }],
     });
     expect(result.success).toBe(true);
   });
@@ -1376,11 +1388,16 @@ describe('SlimmedDataSchema', () => {
 
 describe('RecurringPatternsSchema', () => {
   it('(a) accepts representative recurring-patterns payload', () => {
+    // Fixture corrected per OMN-158 spec §5: wire shapes from get-recurring-patterns.ts.
+    // patterns[]: {pattern, unit, steps, count, percentage, examples} required.
+    // byProject[]: {project, recurringCount, patterns:[{pattern,count}]} required.
+    // mostCommon: same shape as patterns[] entry (or null).
+    // duration: number (Date.now() subtraction).
     const result = RecurringPatternsSchema.safeParse({
       totalRecurring: 12,
-      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 5 }],
-      byProject: [{ project: 'Work', recurringCount: 3 }],
-      mostCommon: { pattern: 'days_1', count: 5 },
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 5, percentage: 41, examples: ['Daily standup'] }],
+      byProject: [{ project: 'Work', recurringCount: 3, patterns: [{ pattern: 'days_1', count: 3 }] }],
+      mostCommon: { pattern: 'days_1', unit: 'days', steps: 1, count: 5, percentage: 41, examples: ['Daily standup'] },
       duration: 2300,
       debug: { optimizationUsed: 'OmniJS bridge' },
     });
@@ -1869,12 +1886,14 @@ describe('RecurringTaskRowSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts minimal recurring task row (id, name, repetitionRule, frequency)', () => {
+  it('(a) accepts minimal recurring task row with null unit (emitter default when no rule/name match)', () => {
+    // Fixture corrected per OMN-158 Task 2 spec-review: unit required + nullable; steps required.
+    // When ruleString is absent and name-inference fails, ruleData = {unit: null, steps: 1}.
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task1',
       name: 'Weekly review',
-      repetitionRule: {},
-      frequency: 'Weekly',
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Unknown Pattern',
     });
     expect(result.success).toBe(true);
   });
@@ -1882,7 +1901,7 @@ describe('RecurringTaskRowSchema', () => {
   it('(b) rejects missing required id', () => {
     const result = RecurringTaskRowSchema.safeParse({
       name: 'Weekly review',
-      repetitionRule: {},
+      repetitionRule: { unit: null, steps: 1 },
       frequency: 'Weekly',
     });
     expect(result.success).toBe(false);
@@ -1892,7 +1911,7 @@ describe('RecurringTaskRowSchema', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task1',
       name: 'Weekly review',
-      repetitionRule: {},
+      repetitionRule: { unit: null, steps: 1 },
       frequency: 'Weekly',
       rogue: true,
     });
@@ -2039,6 +2058,848 @@ describe('PerspectiveSummarySchema', () => {
 
   it('(c) rejects closed-world: extra key in perspective summary', () => {
     const result = PerspectiveSummarySchema.safeParse({ total: 5, insights: [], rogue: true });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: RecurringTaskRowSchema nullability fix
+// ---------------------------------------------------------------------------
+
+describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
+  it('(nullability) accepts unit: null (no ruleString and no name-inference match)', () => {
+    // This is the key regression test: the emitter sets ruleData.unit = null by default
+    // when parseRuleString finds no FREQ= and inferFrequencyFromName returns null.
+    // The old schema had z.string().optional() which REJECTED null — this test would
+    // have FAILED before the fix.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Some unrecognized task',
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) accepts unit: string (parsed from RRULE)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Daily task',
+      repetitionRule: { unit: 'days', steps: 1, ruleString: 'FREQ=DAILY', _inferenceSource: 'ruleString' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) accepts method: null (when repetitionRule.method.name resolves to null)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      repetitionRule: { unit: 'weeks', steps: 1, method: null },
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) rejects unit: undefined (unit is required, not optional)', () => {
+    // unit is required (must be present, may be null), NOT optional (may be absent).
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      repetitionRule: { steps: 1 }, // unit key absent
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(nullability) rejects missing steps (steps required)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      repetitionRule: { unit: null }, // steps absent
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects extra key inside repetitionRule (anchorDateKey removed from schema — not emitted)', () => {
+    // The emitter only emits unit/steps/ruleString/_inferenceSource/method.
+    // anchorDateKey/catchUpAutomatically/scheduleType were legacy; .strict() rejects them.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Daily task',
+      repetitionRule: { unit: 'days', steps: 1, anchorDateKey: 'due' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: v3EnvelopeSchema factory
+// ---------------------------------------------------------------------------
+
+describe('v3EnvelopeSchema factory', () => {
+  const TestSchema = v3EnvelopeSchema(z.object({ count: z.number(), label: z.string() }).strict());
+
+  it('(a) accepts typed data payload', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test' } });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects data payload with wrong type', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 'five', label: 'test' } });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects data payload with extra key (strict data)', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test', rogue: true } });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects envelope with extra top-level key', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test' }, extra: 'x' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: PRODUCTIVITY_STATS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('PRODUCTIVITY_STATS_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      summary: {
+        period: 'week',
+        totalProjects: 5,
+        activeProjects: 3,
+        totalTasks: 120,
+        completedTasks: 80,
+        completedInPeriod: 12,
+        availableTasks: 25,
+        completionRate: 0.6667,
+        dailyAverage: 1.7,
+        daysInPeriod: 7,
+        overdueCount: 3,
+      },
+      insights: ['Low task completion rate'],
+      metadata: {
+        generated_at: '2026-06-12T10:00:00.000Z',
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 450,
+        note: 'All statistics calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts minimal payload (no projectStats/tagStats)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with projectStats and tagStats (name-keyed maps)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        projectStats: {
+          'My Project': {
+            total: 10,
+            completed: 5,
+            available: 3,
+            completionRate: '50.0',
+            status: 'active',
+            hadRecentActivity: true,
+          },
+        },
+        tagStats: {
+          Work: { available: 5, remaining: 8, completionRate: '37.5' },
+        },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload with wrong-typed summary.completionRate (string not number)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: { ...minimalPayload.data.summary, completionRate: '66.67%' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing metadata.generated_at', () => {
+    const metaWithout = Object.fromEntries(
+      Object.entries(minimalPayload.data.metadata).filter(([k]) => k !== 'generated_at'),
+    );
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, metadata: metaWithout },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in data', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in projectStats value', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        projectStats: {
+          'My Project': {
+            total: 10,
+            completed: 5,
+            available: 3,
+            completionRate: '50.0',
+            status: 'active',
+            hadRecentActivity: true,
+            rogue: true,
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: TASK_VELOCITY_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('TASK_VELOCITY_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      velocity: {
+        period: 'week',
+        averageCompleted: '3.5',
+        averageCreated: '2.0',
+        dailyVelocity: '0.50',
+        backlogGrowthRate: '-1.5',
+      },
+      throughput: {
+        intervals: [
+          {
+            start: '2026-06-05T00:00:00.000Z',
+            end: '2026-06-12T23:59:59.000Z',
+            created: 14,
+            completed: 24,
+            label: '6/12/2026',
+          },
+        ],
+        totalCompleted: 24,
+        totalCreated: 14,
+      },
+      breakdown: { medianCompletionHours: '12.5', tasksAnalyzed: 1961 },
+      projections: { tasksPerDay: '0.50', tasksPerWeek: '3.5', tasksPerMonth: '15.0' },
+      optimization: 'omnijs_v3',
+      dateRange: { start: '2026-06-05', end: '2026-06-12' },
+    },
+  };
+
+  it('(a) accepts full payload with ISO string start/end in intervals', () => {
+    // Verifying Date.toJSON() → ISO string on the wire (emitter uses Date objects,
+    // JSON.stringify calls Date.prototype.toJSON() producing ISO-8601 string).
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects interval with non-string start (wrong type)', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        throughput: {
+          ...minimalPayload.data.throughput,
+          intervals: [{ start: new Date(), end: '2026-06-12T23:59:59.000Z', created: 1, completed: 2, label: 'x' }],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in velocity', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, velocity: { ...minimalPayload.data.velocity, rogue: true } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in interval', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        throughput: {
+          ...minimalPayload.data.throughput,
+          intervals: [
+            {
+              start: '2026-06-05T00:00:00.000Z',
+              end: '2026-06-12T23:59:59.000Z',
+              created: 1,
+              completed: 2,
+              label: 'x',
+              rogue: true,
+            },
+          ],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: OVERDUE_ANALYSIS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
+  const overdueTask = {
+    id: 'task1',
+    name: 'Overdue task',
+    dueDate: '2026-06-01T17:00:00.000Z',
+    daysOverdue: 11,
+    project: 'Work',
+    tags: ['urgent'],
+    blocked: false,
+    isNext: true,
+  };
+
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      summary: {
+        totalOverdue: 1,
+        blockedCount: 0,
+        unblockedCount: 1,
+        blockedPercentage: 0.0,
+        avgDaysOverdue: 11.0,
+        mostOverdue: overdueTask,
+      },
+      insights: ['1 overdue tasks found'],
+      groupedByUrgency: { critical: [], high: [overdueTask], medium: [], low: [] },
+      projectBottlenecks: [
+        { name: 'Work', overdueCount: 1, blockedCount: 0, avgDaysOverdue: '11.0', blockageRate: '0.0' },
+      ],
+      blockedTasks: [],
+      metadata: {
+        generated_at: '2026-06-12T10:00:00.000Z',
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 800,
+        tasksAnalyzed: 100,
+        note: 'All analysis calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts full payload with overdue task', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload where mostOverdue is null (no overdue tasks)', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: {
+          totalOverdue: 0,
+          blockedCount: 0,
+          unblockedCount: 0,
+          blockedPercentage: 0.0,
+          avgDaysOverdue: 0.0,
+          mostOverdue: null,
+        },
+        insights: ['No overdue tasks found - excellent!'],
+        groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
+        projectBottlenecks: [],
+        blockedTasks: [],
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed blockedPercentage (string not number)', () => {
+    // blockedPercentage: parseFloat(toFixed(1)) → number; must NOT be string
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: { ...minimalPayload.data.summary, blockedPercentage: '0.0' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in overdue task row', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        groupedByUrgency: { critical: [], high: [{ ...overdueTask, rogue: true }], medium: [], low: [] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra urgency bucket key (groupedByUrgency is strict)', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        groupedByUrgency: { critical: [], high: [], medium: [], low: [], extreme: [] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: WORKFLOW_ANALYSIS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      insights: [{ category: 'productivity', insight: '75% of tasks are ready', priority: 'medium' }],
+      patterns: {
+        workloadDistribution: { byProject: {}, byTag: {}, timeBuckets: {} },
+        workflowMetrics: { availablePercentage: '75.0', overduePercentage: '5.0' },
+        deferralAnalysis: { totalDeferred: 10, strategicDeferrals: 8, problematicDeferrals: 2 },
+      },
+      recommendations: [
+        { category: 'dependency_management', recommendation: 'Review blocked tasks', priority: 'high' },
+      ],
+      totalTasks: 200,
+      totalProjects: 15,
+      analysisTime: 1200,
+      dataPoints: 200,
+      metadata: {
+        analysisDepth: 'standard',
+        focusAreas: ['productivity', 'workload'],
+        maxInsights: 15,
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 1200,
+        note: 'All analysis calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts minimal payload without data key (includeRawData=false → undefined-dropped)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with data key (includeRawData=true passthrough)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, data: { tasks: [], projects: [], workload: {} } },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed insight (priority not string)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        insights: [{ category: 'productivity', insight: 'x', priority: 5 }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in patterns (patterns is strict)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        patterns: { ...minimalPayload.data.patterns, extraPattern: {} },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in metadata', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, metadata: { ...minimalPayload.data.metadata, rogue: true } },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: REVIEWS_LIST_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
+  it('(a) accepts payload with project items', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'My Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+        },
+      ],
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with all optional fields on project', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'My Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+          note: 'Some note',
+          folder: 'Work',
+          dueDate: '2026-07-01T17:00:00.000Z',
+          lastReviewDate: '2026-06-01T00:00:00.000Z',
+          nextReviewDate: '2026-07-01T00:00:00.000Z',
+          reviewInterval: { unit: 'weeks', steps: 4 },
+          taskCounts: { total: 5, available: 3, completed: 2 },
+        },
+      ],
+      metadata: {
+        total_found: 1,
+        generated_at: '2026-06-12T10:00:00.000Z',
+        filter_applied: { overdue: true },
+        search_criteria: { overdue_only: true, days_ahead: 7 },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects project missing required flagged field', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [{ id: 'p1', name: 'Project', status: 'active', sequential: false, completedByChildren: false }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on project row', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+          rogue: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: MARK_REVIEWED_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('MARK_REVIEWED_TYPED_SCHEMA', () => {
+  it('(a) accepts full mark-reviewed payload', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'My Project',
+        lastReviewDate: '2026-06-12T12:00:00.000Z',
+        nextReviewDate: '2026-07-10T12:00:00.000Z',
+        reviewInterval: { unit: 'weeks', steps: 4 },
+      },
+      changes: ['Last review date set to 2026-06-12'],
+      message: "Project 'My Project' marked as reviewed",
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with null reviewInterval and null dates', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'My Project',
+        lastReviewDate: '2026-06-12T12:00:00.000Z',
+        nextReviewDate: null,
+        reviewInterval: null,
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required project field', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({ success: true, message: 'done' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in project', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'Project',
+        lastReviewDate: null,
+        nextReviewDate: null,
+        reviewInterval: null,
+        rogue: true,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: SET_SCHEDULE_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('SET_SCHEDULE_TYPED_SCHEMA', () => {
+  it('(a) accepts full set-schedule payload with success + failure items', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [
+          {
+            projectId: 'p1',
+            projectName: 'My Project',
+            changes: ['Review interval set to every 4 weeks'],
+            reviewInterval: { unit: 'weeks', steps: 4 },
+            nextReviewDate: '2026-07-10T12:00:00.000Z',
+          },
+        ],
+        failed: [{ projectId: 'p2', projectName: 'Missing Project', error: 'Project not found' }],
+        summary: { total_requested: 2, successful_count: 1, failed_count: 1 },
+      },
+      message: 'Batch review schedule update completed: 1 successful, 1 failed',
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts failed entry without projectName (project not found early failure)', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [],
+        failed: [{ projectId: 'p2', error: 'Project not found' }],
+        summary: { total_requested: 1, successful_count: 0, failed_count: 1 },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required results.summary', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: { successful: [], failed: [] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in successful entry', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [
+          { projectId: 'p1', projectName: 'P', changes: [], reviewInterval: null, nextReviewDate: null, rogue: true },
+        ],
+        failed: [],
+        summary: { total_requested: 1, successful_count: 1, failed_count: 0 },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: Deepened RecurringPatternsSchema
+// ---------------------------------------------------------------------------
+
+describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
+  it('(a) accepts payload where mostCommon is null', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 0,
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects pattern entry missing percentage field', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 1, examples: [] }], // missing percentage
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) accepts steps as string ("unknown" when no pattern matched)', () => {
+    // The emitter sets steps = ruleData.steps || 'unknown' which produces string 'unknown'
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [
+        {
+          pattern: 'unknown_unknown',
+          unit: 'unknown',
+          steps: 'unknown',
+          count: 1,
+          percentage: 100,
+          examples: ['Task'],
+        },
+      ],
+      byProject: [],
+      mostCommon: null,
+      duration: 50,
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: extra key in pattern entry', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 1, percentage: 100, examples: [], rogue: true }],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in byProject entry', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [],
+      byProject: [{ project: 'Work', recurringCount: 1, patterns: [], rogue: true }],
+      mostCommon: null,
+      duration: 100,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: Deepened SlimmedDataSchema
+// ---------------------------------------------------------------------------
+
+describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
+  it('(a) accepts full payload with all optional fields on task row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [
+        {
+          id: 't1',
+          name: 'Buy milk',
+          completed: false,
+          flagged: true,
+          status: 'available',
+          tags: ['errands'],
+          project: 'Shopping',
+          projectId: 'p1',
+          deferDate: '2026-06-12T08:00:00.000Z',
+          dueDate: '2026-06-15T17:00:00.000Z',
+          creationDate: '2026-06-01T08:00:00.000Z',
+          modificationDate: '2026-06-10T10:00:00.000Z',
+          estimatedMinutes: 15,
+          noteHead: 'Get 2%',
+          children: 0,
+          note: 'Get 2% milk',
+        },
+      ],
+      projects: [
+        {
+          id: 'p1',
+          name: 'Shopping',
+          status: 'active',
+          taskCount: 5,
+          availableTaskCount: 3,
+          lastReviewDate: '2026-06-01T00:00:00.000Z',
+          nextReviewDate: '2026-07-01T00:00:00.000Z',
+        },
+      ],
+      tags: [{ id: 'tag1', name: 'errands', taskCount: 3 }],
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects task row missing required completed field', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [{ id: 't1', name: 'Task', flagged: false, status: 'available', tags: [] }],
+      projects: [],
+      tags: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in task row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [{ id: 't1', name: 'Task', completed: false, flagged: false, status: 'available', tags: [], rogue: true }],
+      projects: [],
+      tags: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in tag row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [],
+      projects: [],
+      tags: [{ id: 'tag1', name: 'Work', taskCount: 3, rogue: true }],
+    });
     expect(result.success).toBe(false);
   });
 });
