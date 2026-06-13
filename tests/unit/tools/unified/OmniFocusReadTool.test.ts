@@ -334,9 +334,9 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
-  // ─── OMN-156 (C-lite): compiled.projectFilter wiring ──────────────
+  // ─── projects filter wiring (OMN-156 typed transform; OMN-161 folded into the union) ──────────────
 
-  describe('OMN-156 projectFilter wiring', () => {
+  describe('projects filter wiring', () => {
     it('projects query with flagged filter reaches the script builder (was silently dropped, V7)', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
