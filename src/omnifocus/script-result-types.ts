@@ -93,7 +93,9 @@ export function detectKnownErrorShape(value: unknown): ScriptError | null {
     return createScriptError(message, SCRIPT_ERROR_CONTEXT.ERROR_ENVELOPE, value);
   }
 
-  // Legacy: {error: true | 'true', message?, details?} — uses canonical SCRIPT_REPORTED context
+  // Legacy: {error: true | 'true', message?, details?} — uses canonical SCRIPT_REPORTED context.
+  // The legacy dialect carries no `context` field, so there is no scriptContext to preserve;
+  // details passes through verbatim (asymmetry vs. the {success:false} branch below).
   if (obj.error === true || obj.error === 'true') {
     const message = typeof obj.message === 'string' ? obj.message : 'Script execution failed';
     return createScriptError(message, SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED, obj.details ?? 'No additional context');
@@ -118,6 +120,9 @@ export function detectKnownErrorShape(value: unknown): ScriptError | null {
  * `details` fields are spread in so they remain accessible.
  * Falls back to the raw envelope `value` when neither `details` nor a script
  * context is present.
+ *
+ * Consumer contract: consumers inspect `details.scriptContext` for the script's
+ * original context; the rest of `details` is dialect-dependent and best-effort.
  */
 function buildSuccessFalseDetails(obj: Record<string, unknown>, value: unknown): unknown {
   const scriptContext = typeof obj.context === 'string' ? obj.context : undefined;
