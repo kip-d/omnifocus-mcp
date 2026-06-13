@@ -42,21 +42,35 @@ surface is the unit tests that pin the strings, and the external MCP-client cont
 ## 3. Canonical vocabulary
 
 A single exported, documented constant map (e.g. `SCRIPT_ERROR_CONTEXT` in `script-result-types.ts`) pins the wire
-strings; unit tests assert against it. Five canonical contexts, each replacing today's ad-hoc string:
+strings; unit tests assert against it. **Seven** live context strings are emitted today across THREE modules
+(`script-result-types.ts`, `OmniAutomation.ts`, AND `base.ts` — the spec-review found two `base.ts` sites the first
+draft missed); the closed-vocabulary test must introspect all three modules, not just the seam.
 
-| Canonical context (wire string)            | Replaces                            | Source                                                                                                          |
-| ------------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `Script error envelope`                    | (unchanged)                         | modern `{ok:false, error:{message}}` envelope                                                                   |
-| `Script reported an error`                 | **`Legacy script error` (dropped)** | legacy `{error:true,...}` dialect AND `{success:false}` without its own `context`                               |
-| `Unrecognized script output shape`         | (unchanged)                         | fail-closed: matched no dialect, failed success schema (OMN-139)                                                |
-| `Script execution error`                   | `OmniAutomation execution error`    | `OmniAutomationError` (timeout / spawn / osascript failure) — drops the internal class name leaking to the wire |
-| `Unexpected error during script execution` | (unchanged)                         | generic catch                                                                                                   |
+| Canonical context (wire string)            | Replaces                            | Source                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Script error envelope`                    | (unchanged)                         | modern `{ok:false, error:{message}}` envelope (`script-result-types.ts`)                                                                                                                                                                                                                                                                                       |
+| `Script reported an error`                 | **`Legacy script error` (dropped)** | legacy `{error:true,...}` dialect AND `{success:false}` without its own `context` (`script-result-types.ts`)                                                                                                                                                                                                                                                   |
+| `Unrecognized script output shape`         | (unchanged)                         | fail-closed: matched no dialect, failed success schema (OMN-139) (`OmniAutomation.ts`)                                                                                                                                                                                                                                                                         |
+| `Script execution error`                   | `OmniAutomation execution error`    | `OmniAutomationError` (timeout / spawn / osascript failure) — drops the internal class name leaking (`OmniAutomation.ts`)                                                                                                                                                                                                                                      |
+| `Unexpected error during script execution` | (unchanged)                         | generic catch in `executeJson` (`OmniAutomation.ts`)                                                                                                                                                                                                                                                                                                           |
+| `Script returned null or undefined`        | (unchanged)                         | `base.ts` execJson null/empty result. **Carries `error: 'NULL_RESULT'` — that `error` value is LOAD-BEARING** (`OmniFocusAnalyzeTool` branches on `result.error === 'NULL_RESULT'`; `clustering.ts` IGNORE_SET keys on `categorization.errorType === 'NULL_RESULT'`). Canonicalize the context label only; preserve the `error: 'NULL_RESULT'` value verbatim. |
+| `Script execution exception`               | (unchanged)                         | `base.ts` execJson try/catch (mock-fallback / thrown-inside-execJson path)                                                                                                                                                                                                                                                                                     |
+
+**Bucket arithmetic (reconciling §2's "preserve ~5-6"):** 8 distinct context strings are emitted today; dropping the
+literal `Legacy script error` and folding `{success:false}`-with-own-context into `Script reported an error` leaves **7
+canonical wire contexts**. That honors "preserve distinctions" — every meaningful error class keeps its own wire
+context; only the redundant legacy/success pair merges and only the `Legacy script error` label is dropped.
 
 **Per-script `context` no longer leaks to the wire.** Today `detectKnownErrorShape` preserves a `{success:false}`
 script's own `context` field as the wire context (§3.4 precedence). B2 removes that: a `{success:false}` error
 canonicalizes to `Script reported an error`, and **the script's own context/message is preserved in `details`** (no
 information loss — it moves off the context-string contract into the diagnostic payload). This is the one behavioral
-change beyond the renames: it's what "no per-script vocabulary leaking to the wire" means.
+change beyond the renames: it's what "no per-script vocabulary leaking to the wire" means. **This deliberately
+supersedes the parent §3.4 mechanical-preservation precedence** ("use the script's own `context` when present, else
+`'Legacy script error'`") — that rule was OMN-139's preserve-semantics stopgap; B2 is where it's replaced. Verified no
+downstream consumer reads the script's own `context` (consumers read `result.error`/`result.details`; the circuit
+breaker substring-matches `result.context` only for connectivity keywords that script context never populated), so the
+move breaks nothing.
 
 Rules: contexts are the ONLY values `context` may take (closed vocabulary, asserted by a test that greps every
 `createScriptError` call site / introspects the constant). `error` (message) stays free-form and script-derived;
@@ -64,26 +78,42 @@ Rules: contexts are the ONLY values `context` may take (closed vocabulary, asser
 
 ## 4. Failure-log + metrics routing
 
-**Single logging point at the `execJson` seam** (`BaseTool.execJson` in `src/tools/base.ts`), where the `ScriptResult`
-is still visible as `success:false` before it's converted to a tool response. When `executeJson` returns a
-`ScriptError`:
+**Logging point: `BaseTool.execJson`** (`src/tools/base.ts`), where the `ScriptResult` is still visible as
+`success:false` before it is converted to a tool response. When `executeJson` returns a `ScriptError`:
 
 1. `logToolFailure(...)` it to the JSONL (reuse the existing writer + the `failureLogSuppression()` gate so tests/CI
-   don't write), with the canonical `context` as part of the entry and the existing categorization.
+   don't write), with the canonical `context` and the existing categorization.
 2. Record a **failure** metric for it.
 
-**Double-count avoidance (the load-bearing design constraint):** `execute()` currently records one `success:true` metric
-per call on the returned path. A returned `ScriptError` must count as exactly ONE failure, not
-one-success-plus-one-failure, and a returned error that the tool _also_ re-throws must not log twice (the thrown path
-already logs via `handleExecuteError`).
+**Coverage caveat — `execJson` is NOT the only `executeJson` caller (spec-review Critical).** The OMN-139-era structural
+cast (`omni as { executeJson?: ... }`) is GONE — `base.ts` now calls `this.omniAutomation.executeJson(...)` directly
+(typed). But `src/omnifocus/version-detection.ts` calls `executeJson` DIRECTLY, bypassing `BaseTool.execJson`. That site
+is **explicitly scoped OUT** of routing: it is startup version-detection, not a tool execution, and it has a deliberate
+safe fallback (a returned error means "couldn't detect version" → graceful default, not a user-facing tool failure). The
+plan documents this carve-out rather than letting "single point sees everything" stand unqualified; if a future non-tool
+`executeJson` caller appears it must make the same explicit in-or-out decision (same discipline as the no-opt-outs
+rule).
 
-- The returned-error logging+metric happens once at `execJson`; mark the resolved `ScriptError` (or thread a
-  per-`correlationId` flag) so `execute()`'s post-`executeValidated` block records the call as a failure (or suppresses
-  its `success:true`) instead of double-counting, and so `handleExecuteError` does not re-log if the same error is later
-  thrown. The plan must map, per the two paths (returned vs thrown), exactly one log + one metric.
+**Double-count avoidance (the load-bearing constraint — spec-review Important).** `execute()` records one `success:true`
+metric per call on the returned path, and by the time control reaches that metrics block the `ScriptError` has ALREADY
+been transformed into a tool-specific `StandardResponseV2` (`isError:true`, at tool-varying nesting) — so `execute()`
+cannot recover the `ScriptError` by inspecting its return value, and a plain instance flag would race (tool instances
+are reused across concurrent requests). Committed direction (the plan resolves the exact mechanism as its FIRST task,
+and it MUST NOT rely on the optional `correlationId`):
+
+- The returned-error log + failure metric is recorded ONCE, at `execJson`.
+- `execute()`'s returned-path `success:true` metric must be SUPPRESSED for that call. Mechanism must be
+  **execution-scoped, not an instance flag** — candidate approaches for the plan to choose: (i) `AsyncLocalStorage`
+  carrying a per-execution "outcome already recorded" context; (ii) refactor so error responses carry a uniform,
+  known-location `isError` marker that `execute()` reads to decide success-vs-failure (removes the side channel entirely
+  but touches every tool's error-response shape); (iii) `execJson` returns an outcome the tool propagates to `execute()`
+  through the call's return value. Whichever: exactly ONE log + ONE metric per returned error, and the thrown path
+  (`handleExecuteError`) must not double-log a returned-then-rethrown error.
 - **Partial-success is NOT an error:** bulk ops (`BulkDeleteResultSchema`) return `success:true` with a per-item
-  `errors[]` array (OMN-144 — script-level success; zero-deletion failure is a tool-level error). Those stay successes;
-  only `ScriptResult.success===false` routes to the failure log. Confirm no `success:true`-with-errors path is swept in.
+  `errors[]` array (OMN-144 — script-level success; zero-deletion failure is surfaced as a tool-level envelope, not a
+  `ScriptError`). Verified: the bulk handler routes a ScriptError into the returned `success:true` envelope's
+  `errors[]`. Only `ScriptResult.success===false` routes to the failure log; no `success:true`-with-errors path is swept
+  in.
 
 ## 5. Internal matcher + test updates
 
@@ -92,11 +122,14 @@ already logs via `handleExecuteError`).
   diagnose-failures clustering Just Works on the newly-logged class. (Memory: project_diagnose_failures_scheduled,
   project_failure_log_real_signal — update the latter: returned errors are no longer a silent gap.)
 - **Tests:** update the unit tests pinning the old strings (`tests/unit/omnifocus/script-result-types.test.ts`,
-  `tests/unit/omnifocus/OmniAutomation.test.ts`) to the canonical vocabulary; add tests asserting (a) the closed
-  vocabulary (no `createScriptError` emits a string outside the constant), (b) `{success:false}`-with-own-context
-  canonicalizes to `Script reported an error` with the script context preserved in `details`, (c) a returned
-  `ScriptError` produces exactly one JSONL entry + one failure metric (no double-count, partial-success bulk stays
-  success).
+  `tests/unit/omnifocus/OmniAutomation.test.ts`, and any `base.ts` test pinning the NULL_RESULT / exception contexts) to
+  the canonical vocabulary; add tests asserting (a) the closed vocabulary — introspect/grep `createScriptError`
+  emissions across ALL THREE emitting modules (`script-result-types.ts`, `OmniAutomation.ts`, `base.ts`), so no stray
+  string ships; (b) `{success:false}`-with-own-context canonicalizes to `Script reported an error` with the script
+  context preserved in `details`; (c) the `NULL_RESULT` `error` value survives the context rename (the consumer +
+  IGNORE_SET still match); (d) a returned `ScriptError` produces exactly one JSONL entry + one failure metric (no
+  double-count, partial-success bulk stays success). The closed-vocabulary test lives wherever it can import the
+  `SCRIPT_ERROR_CONTEXT` constant and scan the three modules — not solely against the seam.
 
 ## 6. Testing
 
