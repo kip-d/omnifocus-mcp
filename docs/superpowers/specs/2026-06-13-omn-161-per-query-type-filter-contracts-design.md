@@ -98,10 +98,11 @@ type CompiledQuery =
 The `projectFilter?` field is **removed**; projects' typed filter lands on `filters`. Handlers switch on `compiled.type`
 (already the dispatch discriminant) and TS narrows `filters` to the right type.
 
-`TagFilter`, `FolderFilter`, `PerspectiveFilter`, `ExportFilter` are new types in `src/contracts/filters.ts`. In S1
+`TagFilter`, `FolderFilter`, `PerspectiveFilter` are new types in `src/contracts/filters.ts`. In S1
 `TagFilter`/`FolderFilter`/`PerspectiveFilter` are **empty** (`Record<string, never>` or a branded empty object) — they
-carry no supported keys yet; S2 adds the folder/tag fields. `ExportFilter` is the existing ad-hoc shape from
-`handleTaskExport`, lifted to a named type and produced by a transform (F9: drop the `.search` field — never populated).
+carry no supported keys yet; S2 adds the folder/tag fields. `ExportFilter` is **already a named type** (annotated at
+`OmniFocusReadTool.handleTaskExport`); S1 produces it via `transformExportFilters` and strips the dead `.search` field
+(F9 — never populated). No "lift" step is needed; the type exists.
 
 ### 3.2 Per-type transforms + dispatch
 
@@ -134,7 +135,10 @@ message (F6) and no longer accept-then-ignore a supported tasks key (F3 — it n
   build the path as `[...originToPath(origin), 'status']` so `on_hold` inside `OR[1]` reports `filters.OR[1].status`.
 - **F6 (right-type messages):** each type's reject error names its own supported set. The shared
   `FOLDER_TASKS_REJECTION`/`ON_HOLD_TASKS_REJECTION` constants stay for the tasks/export path (correct there);
-  tags/folders get their own messages from their transforms.
+  tags/folders get their own messages from their transforms. **Do NOT expand the tasks-side reject map** — the
+  `transformFlatFilter` reject-loop comment warns a second tasks-side reject key would need a per-key message map; S1
+  leaves tasks-side reject logic untouched (byte-identical pin) and routes tags/folders rejection through their _own_
+  transforms.
 - **F7 (empty-item symmetry):** extract a `usableKeyCount`-equivalent and apply it in projects' `mergeFrom` so
   `AND:[{}]` rejects on projects exactly as on tasks. Factor the empty-operator/empty-item rejection into shared helpers
   (`filter-merge.ts`) so all transforms get identical semantics.
@@ -143,8 +147,8 @@ message (F6) and no longer accept-then-ignore a supported tasks key (F3 — it n
 ### 3.4 Error surface
 
 All new rejects are `z.ZodError` with `path: ['query','filters', …]` and messages that name the offending key and the
-type's supported set (OMN-131 pattern) → VALIDATION_ERROR in the failure log, InvalidParams over MCP. Unchanged from the
-established surface; only the _origin paths_ (F5) and _message type-names_ (F6) are corrected.
+type's supported set (OMN-131 pattern) → VALIDATION*ERROR in the failure log, InvalidParams over MCP. Unchanged from the
+established surface; only the \_origin paths* (F5) and _message type-names_ (F6) are corrected.
 
 ### 3.5 Docs / spec / tests
 
