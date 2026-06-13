@@ -127,6 +127,12 @@ const zDef = (s: z.ZodTypeAny): ZodDef => (s as unknown as { _def: ZodDef })._de
  *   4. Otherwise (zero or multiple matches — e.g. two 'created' branches, or no literal
  *      discriminators like CompleteResultSchema's key-presence split) leave `issues` unchanged.
  *
+ * Limitation: a literal key wrapped in ZodOptional/ZodNullable (e.g. `z.literal('x').optional()`)
+ * is treated as a NON-discriminator and won't drive slimming — only bare `z.literal(...)` shape
+ * fields count. All current family-schema discriminators are bare literals, so this is unreachable
+ * today; documented so a future maintainer adding a wrapped-literal discriminator knows why
+ * slimming silently stops firing for it.
+ *
  * @param schema  The Zod schema passed to safeParse (any type; only ZodUnion is acted on).
  * @param value   The value that failed validation.
  * @param issues  The issues array from the ZodError (returned unchanged on non-union schemas).
