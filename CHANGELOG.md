@@ -7,6 +7,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Response schemas are now leaf-strict** (OMN-158) — the OMN-139 family schemas in
+  `src/omnifocus/script-response-schemas.ts` validated only the top-level envelope structure, leaving every leaf as
+  `z.unknown()`. They now carry full, source-verified field inventories (read from each emitting script, not from TS
+  types), `.strict()` at every depth, so any future drift in a script's output shape — a renamed, retyped, or extra leaf
+  field — surfaces loudly at runtime instead of passing silently. Field-projected rows enumerate the emitting projection
+  switch's case labels (guarded by a parity test); name-keyed maps use `z.record`; fixed-vocabulary maps use strict
+  structs. `TaskWriteResultSchema` is now a create∪update union and `ExportResultSchema` is split into per-format
+  task/project unions (a CSV result carrying a `debug` key, or a create/update key hybrid, now rejects). Mechanical
+  schema↔emission tie-in tests assert each success-path VM envelope against its schema, so emission drift fails CI
+  rather than only fail-closing in production. No wire-visible change on the success path. On a union-schema rejection,
+  the `'Unrecognized script output shape'` error's `details.issues` is slimmed to the single matching branch when
+  exactly one branch's literal discriminators match (presentation-only; the detection outcome, context string, and
+  message are unchanged). Retires all `@typescript-eslint/no-unsafe-argument` warnings from the schema factory/cast
+  class.
+
 ### Fixed
 
 - **Filter keys beside AND/OR/NOT and all logical-operator edge-cases now compose correctly** (OMN-151) — Filter keys at
