@@ -297,12 +297,25 @@ export interface ProjectFilter {
 }
 
 /**
- * OMN-161 S1: tags/folders/perspectives queries carry no compile-time filter yet.
- * Empty object types — distinct members of the CompiledQuery discriminated union.
- * S2 adds folder/tag name fields to TagFilter/FolderFilter (capability).
+ * OMN-161 S2: tags/folders queries support basic name (+ folder parent) filtering.
+ * Distinct members of the CompiledQuery discriminated union. Perspectives still
+ * carry no filter (reject-all). The compile boundary (reject-filters.ts) maps the
+ * input vocabulary into these typed shapes; the query scripts consume them.
  */
-export type TagFilter = Record<string, never>;
-export type FolderFilter = Record<string, never>;
+export interface TagFilter {
+  /** Tag name-scoped match (OMN-170). */
+  name?: string;
+  nameOperator?: TextOperator; // CONTAINS (default) | MATCHES
+}
+export interface FolderFilter {
+  /** Folder name-scoped match (OMN-170). */
+  name?: string;
+  nameOperator?: TextOperator; // CONTAINS (default) | MATCHES
+  /** `folder: "<name>"` → parent folder name (case-insensitive substring). */
+  parentName?: string;
+  /** `folder: null` → only folders with no parent (top-level). */
+  topLevelOnly?: boolean;
+}
 export type PerspectiveFilter = Record<string, never>;
 
 /**

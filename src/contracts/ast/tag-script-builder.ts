@@ -14,7 +14,9 @@
  */
 
 import type { TagQueryOptions, TagSortBy } from '../tag-options.js';
+import type { TextOperator } from '../filters.js';
 import type { GeneratedScript } from './script-builder.js';
+import { escapeTemplateString } from './bridge-escape.js';
 
 // =============================================================================
 // MAIN TAG SCRIPT BUILDER
@@ -27,13 +29,14 @@ import type { GeneratedScript } from './script-builder.js';
  * @returns Generated script ready for execution
  */
 export function buildTagsScript(options: TagQueryOptions): GeneratedScript {
-  const { mode, includeEmpty = true, sortBy = 'name', includeUsageStats = false, limit } = options;
+  const { mode, includeEmpty = true, sortBy = 'name', includeUsageStats = false, limit, name, nameOperator } = options;
 
   switch (mode) {
     case 'names':
       return buildTagNamesScript({ sortBy, limit });
     case 'basic':
-      return buildBasicTagsScript({ sortBy, limit });
+      // OMN-170 S2: name filter is supported in basic mode (the read seam's mode).
+      return buildBasicTagsScript({ sortBy, limit, name, nameOperator });
     case 'full':
       return buildFullTagsScript({ includeEmpty, sortBy, includeUsageStats, limit });
     default: {
@@ -51,6 +54,22 @@ export function buildTagsScript(options: TagQueryOptions): GeneratedScript {
 interface TagScriptOptions {
   sortBy?: TagSortBy;
   limit?: number;
+  /** OMN-170 S2: tag name filter (basic mode only). */
+  name?: string;
+  nameOperator?: TextOperator;
+}
+
+/**
+ * OMN-170 S2: emit a safe case-insensitive tag-name match predicate (OMN-149
+ * pattern — term injected via JSON.stringify only). Returns 'true' (match all)
+ * when no name filter is present.
+ */
+function tagNamePredicate(name?: string, operator?: TextOperator): string {
+  if (!name) return 'true';
+  if (operator === 'MATCHES') {
+    return `new RegExp(${JSON.stringify(name)}, 'i').test((tag.name || ''))`;
+  }
+  return `(tag.name || '').toLowerCase().includes(${JSON.stringify(name.toLowerCase())})`;
 }
 
 /**
@@ -140,10 +159,47 @@ function buildTagNamesScript(options: TagScriptOptions = {}): GeneratedScript {
  * Note: sortBy is ignored in basic mode (always sorted by name)
  */
 function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
-  const { limit } = options;
+  const { limit, name, nameOperator } = options;
   // sortBy is ignored in basic mode - always sorted by name
   const limitClause = limit ? `const limitCount = ${limit};` : '';
   const limitCheck = limit ? 'if (count >= limitCount) return;' : '';
+  const namePredicate = tagNamePredicate(name, nameOperator);
+  const hasFilter = !!name;
+
+  // OMN-170 S2: build the inner OmniJS as a plain source string, then wrap it via
+  // escapeTemplateString — the established nested-backtick safety mechanism. The
+  // name term lands inside this source (via namePredicate's JSON.stringify); the
+  // whole-source escape neutralizes any backtick/${ in the term (OMN-111/113).
+  const tagsOmniJsSource = `
+      (() => {
+        const tags = [];
+        let totalMatched = 0;
+        ${limitClause}
+        let count = 0;
+
+        // OMN-170 S2: tag name predicate (true = match all when unfiltered).
+        function matchesName(tag) { return ${namePredicate}; }
+
+        flattenedTags.forEach(tag => {
+          if (!(tag.id && tag.name)) return;
+          if (!matchesName(tag)) return;
+          totalMatched++;
+          ${limitCheck}
+          tags.push({
+            id: tag.id.primaryKey,
+            name: tag.name
+          });
+          count++;
+        });
+
+        return JSON.stringify({
+          items: tags,
+          mode: 'basic',
+          total: tags.length,
+          total_matched: totalMatched
+        });
+      })()
+    `;
 
   const script = `
 (() => {
@@ -152,30 +208,7 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
   try {
     const startTime = Date.now();
 
-    const omniJsScript = \`
-      (() => {
-        const tags = [];
-        ${limitClause}
-        let count = 0;
-
-        flattenedTags.forEach(tag => {
-          ${limitCheck}
-          if (tag.id && tag.name) {
-            tags.push({
-              id: tag.id.primaryKey,
-              name: tag.name
-            });
-            count++;
-          }
-        });
-
-        return JSON.stringify({
-          items: tags,
-          mode: 'basic',
-          total: tags.length
-        });
-      })()
-    \`;
+    const omniJsScript = \`${escapeTemplateString(tagsOmniJsSource)}\`;
 
     const resultJson = app.evaluateJavascript(omniJsScript);
     const result = JSON.parse(resultJson);
@@ -193,6 +226,7 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
       items: result.items || [],
       summary: {
         total: result.total || 0,
+        total_matched: result.total_matched != null ? result.total_matched : (result.total || 0),
         insights: ["Found " + (result.total || 0) + " tags (basic mode)"],
         query_time_ms: endTime - startTime,
         mode: 'basic',
@@ -215,8 +249,10 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
 
   return {
     script: script.trim(),
-    filterDescription: 'all tags (basic: id + name)',
-    isEmptyFilter: true,
+    filterDescription: hasFilter
+      ? `name ${nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${name}"`
+      : 'all tags (basic: id + name)',
+    isEmptyFilter: !hasFilter,
   };
 }
 

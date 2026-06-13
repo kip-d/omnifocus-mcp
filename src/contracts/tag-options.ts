@@ -13,6 +13,8 @@
  * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
  */
 
+import type { TextOperator } from './filters.js';
+
 // =============================================================================
 // MODE DEFINITIONS
 // =============================================================================
@@ -70,6 +72,13 @@ export interface TagQueryOptions {
    * Limit number of tags returned
    */
   limit?: number;
+
+  /**
+   * OMN-170 S2: tag name-scoped filter (basic mode only — the read seam's mode).
+   * Compiled from a TagFilter by reject-filters.ts. Other modes ignore it.
+   */
+  name?: string;
+  nameOperator?: TextOperator; // CONTAINS (default) | MATCHES
 }
 
 // =============================================================================
@@ -114,6 +123,8 @@ export function createTagQueryOptions(options: TagQueryOptions): TagQueryOptions
     sortBy: options.sortBy ?? 'name',
     includeUsageStats: options.includeUsageStats ?? false,
     limit: options.limit,
+    name: options.name,
+    nameOperator: options.nameOperator,
   };
 }
 
