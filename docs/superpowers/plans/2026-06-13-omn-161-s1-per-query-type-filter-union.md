@@ -84,8 +84,11 @@ describe('STATUS_TO_PROJECT (OMN-161 F4)', () => {
 // read-schema.ts — near the filterFields status field
 export const READ_STATUS_VALUES = ['active', 'completed', 'dropped', 'on_hold'] as const;
 export type ReadStatus = (typeof READ_STATUS_VALUES)[number];
-// and use z.enum(READ_STATUS_VALUES) for the status field so the enum and the type share one source
 ```
+
+**REPLACE the inline enum, do not add beside it.** The `status` field is currently
+`z.enum(['active','completed','dropped','on_hold'])` — change it to `z.enum(READ_STATUS_VALUES)` so the schema and the
+`ReadStatus` type share ONE source. Leaving the inline literal beside the new const half-wires the guarantee.
 
 In `filter-merge.ts`, change the loose Record to a `satisfies`-bound one:
 
@@ -524,6 +527,7 @@ compile(input: ReadInput): CompiledQuery {
       return { ...base, type: 'perspectives', filters: transformPerspectiveFilters(query.filters ?? {}) };
     case 'tasks':
     case 'export': {
+      // (default exhaustiveness guard at the end of the switch catches any future query.type)
       const raw: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
       if ('fastSearch' in query && query.fastSearch !== undefined) raw.fastSearch = query.fastSearch;
       const filters = normalizeFilter(raw);
@@ -546,6 +550,11 @@ compile(input: ReadInput): CompiledQuery {
         includeCompleted: 'includeCompleted' in query ? query.includeCompleted : undefined,
         fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
       };
+    }
+    default: {
+      // Exhaustiveness: a future query.type is a compile error here, never a silent undefined return.
+      const _exhaustive: never = query;
+      throw new Error(`Unhandled query type: ${JSON.stringify(_exhaustive)}`);
     }
   }
 }
