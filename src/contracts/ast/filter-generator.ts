@@ -14,7 +14,14 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, ProjectFilter, ProjectStatus, NormalizedTaskFilter, TextOperator } from '../filters.js';
+import type {
+  TaskFilter,
+  ProjectFilter,
+  ProjectStatus,
+  NormalizedTaskFilter,
+  TextOperator,
+  FolderFilter,
+} from '../filters.js';
 import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
@@ -391,4 +398,74 @@ export function describeProjectFilter(filter: ProjectFilter): string {
   }
 
   return conditions.join(' AND ');
+}
+
+// =============================================================================
+// FOLDER FILTER CODE GENERATION (OMN-170 S2)
+// =============================================================================
+
+/**
+ * Emit one case-insensitive match condition against a folder string field.
+ * CONTAINS lowercases both sides; MATCHES compiles to a RegExp test. The term
+ * is injected via JSON.stringify only — never raw interpolation (OMN-149-safe,
+ * mirror of projectTextCondition).
+ */
+function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
+  if (operator === 'MATCHES') {
+    return `new RegExp(${JSON.stringify(term)}, 'i').test(${accessor})`;
+  }
+  return `${accessor}.toLowerCase().includes(${JSON.stringify(term.toLowerCase())})`;
+}
+
+/**
+ * Generate OmniJS filter code for a FolderFilter (OMN-170 S2). Operates on the
+ * OmniJS `folder` object inside buildFilteredFoldersScript. Direct code
+ * generation (no AST), mirroring generateProjectFilterCode.
+ *
+ * @returns a JS predicate string; 'true' for an empty filter (match all).
+ */
+export function generateFolderFilterCode(filter: FolderFilter): string {
+  const conditions: string[] = [];
+
+  // Name search — name ONLY (folders have no note).
+  if (filter.name) {
+    conditions.push(`(${folderTextCondition("(folder.name || '')", filter.name, filter.nameOperator)})`);
+  }
+
+  // Parent folder name (case-insensitive substring), null-guarded.
+  if (filter.parentName) {
+    const escaped = JSON.stringify(filter.parentName.toLowerCase());
+    conditions.push(`(folder.parent && (folder.parent.name || '').toLowerCase().includes(${escaped}))`);
+  }
+
+  // Top-level only — no containing parent folder.
+  if (filter.topLevelOnly) {
+    conditions.push('!folder.parent');
+  }
+
+  return conditions.length > 0 ? conditions.join(' && ') : 'true';
+}
+
+/**
+ * Check if a folder filter is empty (will match all folders).
+ */
+export function isEmptyFolderFilter(filter: FolderFilter): boolean {
+  return !filter.name && !filter.parentName && !filter.topLevelOnly;
+}
+
+/**
+ * Human-readable description of the folder filter (for GeneratedScript.filterDescription).
+ */
+export function describeFolderFilter(filter: FolderFilter): string {
+  const conditions: string[] = [];
+  if (filter.name) {
+    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
+  }
+  if (filter.parentName) {
+    conditions.push(`parent folder name contains "${filter.parentName}"`);
+  }
+  if (filter.topLevelOnly) {
+    conditions.push('top-level only (no parent)');
+  }
+  return conditions.length === 0 ? 'all folders' : conditions.join(' AND ');
 }

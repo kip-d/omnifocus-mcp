@@ -101,19 +101,54 @@ describe('buildFilteredFoldersScript', () => {
     });
   });
 
-  describe('search filter', () => {
-    it('applies search filter when provided', () => {
-      const result = buildFilteredFoldersScript({ search: 'Work' });
-
-      expect(result.script).toContain('Work');
-      expect(result.script).toContain('searchFilter');
-      expect(result.filterDescription).toContain('search');
+  describe('filter (OMN-170 S2)', () => {
+    it('empty filter → matchesFilter returns true (match all)', () => {
+      const result = buildFilteredFoldersScript({});
+      expect(result.script).toContain('function matchesFilter(folder)');
+      expect(result.script).toContain('return true;');
+      expect(result.filterDescription).toBe('all folders');
     });
 
-    it('does not include search filter when empty', () => {
-      const result = buildFilteredFoldersScript({});
-      // Search filter variable should be empty string
-      expect(result.script).toContain('const searchFilter = ""');
+    it('name CONTAINS → case-insensitive substring predicate on folder.name', () => {
+      const result = buildFilteredFoldersScript({ filter: { name: 'Work', nameOperator: 'CONTAINS' } });
+      expect(result.script).toContain('(folder.name || \'\').toLowerCase().includes("work")');
+      expect(result.filterDescription).toContain('name contains "Work"');
+    });
+
+    it('name MATCHES → safe RegExp predicate (no raw interpolation)', () => {
+      const result = buildFilteredFoldersScript({ filter: { name: 'Wo.k', nameOperator: 'MATCHES' } });
+      expect(result.script).toContain('new RegExp("Wo.k", \'i\').test');
+    });
+
+    it('parentName → null-guarded substring on folder.parent.name', () => {
+      const result = buildFilteredFoldersScript({ filter: { parentName: 'Bills' } });
+      expect(result.script).toContain('folder.parent');
+      expect(result.script).toContain('(folder.parent.name || \'\').toLowerCase().includes("bills")');
+    });
+
+    it('topLevelOnly → !folder.parent', () => {
+      const result = buildFilteredFoldersScript({ filter: { topLevelOnly: true } });
+      expect(result.script).toContain('!folder.parent');
+    });
+
+    it('count honesty: filters BEFORE the limit cap, total_available from totalMatched', () => {
+      const result = buildFilteredFoldersScript({ filter: { name: 'X', nameOperator: 'CONTAINS' } });
+      // matchesFilter rejection precedes the limit guard
+      const matchIdx = result.script.indexOf('if (!matchesFilter(folder)) return;');
+      const limitIdx = result.script.indexOf('if (count >= limit) return;');
+      expect(matchIdx).toBeGreaterThanOrEqual(0);
+      expect(limitIdx).toBeGreaterThan(matchIdx);
+      expect(result.script).toContain('totalMatched++');
+      expect(result.script).toContain('total_available: totalMatched');
+      expect(result.script).not.toContain('total_available: flattenedFolders.length');
+    });
+
+    it('backtick-bearing name does not leave a raw backtick in the final script (escapeTemplateString)', () => {
+      const result = buildFilteredFoldersScript({ filter: { name: 'a`b', nameOperator: 'CONTAINS' } });
+      // The inner OmniJS source is wrapped in a backtick literal; any backtick in
+      // the term must be escaped (\\`) so it does not terminate the template.
+      expect(result.script).not.toMatch(/includes\("a`b"/);
+      expect(result.script).toContain('a\\`b');
     });
   });
 
@@ -155,13 +190,13 @@ describe('buildFilteredFoldersScript', () => {
   });
 
   describe('GeneratedScript return type', () => {
-    it('returns isEmptyFilter true when no search filter', () => {
+    it('returns isEmptyFilter true when no filter', () => {
       const result = buildFilteredFoldersScript({});
       expect(result.isEmptyFilter).toBe(true);
     });
 
-    it('returns isEmptyFilter false when search filter provided', () => {
-      const result = buildFilteredFoldersScript({ search: 'Work' });
+    it('returns isEmptyFilter false when a filter is provided', () => {
+      const result = buildFilteredFoldersScript({ filter: { name: 'Work', nameOperator: 'CONTAINS' } });
       expect(result.isEmptyFilter).toBe(false);
     });
   });

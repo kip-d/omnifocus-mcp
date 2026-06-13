@@ -6,8 +6,11 @@ import {
   generateFilterBlock,
   isEmptyFilter,
   describeFilter,
+  generateFolderFilterCode,
+  isEmptyFolderFilter,
+  describeFolderFilter,
 } from '../../../../src/contracts/ast/filter-generator.js';
-import type { TaskFilter } from '../../../../src/contracts/filters.js';
+import type { TaskFilter, FolderFilter } from '../../../../src/contracts/filters.js';
 
 describe('generateFilterCode', () => {
   describe('end-to-end pipeline', () => {
@@ -400,5 +403,42 @@ describe('describeFilter', () => {
 
   it('describes ID filter', () => {
     expect(describeFilter({ id: 'task-xyz' })).toContain('id = task-xyz');
+  });
+});
+
+describe('generateFolderFilterCode (OMN-170 S2)', () => {
+  it('empty filter → "true"', () => {
+    expect(generateFolderFilterCode({})).toBe('true');
+  });
+  it('name CONTAINS → case-insensitive substring on folder.name', () => {
+    const code = generateFolderFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });
+    expect(code).toContain('(folder.name || \'\').toLowerCase().includes("work")');
+  });
+  it('name MATCHES → safe RegExp on folder.name (OMN-149 pattern)', () => {
+    const code = generateFolderFilterCode({ name: 'Wo.k', nameOperator: 'MATCHES' });
+    expect(code).toContain("new RegExp(\"Wo.k\", 'i').test((folder.name || ''))");
+  });
+  it('parentName → substring on folder.parent.name (null-guarded)', () => {
+    const code = generateFolderFilterCode({ parentName: 'Bills' });
+    expect(code).toContain('folder.parent');
+    expect(code).toContain('(folder.parent.name || \'\').toLowerCase().includes("bills")');
+  });
+  it('topLevelOnly → !folder.parent', () => {
+    expect(generateFolderFilterCode({ topLevelOnly: true })).toContain('!folder.parent');
+  });
+  it('combines conditions with &&', () => {
+    const code = generateFolderFilterCode({ name: 'Q', nameOperator: 'CONTAINS', topLevelOnly: true });
+    expect(code).toContain('&&');
+  });
+  it('isEmptyFolderFilter', () => {
+    expect(isEmptyFolderFilter({})).toBe(true);
+    expect(isEmptyFolderFilter({ name: 'x' } as FolderFilter)).toBe(false);
+    expect(isEmptyFolderFilter({ topLevelOnly: true })).toBe(false);
+    expect(isEmptyFolderFilter({ parentName: 'p' })).toBe(false);
+  });
+  it('describeFolderFilter', () => {
+    expect(describeFolderFilter({})).toBe('all folders');
+    expect(describeFolderFilter({ name: 'Work', nameOperator: 'CONTAINS' })).toContain('name contains "Work"');
+    expect(describeFolderFilter({ topLevelOnly: true })).toContain('top-level');
   });
 });

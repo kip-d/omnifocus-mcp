@@ -276,6 +276,9 @@ export const TagItemSchema = z.union([TagFullItem, TagBasicItem, TagNameItem]);
 export const TagSummarySchema = z
   .object({
     total: z.number(),
+    // OMN-170 S2: matching population (pre-limit) for the basic-mode name filter;
+    // distinct from `total` (returned count). Optional — emitted by the basic builder.
+    total_matched: z.number().optional(),
     insights: z.array(z.string()),
     query_time_ms: z.number(),
     mode: z.string(),

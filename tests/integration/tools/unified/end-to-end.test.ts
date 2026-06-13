@@ -207,6 +207,103 @@ describe('Unified Tools End-to-End Integration', () => {
       expect(parsed).toHaveProperty('success');
     }, 60000);
 
+    // OMN-170 S2: folders/tags filtering capability (name + folder parent/topLevel).
+    // Data-agnostic: derive a probe substring from the live vault rather than
+    // hardcoding folder/tag names.
+    describe('OMN-170 S2: folders/tags filtering', () => {
+      let reqId = 900;
+      const readQuery = async (query: unknown) => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: reqId++,
+          method: 'tools/call',
+          params: { name: 'omnifocus_read', arguments: { query } },
+        });
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        return JSON.parse(content[0].text);
+      };
+
+      it('filters folders by name and reports an honest total_count', async () => {
+        const all = await readQuery({ type: 'folders' });
+        expectOk(all, 'unfiltered folders');
+        const folders: Array<{ name: string; parentId?: string }> = all.data?.folders ?? [];
+        if (folders.length === 0) {
+          // No folders in the vault — nothing to filter; assert the empty path is honest.
+          expect(all.metadata.total_count).toBe(0);
+          return;
+        }
+        // Probe substring: middle slice of the first folder's name (lowercased to
+        // exercise case-insensitive matching).
+        const probeName = folders[0].name;
+        const probe = probeName.slice(0, Math.max(1, Math.min(3, probeName.length))).toLowerCase();
+
+        const filtered = await readQuery({ type: 'folders', filters: { name: { contains: probe } } });
+        expectOk(filtered, 'folders by name');
+        const matched: Array<{ name: string }> = filtered.data?.folders ?? [];
+        // Every returned folder actually contains the probe (case-insensitive).
+        for (const f of matched) {
+          expect(f.name.toLowerCase()).toContain(probe);
+        }
+        // The filtered population is a subset of the full list, and at least the
+        // probe source matched.
+        expect(matched.length).toBeGreaterThan(0);
+        expect(matched.length).toBeLessThanOrEqual(folders.length);
+        // Honest count: total_count equals the matching population (not the full list).
+        expect(filtered.metadata.total_count).toBe(matched.length);
+        if (folders.length > matched.length) {
+          expect(filtered.metadata.total_count).toBeLessThan(all.metadata.total_count);
+        }
+      }, 60000);
+
+      it('folder: null returns only top-level folders (no parent)', async () => {
+        const topLevel = await readQuery({ type: 'folders', filters: { folder: null } });
+        expectOk(topLevel, 'top-level folders');
+        const folders: Array<{ parentId?: string }> = topLevel.data?.folders ?? [];
+        for (const f of folders) {
+          expect(f.parentId).toBeUndefined();
+        }
+      }, 60000);
+
+      it('filters tags by name', async () => {
+        const all = await readQuery({ type: 'tags' });
+        expectOk(all, 'unfiltered tags');
+        const tags: Array<{ name: string }> = all.data?.tags ?? [];
+        if (tags.length === 0) return;
+        const probeName = tags[0].name;
+        const probe = probeName.slice(0, Math.max(1, Math.min(3, probeName.length))).toLowerCase();
+
+        const filtered = await readQuery({ type: 'tags', filters: { name: { contains: probe } } });
+        expectOk(filtered, 'tags by name');
+        const matched: Array<{ name: string }> = filtered.data?.tags ?? [];
+        for (const t of matched) {
+          expect(t.name.toLowerCase()).toContain(probe);
+        }
+        expect(matched.length).toBeGreaterThan(0);
+        expect(matched.length).toBeLessThanOrEqual(tags.length);
+        // Count honesty (OMN-154): total_count == the matching population (total_matched),
+        // not the full tag list. No limit on tags, so matched.length == population.
+        expect(filtered.metadata.total_count).toBe(matched.length);
+      }, 60000);
+
+      it('cache honesty: a filtered folders query is not served the unfiltered slice', async () => {
+        // Warm the unfiltered browse cache first.
+        const all = await readQuery({ type: 'folders' });
+        expectOk(all, 'unfiltered folders (cache warm)');
+        const folders: Array<{ name: string }> = all.data?.folders ?? [];
+        if (folders.length < 2) return; // need a real subset to distinguish
+        const probeName = folders[0].name;
+        const probe = probeName.slice(0, Math.max(1, Math.min(3, probeName.length))).toLowerCase();
+
+        const filtered = await readQuery({ type: 'folders', filters: { name: { contains: probe } } });
+        expectOk(filtered, 'folders by name (post-cache)');
+        const matched: Array<{ name: string }> = filtered.data?.folders ?? [];
+        // The filtered result must reflect the filter, not echo the full cached list.
+        for (const f of matched) {
+          expect(f.name.toLowerCase()).toContain(probe);
+        }
+      }, 60000);
+    });
+
     it('should return count-only for active tasks (OmniJS in-process count)', async () => {
       const result = await sendRequest({
         jsonrpc: '2.0',

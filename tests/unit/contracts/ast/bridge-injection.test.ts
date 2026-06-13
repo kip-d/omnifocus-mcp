@@ -60,8 +60,11 @@ describe('OMN-65: bridge builders survive hostile filter strings', () => {
     // ExportFilter exposes free text as `search` (NOT `text` — TS2353 otherwise):
     it(`buildExportTasksScript search=${tag}`, () => assertSafe(buildExportTasksScript({ search: v }).script, v));
     // predicate-only builders (no in-body comment channel):
-    it(`buildFilteredFoldersScript search=${tag}`, () =>
-      assertSafe(buildFilteredFoldersScript({ search: v }).script, v));
+    // OMN-170 S2: folders filter free text via `filter.name` (the old `search`
+    // string option was removed; the name predicate routes through the same
+    // escapeTemplateString-wrapped omniJsSource).
+    it(`buildFilteredFoldersScript name=${tag}`, () =>
+      assertSafe(buildFilteredFoldersScript({ filter: { name: v, nameOperator: 'CONTAINS' } }).script, v));
     it(`buildProjectByIdScript projectId=${tag}`, () => assertSafe(buildProjectByIdScript(v).script, v));
   }
 });

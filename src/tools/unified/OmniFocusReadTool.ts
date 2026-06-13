@@ -56,6 +56,7 @@ import {
   type TaskQueryMode,
 } from '../tasks/task-query-pipeline.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
+import { isEmptyFolderFilter } from '../../contracts/ast/filter-generator.js';
 import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
 import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
 
@@ -281,6 +282,10 @@ COMPLETED TASKS:
 
 FOLDERS (type: "folders"):
 - Returns a FLAT list; each folder appears once as a full entry (id, name, status, depth, path, parentId). Folders with subfolders additionally carry a children array of lightweight {id,name} refs plus childCount for navigation — those nested refs are adjacency hints, NOT duplicate rows.
+- Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter folders by name; filters: { folder: "<name>" } matches folders whose PARENT folder name contains <name>; filters: { folder: null } returns top-level folders only. Other filter keys (status, flagged, logical operators, etc.) reject with a steering error.
+
+TAGS (type: "tags"):
+- Returns a flat {id, name} list. Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter tags by name. Other filter keys reject with a steering error.
 
 EXPORT TO DISK:
 - outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
@@ -805,25 +810,29 @@ PERFORMANCE:
     });
   }
 
-  private async handleTagQuery(_compiled: CompiledQuery): Promise<unknown> {
+  private async handleTagQuery(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'tags') throw new Error('handleTagQuery: wrong type');
     const timer = new OperationTimerV2();
-
-    // Check cache
-    const cacheKey = 'list:name:true:false:false:true:false';
-    const cached = this.cache.get<{
-      tags?: unknown[];
-      items?: unknown[];
-      count?: number;
-    }>('tags', cacheKey);
+    // OMN-170 S2: TagFilter (name only). Empty filter reuses the original browse
+    // cache key (byte-identical, no regression); a name filter gets its own key so
+    // a filtered query is never served the unfiltered slice (C17/R11 cache honesty).
+    const filter = compiled.filters;
+    const hasFilter = filter.name !== undefined;
+    const cacheKey = hasFilter
+      ? `list:name:true:false:false:true:false_${JSON.stringify(filter)}`
+      : 'list:name:true:false:false:true:false';
+    const cached = this.cache.get<unknown>('tags', cacheKey);
     if (cached) {
       return cached;
     }
 
-    // Build and execute AST-powered tag list script (basic mode, defaults)
+    // Build and execute AST-powered tag list script (basic mode; name filter S2).
     const tagOptions: TagQueryOptions = {
       mode: 'basic' as TagQueryMode,
       includeEmpty: true,
       sortBy: 'name' as TagSortBy,
+      name: filter.name,
+      nameOperator: filter.nameOperator,
     };
     const generatedScript = buildTagsScript(tagOptions);
     const result = await this.execJson(generatedScript.script, TAG_LIST_SCHEMA);
@@ -840,18 +849,32 @@ PERFORMANCE:
     }
 
     // Unwrap AST envelope: {ok: true, v: "ast", items: [...], summary: {...}}
-    const envelope = result.data as { ok?: boolean; v?: string; items?: unknown[]; summary?: { total?: number } };
+    const envelope = result.data as {
+      ok?: boolean;
+      v?: string;
+      items?: unknown[];
+      summary?: { total?: number; total_matched?: number };
+    };
     const items = envelope.items || [];
     const total = envelope.summary?.total ?? items.length;
+    // OMN-154/OMN-170: the matching population (pre-limit) is total_matched; falls
+    // back to total when the script omits it (no name filter / older builds).
+    const population = envelope.summary?.total_matched ?? total;
 
-    const response = createListResponseV2('tags', items, 'tags', {
-      ...timer.toMetadata(),
-      total,
-      operation: 'list',
-      mode: 'ast_unified',
-    });
+    const response = createListResponseV2(
+      'tags',
+      items,
+      'tags',
+      {
+        ...timer.toMetadata(),
+        total,
+        operation: 'list',
+        mode: 'ast_unified',
+      },
+      { population },
+    );
 
-    // Cache the result
+    // Cache the result (keyed by filter — see cacheKey above)
     this.cache.set('tags', cacheKey, response);
     return response;
   }
@@ -907,8 +930,14 @@ PERFORMANCE:
     }
   }
 
-  private async handleFolderQuery(_compiled: CompiledQuery): Promise<unknown> {
+  private async handleFolderQuery(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'folders') throw new Error('handleFolderQuery: wrong type');
     const timer = new OperationTimerV2();
+    // OMN-170 S2: FolderFilter (name / parent / topLevelOnly). Empty filter reuses
+    // the original browse cache key (byte-identical); a filter gets its own key so a
+    // filtered query is never served the unfiltered slice (C17/R11 cache honesty).
+    const filter = compiled.filters;
+    const isEmpty = isEmptyFolderFilter(filter);
 
     // Helper: build the folders response with honest counts on both paths
     const buildFoldersResponse = (
@@ -931,14 +960,14 @@ PERFORMANCE:
     };
 
     // Check cache first
-    const cacheKey = 'folders_list_basic';
+    const cacheKey = isEmpty ? 'folders_list_basic' : `folders_list_basic_${JSON.stringify(filter)}`;
     const cached = this.cache.get<{ folders: unknown[]; totalAvailable?: number }>('folders', cacheKey);
     if (cached) {
       return buildFoldersResponse(cached.folders, cached.totalAvailable, { from_cache: true });
     }
 
     // Build and execute AST-generated folder list script
-    const { script } = buildFilteredFoldersScript({ limit: 100 });
+    const { script } = buildFilteredFoldersScript({ filter, limit: 100 });
     const result = await this.execJson(script, FolderListSchema);
 
     if (!isScriptSuccess(result)) {
