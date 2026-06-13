@@ -120,6 +120,19 @@ describe('transformProjectFilters — rejects (P1/P3: never silently drop)', () 
   });
 });
 
+// OMN-161 F7: projects must reject empty AND items (symmetric with tasks)
+describe('OMN-161 F7: projects reject empty AND items (symmetric with tasks)', () => {
+  it('rejects AND:[{}] (empty item) symmetrically with tasks (OMN-161 F7)', () => {
+    expect(() => transformProjectFilters({ AND: [{}] } as any)).toThrow(z.ZodError);
+  });
+  it('rejects an AND item with only undefined values (OMN-161 F7)', () => {
+    expect(() => transformProjectFilters({ AND: [{ flagged: undefined }] } as any)).toThrow(z.ZodError);
+  });
+  it('still accepts a non-empty AND item', () => {
+    expect(transformProjectFilters({ AND: [{ flagged: true }] } as any)).toEqual({ flagged: true });
+  });
+});
+
 describe('disposition parity — every map key actually maps (MUTATION_DEFS pattern)', () => {
   const MAP_KEY_PROBES: Record<string, unknown> = {
     id: { id: 'abc' },

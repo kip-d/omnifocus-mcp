@@ -43,10 +43,15 @@ const NumberFilterSchema = z.union([
 // OR/NOT and task-only keys reject with steering.
 // The schema matches this capability. No z.lazy() needed.
 
+// OMN-161 F4: single source of truth for filter status values.
+// STATUS_TO_PROJECT in filter-merge.ts uses `satisfies Record<ReadStatus, ProjectStatus>`.
+export const READ_STATUS_VALUES = ['active', 'completed', 'dropped', 'on_hold'] as const;
+export type ReadStatus = (typeof READ_STATUS_VALUES)[number];
+
 // Shared filter field shape (used by both FlatFilterSchema and FilterSchema)
 const filterFields = {
   id: z.string().optional(), // Exact task ID lookup
-  status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
+  status: z.enum(READ_STATUS_VALUES).optional(),
   // OMN-72: `completed` boolean is the documented GTD idiom in CLAUDE.md/memory
   // (`completed: false` = only active). Accepted as a direct alias for the
   // completion dimension of `status`; explicit `completed` overrides `status`.

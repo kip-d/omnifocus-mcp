@@ -4,6 +4,7 @@ import {
   mergeConflictChecked,
   emptyOperatorError,
   filterDeepEqual,
+  STATUS_TO_PROJECT,
 } from '../../../../../src/tools/unified/compilers/filter-merge.js';
 
 describe('filterDeepEqual', () => {
@@ -80,6 +81,13 @@ describe('mergeConflictChecked', () => {
       // Reverse-mapped vocabulary: internal `projectId` is labeled project/projectId
       expect(issue.message).toContain('project/projectId');
     }
+  });
+});
+
+describe('STATUS_TO_PROJECT (OMN-161 F4)', () => {
+  it('maps every read-schema status value', () => {
+    expect(Object.keys(STATUS_TO_PROJECT).sort()).toEqual(['active', 'completed', 'dropped', 'on_hold']);
+    expect(STATUS_TO_PROJECT.on_hold).toBe('onHold');
   });
 });
 

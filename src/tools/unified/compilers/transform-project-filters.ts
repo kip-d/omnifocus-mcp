@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
+import type { FilterValue, FlatFilterValue, ReadStatus } from '../schemas/read-schema.js';
 import type { ProjectFilter, ProjectStatus } from '../../../contracts/filters.js';
 import { STATUS_TO_PROJECT, extractTextCondition, filterDeepEqual, emptyOperatorError } from './filter-merge.js';
 
@@ -70,7 +70,18 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
   mergeFrom('filters', top);
   if (AND !== undefined && Array.isArray(AND)) {
     if (AND.length === 0) throw emptyOperatorError('AND');
-    (AND as FlatFilterValue[]).forEach((cond, i) => mergeFrom(`AND[${i}]`, cond as Record<string, unknown>));
+    (AND as FlatFilterValue[]).forEach((cond, i) => {
+      // OMN-161 F7: reject empty AND items symmetrically with tasks.
+      const definedKeys = Object.values(cond as Record<string, unknown>).filter((v) => v !== undefined).length;
+      if (definedKeys === 0) {
+        throw projectsError(
+          ['AND', i],
+          `AND[${i}] contains no usable conditions. Every AND item must contain at least one filter; ` +
+            'remove the empty item or add a condition.',
+        );
+      }
+      mergeFrom(`AND[${i}]`, cond as Record<string, unknown>);
+    });
   }
 
   // 2. OR / NOT: unsupported on projects — loud, with working alternatives (P3; OMN-131 pattern).
@@ -119,7 +130,7 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
 
   let statusSet: ProjectStatus[] | undefined;
   if (typeof merged.status === 'string') {
-    const mapped = STATUS_TO_PROJECT[merged.status];
+    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
     // Defense-in-depth: schema rejects unknown status values upstream, but a
     // future schema-enum addition without a STATUS_TO_PROJECT entry must not
     // silently widen on the status dimension.
