@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
@@ -17,10 +18,25 @@ import { recordToolExecution, ToolExecutionMetrics } from '../utils/metrics.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { ScriptResult, SCRIPT_ERROR_CONTEXT, createScriptError } from '../omnifocus/script-result-types.js';
+import {
+  ScriptResult,
+  ScriptError,
+  SCRIPT_ERROR_CONTEXT,
+  createScriptError,
+} from '../omnifocus/script-result-types.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { classifyErrorWithContext } from '../utils/error-recovery.js';
 import { parseWithNormalization } from './normalization/normalize-input.js';
+
+/**
+ * Per-execution ALS context for routing returned ScriptErrors to the failure-log (OMN-159).
+ *
+ * Module-scope: shared across instances — ALS scopes by async-execution context,
+ * not by instance, so concurrent execute() calls each get their own isolated store.
+ * version-detection.ts calls executeJson directly (not via execJson) and is explicitly
+ * scoped out — it is startup detection with a deliberate safe fallback, not a tool execution.
+ */
+const execContext = new AsyncLocalStorage<{ returnedErrors: ScriptError[] }>();
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -109,53 +125,94 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   }
 
   /**
-   * Execute the tool with validation and metrics collection
+   * Execute the tool with validation and metrics collection.
+   *
+   * The body runs inside an AsyncLocalStorage context (execContext) so that
+   * execJson can push returned ScriptErrors into the store; the post-executeValidated
+   * block below reads the store and routes them to the failure-log + counts them as
+   * failures instead of successes. See OMN-159 Task 2 for the design rationale.
+   *
+   * CRITICAL (I3): the success/failure metrics block MUST stay INSIDE the run() callback.
+   * Hoisting it out would make execContext.getStore() return undefined because the ALS
+   * context is torn down when the run() callback resolves.
    */
   async execute(args: unknown): Promise<TResponse> {
     const startTime = Date.now();
     const parameterCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
 
-    try {
-      // OMN-122: strict-first, normalize-on-failure, re-validate-strict. Canonical
-      // (cloud/frontier) callers pass `this.schema` on the first try and never touch
-      // the normalizer — zero behavior change. Only inputs that would have errored
-      // anyway get a bounded repair attempt; an un-repairable input throws the SAME
-      // strict ZodError as before (handled below as a VALIDATION_ERROR).
-      const parseResult = parseWithNormalization(this.schema, args, this.name);
-      if (!parseResult.success) {
-        throw parseResult.error;
-      }
-      const validated = parseResult.data as z.infer<TSchema>;
-      if (parseResult.applied.length > 0) {
-        this.logNormalization(args, parseResult.applied);
-      }
-      this.logger.debug(`Executing ${this.name} with validated args:`, validated);
-
-      const result = await this.executeValidated(validated);
-
-      let resultSize: number | undefined;
+    return execContext.run({ returnedErrors: [] }, async () => {
       try {
-        resultSize = JSON.stringify(result).length;
-      } catch {
-        resultSize = undefined;
+        // OMN-122: strict-first, normalize-on-failure, re-validate-strict. Canonical
+        // (cloud/frontier) callers pass `this.schema` on the first try and never touch
+        // the normalizer — zero behavior change. Only inputs that would have errored
+        // anyway get a bounded repair attempt; an un-repairable input throws the SAME
+        // strict ZodError as before (handled below as a VALIDATION_ERROR).
+        const parseResult = parseWithNormalization(this.schema, args, this.name);
+        if (!parseResult.success) {
+          throw parseResult.error;
+        }
+        const validated = parseResult.data as z.infer<TSchema>;
+        if (parseResult.applied.length > 0) {
+          this.logNormalization(args, parseResult.applied);
+        }
+        this.logger.debug(`Executing ${this.name} with validated args:`, validated);
+
+        const result = await this.executeValidated(validated);
+
+        // Read the ALS store for returned ScriptErrors collected during executeValidated.
+        // MUST remain inside run() callback — getStore() returns undefined outside it.
+        const returned = execContext.getStore()?.returnedErrors ?? [];
+
+        if (returned.length > 0) {
+          // Route each returned ScriptError to the failure-log.
+          // C1: categorize on err.error (the message STRING), NOT err (the ScriptError object).
+          // categorizeError does String(error) for non-Error inputs, so passing err yields
+          // "[object Object]" → everything degrades to INTERNAL_ERROR.
+          for (const err of returned) {
+            const cat = categorizeError(err.error, this.name);
+            this.logToolFailure(args, cat.errorType, err.error, undefined, cat);
+          }
+          // Record metric as failure using the first error's categorized type
+          const firstCat = categorizeError(returned[0].error, this.name);
+          this.recordExecutionMetrics({
+            toolName: this.name,
+            executionTime: Date.now() - startTime,
+            success: false,
+            errorType: firstCat.errorType,
+            timestamp: startTime,
+            correlationId: this.correlationId,
+            parameterCount,
+          });
+        } else {
+          // No returned errors: record success as before
+          let resultSize: number | undefined;
+          try {
+            resultSize = JSON.stringify(result).length;
+          } catch {
+            resultSize = undefined;
+          }
+          this.recordExecutionMetrics({
+            toolName: this.name,
+            executionTime: Date.now() - startTime,
+            success: true,
+            timestamp: startTime,
+            correlationId: this.correlationId,
+            resultSize,
+            parameterCount,
+          });
+        }
+
+        return result;
+      } catch (error) {
+        return this.handleExecuteError(error, args, startTime, parameterCount);
       }
-
-      this.recordExecutionMetrics({
-        toolName: this.name,
-        executionTime: Date.now() - startTime,
-        success: true,
-        timestamp: startTime,
-        correlationId: this.correlationId,
-        resultSize,
-        parameterCount,
-      });
-
-      return result;
-    } catch (error) {
-      return this.handleExecuteError(error, args, startTime, parameterCount);
-    }
+    });
   }
 
+  // OMN-159 disjointness (I4): returned errors are logged at the execJson/execute seam
+  // (execContext ALS, above); thrown errors are logged here. The two paths never overlap:
+  // execJson RETURNS the ScriptError → tool converts it to a response → returns normally →
+  // this catch block is never entered for a returned error. No guard needed.
   private handleExecuteError(error: unknown, args: unknown, startTime: number, parameterCount: number): TResponse {
     const recordFailure = (errorType: string) => {
       this.recordExecutionMetrics({
@@ -497,6 +554,13 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
 
     // Execute the core operation
     const result = await executeCoreOperation();
+
+    // OMN-159: route returned ScriptErrors to the failure-log via the ALS store.
+    // Optional-chain: a direct execJson caller outside execute() has no store (harmless no-op).
+    // version-detection.ts calls executeJson directly (not execJson) — never reaches here.
+    if (!result.success) {
+      execContext.getStore()?.returnedErrors.push(result);
+    }
 
     // Track failures for circuit breaker
     if (!result.success) {
