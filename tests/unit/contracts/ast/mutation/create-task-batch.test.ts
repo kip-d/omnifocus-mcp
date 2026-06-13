@@ -76,7 +76,14 @@ function makeSandbox(
 }
 
 function runBatch(program: string, sandbox: Record<string, unknown>): { results: Array<Record<string, unknown>> } {
-  return JSON.parse(vm.runInNewContext(program, sandbox) as string) as { results: Array<Record<string, unknown>> };
+  const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string) as {
+    results: Array<Record<string, unknown>>;
+  };
+  // OMN-158 Task 4 (M1): every batch wire envelope — success-only AND partial-failure
+  // mixes — is tied to BatchCreateResultSchema here, so the failure-item union branch
+  // ({ taskId: null, success: false, error }) gets a mechanical drift guard too.
+  expectMatchesSchema(BatchCreateResultSchema, parsed);
+  return parsed;
 }
 
 describe('buildBatchCreateTasksProgram', () => {
@@ -224,9 +231,7 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox, taskCalls } = makeSandbox();
-    const rawResult = JSON.parse(vm.runInNewContext(program, sandbox) as string);
-    expectMatchesSchema(BatchCreateResultSchema, rawResult);
-    const { results } = rawResult as { results: Array<Record<string, unknown>> };
+    const { results } = runBatch(program, sandbox);
 
     expect(results).toEqual([
       { tempId: 'a', taskId: 'id-0', success: true, warnings: [] },
@@ -247,9 +252,7 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox, taskInstances, moveCalls } = makeSandbox();
-    const rawResult2 = JSON.parse(vm.runInNewContext(program, sandbox) as string);
-    expectMatchesSchema(BatchCreateResultSchema, rawResult2);
-    const { results } = rawResult2 as { results: Array<Record<string, unknown>> };
+    const { results } = runBatch(program, sandbox);
 
     expect(results.map((r) => r.success)).toEqual([true, true]);
     expect(moveCalls).toHaveLength(1);
@@ -356,9 +359,7 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox } = makeSandbox({ addTagThrowsForName: 'W0' });
-    const rawResult7 = JSON.parse(vm.runInNewContext(program, sandbox) as string);
-    expectMatchesSchema(BatchCreateResultSchema, rawResult7);
-    const { results } = rawResult7 as { results: Array<Record<string, unknown>> };
+    const { results } = runBatch(program, sandbox);
 
     expect(results.map((r) => r.success)).toEqual([true, true]); // best-effort: creation still succeeds
     expect(results[0].warnings).toEqual(['tags: addTag boom']);
