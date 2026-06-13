@@ -1,9 +1,10 @@
 # OMN-161: per-query-type filter contracts — design
 
-**Status:** DRAFT — pending review. **Baseline:** `main` @ `dd956de` (post-OMN-151/156/157/158/159, PRs
-#93/#95/#96/#97/#98). **Ticket:** OMN-161 (redesign: QueryCompiler emits typed per-query-type filters, no handler
-re-narrowing seams). **Normative spec:** `docs/spec/read-filters.md` (OMN-148 §1) — P1 (strict boundary), P2
-(conjunctive composition), P3 (no silent widening), §6 (projects/folders/tags/perspectives contracts). **Generalizes:**
+**Status:** APPROVED (Kip, 2026-06-13; spec-reviewer Approved; refined S1 = union + all honesty riders). **Baseline:**
+`main` @ `dd956de` (post-OMN-151/156/157/158/159, PRs #93/#95/#96/#97/#98). **Ticket:** OMN-161 (redesign: QueryCompiler
+emits typed per-query-type filters, no handler re-narrowing seams). **Normative spec:** `docs/spec/read-filters.md`
+(OMN-148 §1) — P1 (strict boundary), P2 (conjunctive composition), P3 (no silent widening), §6
+(projects/folders/tags/perspectives contracts). **Generalizes:**
 `docs/superpowers/specs/2026-06-12-omn-151-156-logical-operator-honesty-design.md` §3.3/§4 (the projects key-disposition
 table — this doc's per-type tables extend that pattern).
 
