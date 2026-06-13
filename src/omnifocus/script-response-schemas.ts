@@ -1000,10 +1000,12 @@ const ReviewListProjectSchema = z
 const ReviewListMetadataSchema = z
   .object({
     total_found: z.number(),
-    // passthrough echoes of caller filter/criteria — value shape varies, but the key is always present
-    filter_applied: z.unknown(),
+    // passthrough echoes of caller filter/criteria — value shape varies, but the key is always
+    // present (both emitted as object literals: filter || {} and a 4-key criteria object).
+    // z.record keeps the value open while enforcing key-presence — z.unknown() accepts absence.
+    filter_applied: z.record(z.unknown()),
     generated_at: isoDate,
-    search_criteria: z.unknown(),
+    search_criteria: z.record(z.unknown()),
   })
   .strict();
 
