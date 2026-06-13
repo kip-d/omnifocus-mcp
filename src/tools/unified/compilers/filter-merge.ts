@@ -1,17 +1,22 @@
 import { z } from 'zod';
 import type { TaskFilter, ProjectStatus } from '../../../contracts/filters.js';
+import type { ReadStatus } from '../schemas/read-schema.js';
 
 /**
  * OMN-156: shared status vocabulary for project-level status mapping.
  * Moved from QueryCompiler.transformStatus to prevent circular imports when
  * transformProjectFilters (Task 6 wiring) imports from this module.
+ *
+ * OMN-161 F4: `satisfies` binds this map to the ReadStatus enum —
+ * adding a new status value to READ_STATUS_VALUES without a matching
+ * entry here is a compile error.
  */
-export const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {
+export const STATUS_TO_PROJECT = {
   active: 'active',
   on_hold: 'onHold',
   completed: 'done',
   dropped: 'dropped',
-};
+} as const satisfies Record<ReadStatus, ProjectStatus>;
 
 /**
  * Extract a text condition (contains / matches) from a text filter object.

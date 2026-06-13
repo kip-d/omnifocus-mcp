@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
+import type { FilterValue, FlatFilterValue, ReadStatus } from '../schemas/read-schema.js';
 import type { ProjectFilter, ProjectStatus } from '../../../contracts/filters.js';
 import { STATUS_TO_PROJECT, extractTextCondition, filterDeepEqual, emptyOperatorError } from './filter-merge.js';
 
@@ -119,7 +119,7 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
 
   let statusSet: ProjectStatus[] | undefined;
   if (typeof merged.status === 'string') {
-    const mapped = STATUS_TO_PROJECT[merged.status];
+    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
     // Defense-in-depth: schema rejects unknown status values upstream, but a
     // future schema-enum addition without a STATUS_TO_PROJECT entry must not
     // silently widen on the status dimension.
