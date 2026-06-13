@@ -1,21 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
+  SCRIPT_ERROR_CONTEXT,
   detectKnownErrorShape,
   truncateRawOutput,
   slimUnionIssues,
 } from '../../../src/omnifocus/script-result-types.js';
 
 describe('detectKnownErrorShape', () => {
-  it('detects legacy {error: true} with verbatim wire context', () => {
+  it('detects legacy {error: true} — canonical SCRIPT_REPORTED context', () => {
     const r = detectKnownErrorShape({ error: true, message: 'boom', details: 'ctx' });
-    expect(r).toEqual({ success: false, error: 'boom', context: 'Legacy script error', details: 'ctx' });
+    expect(r?.success).toBe(false);
+    expect(r?.error).toBe('boom');
+    expect(r?.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
+    expect(r?.details).toBe('ctx');
   });
 
-  it("detects legacy {error: 'true'} (stringified by the bridge)", () => {
+  it("detects legacy {error: 'true'} (stringified by the bridge) — canonical SCRIPT_REPORTED context", () => {
     const r = detectKnownErrorShape({ error: 'true', message: 'boom' });
     expect(r?.success).toBe(false);
-    expect(r?.context).toBe('Legacy script error');
+    expect(r?.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
   });
 
   it('detects the modern envelope error {ok: false, error: {message}, v}', () => {
@@ -24,17 +28,20 @@ describe('detectKnownErrorShape', () => {
     expect(r?.error).toBe('bridge died');
   });
 
-  it('detects {success: false} and prefers the script-supplied context field', () => {
+  it('detects {success: false} — canonical SCRIPT_REPORTED context; script context moved to details', () => {
     const r = detectKnownErrorShape({ success: false, message: 'no project', context: 'projects_for_review' });
     expect(r?.success).toBe(false);
     expect(r?.error).toBe('no project');
-    expect(r?.context).toBe('projects_for_review'); // spec §3.4 precedence
+    // context is now the canonical string, NOT the script-supplied value
+    expect(r?.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
+    // script's original context is preserved in details.scriptContext
+    expect((r?.details as Record<string, unknown>)?.scriptContext).toBe('projects_for_review');
   });
 
-  it("falls back to 'Legacy script error' context for {success: false} without context", () => {
+  it('detects {success: false} without script context — canonical SCRIPT_REPORTED context', () => {
     const r = detectKnownErrorShape({ success: false, error: 'mark failed' });
     expect(r?.error).toBe('mark failed');
-    expect(r?.context).toBe('Legacy script error');
+    expect(r?.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
   });
 
   it('returns null for success shapes and non-errors', () => {

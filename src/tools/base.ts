@@ -17,7 +17,7 @@ import { recordToolExecution, ToolExecutionMetrics } from '../utils/metrics.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { ScriptResult, createScriptError } from '../omnifocus/script-result-types.js';
+import { ScriptResult, SCRIPT_ERROR_CONTEXT, createScriptError } from '../omnifocus/script-result-types.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { classifyErrorWithContext } from '../utils/error-recovery.js';
 import { parseWithNormalization } from './normalization/normalize-input.js';
@@ -478,9 +478,10 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
       try {
         const res: unknown = await this.omniAutomation.executeJson(script, schema);
 
-        // Handle null/undefined results (mock safety — some test mocks resolve null)
+        // Handle null/undefined results (mock safety — some test mocks resolve null).
+        // error:'NULL_RESULT' is load-bearing (consumer + clustering IGNORE_SET key); do not change it.
         if (res === null || res === undefined) {
-          return createScriptError('NULL_RESULT', 'Script returned null or undefined');
+          return createScriptError('NULL_RESULT', SCRIPT_ERROR_CONTEXT.NULL_RESULT);
         }
 
         // executeJson did total classification (OMN-139); no sniffing needed.
@@ -488,7 +489,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
       } catch (error) {
         return createScriptError(
           error instanceof Error ? error.message : String(error),
-          'Script execution exception',
+          SCRIPT_ERROR_CONTEXT.EXECUTION_EXCEPTION,
           error,
         );
       }

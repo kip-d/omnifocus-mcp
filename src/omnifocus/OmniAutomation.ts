@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
 import {
   ScriptResult,
+  SCRIPT_ERROR_CONTEXT,
   createScriptSuccess,
   createScriptError,
   detectKnownErrorShape,
@@ -92,12 +93,12 @@ export class OmniAutomation {
       });
       return createScriptError(
         'Script output did not match the expected success shape',
-        'Unrecognized script output shape',
+        SCRIPT_ERROR_CONTEXT.UNRECOGNIZED_SHAPE,
         { raw: truncateRawOutput(result), issues: slimUnionIssues(schema, result, validation.error.issues) },
       );
     } catch (error) {
       if (error instanceof OmniAutomationError) {
-        return createScriptError(error.message, 'OmniAutomation execution error', {
+        return createScriptError(error.message, SCRIPT_ERROR_CONTEXT.EXECUTION_ERROR, {
           script: error.details?.script,
           stderr: error.details?.stderr,
         });
@@ -105,7 +106,7 @@ export class OmniAutomation {
 
       return createScriptError(
         error instanceof Error ? error.message : 'Unknown execution error',
-        'Unexpected error during script execution',
+        SCRIPT_ERROR_CONTEXT.UNEXPECTED_ERROR,
         error,
       );
     }
