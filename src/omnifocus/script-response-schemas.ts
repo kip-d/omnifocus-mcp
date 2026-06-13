@@ -320,9 +320,13 @@ export const PerspectiveSummarySchema = z
 
 /**
  * Recurring task row — emitted by analyze-recurring-tasks-ast.ts buildRecurringTasksScript.
- * Source: the taskInfo object built per task: always has id, name, frequency, repetitionRule;
- * project/projectId conditional (containing project); dates conditional.
+ * Source: the taskInfo object built per task: always has id, name, frequency, repetitionRule,
+ * project, projectId; dates conditional.
  *
+ * project/projectId: REQUIRED + nullable. The taskInfo literal always emits both keys, set from
+ *   projectName/projId which default to null and are overwritten only when containingProject exists
+ *   (e.g. an inbox recurring task emits project:null, projectId:null). z.string().optional() was
+ *   WRONG: it fails-closed on null — same class as the unit:null bug below.
  * repetitionRule.unit: REQUIRED + nullable. When ruleString is absent and name-inference fails,
  *   ruleData.unit stays null (parseRuleString/inferFrequencyFromName return null).
  *   z.string().optional() was WRONG: it fails on null (OMN-158 Task 2 spec-review correction).
@@ -333,8 +337,8 @@ export const RecurringTaskRowSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    project: z.string().optional(),
-    projectId: z.string().optional(),
+    project: z.string().nullable(),
+    projectId: z.string().nullable(),
     repetitionRule: z
       .object({
         unit: z.string().nullable(), // required; null when no rule and no name-inference match
@@ -989,23 +993,24 @@ const ReviewListProjectSchema = z
 /**
  * Review-list metadata — emitted by projects-for-review.ts.
  * Source: metadata: {total_found, filter_applied (passthrough echo), generated_at, search_criteria (passthrough echo)}.
- * filter_applied echoes the raw filter param → z.unknown().
- * search_criteria echoes derived criteria → z.unknown().
+ * The metadata literal always emits all four keys on the success branch.
+ * filter_applied echoes the raw filter param → z.unknown() (always-present echo, NOT optional).
+ * search_criteria echoes derived criteria → z.unknown() (always-present echo, NOT optional).
  */
 const ReviewListMetadataSchema = z
   .object({
     total_found: z.number(),
-    // passthrough echoes of caller filter/criteria — shape varies with caller input
-    filter_applied: z.unknown().optional(),
+    // passthrough echoes of caller filter/criteria — value shape varies, but the key is always present
+    filter_applied: z.unknown(),
     generated_at: isoDate,
-    search_criteria: z.unknown().optional(),
+    search_criteria: z.unknown(),
   })
   .strict();
 
-/** Module-scope reviews_list envelope (REVIEWS_LIST_SCHEMA). */
+/** Module-scope reviews_list envelope (REVIEWS_LIST_SCHEMA). metadata always emitted on success. */
 export const REVIEWS_LIST_TYPED_SCHEMA = reviewSuccessSchema({
   projects: z.array(ReviewListProjectSchema),
-  metadata: ReviewListMetadataSchema.optional(),
+  metadata: ReviewListMetadataSchema,
 });
 
 /**
@@ -1023,11 +1028,11 @@ const MarkReviewedProjectSchema = z
   })
   .strict();
 
-/** Module-scope mark-project-reviewed envelope (MARK_REVIEWED_SCHEMA). */
+/** Module-scope mark-project-reviewed envelope (MARK_REVIEWED_SCHEMA). changes/message always emitted on success. */
 export const MARK_REVIEWED_TYPED_SCHEMA = reviewSuccessSchema({
   project: MarkReviewedProjectSchema,
-  changes: z.array(z.string()).optional(),
-  message: z.string().optional(),
+  changes: z.array(z.string()),
+  message: z.string(),
 });
 
 /**
@@ -1058,7 +1063,7 @@ const SetScheduleFailedEntrySchema = z
   })
   .strict();
 
-/** Module-scope set-review-schedule envelope (SET_SCHEDULE_SCHEMA). */
+/** Module-scope set-review-schedule envelope (SET_SCHEDULE_SCHEMA). message always emitted on success. */
 export const SET_SCHEDULE_TYPED_SCHEMA = reviewSuccessSchema({
   results: z
     .object({
@@ -1073,7 +1078,7 @@ export const SET_SCHEDULE_TYPED_SCHEMA = reviewSuccessSchema({
         .strict(),
     })
     .strict(),
-  message: z.string().optional(),
+  message: z.string(),
 });
 
 /**
@@ -1106,16 +1111,18 @@ const SlimTaskSchema = z
 /**
  * Slimmed project row — emitted by fetchSlimmedData inline JXA script projectData object.
  * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData.
- * id, name, status are always set. taskCount/availableTaskCount set via direct property access.
- * All dates are conditional (try/catch).
+ * id, name, status always set. taskCount/availableTaskCount are in the projectData literal
+ * (direct property access, NOT inner try/catch) → always present; the outer try/catch skips
+ * the whole project on error rather than emitting a partial object.
+ * All dates are conditional (inner try/catch).
  */
 const SlimProjectSchema = z
   .object({
     id: z.string(),
     name: z.string(),
     status: z.string(),
-    taskCount: z.number().optional(),
-    availableTaskCount: z.number().optional(),
+    taskCount: z.number(),
+    availableTaskCount: z.number(),
     lastReviewDate: z.string().optional(),
     nextReviewDate: z.string().optional(),
     creationDate: z.string().optional(),
@@ -1193,7 +1200,7 @@ export const RecurringPatternsSchema = z
     byProject: z.array(RecurringByProjectEntrySchema),
     mostCommon: RecurringPatternEntrySchema.nullable(),
     duration: z.number(),
-    debug: z.object({ optimizationUsed: z.string() }).strict().optional(),
+    debug: z.object({ optimizationUsed: z.string() }).strict(), // always emitted in the outer spread
   })
   .strict();
 

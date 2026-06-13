@@ -1339,11 +1339,12 @@ describe('SlimmedDataSchema', () => {
   it('(a) accepts representative slimmed-data payload', () => {
     // Fixture corrected per OMN-158 spec §5: wire shapes for slimmed rows.
     // tasks: id, name, completed, flagged, status, tags are always emitted.
-    // projects: id, name, status always emitted.
+    // projects: id, name, status, taskCount, availableTaskCount always emitted
+    //   (taskCount/availableTaskCount are in the projectData literal, not inner try/catch).
     // tags: id, name, taskCount always emitted.
     const result = SlimmedDataSchema.safeParse({
       tasks: [{ id: 't1', name: 'Buy milk', completed: false, flagged: false, status: 'available', tags: [] }],
-      projects: [{ id: 'p1', name: 'Errands', status: 'active' }],
+      projects: [{ id: 'p1', name: 'Errands', status: 'active', taskCount: 5, availableTaskCount: 3 }],
       tags: [{ id: 'tag1', name: 'home', taskCount: 3 }],
     });
     expect(result.success).toBe(true);
@@ -1411,11 +1412,14 @@ describe('RecurringPatternsSchema', () => {
       byProject: [],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge for 3-4x faster property access' },
     });
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts payload without optional debug key', () => {
+  it('(b) rejects payload missing debug key (debug always emitted in the outer spread)', () => {
+    // OMN-158 Task 3 spec-review: get-recurring-patterns.ts always returns {...parsed, duration, debug}
+    // → debug is required, NOT optional.
     const result = RecurringPatternsSchema.safeParse({
       totalRecurring: 3,
       patterns: [],
@@ -1423,7 +1427,7 @@ describe('RecurringPatternsSchema', () => {
       mostCommon: null,
       duration: 50,
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it('(b) rejects payload missing totalRecurring key', () => {
@@ -1888,10 +1892,13 @@ describe('RecurringTaskRowSchema', () => {
 
   it('(a) accepts minimal recurring task row with null unit (emitter default when no rule/name match)', () => {
     // Fixture corrected per OMN-158 Task 2 spec-review: unit required + nullable; steps required.
+    // project/projectId required + nullable (always-emitted, default null) per Task 3 spec-review.
     // When ruleString is absent and name-inference fails, ruleData = {unit: null, steps: 1}.
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task1',
       name: 'Weekly review',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: null, steps: 1 },
       frequency: 'Unknown Pattern',
     });
@@ -1901,6 +1908,20 @@ describe('RecurringTaskRowSchema', () => {
   it('(b) rejects missing required id', () => {
     const result = RecurringTaskRowSchema.safeParse({
       name: 'Weekly review',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects missing required project key (project required + nullable, not optional)', () => {
+    // project is always emitted by the taskInfo literal (default null) → key must be present.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      projectId: null,
       repetitionRule: { unit: null, steps: 1 },
       frequency: 'Weekly',
     });
@@ -1911,6 +1932,8 @@ describe('RecurringTaskRowSchema', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task1',
       name: 'Weekly review',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: null, steps: 1 },
       frequency: 'Weekly',
       rogue: true,
@@ -1922,6 +1945,8 @@ describe('RecurringTaskRowSchema', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task1',
       name: 'Daily task',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: 'days', steps: 1, rogue: true },
       frequency: 'Daily',
     });
@@ -2067,6 +2092,23 @@ describe('PerspectiveSummarySchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
+  it('(nullability) accepts project: null, projectId: null (inbox recurring task — no containing project)', () => {
+    // OMN-158 Task 3 spec-review fix: the taskInfo literal ALWAYS emits project & projectId,
+    // defaulting to null and overwriting only when containingProject exists. An inbox recurring
+    // task therefore emits project:null, projectId:null. The old z.string().optional() REJECTED
+    // null → the whole read fail-closed (same class as the unit:null bug). This fixture proves
+    // the nullable() fix; mutation-verified to FAIL against the prior .optional().
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-inbox',
+      name: 'Inbox recurring task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: 'days', steps: 1, ruleString: 'FREQ=DAILY' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('(nullability) accepts unit: null (no ruleString and no name-inference match)', () => {
     // This is the key regression test: the emitter sets ruleData.unit = null by default
     // when parseRuleString finds no FREQ= and inferFrequencyFromName returns null.
@@ -2075,6 +2117,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Some unrecognized task',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: null, steps: 1 },
       frequency: 'Unknown Pattern',
     });
@@ -2085,6 +2129,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Daily task',
+      project: 'Work',
+      projectId: 'proj1',
       repetitionRule: { unit: 'days', steps: 1, ruleString: 'FREQ=DAILY', _inferenceSource: 'ruleString' },
       frequency: 'Daily',
     });
@@ -2095,6 +2141,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Recurring task',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: 'weeks', steps: 1, method: null },
       frequency: 'Weekly',
     });
@@ -2106,6 +2154,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Recurring task',
+      project: null,
+      projectId: null,
       repetitionRule: { steps: 1 }, // unit key absent
       frequency: 'Unknown Pattern',
     });
@@ -2116,6 +2166,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Recurring task',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: null }, // steps absent
       frequency: 'Unknown Pattern',
     });
@@ -2128,6 +2180,8 @@ describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
     const result = RecurringTaskRowSchema.safeParse({
       id: 'task-abc',
       name: 'Daily task',
+      project: null,
+      projectId: null,
       repetitionRule: { unit: 'days', steps: 1, anchorDateKey: 'due' },
       frequency: 'Daily',
     });
@@ -2563,6 +2617,7 @@ describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
 
 describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
   it('(a) accepts payload with project items', () => {
+    // metadata is always emitted by projects-for-review.ts on the success branch → required.
     const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
       success: true,
       projects: [
@@ -2575,6 +2630,12 @@ describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
           completedByChildren: false,
         },
       ],
+      metadata: {
+        total_found: 1,
+        filter_applied: { overdue: false },
+        generated_at: '2026-06-12T10:00:00.000Z',
+        search_criteria: { overdue_only: false, days_ahead: 7, status_filter: ['active'], folder_filter: null },
+      },
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
@@ -2661,6 +2722,7 @@ describe('MARK_REVIEWED_TYPED_SCHEMA', () => {
   });
 
   it('(a) accepts payload with null reviewInterval and null dates', () => {
+    // changes/message always emitted on the success branch → required.
     const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
       success: true,
       project: {
@@ -2670,6 +2732,8 @@ describe('MARK_REVIEWED_TYPED_SCHEMA', () => {
         nextReviewDate: null,
         reviewInterval: null,
       },
+      changes: ['Last review date set to 2026-06-12'],
+      message: "Project 'My Project' marked as reviewed",
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
@@ -2724,6 +2788,7 @@ describe('SET_SCHEDULE_TYPED_SCHEMA', () => {
   });
 
   it('(a) accepts failed entry without projectName (project not found early failure)', () => {
+    // message always emitted on the success branch → required.
     const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
       success: true,
       results: {
@@ -2731,6 +2796,7 @@ describe('SET_SCHEDULE_TYPED_SCHEMA', () => {
         failed: [{ projectId: 'p2', error: 'Project not found' }],
         summary: { total_requested: 1, successful_count: 0, failed_count: 1 },
       },
+      message: 'Batch review schedule update completed: 0 successful, 1 failed',
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
@@ -2771,6 +2837,7 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
       byProject: [],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge for 3-4x faster property access' },
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
@@ -2783,6 +2850,7 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
       byProject: [],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
     });
     expect(result.success).toBe(false);
   });
@@ -2804,6 +2872,7 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
       byProject: [],
       mostCommon: null,
       duration: 50,
+      debug: { optimizationUsed: 'OmniJS bridge' },
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
@@ -2816,6 +2885,7 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
       byProject: [],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
     });
     expect(result.success).toBe(false);
   });
@@ -2827,6 +2897,7 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
       byProject: [{ project: 'Work', recurringCount: 1, patterns: [], rogue: true }],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
     });
     expect(result.success).toBe(false);
   });
