@@ -13,6 +13,8 @@ import {
   type ReturnNode,
   type RawNode,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { TagMutationResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 /** The program's terminal return statement (every tag program has one). */
 function returnStmt(program: Program): ReturnNode {
@@ -225,6 +227,7 @@ describe('emitted merge-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Beta' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({
       action: 'merged',
       sourceTag: 'Alpha',
@@ -246,6 +249,7 @@ describe('emitted merge-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Beta' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed.action).toBe('merged_with_warning');
     expect(parsed.sourceTag).toBe('Alpha');
     expect(parsed.targetTag).toBe('Beta');

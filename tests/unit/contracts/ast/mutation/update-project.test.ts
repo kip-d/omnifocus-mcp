@@ -12,6 +12,8 @@ import {
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { ProjectUpdateData } from '../../../../../src/contracts/mutations.js';
+import { ProjectWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 function emit(changes: ProjectUpdateData, projectId = 'p1'): string {
   const program = buildUpdateProjectProgram({ projectId, changes });
@@ -314,6 +316,7 @@ describe('emitted update-project program executes (vm)', () => {
       Project: { byIdentifier: () => proj, Status: PROJECT_STATUS },
     };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(ProjectWriteResultSchema, parsed);
     expect(parsed.updated).toBe(true);
     expect(parsed.name).toBe('x'); // the other change persisted
     expect(parsed.warnings).toEqual(['status: status locked']);
@@ -329,6 +332,7 @@ describe('emitted update-project program executes (vm)', () => {
       Project: { byIdentifier: () => proj, Status: PROJECT_STATUS },
     };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(ProjectWriteResultSchema, parsed);
     expect(parsed).toEqual({
       projectId: 'fake-proj-id',
       name: 'New name', // read back from the stub, not echoed
@@ -352,6 +356,7 @@ describe('emitted update-project program executes (vm)', () => {
       },
     };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(ProjectWriteResultSchema, parsed);
     expect(parsed.updated).toBe(true);
     expect(parsed.name).toBe('x'); // the other change persisted
     expect(parsed.warnings).toEqual(['folder: boom']);

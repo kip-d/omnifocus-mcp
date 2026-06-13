@@ -12,6 +12,8 @@ import {
   type Program,
   type ReturnNode,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { TagMutationResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 /** The program's terminal return statement (every tag program has one). */
 function returnStmt(program: Program): ReturnNode {
@@ -236,6 +238,7 @@ describe('emitted tag-move programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('nest/tag', { tagName: 'X', parentTagName: 'P' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({
       action: 'nested',
       tagName: 'X',
@@ -268,6 +271,7 @@ describe('emitted tag-move programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('unparent/tag', { tagName: 'X' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({ action: 'unparented', tagName: 'X', message: "Tag 'X' moved to root level" });
     expect(moveCalls).toEqual([{ tags: [tag], position: rootEnding }]);
   });
@@ -277,6 +281,7 @@ describe('emitted tag-move programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('reparent/tag', { tagName: 'X' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({ action: 'reparented', tagName: 'X', message: "Tag 'X' moved to root level" });
     expect('newParentTagName' in parsed).toBe(false);
     expect(moveCalls).toEqual([{ tags: [tag], position: rootEnding }]);

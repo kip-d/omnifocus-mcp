@@ -2,6 +2,8 @@
 // OMN-128 slice 3 — constructFolder node + create/folder lowering tests.
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
+import { FolderCreateResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 import {
   constructFolder,
   json,
@@ -221,6 +223,7 @@ describe('emitted create-folder program executes (vm)', () => {
     const program = emitProgram(buildCreateFolderProgram({ name: 'Home' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(FolderCreateResultSchema, parsed);
     expect(parsed.created).toBe(true);
     expect(parsed.name).toBe('Home');
     expect(parsed.folderId).toMatch(/^folder-pk-/);
@@ -242,6 +245,7 @@ describe('emitted create-folder program executes (vm)', () => {
     const program = emitProgram(buildCreateFolderProgram({ name: 'Sub', parentFolder: 'Personal' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(FolderCreateResultSchema, parsed);
     expect(parsed.created).toBe(true);
     expect(parsed.parentFolder).toBe('Personal');
     expect(parent.children.map((f) => f.name)).toEqual(['Existing Sibling', 'Sub']); // appended, not prepended
@@ -255,6 +259,7 @@ describe('emitted create-folder program executes (vm)', () => {
     const program = emitProgram(buildCreateFolderProgram({ name: 'Deep', parentFolder: 'Personal : Areas' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(FolderCreateResultSchema, parsed);
     expect(parsed.created).toBe(true);
     expect(parsed.parentFolder).toBe('Areas'); // resolved parent's own name, legacy-faithful
   });

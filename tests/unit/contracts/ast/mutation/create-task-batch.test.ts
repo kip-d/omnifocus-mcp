@@ -8,6 +8,8 @@ import {
 import { validateMutationProgram } from '../../../../../src/contracts/ast/mutation/validator.js';
 import { emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
 import type { BatchTaskSpec } from '../../../../../src/contracts/ast/mutation-script-builder.js';
+import { BatchCreateResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 // These tests work at the PROGRAM level (buildBatchCreateTasksProgram →
 // emitProgram), pre-launcher, so no extractOmniJsProgram decoding is needed —
@@ -222,7 +224,9 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox, taskCalls } = makeSandbox();
-    const { results } = runBatch(program, sandbox);
+    const rawResult = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(BatchCreateResultSchema, rawResult);
+    const { results } = rawResult as { results: Array<Record<string, unknown>> };
 
     expect(results).toEqual([
       { tempId: 'a', taskId: 'id-0', success: true, warnings: [] },
@@ -243,7 +247,9 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox, taskInstances, moveCalls } = makeSandbox();
-    const { results } = runBatch(program, sandbox);
+    const rawResult2 = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(BatchCreateResultSchema, rawResult2);
+    const { results } = rawResult2 as { results: Array<Record<string, unknown>> };
 
     expect(results.map((r) => r.success)).toEqual([true, true]);
     expect(moveCalls).toHaveLength(1);
@@ -350,7 +356,9 @@ describe('emitted batch program executes (vm)', () => {
       ]),
     );
     const { sandbox } = makeSandbox({ addTagThrowsForName: 'W0' });
-    const { results } = runBatch(program, sandbox);
+    const rawResult7 = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(BatchCreateResultSchema, rawResult7);
+    const { results } = rawResult7 as { results: Array<Record<string, unknown>> };
 
     expect(results.map((r) => r.success)).toEqual([true, true]); // best-effort: creation still succeeds
     expect(results[0].warnings).toEqual(['tags: addTag boom']);

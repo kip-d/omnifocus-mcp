@@ -1,7 +1,10 @@
+import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { buildCreateProjectProgram, dispatchMutation } from '../../../../../src/contracts/ast/mutation/defs.js';
 import { validateMutationProgram } from '../../../../../src/contracts/ast/mutation/validator.js';
 import { emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
+import { ProjectWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 describe('buildCreateProjectProgram', () => {
   it('no folder → constructProject folder kind none; no resolveFolder/guard', () => {
@@ -107,5 +110,42 @@ describe('dispatchMutation guard (OMN-119/120 non-bypass)', () => {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;
     }
+  });
+});
+
+// OMN-158 Task 4: VM success-path test to tie the create-project emitter to ProjectWriteResultSchema.
+describe('emitted create-project program executes (vm)', () => {
+  function makeSandbox(): Record<string, unknown> {
+    const ProjectCtor = function (this: Record<string, unknown>, name: string) {
+      this.id = { primaryKey: 'proj-pk-1' };
+      this.name = name;
+      this.note = '';
+      this.flagged = false;
+      this.sequential = false;
+      this.dueDate = null;
+      this.deferDate = null;
+      this.plannedDate = null;
+      this.addTag = (): void => {};
+      this.clearTags = (): void => {};
+    } as unknown as Record<string, unknown>;
+    return {
+      Project: ProjectCtor,
+      Tag: function (this: Record<string, unknown>, n: string) {
+        this.name = n;
+      },
+      flattenedTags: [],
+      tags: [],
+    };
+  }
+
+  it('vm: minimal create returns a ProjectWriteResultSchema-valid success envelope', () => {
+    const program = emitProgram(buildCreateProjectProgram({ name: 'My Project' }));
+    const sandbox = makeSandbox();
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(ProjectWriteResultSchema, parsed);
+    expect(parsed.created).toBe(true);
+    expect(parsed.name).toBe('My Project');
+    expect(parsed.projectId).toBe('proj-pk-1');
+    expect(parsed.warnings).toEqual([]);
   });
 });
