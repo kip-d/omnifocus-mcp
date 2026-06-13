@@ -19,6 +19,15 @@ import {
   reviewSuccessSchema,
   SlimmedDataSchema,
   RecurringPatternsSchema,
+  TaskRowSchema,
+  ProjectRowSchema,
+  TaskListMetadataSchema,
+  ProjectListMetadataSchema,
+  TagItemSchema,
+  TagSummarySchema,
+  RecurringTaskRowSchema,
+  RecurringTasksSummarySchema,
+  RecurringTasksMetadataSchema,
 } from '../../omnifocus/script-response-schemas.js';
 import { z } from 'zod';
 
@@ -300,17 +309,43 @@ const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 /** Analytics v3 envelope (all four v3 analytics scripts). */
 const ANALYZE_V3_SCHEMA = V3EnvelopeSuccessSchema;
 
-/** AST recurring-tasks envelope: {ok:true, v:'ast', tasks, summary, metadata}. */
-const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks');
+/**
+ * AST recurring-tasks envelope: {ok:true, v:'ast', tasks, summary, metadata}.
+ * Source: analyze-recurring-tasks-ast.ts buildRecurringTasksScript.
+ */
+const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks', {
+  rowSchema: RecurringTaskRowSchema,
+  summarySchema: RecurringTasksSummarySchema,
+  metadataSchema: RecurringTasksMetadataSchema,
+});
 
-/** AST tag items envelope: {ok:true, v:'ast', items, summary?}. */
-const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items');
+/**
+ * AST tag items envelope: {ok:true, v:'ast', items, summary?}.
+ * Analyze tool receives 'basic' mode items ({id, name} objects).
+ * Source: tag-script-builder.ts buildBasicTagsScript.
+ */
+const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items', {
+  rowSchema: TagItemSchema,
+  summarySchema: TagSummarySchema,
+});
 
-/** Filtered-projects list: {projects|items, metadata?}. */
-const PROJECTS_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
+/**
+ * Filtered-projects list: {projects|items, metadata?}.
+ * Source: buildFilteredProjectsScript.
+ */
+const PROJECTS_LIST_SCHEMA = listResultSchema(['projects', 'items'], {
+  rowSchema: ProjectRowSchema,
+  metadata: ProjectListMetadataSchema,
+});
 
-/** Task list: {tasks|items, metadata?}. */
-const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
+/**
+ * Task list: {tasks|items, metadata?}.
+ * Source: buildListTasksScriptV4 (wraps filtered/inbox/id_lookup inner scripts).
+ */
+const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], {
+  rowSchema: TaskRowSchema,
+  metadata: TaskListMetadataSchema,
+});
 
 /** projects-for-review script: {success:true, projects, metadata?}. */
 const REVIEWS_LIST_SCHEMA = reviewSuccessSchema({

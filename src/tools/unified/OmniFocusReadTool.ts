@@ -1,5 +1,4 @@
 import * as path from 'path';
-import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
@@ -21,10 +20,19 @@ import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-ty
 import {
   listResultSchema,
   CountResultSchema,
-  ExportResultSchema,
+  ExportTasksResultSchema,
+  ExportProjectsResultSchema,
   astEnvelopeSchema,
   ProjectByIdSchema,
   FolderListSchema,
+  TaskRowSchema,
+  ProjectRowSchema,
+  TaskListMetadataSchema,
+  ProjectListMetadataSchema,
+  TagItemSchema,
+  TagSummarySchema,
+  PerspectiveItemSchema,
+  PerspectiveSummarySchema,
 } from '../../omnifocus/script-response-schemas.js';
 import {
   createTaskResponseV2,
@@ -64,10 +72,11 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
  * The 'items' variant covers any legacy callers that use data.tasks||data.items.
  *
  * Source: src/omnifocus/scripts/tasks/list-tasks-ast.ts — return JSON.stringify({tasks, metadata}).
- *
- * OMN-158: remove the dormant items variant and the caller `|| data.items` fallback together.
  */
-const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
+const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], {
+  rowSchema: TaskRowSchema,
+  metadata: TaskListMetadataSchema,
+});
 
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
@@ -76,18 +85,23 @@ const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true }
  *
  * Source: src/contracts/ast/script-builder.ts → buildFilteredProjectsScript →
  *   return JSON.stringify({ projects, metadata: {...} }).
- *
- * OMN-158: remove the dormant items variant and the caller `|| data.items` fallback together.
  */
-const PROJECT_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
+const PROJECT_LIST_SCHEMA = listResultSchema(['projects', 'items'], {
+  rowSchema: ProjectRowSchema,
+  metadata: ProjectListMetadataSchema,
+});
 
 /**
- * Tag list result — emitted by buildTagsScript (all modes).
+ * Tag list result — emitted by buildTagsScript (basic mode in the read tool).
  * Wire shape: {ok: true, v: 'ast', items, summary}
+ * Read tool uses basic mode: items are {id, name} objects.
  *
  * Source: src/contracts/ast/tag-script-builder.ts — return JSON.stringify({ok:true, v:'ast', items, summary}).
  */
-const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
+const TAG_LIST_SCHEMA = astEnvelopeSchema('items', {
+  rowSchema: TagItemSchema,
+  summarySchema: TagSummarySchema,
+});
 
 /**
  * Perspective list result — emitted by LIST_PERSPECTIVES_SCRIPT.
@@ -96,7 +110,10 @@ const TAG_LIST_SCHEMA = astEnvelopeSchema('items');
  * Source: src/omnifocus/scripts/perspectives/list-perspectives.ts →
  *   return JSON.stringify({ items: perspectives, summary: {...} }).
  */
-const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], { extras: { summary: z.unknown().optional() } });
+const PERSPECTIVE_LIST_SCHEMA = listResultSchema(['items'], {
+  rowSchema: PerspectiveItemSchema,
+  extras: { summary: PerspectiveSummarySchema.optional() },
+});
 
 /**
  * Post-hoc field projection for project query results.
@@ -1019,7 +1036,7 @@ PERFORMANCE:
       format,
     });
 
-    const result = await this.execJson(script, ExportResultSchema);
+    const result = await this.execJson(script, ExportTasksResultSchema);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -1114,7 +1131,7 @@ PERFORMANCE:
       format,
       includeStats,
     });
-    const result = await this.execJson(script, ExportResultSchema);
+    const result = await this.execJson(script, ExportProjectsResultSchema);
 
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -1206,7 +1223,7 @@ PERFORMANCE:
       format,
       limit: 5000,
     });
-    const taskResult = await this.execJson(taskScript, ExportResultSchema);
+    const taskResult = await this.execJson(taskScript, ExportTasksResultSchema);
 
     if (isScriptSuccess(taskResult)) {
       const taskData = taskResult.data as { data?: unknown; count?: number };
@@ -1227,7 +1244,7 @@ PERFORMANCE:
       format,
       includeStats: includeProjectStats,
     });
-    const projectResult = await this.execJson(projectScript, ExportResultSchema);
+    const projectResult = await this.execJson(projectScript, ExportProjectsResultSchema);
 
     if (isScriptSuccess(projectResult)) {
       const projData = projectResult.data as { data?: unknown; count?: number };

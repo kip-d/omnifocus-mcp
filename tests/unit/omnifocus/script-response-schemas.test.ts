@@ -6,6 +6,8 @@ import {
   listResultSchema,
   CountResultSchema,
   ExportResultSchema,
+  ExportTasksResultSchema,
+  ExportProjectsResultSchema,
   reviewSuccessSchema,
   TaskWriteResultSchema,
   CompleteResultSchema,
@@ -19,6 +21,15 @@ import {
   RecurringPatternsSchema,
   ProjectByIdSchema,
   FolderListSchema,
+  TaskRowSchema,
+  ProjectRowSchema,
+  TaskListMetadataSchema,
+  ProjectListMetadataSchema,
+  RecurringTaskRowSchema,
+  RecurringTasksSummarySchema,
+  RecurringTasksMetadataSchema,
+  PerspectiveItemSchema,
+  PerspectiveSummarySchema,
 } from '../../../src/omnifocus/script-response-schemas.js';
 
 // Backward-compatible aliases — schemas moved here from OmniFocusReadTool.ts (Task 7 carry-forward)
@@ -212,8 +223,19 @@ describe('listResultSchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('CountResultSchema', () => {
-  it('(a) accepts minimal count payload (count only)', () => {
-    const result = CountResultSchema.safeParse({ count: 42 });
+  it('(a) accepts minimal wire-shape count payload (count + all required fields)', () => {
+    // The emitter always emits all required fields — the real wire shape is never count-only.
+    // Fixture corrected per OMN-158 spec §5: fix fixtures to wire shapes, never loosen schemas.
+    const result = CountResultSchema.safeParse({
+      count: 42,
+      filters_applied: {},
+      query_time_ms: 50,
+      optimization: 'omnijs_count_no_tags',
+      filter_description: 'all tasks',
+      scanned: 42,
+      total_tasks: 42,
+      limited: false,
+    });
     expect(result.success).toBe(true);
   });
 
@@ -283,26 +305,37 @@ describe('ExportResultSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts json task export with limited + debug + message', () => {
+  it('(a) accepts json task export with limited + debug (wire shape from buildExportTasksScript)', () => {
+    // Fixture corrected per OMN-158 spec §5: debug has all required fields; message absent (not limited).
     const result = ExportResultSchema.safeParse({
       format: 'json',
       data: [{ id: 'abc', name: 'Task' }],
       count: 1,
       duration: 80,
       limited: false,
-      debug: { totalTasksProcessed: 1, maxTasksAllowed: 1000 },
-      message: undefined,
+      debug: {
+        totalTasksProcessed: 1,
+        maxTasksAllowed: 1000,
+        filterDescription: 'all tasks',
+        fieldsRequested: ['name', 'project'],
+        optimizationUsed: 'AST filter + OmniJS bridge',
+      },
     });
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts json project export with debug (no limited/message)', () => {
+  it('(a) accepts json project export with debug (wire shape from export-projects.ts)', () => {
+    // Fixture corrected per OMN-158 spec §5: debug requires optimizationUsed field.
     const result = ExportResultSchema.safeParse({
       format: 'json',
-      data: [{ id: 'p1', name: 'Project' }],
+      data: [{ id: 'p1', name: 'Project', status: 'active' }],
       count: 1,
       duration: 55,
-      debug: { totalProjectsProcessed: 1, includeStats: false },
+      debug: {
+        totalProjectsProcessed: 1,
+        includeStats: false,
+        optimizationUsed: 'OmniJS bridge for 5-10x faster property access',
+      },
     });
     expect(result.success).toBe(true);
   });
@@ -1405,6 +1438,607 @@ describe('RecurringPatternsSchema', () => {
       duration: 100,
       error: 'iteration error at item 3',
     });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 2: Read-family row + metadata schemas
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// TaskRowSchema
+// ---------------------------------------------------------------------------
+
+describe('TaskRowSchema', () => {
+  it('(a) accepts a fully-projected task row (all fields present)', () => {
+    const result = TaskRowSchema.safeParse({
+      id: 'abc123',
+      name: 'Buy milk',
+      completed: false,
+      flagged: true,
+      inInbox: false,
+      blocked: false,
+      available: true,
+      dueDate: '2026-06-15T17:00:00.000Z',
+      deferDate: null,
+      plannedDate: null,
+      effectivePlannedDate: null,
+      completionDate: null,
+      modified: '2026-06-12T10:00:00.000Z',
+      added: '2026-06-01T08:00:00.000Z',
+      dropDate: null,
+      tags: ['Work', 'Urgent'],
+      note: 'Get 2% milk',
+      project: 'Errands',
+      projectId: 'proj1',
+      estimatedMinutes: 15,
+      repetitionRule: { ruleString: 'FREQ=WEEKLY', scheduleType: 'fixed' },
+      parentTaskId: null,
+      parentTaskName: null,
+      reason: 'due_soon',
+      daysOverdue: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts a minimal task row (id + name only — projection-gated)', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc123', name: 'Buy milk' });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts task row with null repetitionRule', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', repetitionRule: null });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects task row with wrong-typed field: flagged as string', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', flagged: 'yes' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects task row with wrong-typed field: tags as string', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', tags: 'Work' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on task row', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', rogue: true });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside repetitionRule sub-object', () => {
+    const result = TaskRowSchema.safeParse({
+      id: 'abc',
+      name: 'Task',
+      repetitionRule: { ruleString: 'FREQ=DAILY', rogue: 'extra' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong reason enum value', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', reason: 'critical' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProjectRowSchema
+// ---------------------------------------------------------------------------
+
+describe('ProjectRowSchema', () => {
+  it('(a) accepts a fully-projected project row', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'My Project',
+      status: 'active',
+      flagged: false,
+      note: 'Project note',
+      dueDate: null,
+      deferDate: null,
+      folder: 'Work',
+      folderPath: 'Work/Projects',
+      folderId: 'f1',
+      sequential: false,
+      lastReviewDate: '2026-06-01T00:00:00.000Z',
+      nextReviewDate: '2026-07-01T00:00:00.000Z',
+      reviewInterval: { unit: 'weeks', steps: 2 },
+      completionDate: null,
+      defaultSingletonActionHolder: false,
+      tags: ['GTD'],
+      plannedDate: null,
+      taskCounts: { total: 10, available: 5, completed: 3 },
+      nextTask: { id: 'abc', name: 'Do thing', flagged: false, dueDate: null },
+      stats: { active: 5, completed: 3, total: 10, completionRate: 30, overdue: 1, flagged: 2 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts minimal project row (id + name only)', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project' });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed field: sequential as string', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project', sequential: 'yes' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on project row', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project', rogue: true });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside reviewInterval sub-object', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'Project',
+      reviewInterval: { unit: 'weeks', steps: 2, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside nextTask sub-object', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'Project',
+      nextTask: { id: 'abc', name: 'Task', flagged: false, dueDate: null, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TaskListMetadataSchema
+// ---------------------------------------------------------------------------
+
+describe('TaskListMetadataSchema', () => {
+  it('(a) accepts full filtered-tasks metadata (all fields present)', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 100,
+      total_matched: 100,
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      offset_applied: 0,
+      mode: 'ast_filtered',
+      filter_description: 'active tasks',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts id-lookup metadata (total_matched/filter_description/offset_applied absent)', () => {
+    // PATH TRAP: id_lookup inner emits only {tasks, count, mode, targetId}; the
+    // wrapper copies these values and JSON.stringify drops undefined — these three
+    // keys are ABSENT, not null, on id-lookup reads.
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 1,
+      sorted_in_script: false,
+      limit_applied: 50,
+      offset: 0,
+      mode: 'id_lookup',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects metadata missing required total_count', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      mode: 'ast_filtered',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in task list metadata', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 5,
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      mode: 'ast_filtered',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProjectListMetadataSchema
+// ---------------------------------------------------------------------------
+
+describe('ProjectListMetadataSchema', () => {
+  it('(a) accepts full project list metadata', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_available: 50,
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects metadata missing required total_available', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in project list metadata', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_available: 50,
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ExportTasksResultSchema and ExportProjectsResultSchema
+// ---------------------------------------------------------------------------
+
+describe('ExportTasksResultSchema', () => {
+  it('(a) accepts csv empty variant (no limited, has message)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\n',
+      count: 0,
+      duration: 45,
+      message: 'No tasks found matching the filter criteria',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts csv non-empty variant (with limited)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\nTask A,Work\n',
+      count: 1,
+      duration: 60,
+      limited: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts markdown variant', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'markdown',
+      data: '# OmniFocus Tasks Export\n',
+      count: 5,
+      duration: 80,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts json variant with full debug object', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'json',
+      data: [{ id: 'abc', name: 'Task A' }],
+      count: 1,
+      duration: 90,
+      limited: false,
+      debug: {
+        totalTasksProcessed: 5,
+        maxTasksAllowed: 1000,
+        filterDescription: 'all tasks',
+        fieldsRequested: ['name', 'project', 'dueDate'],
+        optimizationUsed: 'AST filter + OmniJS bridge',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects json variant missing required debug field', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'json',
+      data: [],
+      count: 0,
+      duration: 50,
+      limited: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: csv payload with debug key (wrong variant)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\n',
+      count: 0,
+      duration: 45,
+      debug: {
+        totalTasksProcessed: 0,
+        maxTasksAllowed: 1000,
+        filterDescription: '',
+        fieldsRequested: [],
+        optimizationUsed: '',
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ExportProjectsResultSchema', () => {
+  it('(a) accepts csv variant', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'csv',
+      data: 'id,name,status\n',
+      count: 0,
+      duration: 30,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts markdown variant', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'markdown',
+      data: '# OmniFocus Projects Export\n',
+      count: 5,
+      duration: 40,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts json variant with debug object', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'json',
+      data: [{ id: 'p1', name: 'My Project', status: 'active' }],
+      count: 1,
+      duration: 55,
+      debug: {
+        totalProjectsProcessed: 1,
+        includeStats: false,
+        optimizationUsed: 'OmniJS bridge for 5-10x faster property access',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: csv payload with debug key (wrong variant)', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'csv',
+      data: 'id,name\n',
+      count: 0,
+      duration: 30,
+      debug: { totalProjectsProcessed: 0, includeStats: false, optimizationUsed: '' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: project json debug missing optimizationUsed', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'json',
+      data: [],
+      count: 0,
+      duration: 30,
+      debug: { totalProjectsProcessed: 0, includeStats: false },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RecurringTaskRowSchema + summary/metadata
+// ---------------------------------------------------------------------------
+
+describe('RecurringTaskRowSchema', () => {
+  it('(a) accepts full recurring task row', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Daily standup',
+      project: 'Work',
+      projectId: 'proj1',
+      repetitionRule: {
+        unit: 'days',
+        steps: 1,
+        ruleString: 'FREQ=DAILY',
+        _inferenceSource: 'ruleString',
+      },
+      frequency: 'Daily',
+      dueDate: '2026-06-13T17:00:00.000Z',
+      nextDue: '2026-06-13T17:00:00.000Z',
+      daysUntilDue: 1,
+      isOverdue: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts minimal recurring task row (id, name, repetitionRule, frequency)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      repetitionRule: {},
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required id', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      name: 'Weekly review',
+      repetitionRule: {},
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on recurring task row', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      repetitionRule: {},
+      frequency: 'Weekly',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside repetitionRule', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Daily task',
+      repetitionRule: { unit: 'days', steps: 1, rogue: true },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('RecurringTasksSummarySchema', () => {
+  it('(a) accepts full recurring tasks summary', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 12,
+      returned: 12,
+      overdue: 2,
+      dueThisWeek: 5,
+      byFrequency: { Daily: 4, Weekly: 3, Monthly: 2 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required returned field', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 5,
+      overdue: 0,
+      dueThisWeek: 2,
+      byFrequency: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in summary', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 5,
+      returned: 5,
+      overdue: 0,
+      dueThisWeek: 2,
+      byFrequency: {},
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('RecurringTasksMetadataSchema', () => {
+  it('(a) accepts full recurring tasks metadata', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 350,
+      optimization: 'ast_recurring_builder',
+      options: { includeCompleted: false, sortBy: 'name' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts metadata without optional options key', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 200,
+      optimization: 'ast_recurring_builder',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: extra key in metadata', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 200,
+      optimization: 'ast_recurring_builder',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PerspectiveItemSchema and PerspectiveSummarySchema
+// ---------------------------------------------------------------------------
+
+describe('PerspectiveItemSchema', () => {
+  it('(a) accepts built-in perspective item', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      isBuiltIn: true,
+      identifier: null,
+      filterRules: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts custom perspective item with identifier', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'My Custom View',
+      type: 'custom',
+      isBuiltIn: false,
+      identifier: 'custom-id-123',
+      filterRules: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects perspective missing required isBuiltIn field', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      identifier: null,
+      filterRules: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on perspective item', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      isBuiltIn: true,
+      identifier: null,
+      filterRules: null,
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('PerspectiveSummarySchema', () => {
+  it('(a) accepts representative perspective summary', () => {
+    const result = PerspectiveSummarySchema.safeParse({
+      total: 10,
+      insights: ['Found 10 perspectives (6 built-in, 4 custom)'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects summary missing total', () => {
+    const result = PerspectiveSummarySchema.safeParse({ insights: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in perspective summary', () => {
+    const result = PerspectiveSummarySchema.safeParse({ total: 5, insights: [], rogue: true });
     expect(result.success).toBe(false);
   });
 });
