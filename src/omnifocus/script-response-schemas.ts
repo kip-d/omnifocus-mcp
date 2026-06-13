@@ -4,7 +4,7 @@ import { z } from 'zod';
  * OMN-139 family success schemas. Rules (spec §3.2 — normative):
  *  - SUCCESS BRANCH ONLY. Error branches are detectKnownErrorShape's job.
  *  - Discriminators are LITERALS (z.literal(true)), never z.boolean().
- *  - Top-level closed-world (.strict()); leaves leaf-strict per OMN-158.
+ *  - Top-level closed-world (.strict()); write-family leaves leaf-strict per OMN-158 (read/analyze families follow).
  */
 
 // ---------------------------------------------------------------------------
@@ -201,10 +201,10 @@ export const FolderListSchema = z
  * Write-tool task create/update result (NOT v3-wrapped — wrapInLauncher returns the OmniJS payload raw).
  *
  * Source-verified against src/contracts/ast/mutation/defs.ts:
- *  - buildCreateTaskProgram envelope (lines ~410-426):
+ *  - buildCreateTaskProgram envelope:
  *    {taskId, name, note, flagged, dueDate, deferDate, plannedDate, estimatedMinutes, tags,
  *     project, inInbox, warnings, created:true}
- *  - buildUpdateTaskProgram envelope (lines ~751-758):
+ *  - buildUpdateTaskProgram envelope:
  *    {taskId, name, flagged, updated:true, warnings} — exactly 5 keys, do NOT add note/dates/tags.
  *
  * OMN-158 rider 3: two strict variants (create/update) replacing single object + .refine().
@@ -370,7 +370,7 @@ export const FolderCreateResultSchema = z
 /**
  * Batch create result.
  *
- * Source-verified against src/contracts/ast/mutation/emitter.ts (batchItem emitter, lines ~373-374):
+ * Source-verified against src/contracts/ast/mutation/emitter.ts (batchItem emitter):
  *  success: {tempId, taskId: task.id.primaryKey, success: true, warnings}
  *  failure: {tempId, taskId: null, success: false, error, warnings}
  *
@@ -407,9 +407,9 @@ export const BatchCreateResultSchema = z
  * Source-verified against src/contracts/ast/mutation/defs.ts (each tag program):
  *
  *  created (path):  {action: 'created', tagName, tagId, path, createdSegments, message}
- *                   — buildCreateTagProgram, path variant (lines ~1083-1097)
+ *                   — buildCreateTagProgram, path variant
  *  created (flat):  {action: 'created', tagName, tagId, parentTagName, parentTagId, message}
- *                   — buildCreateTagProgram, flat variant (lines ~1122-1135)
+ *                   — buildCreateTagProgram, flat variant
  *                   NOTE: parentTagName/parentTagId are REQUIRED but may be null (json(null) when no parent)
  *  renamed:         {action: 'renamed', oldName, newName, message}
  *                   — buildRenameTagProgram
@@ -424,9 +424,9 @@ export const BatchCreateResultSchema = z
  *  unparented:      {action: 'unparented', tagName, message}
  *                   — buildUnparentTagProgram / lowerTagMove('unparent')
  *  reparented (with-parent): {action: 'reparented', tagName, newParentTagName, newParentTagId, message}
- *                   — lowerTagMove('reparent') with parentTagName present (lines ~1326-1334)
+ *                   — lowerTagMove('reparent') with parentTagName present
  *  reparented (to-root): {action: 'reparented', tagName, message}
- *                   — lowerTagMove('reparent') without parentTagName (lines ~1338-1344)
+ *                   — lowerTagMove('reparent') without parentTagName
  *                   NOTE: newParentTag* keys are STRUCTURALLY ABSENT (separate envelope literal at build time,
  *                   not JSON.stringify undefined-dropping). OMN-158 splits into two strict variants.
  */
