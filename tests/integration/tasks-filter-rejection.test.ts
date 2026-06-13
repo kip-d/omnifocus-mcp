@@ -93,4 +93,43 @@ d('OMN-162/OMN-166: tasks-side folder/on_hold rejection; projects regression', (
     expect(result.success).toBe(true);
     expect(result.data?.tasks, 'envelope missing data.tasks').toBeDefined();
   }, 30000);
+
+  // OMN-172 (S4): a terminal status inside an OR branch was silently unsatisfiable
+  // (dropped==false AND (dropped==true OR ...)). Now rejects with steering.
+  it('terminal OR branch: {OR:[{status:dropped},{flagged}]} rejects with steering', async () => {
+    await expect(
+      client.callTool('omnifocus_read', {
+        query: {
+          type: 'tasks',
+          filters: { OR: [{ status: 'dropped' }, { flagged: true }] },
+          limit: 10,
+        },
+      }),
+    ).rejects.toThrow(/top level/i);
+  }, 30000);
+
+  it('terminal OR branch (completed sibling): {OR:[{status:completed},{flagged}]} rejects', async () => {
+    await expect(
+      client.callTool('omnifocus_read', {
+        query: {
+          type: 'tasks',
+          filters: { OR: [{ status: 'completed' }, { flagged: true }] },
+          limit: 10,
+        },
+      }),
+    ).rejects.toThrow(/completed/i);
+  }, 30000);
+
+  it('control: top-level status:dropped + OR branch succeeds (base lifts exclusion)', async () => {
+    const result = (await client.callTool('omnifocus_read', {
+      query: {
+        type: 'tasks',
+        filters: { status: 'dropped', OR: [{ status: 'dropped' }, { flagged: true }] },
+        limit: 1,
+      },
+    })) as { success: boolean; data?: { tasks?: unknown[] } };
+
+    expect(result.success).toBe(true);
+    expect(result.data?.tasks, 'envelope missing data.tasks').toBeDefined();
+  }, 30000);
 });

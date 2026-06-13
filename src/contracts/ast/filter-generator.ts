@@ -377,6 +377,9 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
 export function describeProjectFilter(filter: ProjectFilter): string {
   const conditions: string[] = [];
 
+  if (filter.id) {
+    conditions.push(`id: ${filter.id}`); // OMN-172 F10: was the lone undescribed semantic ProjectFilter key
+  }
   if (filter.status && filter.status.length > 0) {
     conditions.push(`status in [${filter.status.join(', ')}]`);
   }

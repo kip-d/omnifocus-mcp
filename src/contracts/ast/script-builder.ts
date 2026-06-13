@@ -1022,14 +1022,38 @@ const BOOLEAN_FILTER_DESCRIPTORS: Array<{ key: keyof TaskFilter; trueLabel: stri
   { key: 'inInbox', trueLabel: 'inbox', falseLabel: 'not inbox' },
 ];
 
-function describeDueDateRange(filter: TaskFilter): string | undefined {
-  if (!filter.dueBefore && !filter.dueAfter) return undefined;
-  if (filter.dueBefore && filter.dueAfter) return `due: ${filter.dueAfter} to ${filter.dueBefore}`;
-  if (filter.dueBefore) return `due before: ${filter.dueBefore}`;
-  return `due after: ${filter.dueAfter}`;
+/**
+ * Date-range descriptors. OMN-172 (F10): every date-range key that can appear in
+ * `filters_applied` must be describable, or `filter_description` reads "all tasks"
+ * while `filters_applied` shows the key (self-contradiction). `due` was the only
+ * one described before S4; defer/planned/completion/added are backfilled here.
+ */
+const DATE_RANGE_DESCRIPTORS: ReadonlyArray<{ label: string; after: keyof TaskFilter; before: keyof TaskFilter }> = [
+  { label: 'due', after: 'dueAfter', before: 'dueBefore' },
+  { label: 'defer', after: 'deferAfter', before: 'deferBefore' },
+  { label: 'planned', after: 'plannedAfter', before: 'plannedBefore' },
+  { label: 'completion', after: 'completionAfter', before: 'completionBefore' },
+  { label: 'added', after: 'addedAfter', before: 'addedBefore' },
+];
+
+function describeDateRange(
+  filter: TaskFilter,
+  label: string,
+  after: keyof TaskFilter,
+  before: keyof TaskFilter,
+): string | undefined {
+  const a = filter[after] as string | undefined;
+  const b = filter[before] as string | undefined;
+  if (!a && !b) return undefined;
+  if (a && b) return `${label}: ${a} to ${b}`;
+  if (b) return `${label} before: ${b}`;
+  return `${label} after: ${a}`;
 }
 
-function describeFilterForScript(filter: TaskFilter): string {
+// OMN-172 (F10): exported so the forcing-function coverage test can assert every
+// describable filter key produces a fragment (reconciles filter_description with
+// filters_applied). See tests/unit/contracts/ast/describe-filter-coverage.test.ts.
+export function describeFilterForScript(filter: TaskFilter): string {
   const conditions: string[] = [];
 
   for (const { key, trueLabel, falseLabel } of BOOLEAN_FILTER_DESCRIPTORS) {
@@ -1049,9 +1073,22 @@ function describeFilterForScript(filter: TaskFilter): string {
     conditions.push(`name: "${filter.name}"`);
   }
 
-  const dueDescription = describeDueDateRange(filter);
-  if (dueDescription) {
-    conditions.push(dueDescription);
+  for (const { label, after, before } of DATE_RANGE_DESCRIPTORS) {
+    const range = describeDateRange(filter, label, after, before);
+    if (range) conditions.push(range);
+  }
+
+  // OMN-49: estimated-duration filters
+  if (filter.estimatedMinutesEquals !== undefined) conditions.push(`estimate = ${filter.estimatedMinutesEquals}m`);
+  if (filter.estimatedMinutesLessThan !== undefined) conditions.push(`estimate < ${filter.estimatedMinutesLessThan}m`);
+  if (filter.estimatedMinutesGreaterThan !== undefined)
+    conditions.push(`estimate > ${filter.estimatedMinutesGreaterThan}m`);
+
+  if (filter.tagStatusValid !== undefined) {
+    conditions.push(filter.tagStatusValid ? 'tag status valid' : 'tag status invalid');
+  }
+  if (filter.parentTaskId) {
+    conditions.push(`parent: ${filter.parentTaskId}`);
   }
 
   if (filter.projectId) {
