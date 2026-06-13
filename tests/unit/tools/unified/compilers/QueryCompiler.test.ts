@@ -1187,4 +1187,27 @@ describe('QueryCompiler', () => {
       expect((compiled.projectFilter as Record<string, unknown>).status).toEqual(['onHold']);
     });
   });
+
+  // OMN-161 F5: on_hold rejection path must be origin-aware
+  describe('OMN-161 F5: origin-aware on_hold rejection path', () => {
+    it('on_hold inside an OR branch reports the branch-qualified path (OMN-161 F5)', () => {
+      const c = new QueryCompiler();
+      try {
+        c.transformFilters({ OR: [{ flagged: true }, { status: 'on_hold' }] } as any);
+        throw new Error('did not throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(z.ZodError);
+        expect((e as z.ZodError).issues[0].path).toEqual(['query', 'filters', 'OR', 1, 'status']);
+      }
+    });
+    it('on_hold at top level still reports filters.status (OMN-161 F5)', () => {
+      const c = new QueryCompiler();
+      try {
+        c.transformFilters({ status: 'on_hold' } as any);
+        throw new Error('no throw');
+      } catch (e) {
+        expect((e as z.ZodError).issues[0].path).toEqual(['query', 'filters', 'status']);
+      }
+    });
+  });
 });

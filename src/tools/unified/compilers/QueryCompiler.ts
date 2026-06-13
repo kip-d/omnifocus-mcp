@@ -265,7 +265,7 @@ export class QueryCompiler {
 
     const result: TaskFilter = {};
 
-    this.transformStatus(input, result);
+    this.transformStatus(input, result, origin);
     this.transformTags(input, result);
     this.transformDates(input, result);
     this.transformNumberFilters(input, result);
@@ -337,7 +337,7 @@ export class QueryCompiler {
     ]);
   }
 
-  private transformStatus(input: QueryFilter, result: TaskFilter): void {
+  private transformStatus(input: QueryFilter, result: TaskFilter, origin: string = 'filters'): void {
     // Task-scope mapping. The same `status` value means different things at the
     // task level vs project level, so map both — downstream code uses whichever
     // is meaningful for the query type. (OMN-50: previously the `dropped` value
@@ -350,10 +350,11 @@ export class QueryCompiler {
       result.dropped = true;
     } else if (input.status === 'on_hold') {
       // OMN-166: was a silent match-all — on_hold set only the dead projectStatus key.
+      // OMN-161 F5: use origin-aware path so OR[1] reports ['query','filters','OR',1,'status'].
       throw new z.ZodError([
         {
           code: z.ZodIssueCode.custom,
-          path: ['query', 'filters', 'status'],
+          path: [...this.originToPath(origin), 'status'],
           message: ON_HOLD_TASKS_REJECTION,
         },
       ]);
