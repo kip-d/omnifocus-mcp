@@ -118,7 +118,7 @@ branch uses `SCRIPT_ERROR_CONTEXT.EXECUTION_EXCEPTION`.
 **Files:**
 
 - Modify: `src/tools/base.ts` (ALS context; `execute()` body wrap + metrics block; `execJson` push; `handleExecuteError`
-  double-log guard)
+  disjointness comment — no guard, per I4)
 - Modify/Create: `tests/unit/tools/` base-tool routing tests (find the existing BaseTool/execute test file; if none
   drives execute()+execJson together, create `tests/unit/tools/base-failure-routing.test.ts` with a minimal concrete
   BaseTool subclass + mocked `omniAutomation.executeJson`)
