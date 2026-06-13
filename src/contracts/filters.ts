@@ -297,6 +297,15 @@ export interface ProjectFilter {
 }
 
 /**
+ * OMN-161 S1: tags/folders/perspectives queries carry no compile-time filter yet.
+ * Empty object types — distinct members of the CompiledQuery discriminated union.
+ * S2 adds folder/tag name fields to TagFilter/FolderFilter (capability).
+ */
+export type TagFilter = Record<string, never>;
+export type FolderFilter = Record<string, never>;
+export type PerspectiveFilter = Record<string, never>;
+
+/**
  * Known project filter property names (for validation)
  */
 export const PROJECT_FILTER_PROPERTY_NAMES = [
