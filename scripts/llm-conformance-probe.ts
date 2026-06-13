@@ -34,9 +34,16 @@
  * model's full advertised context (131k for llama3.1 → 21 GB resident for the 8b).
  *
  * Output: a Markdown conformance report to stdout (redirect to a file), progress to stderr.
+ *
+ * Timing (OMN-173): the report carries a "## Timing" section — Ollama server-start time
+ * (when the probe started it), per-model model-load vs case-execution split, per-model
+ * elapsed, and total wall. Set PROBE_TIMING_JSON=<path> to also write a machine-readable
+ * timing+scores JSON for `npm run baseline:record` to append to the suite-timing log.
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import { writeFileSync } from 'fs';
+import { performance } from 'perf_hooks';
 import { Ollama, type Tool, type ToolCall } from 'ollama';
 import { isLocalhostOllamaHost, resolveNumCtx } from './lib/ollama-lifecycle.js';
 import type { ZodTypeAny } from 'zod';
@@ -229,6 +236,8 @@ class McpServer {
 interface OllamaLifecycle {
   startedByUs: boolean;
   serveProc?: ChildProcess;
+  /** Wall time spent waiting for the server we started to become reachable (0 if attached). */
+  startMs: number;
 }
 
 async function isReachable(ollama: Ollama): Promise<boolean> {
@@ -245,7 +254,7 @@ async function isReachable(ollama: Ollama): Promise<boolean> {
  * ourselves and record that we own it. We never manage a remote server.
  */
 async function ensureOllama(ollama: Ollama, host: string): Promise<OllamaLifecycle> {
-  if (await isReachable(ollama)) return { startedByUs: false };
+  if (await isReachable(ollama)) return { startedByUs: false, startMs: 0 };
   if (!isLocalhostOllamaHost(host)) {
     process.stderr.write(
       `Ollama not reachable at ${host}. That host is not localhost (or could not be parsed), ` +
@@ -254,6 +263,7 @@ async function ensureOllama(ollama: Ollama, host: string): Promise<OllamaLifecyc
     process.exit(2);
   }
   process.stderr.write('Ollama not running — starting `ollama serve` (will be stopped at exit) …\n');
+  const startedAt = performance.now();
   const stderrTail: string[] = [];
   const proc = spawn('ollama', ['serve'], { stdio: ['ignore', 'ignore', 'pipe'] });
   // Backstop registered at spawn time so a crash/signal during the readiness poll
@@ -270,7 +280,9 @@ async function ensureOllama(ollama: Ollama, host: string): Promise<OllamaLifecyc
   });
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline && !spawnError) {
-    if (await isReachable(ollama)) return { startedByUs: true, serveProc: proc };
+    if (await isReachable(ollama)) {
+      return { startedByUs: true, serveProc: proc, startMs: performance.now() - startedAt };
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   proc.kill('SIGTERM');
@@ -347,15 +359,29 @@ function gradeToolCall(c: ConformanceCase, call: ToolCall | undefined): CaseResu
 
 // ── Per-model run ────────────────────────────────────────────────────────────
 
+/** Per-model timing (OMN-173). All values in milliseconds. */
+interface ModelTiming {
+  /** Wall from before the first case to after the last (load + all inference). */
+  elapsedMs: number;
+  /** Model-load time, taken from the first case's Ollama `load_duration` (lazy load on first chat). */
+  loadMs: number;
+  /** Inference wall only: elapsedMs minus loadMs. */
+  caseExecMs: number;
+}
+
 interface ModelReport {
   model: string;
   available: boolean;
   results: CaseResult[];
   error?: string;
+  timing?: ModelTiming;
 }
 
 async function probeModel(ollama: Ollama, model: string, tools: Tool[], numCtx: number): Promise<ModelReport> {
   const results: CaseResult[] = [];
+  let loadMs = 0;
+  let firstCase = true;
+  const startedAt = performance.now();
   for (const c of CASES) {
     process.stderr.write(`  [${model}] ${c.id} … `);
     try {
@@ -376,6 +402,14 @@ async function probeModel(ollama: Ollama, model: string, tools: Tool[], numCtx: 
         // model's full advertised context. Default + sizing rationale: lib/ollama-lifecycle.ts.
         options: { temperature: 0, num_ctx: numCtx },
       });
+      // The model loads lazily on the first chat that completes; `load_duration` (ns) on that
+      // response is the load cost. If an earlier case threw (network/timeout, not a load), the
+      // model never loaded, so the first *successful* case still carries the true load cost.
+      // Subsequent cases reuse the loaded model (load_duration ≈ 0).
+      if (firstCase) {
+        loadMs = (res.load_duration ?? 0) / 1e6;
+        firstCase = false;
+      }
       const call = res.message.tool_calls?.[0];
       const graded = gradeToolCall(c, call);
       results.push(graded);
@@ -385,7 +419,9 @@ async function probeModel(ollama: Ollama, model: string, tools: Tool[], numCtx: 
       process.stderr.write('model_error\n');
     }
   }
-  return { model, available: true, results };
+  const elapsedMs = performance.now() - startedAt;
+  const timing: ModelTiming = { elapsedMs, loadMs, caseExecMs: Math.max(0, elapsedMs - loadMs) };
+  return { model, available: true, results, timing };
 }
 
 // ── Reporting ────────────────────────────────────────────────────────────────
@@ -394,7 +430,80 @@ function pct(n: number, d: number): string {
   return d === 0 ? '0%' : `${Math.round((100 * n) / d)}%`;
 }
 
-function renderReport(reports: ModelReport[]): string {
+/** Compact seconds with one decimal, e.g. 1234ms → "1.2s". */
+function secs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Run-level timing the per-model reports don't carry (OMN-173). */
+interface ProbeTiming {
+  ollamaStartedByUs: boolean;
+  ollamaStartMs: number;
+  totalWallMs: number;
+}
+
+/** Passed / total / score% for a model report. */
+function scoreOf(r: ModelReport): { passed: number; cases: number } {
+  return { passed: r.results.filter((x) => x.outcome === 'pass').length, cases: CASES.length };
+}
+
+/**
+ * Machine-readable timing + scores (OMN-173) for `npm run baseline:record` to append to
+ * the suite-timing log. Stable `schema` tag so the consumer can reject a drifted shape.
+ */
+function buildTimingArtifact(reports: ModelReport[], timing: ProbeTiming) {
+  return {
+    schema: 'omn-173-conformance-timing@1',
+    ollama: { startedByUs: timing.ollamaStartedByUs, startMs: Math.round(timing.ollamaStartMs) },
+    totalWallMs: Math.round(timing.totalWallMs),
+    models: reports.map((r) => {
+      const { passed, cases } = scoreOf(r);
+      return {
+        model: r.model,
+        available: r.available,
+        passed,
+        cases,
+        scorePct: r.available ? Math.round((100 * passed) / cases) : null,
+        elapsedMs: r.timing ? Math.round(r.timing.elapsedMs) : null,
+        loadMs: r.timing ? Math.round(r.timing.loadMs) : null,
+        caseExecMs: r.timing ? Math.round(r.timing.caseExecMs) : null,
+      };
+    }),
+  };
+}
+
+/** The "## Timing" section (OMN-173), split out to keep renderReport's complexity down. */
+function renderTimingSection(reports: ModelReport[], timing: ProbeTiming): string[] {
+  const lines: string[] = [];
+  lines.push('## Timing');
+  lines.push('');
+  const ollamaNote = timing.ollamaStartedByUs
+    ? ` · Ollama server-start: ${secs(timing.ollamaStartMs)} (started by probe)`
+    : ' · Ollama: attached to a running server (no start cost)';
+  lines.push(`Total wall: **${secs(timing.totalWallMs)}**${ollamaNote}`);
+  lines.push('');
+  lines.push('| Model | Elapsed | Model-load | Case-exec | Per-case avg |');
+  lines.push('|-------|---------|-----------|-----------|--------------|');
+  for (const r of reports) {
+    if (!r.available || !r.timing) {
+      lines.push(`| ${r.model} | — | — | — | — |`);
+      continue;
+    }
+    const avg = r.timing.caseExecMs / CASES.length;
+    lines.push(
+      `| ${r.model} | ${secs(r.timing.elapsedMs)} | ${secs(r.timing.loadMs)} | ${secs(r.timing.caseExecMs)} | ${secs(avg)} |`,
+    );
+  }
+  lines.push('');
+  lines.push(
+    '> Model-load is the first-case `load_duration`; case-exec is the remaining inference wall. ' +
+      'Wall times depend on hardware, RAM pressure, and whether the model was already resident — ' +
+      'compare against a same-machine baseline, not across hosts.',
+  );
+  return lines;
+}
+
+function renderReport(reports: ModelReport[], timing: ProbeTiming): string {
   const lines: string[] = [];
   lines.push('# LLM Conformance Probe Report');
   lines.push('');
@@ -426,6 +535,10 @@ function renderReport(reports: ModelReport[]): string {
       `| ${r.model} | ${pass} | ${normalized} | ${tally('wrong_tool')} | ${tally('schema_invalid')} | ${tally('no_tool_call')} | ${tally('model_error')} | **${pct(pass, CASES.length)}** |`,
     );
   }
+  lines.push('');
+
+  // Timing (OMN-173) — drift becomes a diff once recorded to the suite-timing log.
+  lines.push(...renderTimingSection(reports, timing));
   lines.push('');
 
   // Per-model detail
@@ -499,6 +612,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  const runStartedAt = performance.now();
   const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
   const ollama = new Ollama({ host });
   const lifecycle = await ensureOllama(ollama, host);
@@ -558,7 +672,19 @@ async function main(): Promise<void> {
       reports.push(await probeModel(ollama, model, tools, numCtx));
     }
 
-    process.stdout.write(renderReport(reports) + '\n');
+    const timing: ProbeTiming = {
+      ollamaStartedByUs: lifecycle.startedByUs,
+      ollamaStartMs: lifecycle.startMs,
+      totalWallMs: performance.now() - runStartedAt,
+    };
+    process.stdout.write(renderReport(reports, timing) + '\n');
+
+    // Machine-readable timing+scores for `npm run baseline:record` (OMN-173).
+    const timingJsonPath = process.env.PROBE_TIMING_JSON;
+    if (timingJsonPath) {
+      writeFileSync(timingJsonPath, JSON.stringify(buildTimingArtifact(reports, timing), null, 2) + '\n');
+      process.stderr.write(`Wrote timing artifact → ${timingJsonPath}\n`);
+    }
   } finally {
     await teardown();
   }
