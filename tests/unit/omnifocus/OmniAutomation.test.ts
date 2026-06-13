@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { OmniAutomation, OmniAutomationError } from '../../../src/omnifocus/OmniAutomation';
+import { TagMutationResultSchema, CompleteResultSchema } from '../../../src/omnifocus/script-response-schemas';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
@@ -450,6 +451,113 @@ describe('OmniAutomation', () => {
       expect(result.error).toBe('boom');
       expect(result.context).toBe('Legacy script error');
     });
+  });
 
+  describe('executeJson unionErrors slimming (OMN-158 rider 2)', () => {
+    // Uses the same beforeEach/afterEach spy restoration as the detection suite above,
+    // but we need a fresh setup here. The outer beforeEach/afterEach (top of describe block)
+    // reset the spawn mock; the inner spy-guard afterEach in the detection suite handles
+    // restoring the prototype stub. Since this describe block is at the same level and
+    // the spy guard is INSIDE the detection block, this describe block gets the outer
+    // beforeEach/afterEach only, so we install our own spy guard.
+
+    const defaultMockImpl = vi.fn(async (_script: string, _schema?: any) => ({ success: true, data: {} }));
+    let restoredPrototypeSpy = false;
+    beforeEach(() => {
+      restoredPrototypeSpy = false;
+      if (vi.isMockFunction(OmniAutomation.prototype.executeJson)) {
+        vi.mocked(OmniAutomation.prototype.executeJson).mockRestore();
+        restoredPrototypeSpy = true;
+      }
+    });
+    afterEach(() => {
+      if (restoredPrototypeSpy) {
+        vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(defaultMockImpl);
+      }
+    });
+
+    // (a) Near-miss single-literal match: {action:'renamed', oldName:123 (wrong type), newName:'x', message:'y'}
+    //     → same ScriptError (success:false, context 'Unrecognized script output shape')
+    //     BUT details.issues scoped to renamed-branch only (not all 10 branches).
+    it('(a) near-miss renamed branch: details.issues scoped to renamed-branch issues only', async () => {
+      const payload = { action: 'renamed', oldName: 123, newName: 'x', message: 'y' };
+      const result = await emitJsonOutput(JSON.stringify(payload), TagMutationResultSchema);
+
+      // Outcome unchanged: still a ScriptError
+      expect(result.success).toBe(false);
+      // Context unchanged: same stable string
+      expect(result.context).toBe('Unrecognized script output shape');
+      // Message unchanged
+      expect(result.error).toBe('Script output did not match the expected success shape');
+
+      // Issues are now scoped to the renamed branch only — NOT the full invalid_union listing
+      const details = result.details as { raw: string; issues: z.ZodIssue[] };
+      expect(details.issues).toBeDefined();
+      // Should be a short list (renamed-branch issues only: oldName wrong type)
+      const issuePaths = details.issues.map((i: z.ZodIssue) => i.path[0] as string);
+      expect(issuePaths).toContain('oldName');
+      // Should NOT contain issues from other branches (e.g. tagId from created branches,
+      // tagName from deleted branch used at top-level of other branch error paths)
+      // The key sign: no issue with code 'invalid_union' (we replaced the top-level issue)
+      expect(details.issues.every((i: z.ZodIssue) => i.code !== 'invalid_union')).toBe(true);
+    });
+
+    // (b) No-branch-match: {action:'bogus', ...} → no branch's action literal matches → unchanged
+    it('(b) no-match: full unionErrors retained when action literal matches no branch', async () => {
+      const payload = { action: 'bogus', oldName: 'x', newName: 'y', message: 'z' };
+      const result = await emitJsonOutput(JSON.stringify(payload), TagMutationResultSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe('Unrecognized script output shape');
+
+      const details = result.details as { raw: string; issues: z.ZodIssue[] };
+      // Full invalid_union issue retained at top level (not slimmed)
+      expect(details.issues[0].code).toBe('invalid_union');
+    });
+
+    // (c) Shared-literal / ambiguous: action:'created' is shared by two branches →
+    //     multiple match → unchanged
+    it('(c) shared literal (action:created): multiple branches match → unionErrors unchanged', async () => {
+      // action:'created' matches both created-path and created-flat branches; path is wrong type
+      const payload = { action: 'created', tagName: 'Work', tagId: 't1', path: 123, message: 'y' };
+      const result = await emitJsonOutput(JSON.stringify(payload), TagMutationResultSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe('Unrecognized script output shape');
+
+      const details = result.details as { raw: string; issues: z.ZodIssue[] };
+      // Top-level invalid_union issue retained (not slimmed)
+      expect(details.issues[0].code).toBe('invalid_union');
+    });
+
+    // (d) Non-union schema rejection: CompleteResultSchema or a plain object schema.
+    //     Both branches of CompleteResultSchema have completed:literal(true) → both match →
+    //     unchanged (multiple-match path). Plain object schema → no invalid_union issue → unchanged.
+    it('(d) non-union plain schema: issues untouched (no invalid_union at top level)', async () => {
+      const plainSchema = z.object({ taskId: z.string() }).strict();
+      const payload = { taskId: 123 };
+      const result = await emitJsonOutput(JSON.stringify(payload), plainSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe('Unrecognized script output shape');
+
+      const details = result.details as { raw: string; issues: z.ZodIssue[] };
+      // No invalid_union at top — issues untouched (first issue is type mismatch on taskId)
+      expect(details.issues[0].code).not.toBe('invalid_union');
+      expect(details.issues[0].path[0]).toBe('taskId');
+    });
+
+    it('(d2) CompleteResultSchema: both branches share completed:literal(true) → multiple match → unchanged', async () => {
+      // taskId is wrong type; completed:true present → both branches match literal → multiple match
+      const payload = { taskId: 123, name: 'My task', completed: true, completionDate: null };
+      const result = await emitJsonOutput(JSON.stringify(payload), CompleteResultSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe('Unrecognized script output shape');
+
+      const details = result.details as { raw: string; issues: z.ZodIssue[] };
+      // Both branches match completed:literal(true) → multiple match → issues unchanged (still invalid_union)
+      expect(details.issues[0].code).toBe('invalid_union');
+    });
   });
 });
