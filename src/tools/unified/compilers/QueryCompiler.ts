@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
-import type { TaskFilter, NormalizedTaskFilter, ProjectFilter } from '../../../contracts/filters.js';
+import type {
+  TaskFilter,
+  NormalizedTaskFilter,
+  ProjectFilter,
+  TagFilter,
+  FolderFilter,
+  PerspectiveFilter,
+} from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
 import { buildAST } from '../../../contracts/ast/builder.js';
@@ -13,6 +20,7 @@ import {
   type MergeSource,
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
+import { transformTagFilters, transformFolderFilters, transformPerspectiveFilters } from './reject-filters.js';
 import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION, ON_HOLD_TASKS_REJECTION } from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
@@ -20,43 +28,58 @@ export type QueryFilter = FilterValue;
 // Items inside AND/OR/NOT are flat (no nested logical operators)
 export type FlatQueryFilter = FlatFilterValue;
 
-export interface CompiledQuery {
-  type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders' | 'export';
-  mode?:
-    | 'all'
-    | 'inbox'
-    | 'search'
-    | 'overdue'
-    | 'today'
-    | 'upcoming'
-    | 'available'
-    | 'blocked'
-    | 'flagged'
-    | 'smart_suggest';
-  filters: NormalizedTaskFilter; // Normalized during compilation
+/**
+ * OMN-161 S1: shared response-control fields present on every CompiledQuery variant.
+ */
+interface CompiledQueryBase {
   fields?: string[];
   sort?: Array<{ field: SortableField; direction: 'asc' | 'desc' }>;
   limit?: number;
   offset?: number;
-  // Response control parameters
   details?: boolean;
-  fastSearch?: boolean;
-  daysAhead?: number;
-  countOnly?: boolean; // Return only count (33x faster than fetching full tasks)
-  // Export parameters (when type='export')
-  exportType?: 'tasks' | 'projects' | 'all';
-  format?: 'json' | 'csv' | 'markdown';
-  exportFields?: string[];
-  outputDirectory?: string;
-  includeStats?: boolean;
-  includeCompleted?: boolean;
-  /**
-   * OMN-156 (C-lite): typed ProjectFilter compiled from projects-query filters.
-   * Present only when type === 'projects'. handleProjectQuery consumes ONLY this;
-   * compiled.filters stays empty normalized TaskFilter for projects.
-   */
-  projectFilter?: ProjectFilter;
 }
+
+type TaskMode =
+  | 'all'
+  | 'inbox'
+  | 'search'
+  | 'overdue'
+  | 'today'
+  | 'upcoming'
+  | 'available'
+  | 'blocked'
+  | 'flagged'
+  | 'smart_suggest';
+
+/**
+ * OMN-161 S1: CompiledQuery is a discriminated union keyed by `type`.
+ * Each variant carries its own typed `filters` shape — no more shared
+ * flat interface or `projectFilter?` side-channel.
+ */
+export type CompiledQuery =
+  | (CompiledQueryBase & {
+      type: 'tasks';
+      filters: NormalizedTaskFilter;
+      mode?: TaskMode;
+      fastSearch?: boolean;
+      daysAhead?: number;
+      countOnly?: boolean;
+    })
+  | (CompiledQueryBase & { type: 'projects'; filters: ProjectFilter; includeStats?: boolean })
+  | (CompiledQueryBase & { type: 'tags'; filters: TagFilter })
+  | (CompiledQueryBase & { type: 'folders'; filters: FolderFilter })
+  | (CompiledQueryBase & { type: 'perspectives'; filters: PerspectiveFilter })
+  | (CompiledQueryBase & {
+      type: 'export';
+      filters: NormalizedTaskFilter;
+      exportType?: 'tasks' | 'projects' | 'all';
+      format?: 'json' | 'csv' | 'markdown';
+      exportFields?: string[];
+      outputDirectory?: string;
+      includeStats?: boolean;
+      includeCompleted?: boolean;
+      fastSearch?: boolean;
+    });
 
 /**
  * OMN-162: Returns true if the given TaskFilter compiles to a literal(true) AST node —
@@ -76,46 +99,69 @@ export class QueryCompiler {
   compile(input: ReadInput): CompiledQuery {
     const { query } = input;
 
-    // OMN-156 (C-lite): projects filters compile to a typed ProjectFilter in
-    // INPUT vocabulary. compiled.filters stays an empty normalized TaskFilter for
-    // projects — handleProjectQuery must consume ONLY projectFilter.
-    const isProjects = query.type === 'projects';
-    const projectFilter = isProjects ? transformProjectFilters(query.filters ?? {}) : undefined;
-    const rawFilters: TaskFilter = !isProjects && query.filters ? this.transformFilters(query.filters) : {};
-
-    // OMN-115: fastSearch is a query-level param, but the AST search builder only
-    // sees the filter object. Thread it onto the filter so `fastSearch: true`
-    // emits a name-only predicate (skips the note body) per the documented
-    // "Name search" fast path.
-    if ('fastSearch' in query && query.fastSearch !== undefined) {
-      rawFilters.fastSearch = query.fastSearch;
-    }
-    const filters = normalizeFilter(rawFilters);
-    const taskMode = 'mode' in query && query.mode ? query.mode : 'all';
-
-    return {
-      type: query.type,
-      // Task-specific — default mode to 'all' for task queries only
-      mode: query.type === 'tasks' ? taskMode : undefined,
-      filters,
-      projectFilter,
+    const base: CompiledQueryBase = {
       fields: 'fields' in query ? query.fields : undefined,
       sort: 'sort' in query ? query.sort : undefined,
       limit: 'limit' in query ? query.limit : undefined,
       offset: 'offset' in query ? query.offset : undefined,
-      // Task-specific response control
       details: 'details' in query ? query.details : undefined,
-      fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
-      daysAhead: 'daysAhead' in query ? query.daysAhead : undefined,
-      countOnly: 'countOnly' in query ? query.countOnly : undefined,
-      // Export-specific
-      exportType: 'exportType' in query ? query.exportType : undefined,
-      format: 'format' in query ? query.format : undefined,
-      exportFields: 'exportFields' in query ? query.exportFields : undefined,
-      outputDirectory: 'outputDirectory' in query ? query.outputDirectory : undefined,
-      includeStats: 'includeStats' in query ? query.includeStats : undefined,
-      includeCompleted: 'includeCompleted' in query ? query.includeCompleted : undefined,
     };
+
+    switch (query.type) {
+      case 'projects':
+        return {
+          ...base,
+          type: 'projects',
+          filters: transformProjectFilters(query.filters ?? {}),
+          includeStats: 'includeStats' in query ? query.includeStats : undefined,
+        };
+      case 'tags':
+        return { ...base, type: 'tags', filters: transformTagFilters(query.filters ?? {}) };
+      case 'folders':
+        return { ...base, type: 'folders', filters: transformFolderFilters(query.filters ?? {}) };
+      case 'perspectives':
+        return { ...base, type: 'perspectives', filters: transformPerspectiveFilters(query.filters ?? {}) };
+      case 'tasks':
+      case 'export': {
+        // OMN-115: fastSearch is a query-level param, but the AST search builder only
+        // sees the filter object. Thread it onto the filter so `fastSearch: true`
+        // emits a name-only predicate (skips the note body) per the documented
+        // "Name search" fast path.
+        const raw: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
+        if ('fastSearch' in query && query.fastSearch !== undefined) {
+          raw.fastSearch = query.fastSearch;
+        }
+        const filters = normalizeFilter(raw);
+        if (query.type === 'tasks') {
+          return {
+            ...base,
+            type: 'tasks',
+            filters,
+            mode: ('mode' in query && query.mode ? query.mode : 'all') as TaskMode,
+            fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
+            daysAhead: 'daysAhead' in query ? query.daysAhead : undefined,
+            countOnly: 'countOnly' in query ? query.countOnly : undefined,
+          };
+        }
+        return {
+          ...base,
+          type: 'export',
+          filters,
+          exportType: 'exportType' in query ? query.exportType : undefined,
+          format: 'format' in query ? query.format : undefined,
+          exportFields: 'exportFields' in query ? query.exportFields : undefined,
+          outputDirectory: 'outputDirectory' in query ? query.outputDirectory : undefined,
+          includeStats: 'includeStats' in query ? query.includeStats : undefined,
+          includeCompleted: 'includeCompleted' in query ? query.includeCompleted : undefined,
+          // cast required: fastSearch narrows to unknown in this union position
+          fastSearch: 'fastSearch' in query ? (query.fastSearch as boolean | undefined) : undefined,
+        };
+      }
+      default: {
+        const _exhaustive: never = query;
+        throw new Error(`Unhandled query type: ${JSON.stringify(_exhaustive)}`);
+      }
+    }
   }
 
   /**

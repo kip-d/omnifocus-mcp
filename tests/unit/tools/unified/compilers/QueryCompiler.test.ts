@@ -1009,29 +1009,36 @@ describe('QueryCompiler', () => {
       const compiled = compiler.compile({
         query: { type: 'projects', filters: { folder: 'Work' } },
       } as never);
-      expect(compiled.projectFilter).toBeDefined();
-      expect((compiled.projectFilter as Record<string, unknown>).folderName).toBe('Work');
+      // OMN-161 S1: ProjectFilter now lives on compiled.filters (no projectFilter side-channel)
+      expect(compiled.type).toBe('projects');
+      expect((compiled.filters as Record<string, unknown>).folderName).toBe('Work');
     });
   });
 
-  describe('compile() projects branch (OMN-156 C-lite)', () => {
-    it('populates projectFilter and leaves filters empty for projects queries', () => {
+  describe('compile() projects branch (OMN-156 C-lite / OMN-161 S1)', () => {
+    it('projects: typed ProjectFilter lands on compiled.filters (no projectFilter side-channel)', () => {
       const compiled = compiler.compile({
         query: { type: 'projects', filters: { flagged: true, status: 'active' } },
       } as never);
-      expect(compiled.projectFilter).toEqual({ flagged: true, status: ['active'] });
-      // compiled.filters is the empty normalized filter — nothing leaks through the old path
-      expect(compiled.filters.flagged).toBeUndefined();
-      expect(compiled.filters.projectStatus).toBeUndefined();
+      // OMN-161 S1: ProjectFilter is now compiled.filters; projectFilter side-channel removed
+      expect(compiled.type).toBe('projects');
+      expect((compiled.filters as Record<string, unknown>).flagged).toBe(true);
+      expect((compiled.filters as Record<string, unknown>).status).toEqual(['active']);
+      // projectFilter no longer exists on CompiledQuery
+      expect((compiled as any).projectFilter).toBeUndefined();
     });
     it('throws from compile() for OR on projects (reaches BaseTool as VALIDATION_ERROR)', () => {
       expect(() =>
         compiler.compile({ query: { type: 'projects', filters: { OR: [{ name: { contains: 'a' } }] } } } as never),
       ).toThrowError(z.ZodError);
     });
-    it('tasks queries do NOT get a projectFilter', () => {
+    it('tasks queries have NormalizedTaskFilter on compiled.filters (not ProjectFilter shape)', () => {
       const compiled = compiler.compile({ query: { type: 'tasks', filters: { flagged: true } } } as never);
-      expect(compiled.projectFilter).toBeUndefined();
+      // Verify type discriminant
+      expect(compiled.type).toBe('tasks');
+      expect((compiled.filters as Record<string, unknown>).flagged).toBe(true);
+      // projectFilter never existed on the union — structural check
+      expect((compiled as any).projectFilter).toBeUndefined();
     });
   });
 
@@ -1183,8 +1190,9 @@ describe('QueryCompiler', () => {
       const compiled = compiler.compile({
         query: { type: 'projects', filters: { status: 'on_hold' } },
       } as never);
-      expect(compiled.projectFilter).toBeDefined();
-      expect((compiled.projectFilter as Record<string, unknown>).status).toEqual(['onHold']);
+      // OMN-161 S1: ProjectFilter now lives on compiled.filters (no projectFilter side-channel)
+      expect(compiled.type).toBe('projects');
+      expect((compiled.filters as Record<string, unknown>).status).toEqual(['onHold']);
     });
   });
 

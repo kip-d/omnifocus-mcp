@@ -180,6 +180,7 @@ function resolveFieldsMode(
  * Build the full task query: resolve mode, augment filters, inject fields, build script.
  */
 function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
+  if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
   const limit = compiled.limit || 25;
   const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
 
@@ -410,14 +411,15 @@ PERFORMANCE:
       case 'export':
         return this.handleExport(compiled);
       default: {
-        // Exhaustiveness check
-        const _exhaustive: never = compiled.type;
-        throw new Error(`Unsupported query type: ${String(_exhaustive)}`);
+        // Exhaustiveness check — compiled is `never` here (all union variants handled)
+        const _exhaustive: never = compiled as never;
+        throw new Error(`Unsupported query type: ${JSON.stringify(_exhaustive)}`);
       }
     }
   }
 
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'tasks') throw new Error('handleTaskQuery: wrong type');
     const timer = new OperationTimerV2();
     const { script, filter, mode, limit, sortedInScript, fieldsMode } = buildTaskQuery(compiled);
 
@@ -668,6 +670,7 @@ PERFORMANCE:
   }
 
   private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'projects') throw new Error('handleProjectQuery: wrong type');
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
     const includeStats = compiled.includeStats ?? false;
@@ -676,15 +679,9 @@ PERFORMANCE:
     const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
     const effectiveFields = resolveEffectiveProjectFields(userExplicitFields, compiled.details);
 
-    // OMN-156 (C-lite): the compiler emits a typed ProjectFilter; the old
-    // cherry-pick re-narrowing seam (silently dropped unmapped keys → match-all,
-    // D10) is deleted, not guarded. A missing projectFilter is an invariant
-    // violation — falling back to {} would silently degrade to match-all,
-    // exactly the bug class this seam closes.
-    if (!compiled.projectFilter) {
-      throw new Error('Invariant violation: projects query compiled without projectFilter (OMN-156)');
-    }
-    const projectFilter: ProjectFilter = compiled.projectFilter;
+    // OMN-161 S1: compiled.filters is now typed as ProjectFilter directly.
+    // The old projectFilter? side-channel is removed.
+    const projectFilter: ProjectFilter = compiled.filters;
 
     if (projectFilter.id) {
       return this.executeProjectIdLookup(projectFilter.id, effectiveFields, timer);
@@ -974,6 +971,7 @@ PERFORMANCE:
   // =============================================================================
 
   private async handleExport(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'export') throw new Error('handleExport: wrong type');
     const exportType = compiled.exportType || 'tasks';
     const format = (compiled.format || 'json') as ExportFormat;
     const timer = new OperationTimerV2();
@@ -1006,6 +1004,7 @@ PERFORMANCE:
     format: ExportFormat,
     timer: OperationTimerV2,
   ): Promise<unknown> {
+    if (compiled.type !== 'export') throw new Error('handleTaskExport: wrong type');
     const outputDirectory = compiled.outputDirectory;
 
     // OMN-44: `filters.completed` (if set) takes precedence; `includeCompleted`
@@ -1019,9 +1018,11 @@ PERFORMANCE:
       projectId: compiled.filters.projectId,
       tags: compiled.filters.tags,
       tagsOperator: compiled.filters.tagsOperator as ExportFilter['tagsOperator'],
-      search: compiled.filters.search,
-      // OMN-142: name is name-scoped (never matches notes); search above
-      // keeps the legacy full-text (name OR note) semantics.
+      // F9 (OMN-161 S1): compiled.filters.search was always undefined here — the
+      // compile path never populated it (search is a legacy TaskFilter field not
+      // mapped from the public API). Deleted the dead line; ExportFilter.search
+      // stays in the type for the script builder side.
+      // OMN-142: name is name-scoped (never matches notes).
       name: compiled.filters.name,
       nameOperator: compiled.filters.nameOperator,
     };
@@ -1175,6 +1176,7 @@ PERFORMANCE:
     format: ExportFormat,
     timer: OperationTimerV2,
   ): Promise<unknown> {
+    if (compiled.type !== 'export') throw new Error('handleBulkExport: wrong type');
     const outputDirectory = compiled.outputDirectory;
     if (!outputDirectory) {
       return createErrorResponseV2(
