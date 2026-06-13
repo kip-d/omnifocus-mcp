@@ -262,7 +262,7 @@ FILTER OPERATORS:
 - boolean: flagged, blocked, available, inInbox
 - folder (projects queries ONLY): "<name>" matches folder-name substring; null = top-level projects only. On tasks/export queries folder and status: "on_hold" are rejected with guidance (query projects first, then tasks by projectId)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false
-- Projects filters: status, completed, flagged, name, text, folder, id. OR/NOT are not supported on projects queries (use one query per alternative).
+- Projects filters: status, completed, flagged, name, text, folder, id. AND merges; OR: [...] returns the union of its branches; NOT: { status: "active"|"on_hold"|"completed"|"dropped" } matches the complement of that status over the four project states (broader than the tasks NOT, which is completed/active only).
 
 RESPONSE CONTROL:
 - Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available)

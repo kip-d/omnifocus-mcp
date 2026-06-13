@@ -341,6 +341,15 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
     conditions.push('!project.parentFolder');
   }
 
+  // OMN-171 (S3): OR branches — each branch is a flat ProjectFilter compiled
+  // recursively (branches never nest, so the recursion is one level deep). The
+  // ||-joined group ANDs with the base conditions, mirroring the tasks-side
+  // buildAST orBranches node (which emits an or() AST instead of a string).
+  if (filter.orBranches && filter.orBranches.length > 0) {
+    const branchCodes = filter.orBranches.map((branch) => `(${generateProjectFilterCode(branch)})`);
+    conditions.push(branchCodes.length === 1 ? branchCodes[0] : `(${branchCodes.join(' || ')})`);
+  }
+
   // Return 'true' if no conditions (match all projects)
   return conditions.length > 0 ? conditions.join(' && ') : 'true';
 }
@@ -357,7 +366,8 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
     !filter.name && // OMN-142
     !filter.folderId &&
     !filter.folderName &&
-    !filter.topLevelOnly // OMN-96
+    !filter.topLevelOnly && // OMN-96
+    (!filter.orBranches || filter.orBranches.length === 0) // OMN-171
   );
 }
 
@@ -391,6 +401,10 @@ export function describeProjectFilter(filter: ProjectFilter): string {
   }
   if (filter.topLevelOnly) {
     conditions.push('top-level only (no folder)'); // OMN-96
+  }
+  if (filter.orBranches && filter.orBranches.length > 0) {
+    // OMN-171: describe each branch recursively, joined by OR
+    conditions.push(`(${filter.orBranches.map((b) => describeProjectFilter(b)).join(') OR (')})`);
   }
 
   if (conditions.length === 0) {

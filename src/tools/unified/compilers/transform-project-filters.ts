@@ -4,14 +4,17 @@ import type { ProjectFilter, ProjectStatus } from '../../../contracts/filters.js
 import { STATUS_TO_PROJECT, extractTextCondition, filterDeepEqual, emptyOperatorError } from './filter-merge.js';
 
 type ProjectInputKey = keyof FlatFilterValue | 'AND' | 'OR' | 'NOT';
-type Disposition = 'map' | 'merge' | 'reject';
+// 'compose' = handled by a dedicated operator path (AND-merge / OR-branch /
+// NOT-complement), NOT mapped directly and NOT silently dropped. OMN-171
+// lifted OR/NOT from 'reject' to 'compose'.
+type Disposition = 'map' | 'merge' | 'compose' | 'reject';
 
 /**
  * OMN-156 (C-lite): every input-schema filter key has an explicit projects
  * disposition. `satisfies` makes a NEW schema field a compile error here until
  * someone decides its projects behavior — silent dropping is structurally
  * impossible (the MUTATION_DEFS registration pattern; spec P1).
- * Full per-query-type contracts: OMN-161.
+ * Full per-query-type contracts: OMN-161. OMN-171 (S3): OR/NOT now supported.
  */
 export const PROJECT_KEY_DISPOSITION = {
   id: 'map',
@@ -22,8 +25,8 @@ export const PROJECT_KEY_DISPOSITION = {
   text: 'map',
   name: 'map',
   AND: 'merge',
-  OR: 'reject',
-  NOT: 'reject',
+  OR: 'compose', // OMN-171: branch compilation → ProjectFilter.orBranches
+  NOT: 'compose', // OMN-171: {status} → four-state complement folded into status
   tags: 'reject',
   project: 'reject',
   projectId: 'reject',
@@ -41,8 +44,128 @@ export const PROJECT_KEY_DISPOSITION = {
 
 const SUPPORTED = 'Supported projects filters: status, completed, flagged, name, text, folder, id.';
 
+/** The four project states, in canonical order — the universe NOT complements over. */
+const ALL_PROJECT_STATUSES: ProjectStatus[] = ['active', 'onHold', 'done', 'dropped'];
+
 function projectsError(path: Array<string | number>, message: string): z.ZodError {
   return new z.ZodError([{ code: z.ZodIssueCode.custom, path: ['query', 'filters', ...path], message }]);
+}
+
+/**
+ * OMN-171: NOT on projects compiles to the status-array COMPLEMENT over the four
+ * project states. Contract (OMN-131 shape): NOT must be exactly { status: <one
+ * value> }; everything else hard-rejects. Unlike the tasks-side NOT (2-valued
+ * completed only), projects' status is 4-valued so the complement is well-defined
+ * for all four states.
+ */
+function projectNotComplement(notFilter: unknown): ProjectStatus[] {
+  const flat = (notFilter ?? {}) as Record<string, unknown>;
+  const keys = Object.keys(flat).filter((k) => flat[k] !== undefined);
+  if (keys.length === 1 && typeof flat.status === 'string') {
+    const excluded = STATUS_TO_PROJECT[flat.status as ReadStatus];
+    if (excluded) return ALL_PROJECT_STATUSES.filter((s) => s !== excluded);
+    // Unknown status value falls through to the reject below (defense-in-depth;
+    // the schema rejects unknown enum values upstream).
+  }
+  throw projectsError(
+    ['NOT'],
+    `Unsupported NOT filter on projects queries: ${JSON.stringify(notFilter)}. ` +
+      "NOT supports exactly { status: <'active'|'on_hold'|'completed'|'dropped'> } — it compiles to the " +
+      'complement of that status over the four project states. For other exclusions express the condition ' +
+      'directly (e.g. flagged:false, or a status filter naming the states you want).',
+  );
+}
+
+/**
+ * Map a flat (operator-free) project filter input into a typed ProjectFilter.
+ * Used for the AND-merged base AND for each OR branch. `pathPrefix` scopes
+ * ZodError paths (OR branches report ['query','filters','OR',i,…]).
+ *
+ * Steps mirror the prior monolithic transform: 3) reject unsupported keys,
+ * 4) id exclusivity, 5) map. NOT folding stays at the caller (top level only).
+ */
+function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array<string | number> = []): ProjectFilter {
+  // 3. Reject every unsupported key, all named in one error.
+  const offenders = Object.keys(merged).filter(
+    (key) => (PROJECT_KEY_DISPOSITION as Record<string, Disposition>)[key] !== 'map',
+  );
+  if (offenders.length > 0) {
+    throw projectsError(
+      pathPrefix,
+      `Unsupported filter${offenders.length > 1 ? 's' : ''} on projects queries: ${offenders.join(', ')}. ${SUPPORTED} These are task-query filters — did you mean type:'tasks' with a project filter?`,
+    );
+  }
+
+  // 4. id is an exclusive fast path (design spec §3.3): silently ignoring
+  //    co-filters is the same drop class this module closes.
+  const keys = Object.keys(merged);
+  if (merged.id !== undefined && keys.length > 1) {
+    throw projectsError(
+      [...pathPrefix, 'id'],
+      `'id' is an exact lookup and cannot combine with other filters (got: ${keys.filter((k) => k !== 'id').join(', ')}). ` +
+        'Remove the other filters, or drop id to search.',
+    );
+  }
+
+  // 5. Map.
+  const result: ProjectFilter = {};
+  if (typeof merged.id === 'string') result.id = merged.id;
+  if (typeof merged.flagged === 'boolean') result.flagged = merged.flagged;
+
+  let statusSet: ProjectStatus[] | undefined;
+  if (typeof merged.status === 'string') {
+    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
+    // Defense-in-depth: schema rejects unknown status values upstream, but a
+    // future schema-enum addition without a STATUS_TO_PROJECT entry must not
+    // silently widen on the status dimension.
+    if (!mapped) {
+      throw projectsError(
+        [...pathPrefix, 'status'],
+        `Unknown status value '${String(merged.status)}' for projects queries. Supported: active, on_hold, completed, dropped.`,
+      );
+    }
+    statusSet = [mapped];
+  }
+  if (typeof merged.completed === 'boolean') {
+    // Decision record (design spec §3.3): completed:false is the GTD "still
+    // live?" question — dropped is a terminal verdict, excluded for parity with
+    // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
+    const completedSet: ProjectStatus[] = merged.completed ? ['done'] : ['active', 'onHold'];
+    if (statusSet) {
+      const intersection = statusSet.filter((s) => completedSet.includes(s));
+      if (intersection.length === 0) {
+        throw projectsError(
+          pathPrefix,
+          `'completed: ${merged.completed}' contradicts 'status: ${String(merged.status)}' on projects ` +
+            "(completed:false means active/on-hold). For dropped projects use status:'dropped' alone; " +
+            "for done projects use status:'completed' or completed:true.",
+        );
+      }
+      statusSet = intersection;
+    } else {
+      statusSet = completedSet;
+    }
+  }
+  if (statusSet) result.status = statusSet;
+
+  if (merged.folder === null) {
+    result.topLevelOnly = true;
+  } else if (typeof merged.folder === 'string') {
+    result.folderName = merged.folder;
+  }
+
+  const nameCond = extractTextCondition(merged.name as { contains?: string; matches?: string } | undefined);
+  if (nameCond) {
+    result.name = nameCond.value;
+    result.nameOperator = nameCond.operator;
+  }
+  const textCond = extractTextCondition(merged.text as { contains?: string; matches?: string } | undefined);
+  if (textCond) {
+    result.text = textCond.value;
+    result.textOperator = textCond.operator;
+  }
+
+  return result;
 }
 
 export function transformProjectFilters(input: FilterValue): ProjectFilter {
@@ -84,101 +207,64 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
     });
   }
 
-  // 2. OR / NOT: unsupported on projects — loud, with working alternatives (P3; OMN-131 pattern).
-  if (OR !== undefined) {
-    throw projectsError(
-      ['OR'],
-      'Logical operator OR is not supported on projects queries. ' +
-        'Use a single filters.name / filters.text / filters.status condition, or run one query per alternative.',
-    );
-  }
+  // 2. NOT → status-array complement (OMN-171). Computed before mapping so it can
+  //    intersect the base status below; defer the fold until after the base map.
+  let notComplement: ProjectStatus[] | undefined;
   if (NOT !== undefined) {
-    throw projectsError(
-      ['NOT'],
-      'NOT is not supported on projects queries. ' +
-        "Express the condition directly: e.g. instead of NOT {status:'completed'} use status:'active', " +
-        'or use the status filter for the states you want.',
-    );
+    notComplement = projectNotComplement(NOT);
   }
 
-  // 3. Reject every unsupported key, all named in one error.
-  const offenders = Object.keys(merged).filter(
-    (key) => (PROJECT_KEY_DISPOSITION as Record<string, Disposition>)[key] !== 'map',
-  );
-  if (offenders.length > 0) {
-    throw projectsError(
-      [],
-      `Unsupported filter${offenders.length > 1 ? 's' : ''} on projects queries: ${offenders.join(', ')}. ${SUPPORTED} These are task-query filters — did you mean type:'tasks' with a project filter?`,
-    );
-  }
+  // 3–5. Map the AND-merged base into a typed ProjectFilter.
+  const result = mapFlatProjectFilter(merged, []);
 
-  // 4. id is an exclusive fast path (design spec §3.3): silently ignoring
-  //    co-filters is the same drop class this module closes.
-  const keys = Object.keys(merged);
-  if (merged.id !== undefined && keys.length > 1) {
-    throw projectsError(
-      ['id'],
-      `'id' is an exact lookup and cannot combine with other filters (got: ${keys.filter((k) => k !== 'id').join(', ')}). ` +
-        'Remove the other filters, or drop id to search.',
-    );
-  }
-
-  // 5. Map.
-  const result: ProjectFilter = {};
-  if (typeof merged.id === 'string') result.id = merged.id;
-  if (typeof merged.flagged === 'boolean') result.flagged = merged.flagged;
-
-  let statusSet: ProjectStatus[] | undefined;
-  if (typeof merged.status === 'string') {
-    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
-    // Defense-in-depth: schema rejects unknown status values upstream, but a
-    // future schema-enum addition without a STATUS_TO_PROJECT entry must not
-    // silently widen on the status dimension.
-    if (!mapped) {
-      throw projectsError(
-        ['status'],
-        `Unknown status value '${String(merged.status)}' for projects queries. Supported: active, on_hold, completed, dropped.`,
-      );
-    }
-    statusSet = [mapped];
-  }
-  if (typeof merged.completed === 'boolean') {
-    // Decision record (design spec §3.3): completed:false is the GTD "still
-    // live?" question — dropped is a terminal verdict, excluded for parity with
-    // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
-    const completedSet: ProjectStatus[] = merged.completed ? ['done'] : ['active', 'onHold'];
-    if (statusSet) {
-      const intersection = statusSet.filter((s) => completedSet.includes(s));
+  // Fold the NOT complement into the base status by intersection. An empty
+  // intersection is a contradiction (e.g. status:'active' AND NOT:{status:'active'}),
+  // which must reject loudly rather than silently return zero rows.
+  if (notComplement) {
+    if (result.status) {
+      const intersection = result.status.filter((s) => notComplement!.includes(s));
       if (intersection.length === 0) {
         throw projectsError(
-          [],
-          `'completed: ${merged.completed}' contradicts 'status: ${String(merged.status)}' on projects ` +
-            "(completed:false means active/on-hold). For dropped projects use status:'dropped' alone; " +
-            "for done projects use status:'completed' or completed:true.",
+          ['NOT'],
+          'NOT { status: … } excludes all of the statuses requested by the other filters ' +
+            `(base status [${result.status.join(', ')}] vs NOT-complement [${notComplement.join(', ')}]). ` +
+            'The combination is unsatisfiable — drop one of the constraints.',
         );
       }
-      statusSet = intersection;
+      result.status = intersection;
     } else {
-      statusSet = completedSet;
+      result.status = notComplement;
     }
   }
-  if (statusSet) result.status = statusSet;
 
-  if (merged.folder === null) {
-    result.topLevelOnly = true;
-  } else if (typeof merged.folder === 'string') {
-    result.folderName = merged.folder;
-  }
-
-  const nameCond = extractTextCondition(merged.name as { contains?: string; matches?: string } | undefined);
-  if (nameCond) {
-    result.name = nameCond.value;
-    result.nameOperator = nameCond.operator;
-  }
-  const textCond = extractTextCondition(merged.text as { contains?: string; matches?: string } | undefined);
-  if (textCond) {
-    result.text = textCond.value;
-    result.textOperator = textCond.operator;
+  // 6. OR → branch compilation (OMN-171). Each branch is a flat ProjectFilter;
+  //    generateProjectFilterCode joins them with ||, ANDed with the base keys
+  //    (mirror of the tasks orBranches path). Branches never nest (one-level schema).
+  if (OR !== undefined && Array.isArray(OR)) {
+    if (OR.length === 0) throw emptyOperatorError('OR');
+    result.orBranches = (OR as FlatFilterValue[]).map((cond, i) => {
+      const flat = cond as Record<string, unknown>;
+      const definedKeys = Object.values(flat).filter((v) => v !== undefined).length;
+      if (definedKeys === 0) {
+        throw projectsError(
+          ['OR', i],
+          `OR[${i}] contains no usable conditions. ` +
+            'An empty OR branch would match everything; remove the empty item or add a condition.',
+        );
+      }
+      const branch = mapFlatProjectFilter(flat, ['OR', i]);
+      // Defense-in-depth: a branch whose keys all dropped out of the map would
+      // match everything. No currently-expressible input hits this (every
+      // mappable key produces output), but it guards future transform drift.
+      if (Object.values(branch).filter((v) => v !== undefined).length === 0) {
+        throw projectsError(
+          ['OR', i],
+          `OR[${i}] contains no executable conditions — its keys compile to no project-level filter, ` +
+            'which would silently match every project. Remove the branch or use a supported projects filter.',
+        );
+      }
+      return branch;
+    });
   }
 
   return result;

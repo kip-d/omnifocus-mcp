@@ -291,6 +291,16 @@ export interface ProjectFilter {
    */
   topLevelOnly?: boolean;
 
+  // --- OR Logic (OMN-171 / OMN-161 S3) ---
+  /**
+   * OR branches: each entry is an independent flat ProjectFilter (no nested
+   * logical operators — the schema is one level). `generateProjectFilterCode`
+   * recurses per branch and joins them with `||`, ANDed with the base keys —
+   * mirroring the tasks-side `buildAST` orBranches path. Populated by
+   * `transformProjectFilters` when the projects query uses `{ OR: [...] }`.
+   */
+  orBranches?: ProjectFilter[];
+
   // --- Pagination ---
   limit?: number;
   offset?: number;
@@ -333,6 +343,7 @@ export const PROJECT_FILTER_PROPERTY_NAMES = [
   'folderId',
   'folderName',
   'topLevelOnly', // OMN-96
+  'orBranches', // OMN-171: OR branch compilation on projects
   'limit',
   'offset',
 ] as const;

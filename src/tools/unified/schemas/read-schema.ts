@@ -38,9 +38,10 @@ const NumberFilterSchema = z.union([
 //   and empty operator items reject loudly (VALIDATION_ERROR)
 //   OR: each branch compiles independently → orBranches (ANDed with base keys)
 //   NOT: exactly {status:'completed'} / {status:'active'}; all else rejects (OMN-131)
-// Projects queries compile via transformProjectFilters (OMN-156): supported
-// keys only (status/completed/flagged/name/text/folder/id); AND merges;
-// OR/NOT and task-only keys reject with steering.
+// Projects queries compile via transformProjectFilters (OMN-156, OMN-171):
+// supported keys only (status/completed/flagged/name/text/folder/id); AND merges;
+// OR compiles to orBranches (union of branches); NOT:{status} → four-state status
+// complement (OMN-171); task-only keys still reject with steering.
 // The schema matches this capability. No z.lazy() needed.
 
 // OMN-161 F4: single source of truth for filter status values.

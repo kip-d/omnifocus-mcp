@@ -1,17 +1,18 @@
 /**
- * OMN-156 regression: projects OR must REJECT with steering (not silently
- * return all-projects), completed:false must exclude done projects, and
- * mode:'flagged' must compose with OR (not be silently ignored).
+ * OMN-171 (S3) flips C18: projects OR now RETURNS THE UNION of its branches
+ * (it rejected with steering through OMN-156/OMN-161 S1). completed:false must
+ * still exclude done/dropped projects, and mode:'flagged' must compose with OR.
  *
- * C18 shape: `{type:'projects', filters:{OR:[...]}}` returned 10 match-all
- * rows before this PR — the OR was silently dropped and the query widened to
- * the whole projects database.
+ * C18 history: `{type:'projects', filters:{OR:[...]}}` returned 10 match-all
+ * rows pre-OMN-156 (OR silently dropped → whole-DB widening), then rejected
+ * with steering (OMN-156), and now compiles to `orBranches` (OMN-171).
  *
  * Mode+OR composition (V6): `mode:'flagged'` was augmented AFTER the OR
  * early-return in buildAST, so the flagged constraint never reached the
  * compiled script and unflagged tasks leaked in.
  *
- * Read-only — no fixtures, no sandbox, no cleanup.
+ * Read-only — no fixtures, no sandbox, no cleanup. Data-agnostic: probe
+ * substrings are derived from live project names, not hardcoded.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -21,39 +22,61 @@ import { MCPTestClient } from './helpers/mcp-test-client.js';
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
-d('OMN-156: projects OR rejects with steering; completed:false and mode+OR compose', () => {
+type ProjRow = { id: string; name: string; status?: string };
+type ProjResult = { success: boolean; data?: { projects?: ProjRow[] } };
+
+/** Derive a stable lowercase probe substring (≤4 chars) from a project name. */
+const probeOf = (name: string): string => name.trim().slice(0, 4).toLowerCase();
+
+d('OMN-171: projects OR returns the union of branches; completed:false and mode+OR compose', () => {
   let client: MCPTestClient;
 
   beforeAll(async () => {
     client = await getSharedClient();
   });
 
-  it('C18: projects OR rejects with steering (not silent match-all)', async () => {
-    await expect(
-      client.callTool('omnifocus_read', {
-        query: {
-          type: 'projects',
-          filters: {
-            OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }],
-          },
-          limit: 10,
-        },
-      }),
-    ).rejects.toThrow(/not supported on projects/i);
+  it('C18 (OMN-171): projects OR returns the union of its branches (was reject)', async () => {
+    // Derive data-agnostic probe substrings from live project names.
+    const all = (await client.callTool('omnifocus_read', {
+      query: { type: 'projects', filters: {}, limit: 50, fields: ['id', 'name'] },
+    })) as ProjResult;
+    const projects = all.data?.projects ?? [];
+    if (projects.length < 2) {
+      console.warn('projects OR union test: <2 projects in vault — skipping (data-agnostic)');
+      return;
+    }
+    const s1 = probeOf(projects[0].name);
+    // pick a second probe from a project whose name does NOT contain s1 (distinct branch)
+    const other = projects.find((p) => !p.name.toLowerCase().includes(s1)) ?? projects[1];
+    const s2 = probeOf(other.name);
 
-    // Also assert the steering text is present (filters.name alternative is mentioned)
-    await expect(
-      client.callTool('omnifocus_read', {
-        query: {
-          type: 'projects',
-          filters: {
-            OR: [{ name: { contains: 'a' } }, { name: { contains: 'b' } }],
-          },
-          limit: 10,
-        },
-      }),
-    ).rejects.toThrow(/filters\.name/);
-  }, 30000);
+    const orResult = (await client.callTool('omnifocus_read', {
+      query: {
+        type: 'projects',
+        filters: { OR: [{ name: { contains: s1 } }, { name: { contains: s2 } }] },
+        limit: 100,
+        fields: ['id', 'name'],
+      },
+    })) as ProjResult;
+
+    expect(orResult.success).toBe(true);
+    const got = orResult.data?.projects ?? [];
+    // Every returned project matches at least one branch (no match-all widening).
+    for (const p of got) {
+      const n = p.name.toLowerCase();
+      expect(
+        n.includes(s1) || n.includes(s2),
+        `project "${p.name}" matched neither OR branch ("${s1}" / "${s2}") — OR widened to match-all`,
+      ).toBe(true);
+    }
+
+    // Union ⊇ each single-branch result (OR is a superset of either alternative).
+    const single = (await client.callTool('omnifocus_read', {
+      query: { type: 'projects', filters: { name: { contains: s1 } }, limit: 100, fields: ['id', 'name'] },
+    })) as ProjResult;
+    const singleCount = single.data?.projects?.length ?? 0;
+    expect(got.length).toBeGreaterThanOrEqual(singleCount);
+  }, 60000);
 
   it('projects completed:false is effective — all returned rows are active or on-hold', async () => {
     const result = (await client.callTool('omnifocus_read', {
