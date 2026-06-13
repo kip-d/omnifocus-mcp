@@ -12,6 +12,8 @@ import {
   type ReturnNode,
   type RawNode,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { TagMutationResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 /** The program's terminal return statement (every create/tag program has one). */
 function returnStmt(program: Program): ReturnNode {
@@ -68,7 +70,7 @@ describe('create/tag lowering — flat, with parent', () => {
     // Live reads off the resolved parent binding — not echoes (spec §2.2).
     expect(omnijs).toContain('parentTagName: _parent.name');
     expect(omnijs).toContain('parentTagId: _parent.id.primaryKey');
-    expect(omnijs).toContain('message: "Tag \'Child\' created under \'P\'"');
+    expect(omnijs).toContain("message: \"Tag 'Child' created under 'P'\"");
     expect(omnijs).not.toMatch(/\bsuccess\s*:/); // no success KEY (spec §2.3); 'successfully' in messages is fine
   });
 });
@@ -219,6 +221,7 @@ describe('emitted create-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('create/tag', { tagName: 'X' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({
       action: 'created',
       tagName: 'X',
@@ -249,6 +252,7 @@ describe('emitted create-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('create/tag', { tagName: 'Child', parentTagName: 'P' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({
       action: 'created',
       tagName: 'Child',
@@ -276,6 +280,7 @@ describe('emitted create-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('create/tag', { tagName: 'Work : Active' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed).toEqual({
       action: 'created',
       tagName: 'Active',
@@ -294,6 +299,7 @@ describe('emitted create-tag programs execute (vm)', () => {
     const program = emitProgram(await dispatchMutation('create/tag', { tagName: 'Work : Active' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
 
+    expectMatchesSchema(TagMutationResultSchema, parsed);
     expect(parsed.createdSegments).toEqual([]);
     expect(parsed.message).toBe("Tag path 'Work : Active' already exists");
   });

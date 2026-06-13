@@ -2,10 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   V3EnvelopeSuccessSchema,
+  v3EnvelopeSchema,
   astEnvelopeSchema,
   listResultSchema,
   CountResultSchema,
   ExportResultSchema,
+  ExportTasksResultSchema,
+  ExportProjectsResultSchema,
   reviewSuccessSchema,
   TaskWriteResultSchema,
   CompleteResultSchema,
@@ -19,6 +22,22 @@ import {
   RecurringPatternsSchema,
   ProjectByIdSchema,
   FolderListSchema,
+  TaskRowSchema,
+  ProjectRowSchema,
+  TaskListMetadataSchema,
+  ProjectListMetadataSchema,
+  RecurringTaskRowSchema,
+  RecurringTasksSummarySchema,
+  RecurringTasksMetadataSchema,
+  PerspectiveItemSchema,
+  PerspectiveSummarySchema,
+  PRODUCTIVITY_STATS_V3_SCHEMA,
+  TASK_VELOCITY_V3_SCHEMA,
+  OVERDUE_ANALYSIS_V3_SCHEMA,
+  WORKFLOW_ANALYSIS_V3_SCHEMA,
+  REVIEWS_LIST_TYPED_SCHEMA,
+  MARK_REVIEWED_TYPED_SCHEMA,
+  SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../../src/omnifocus/script-response-schemas.js';
 
 // Backward-compatible aliases — schemas moved here from OmniFocusReadTool.ts (Task 7 carry-forward)
@@ -212,8 +231,19 @@ describe('listResultSchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('CountResultSchema', () => {
-  it('(a) accepts minimal count payload (count only)', () => {
-    const result = CountResultSchema.safeParse({ count: 42 });
+  it('(a) accepts minimal wire-shape count payload (count + all required fields)', () => {
+    // The emitter always emits all required fields — the real wire shape is never count-only.
+    // Fixture corrected per OMN-158 spec §5: fix fixtures to wire shapes, never loosen schemas.
+    const result = CountResultSchema.safeParse({
+      count: 42,
+      filters_applied: {},
+      query_time_ms: 50,
+      optimization: 'omnijs_count_no_tags',
+      filter_description: 'all tasks',
+      scanned: 42,
+      total_tasks: 42,
+      limited: false,
+    });
     expect(result.success).toBe(true);
   });
 
@@ -283,26 +313,37 @@ describe('ExportResultSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts json task export with limited + debug + message', () => {
+  it('(a) accepts json task export with limited + debug (wire shape from buildExportTasksScript)', () => {
+    // Fixture corrected per OMN-158 spec §5: debug has all required fields; message absent (not limited).
     const result = ExportResultSchema.safeParse({
       format: 'json',
       data: [{ id: 'abc', name: 'Task' }],
       count: 1,
       duration: 80,
       limited: false,
-      debug: { totalTasksProcessed: 1, maxTasksAllowed: 1000 },
-      message: undefined,
+      debug: {
+        totalTasksProcessed: 1,
+        maxTasksAllowed: 1000,
+        filterDescription: 'all tasks',
+        fieldsRequested: ['name', 'project'],
+        optimizationUsed: 'AST filter + OmniJS bridge',
+      },
     });
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts json project export with debug (no limited/message)', () => {
+  it('(a) accepts json project export with debug (wire shape from export-projects.ts)', () => {
+    // Fixture corrected per OMN-158 spec §5: debug requires optimizationUsed field.
     const result = ExportResultSchema.safeParse({
       format: 'json',
-      data: [{ id: 'p1', name: 'Project' }],
+      data: [{ id: 'p1', name: 'Project', status: 'active' }],
       count: 1,
       duration: 55,
-      debug: { totalProjectsProcessed: 1, includeStats: false },
+      debug: {
+        totalProjectsProcessed: 1,
+        includeStats: false,
+        optimizationUsed: 'OmniJS bridge for 5-10x faster property access',
+      },
     });
     expect(result.success).toBe(true);
   });
@@ -432,6 +473,69 @@ describe('TaskWriteResultSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects create-variant with wrong-typed leaf: flagged as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: '',
+      flagged: 'yes', // wrong type
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      estimatedMinutes: null,
+      tags: [],
+      project: null,
+      inInbox: true,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects create-variant with wrong-typed leaf: tags as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: '',
+      flagged: false,
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      estimatedMinutes: null,
+      tags: 'Work', // wrong type, should be array
+      project: null,
+      inInbox: true,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects update-variant carrying create-only keys (cross-variant hybrid)', () => {
+    // update + note (only on create) should fail the update branch
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: 'some note',
+      flagged: false,
+      updated: true,
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects update-variant with wrong-typed leaf: warnings as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      flagged: false,
+      updated: true,
+      warnings: 'none', // wrong type
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -494,6 +598,17 @@ describe('CompleteResultSchema', () => {
       completed: true,
       completionDate: null,
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects wrong-typed leaf: completionDate as number', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completed: true,
+      completionDate: 12345, // wrong type, should be string|null
     });
     expect(result.success).toBe(false);
   });
@@ -574,7 +689,10 @@ describe('BulkDeleteResultSchema', () => {
 
   it('(a) accepts bulk-delete envelope with no errors (all deleted)', () => {
     const result = BulkDeleteResultSchema.safeParse({
-      deleted: [{ id: 'abc', name: 'Task 1' }, { id: 'def', name: 'Task 2' }],
+      deleted: [
+        { id: 'abc', name: 'Task 1' },
+        { id: 'def', name: 'Task 2' },
+      ],
       errors: [],
       message: 'Deleted 2 of 2 tasks',
     });
@@ -611,6 +729,34 @@ describe('BulkDeleteResultSchema', () => {
       errors: [],
       message: 'Deleted 0 of 0 tasks',
       error: 'something',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects extra key inside deleted item', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 'abc', name: 'Task 1', rogue: true }],
+      errors: [],
+      message: 'Deleted 1 of 1 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed leaf inside deleted item: id as number', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 123, name: 'Task 1' }], // id should be string
+      errors: [],
+      message: 'Deleted 1 of 1 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects extra key inside errors item', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [],
+      errors: [{ taskId: 'abc', error: 'not found', rogue: true }],
+      message: 'Deleted 0 of 1 tasks',
     });
     expect(result.success).toBe(false);
   });
@@ -774,6 +920,29 @@ describe('FolderCreateResultSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects wrong-typed: warnings as string not array', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: 'none', // wrong type
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed: parentFolder as number', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: 42, // wrong type, should be string|null
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -784,8 +953,8 @@ describe('BatchCreateResultSchema', () => {
   it('(a) accepts batch-create envelope with results array', () => {
     const result = BatchCreateResultSchema.safeParse({
       results: [
-        { tempId: 't1', taskId: 'abc', success: true },
-        { tempId: 't2', taskId: null, success: false, error: 'Not found' },
+        { tempId: 't1', taskId: 'abc', success: true, warnings: [] },
+        { tempId: 't2', taskId: null, success: false, error: 'Not found', warnings: [] },
       ],
     });
     expect(result.success).toBe(true);
@@ -805,6 +974,42 @@ describe('BatchCreateResultSchema', () => {
     const result = BatchCreateResultSchema.safeParse({
       results: [],
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) accepts success batch item with warnings', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc123', success: true, warnings: [] }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(leaf) accepts failure batch item', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: null, success: false, error: 'Project not found', warnings: [] }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(leaf) rejects extra key inside success batch item', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc123', success: true, warnings: [], rogue: true }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed field inside success batch item: taskId as number', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 123, success: true, warnings: [] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects hybrid: success:true with error key (cross-variant)', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc', success: true, warnings: [], error: 'oops' }],
     });
     expect(result.success).toBe(false);
   });
@@ -947,6 +1152,56 @@ describe('TagMutationResultSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects path-created with wrong-typed createdSegments: not array of strings', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'created',
+      tagName: 'Work',
+      tagId: 'tid1',
+      path: 'Context : Work',
+      createdSegments: [{ name: 'Work' }], // should be string[]
+      message: 'Created 1 tag(s)',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects merged_with_warning with wrong-typed tasksMerged: string not number', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged_with_warning',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: '3', // wrong type, should be number
+      warning: 'could not delete',
+      message: 'Merged 3 tasks but could not delete source tag',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects reparented-to-root carrying newParentTagId (cross-variant hybrid)', () => {
+    // reparented-to-root must NOT have newParentTagId; the two-variant union enforces this
+    const result = TagMutationResultSchema.safeParse({
+      action: 'reparented',
+      tagName: 'Work',
+      newParentTagId: 'npid1', // must be absent on to-root variant
+      message: "Tag 'Work' moved to root level",
+    });
+    // After OMN-158: should fail because to-root variant is strict (no newParentTagId)
+    // and with-parent variant requires newParentTagName (missing here)
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects merged_with_warning missing required warning key', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged_with_warning',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: 3,
+      // warning key absent - should fail after OMN-158
+      message: 'Merged 3 tasks but could not delete source tag',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1082,16 +1337,44 @@ describe('FOLDER_LIST_SCHEMA', () => {
 
 describe('SlimmedDataSchema', () => {
   it('(a) accepts representative slimmed-data payload', () => {
+    // Fixture corrected per OMN-158 spec §5: wire shapes for slimmed rows.
+    // tasks: id, name, completed, flagged, status, tags are always emitted.
+    // projects: id, name, status, taskCount, availableTaskCount always emitted
+    //   (taskCount/availableTaskCount are in the projectData literal, not inner try/catch).
+    // tags: id, name, taskCount always emitted.
     const result = SlimmedDataSchema.safeParse({
-      tasks: [{ id: 't1', name: 'Buy milk' }],
-      projects: [{ id: 'p1', name: 'Errands' }],
-      tags: [{ id: 'tag1', name: 'home' }],
+      tasks: [{ id: 't1', name: 'Buy milk', completed: false, flagged: false, status: 'available', tags: [] }],
+      projects: [{ id: 'p1', name: 'Errands', status: 'active', taskCount: 5, availableTaskCount: 3 }],
+      tags: [{ id: 'tag1', name: 'home', taskCount: 3 }],
     });
     expect(result.success).toBe(true);
   });
 
   it('(a) accepts empty arrays for all keys', () => {
     const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [], tags: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts a task with estimatedMinutes: null (unset estimate — emitter assigns the raw JXA null)', () => {
+    // Regression guard: the slim emitter does `taskData.estimatedMinutes = task.estimatedMinutes()`
+    // with no ?./coalesce, so an unset estimate serializes as null and must validate (was z.number()
+    // .optional(), which fail-closed the whole fetchSlimmedData read for any un-estimated task).
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [
+        {
+          id: 't1',
+          name: 'No estimate',
+          completed: false,
+          flagged: false,
+          status: 'available',
+          tags: [],
+          estimatedMinutes: null,
+        },
+      ],
+      projects: [],
+      tags: [],
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
   });
 
@@ -1129,11 +1412,16 @@ describe('SlimmedDataSchema', () => {
 
 describe('RecurringPatternsSchema', () => {
   it('(a) accepts representative recurring-patterns payload', () => {
+    // Fixture corrected per OMN-158 spec §5: wire shapes from get-recurring-patterns.ts.
+    // patterns[]: {pattern, unit, steps, count, percentage, examples} required.
+    // byProject[]: {project, recurringCount, patterns:[{pattern,count}]} required.
+    // mostCommon: same shape as patterns[] entry (or null).
+    // duration: number (Date.now() subtraction).
     const result = RecurringPatternsSchema.safeParse({
       totalRecurring: 12,
-      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 5 }],
-      byProject: [{ project: 'Work', recurringCount: 3 }],
-      mostCommon: { pattern: 'days_1', count: 5 },
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 5, percentage: 41, examples: ['Daily standup'] }],
+      byProject: [{ project: 'Work', recurringCount: 3, patterns: [{ pattern: 'days_1', count: 3 }] }],
+      mostCommon: { pattern: 'days_1', unit: 'days', steps: 1, count: 5, percentage: 41, examples: ['Daily standup'] },
       duration: 2300,
       debug: { optimizationUsed: 'OmniJS bridge' },
     });
@@ -1147,11 +1435,14 @@ describe('RecurringPatternsSchema', () => {
       byProject: [],
       mostCommon: null,
       duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge for 3-4x faster property access' },
     });
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts payload without optional debug key', () => {
+  it('(b) rejects payload missing debug key (debug always emitted in the outer spread)', () => {
+    // OMN-158 Task 3 spec-review: get-recurring-patterns.ts always returns {...parsed, duration, debug}
+    // → debug is required, NOT optional.
     const result = RecurringPatternsSchema.safeParse({
       totalRecurring: 3,
       patterns: [],
@@ -1159,7 +1450,7 @@ describe('RecurringPatternsSchema', () => {
       mostCommon: null,
       duration: 50,
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it('(b) rejects payload missing totalRecurring key', () => {
@@ -1190,6 +1481,1517 @@ describe('RecurringPatternsSchema', () => {
       mostCommon: null,
       duration: 100,
       error: 'iteration error at item 3',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 2: Read-family row + metadata schemas
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// TaskRowSchema
+// ---------------------------------------------------------------------------
+
+describe('TaskRowSchema', () => {
+  it('(a) accepts a fully-projected task row (all fields present)', () => {
+    const result = TaskRowSchema.safeParse({
+      id: 'abc123',
+      name: 'Buy milk',
+      completed: false,
+      flagged: true,
+      inInbox: false,
+      blocked: false,
+      available: true,
+      dueDate: '2026-06-15T17:00:00.000Z',
+      deferDate: null,
+      plannedDate: null,
+      effectivePlannedDate: null,
+      completionDate: null,
+      modified: '2026-06-12T10:00:00.000Z',
+      added: '2026-06-01T08:00:00.000Z',
+      dropDate: null,
+      tags: ['Work', 'Urgent'],
+      note: 'Get 2% milk',
+      project: 'Errands',
+      projectId: 'proj1',
+      estimatedMinutes: 15,
+      repetitionRule: { ruleString: 'FREQ=WEEKLY', scheduleType: 'fixed' },
+      parentTaskId: null,
+      parentTaskName: null,
+      reason: 'due_soon',
+      daysOverdue: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts a minimal task row (id + name only — projection-gated)', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc123', name: 'Buy milk' });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts task row with null repetitionRule', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', repetitionRule: null });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects task row with wrong-typed field: flagged as string', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', flagged: 'yes' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects task row with wrong-typed field: tags as string', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', tags: 'Work' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on task row', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', rogue: true });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside repetitionRule sub-object', () => {
+    const result = TaskRowSchema.safeParse({
+      id: 'abc',
+      name: 'Task',
+      repetitionRule: { ruleString: 'FREQ=DAILY', rogue: 'extra' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong reason enum value', () => {
+    const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', reason: 'critical' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProjectRowSchema
+// ---------------------------------------------------------------------------
+
+describe('ProjectRowSchema', () => {
+  it('(a) accepts a fully-projected project row', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'My Project',
+      status: 'active',
+      flagged: false,
+      note: 'Project note',
+      dueDate: null,
+      deferDate: null,
+      folder: 'Work',
+      folderPath: 'Work/Projects',
+      folderId: 'f1',
+      sequential: false,
+      lastReviewDate: '2026-06-01T00:00:00.000Z',
+      nextReviewDate: '2026-07-01T00:00:00.000Z',
+      reviewInterval: { unit: 'weeks', steps: 2 },
+      completionDate: null,
+      defaultSingletonActionHolder: false,
+      tags: ['GTD'],
+      plannedDate: null,
+      taskCounts: { total: 10, available: 5, completed: 3 },
+      nextTask: { id: 'abc', name: 'Do thing', flagged: false, dueDate: null },
+      stats: { active: 5, completed: 3, total: 10, completionRate: 30, overdue: 1, flagged: 2 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts minimal project row (id + name only)', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project' });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed field: sequential as string', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project', sequential: 'yes' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on project row', () => {
+    const result = ProjectRowSchema.safeParse({ id: 'p1', name: 'Project', rogue: true });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside reviewInterval sub-object', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'Project',
+      reviewInterval: { unit: 'weeks', steps: 2, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside nextTask sub-object', () => {
+    const result = ProjectRowSchema.safeParse({
+      id: 'p1',
+      name: 'Project',
+      nextTask: { id: 'abc', name: 'Task', flagged: false, dueDate: null, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TaskListMetadataSchema
+// ---------------------------------------------------------------------------
+
+describe('TaskListMetadataSchema', () => {
+  it('(a) accepts full filtered-tasks metadata (all fields present)', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 100,
+      total_matched: 100,
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      offset_applied: 0,
+      mode: 'ast_filtered',
+      filter_description: 'active tasks',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts id-lookup metadata (total_matched/filter_description/offset_applied absent)', () => {
+    // PATH TRAP: id_lookup inner emits only {tasks, count, mode, targetId}; the
+    // wrapper copies these values and JSON.stringify drops undefined — these three
+    // keys are ABSENT, not null, on id-lookup reads.
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 1,
+      sorted_in_script: false,
+      limit_applied: 50,
+      offset: 0,
+      mode: 'id_lookup',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects metadata missing required total_count', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      mode: 'ast_filtered',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in task list metadata', () => {
+    const result = TaskListMetadataSchema.safeParse({
+      total_count: 5,
+      sorted_in_script: false,
+      limit_applied: 25,
+      offset: 0,
+      mode: 'ast_filtered',
+      optimization: 'ast_v4',
+      architecture: 'ast_first',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProjectListMetadataSchema
+// ---------------------------------------------------------------------------
+
+describe('ProjectListMetadataSchema', () => {
+  it('(a) accepts full project list metadata', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_available: 50,
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects metadata missing required total_available', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in project list metadata', () => {
+    const result = ProjectListMetadataSchema.safeParse({
+      total_available: 50,
+      total_matched: 10,
+      returned_count: 10,
+      limit_applied: 25,
+      performance_mode: 'normal',
+      stats_included: false,
+      optimization: 'ast_filtered',
+      filter_description: 'active projects',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ExportTasksResultSchema and ExportProjectsResultSchema
+// ---------------------------------------------------------------------------
+
+describe('ExportTasksResultSchema', () => {
+  it('(a) accepts csv empty variant (no limited, has message)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\n',
+      count: 0,
+      duration: 45,
+      message: 'No tasks found matching the filter criteria',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts csv non-empty variant (with limited)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\nTask A,Work\n',
+      count: 1,
+      duration: 60,
+      limited: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts markdown variant', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'markdown',
+      data: '# OmniFocus Tasks Export\n',
+      count: 5,
+      duration: 80,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts json variant with full debug object', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'json',
+      data: [{ id: 'abc', name: 'Task A' }],
+      count: 1,
+      duration: 90,
+      limited: false,
+      debug: {
+        totalTasksProcessed: 5,
+        maxTasksAllowed: 1000,
+        filterDescription: 'all tasks',
+        fieldsRequested: ['name', 'project', 'dueDate'],
+        optimizationUsed: 'AST filter + OmniJS bridge',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects json variant missing required debug field', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'json',
+      data: [],
+      count: 0,
+      duration: 50,
+      limited: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: csv payload with debug key (wrong variant)', () => {
+    const result = ExportTasksResultSchema.safeParse({
+      format: 'csv',
+      data: 'name,project\n',
+      count: 0,
+      duration: 45,
+      debug: {
+        totalTasksProcessed: 0,
+        maxTasksAllowed: 1000,
+        filterDescription: '',
+        fieldsRequested: [],
+        optimizationUsed: '',
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ExportProjectsResultSchema', () => {
+  it('(a) accepts csv variant', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'csv',
+      data: 'id,name,status\n',
+      count: 0,
+      duration: 30,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts markdown variant', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'markdown',
+      data: '# OmniFocus Projects Export\n',
+      count: 5,
+      duration: 40,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts json variant with debug object', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'json',
+      data: [{ id: 'p1', name: 'My Project', status: 'active' }],
+      count: 1,
+      duration: 55,
+      debug: {
+        totalProjectsProcessed: 1,
+        includeStats: false,
+        optimizationUsed: 'OmniJS bridge for 5-10x faster property access',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: csv payload with debug key (wrong variant)', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'csv',
+      data: 'id,name\n',
+      count: 0,
+      duration: 30,
+      debug: { totalProjectsProcessed: 0, includeStats: false, optimizationUsed: '' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: project json debug missing optimizationUsed', () => {
+    const result = ExportProjectsResultSchema.safeParse({
+      format: 'json',
+      data: [],
+      count: 0,
+      duration: 30,
+      debug: { totalProjectsProcessed: 0, includeStats: false },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RecurringTaskRowSchema + summary/metadata
+// ---------------------------------------------------------------------------
+
+describe('RecurringTaskRowSchema', () => {
+  it('(a) accepts full recurring task row', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Daily standup',
+      project: 'Work',
+      projectId: 'proj1',
+      repetitionRule: {
+        unit: 'days',
+        steps: 1,
+        ruleString: 'FREQ=DAILY',
+        _inferenceSource: 'ruleString',
+      },
+      frequency: 'Daily',
+      dueDate: '2026-06-13T17:00:00.000Z',
+      nextDue: '2026-06-13T17:00:00.000Z',
+      daysUntilDue: 1,
+      isOverdue: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts minimal recurring task row with null unit (emitter default when no rule/name match)', () => {
+    // Fixture corrected per OMN-158 Task 2 spec-review: unit required + nullable; steps required.
+    // project/projectId required + nullable (always-emitted, default null) per Task 3 spec-review.
+    // When ruleString is absent and name-inference fails, ruleData = {unit: null, steps: 1}.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required id', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      name: 'Weekly review',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects missing required project key (project required + nullable, not optional)', () => {
+    // project is always emitted by the taskInfo literal (default null) → key must be present.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on recurring task row', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Weekly review',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Weekly',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key inside repetitionRule', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task1',
+      name: 'Daily task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: 'days', steps: 1, rogue: true },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('RecurringTasksSummarySchema', () => {
+  it('(a) accepts full recurring tasks summary', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 12,
+      returned: 12,
+      overdue: 2,
+      dueThisWeek: 5,
+      byFrequency: { Daily: 4, Weekly: 3, Monthly: 2 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required returned field', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 5,
+      overdue: 0,
+      dueThisWeek: 2,
+      byFrequency: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in summary', () => {
+    const result = RecurringTasksSummarySchema.safeParse({
+      totalRecurring: 5,
+      returned: 5,
+      overdue: 0,
+      dueThisWeek: 2,
+      byFrequency: {},
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('RecurringTasksMetadataSchema', () => {
+  it('(a) accepts full recurring tasks metadata', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 350,
+      optimization: 'ast_recurring_builder',
+      options: { includeCompleted: false, sortBy: 'name' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts metadata without optional options key', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 200,
+      optimization: 'ast_recurring_builder',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: extra key in metadata', () => {
+    const result = RecurringTasksMetadataSchema.safeParse({
+      query_time_ms: 200,
+      optimization: 'ast_recurring_builder',
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PerspectiveItemSchema and PerspectiveSummarySchema
+// ---------------------------------------------------------------------------
+
+describe('PerspectiveItemSchema', () => {
+  it('(a) accepts built-in perspective item', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      isBuiltIn: true,
+      identifier: null,
+      filterRules: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts custom perspective item with identifier', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'My Custom View',
+      type: 'custom',
+      isBuiltIn: false,
+      identifier: 'custom-id-123',
+      filterRules: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects perspective missing required isBuiltIn field', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      identifier: null,
+      filterRules: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on perspective item', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      isBuiltIn: true,
+      identifier: null,
+      filterRules: null,
+      rogue: true,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('PerspectiveSummarySchema', () => {
+  it('(a) accepts representative perspective summary', () => {
+    const result = PerspectiveSummarySchema.safeParse({
+      total: 10,
+      insights: ['Found 10 perspectives (6 built-in, 4 custom)'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects summary missing total', () => {
+    const result = PerspectiveSummarySchema.safeParse({ insights: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in perspective summary', () => {
+    const result = PerspectiveSummarySchema.safeParse({ total: 5, insights: [], rogue: true });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: RecurringTaskRowSchema nullability fix
+// ---------------------------------------------------------------------------
+
+describe('RecurringTaskRowSchema (OMN-158 Task 3 nullability fix)', () => {
+  it('(nullability) accepts project: null, projectId: null (inbox recurring task — no containing project)', () => {
+    // OMN-158 Task 3 spec-review fix: the taskInfo literal ALWAYS emits project & projectId,
+    // defaulting to null and overwriting only when containingProject exists. An inbox recurring
+    // task therefore emits project:null, projectId:null. The old z.string().optional() REJECTED
+    // null → the whole read fail-closed (same class as the unit:null bug). This fixture proves
+    // the nullable() fix; mutation-verified to FAIL against the prior .optional().
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-inbox',
+      name: 'Inbox recurring task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: 'days', steps: 1, ruleString: 'FREQ=DAILY' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) accepts unit: null (no ruleString and no name-inference match)', () => {
+    // This is the key regression test: the emitter sets ruleData.unit = null by default
+    // when parseRuleString finds no FREQ= and inferFrequencyFromName returns null.
+    // The old schema had z.string().optional() which REJECTED null — this test would
+    // have FAILED before the fix.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Some unrecognized task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null, steps: 1 },
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) accepts unit: string (parsed from RRULE)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Daily task',
+      project: 'Work',
+      projectId: 'proj1',
+      repetitionRule: { unit: 'days', steps: 1, ruleString: 'FREQ=DAILY', _inferenceSource: 'ruleString' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) accepts method: null (when repetitionRule.method.name resolves to null)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: 'weeks', steps: 1, method: null },
+      frequency: 'Weekly',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(nullability) rejects unit: undefined (unit is required, not optional)', () => {
+    // unit is required (must be present, may be null), NOT optional (may be absent).
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      project: null,
+      projectId: null,
+      repetitionRule: { steps: 1 }, // unit key absent
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(nullability) rejects missing steps (steps required)', () => {
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Recurring task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: null }, // steps absent
+      frequency: 'Unknown Pattern',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects extra key inside repetitionRule (anchorDateKey removed from schema — not emitted)', () => {
+    // The emitter only emits unit/steps/ruleString/_inferenceSource/method.
+    // anchorDateKey/catchUpAutomatically/scheduleType were legacy; .strict() rejects them.
+    const result = RecurringTaskRowSchema.safeParse({
+      id: 'task-abc',
+      name: 'Daily task',
+      project: null,
+      projectId: null,
+      repetitionRule: { unit: 'days', steps: 1, anchorDateKey: 'due' },
+      frequency: 'Daily',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: v3EnvelopeSchema factory
+// ---------------------------------------------------------------------------
+
+describe('v3EnvelopeSchema factory', () => {
+  const TestSchema = v3EnvelopeSchema(z.object({ count: z.number(), label: z.string() }).strict());
+
+  it('(a) accepts typed data payload', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test' } });
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects data payload with wrong type', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 'five', label: 'test' } });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects data payload with extra key (strict data)', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test', rogue: true } });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects envelope with extra top-level key', () => {
+    const result = TestSchema.safeParse({ ok: true, v: '3', data: { count: 5, label: 'test' }, extra: 'x' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: PRODUCTIVITY_STATS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('PRODUCTIVITY_STATS_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      summary: {
+        period: 'week',
+        totalProjects: 5,
+        activeProjects: 3,
+        totalTasks: 120,
+        completedTasks: 80,
+        completedInPeriod: 12,
+        availableTasks: 25,
+        completionRate: 0.6667,
+        dailyAverage: 1.7,
+        daysInPeriod: 7,
+        overdueCount: 3,
+      },
+      insights: ['Low task completion rate'],
+      metadata: {
+        generated_at: '2026-06-12T10:00:00.000Z',
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 450,
+        note: 'All statistics calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts minimal payload (no projectStats/tagStats)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with projectStats and tagStats (name-keyed maps)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        projectStats: {
+          'My Project': {
+            total: 10,
+            completed: 5,
+            available: 3,
+            completionRate: '50.0',
+            status: 'active',
+            hadRecentActivity: true,
+          },
+        },
+        tagStats: {
+          Work: { available: 5, remaining: 8, completionRate: '37.5' },
+        },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects payload with wrong-typed summary.completionRate (string not number)', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: { ...minimalPayload.data.summary, completionRate: '66.67%' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects payload missing metadata.generated_at', () => {
+    const metaWithout = Object.fromEntries(
+      Object.entries(minimalPayload.data.metadata).filter(([k]) => k !== 'generated_at'),
+    );
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, metadata: metaWithout },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in data', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, rogue: true },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in projectStats value', () => {
+    const result = PRODUCTIVITY_STATS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        projectStats: {
+          'My Project': {
+            total: 10,
+            completed: 5,
+            available: 3,
+            completionRate: '50.0',
+            status: 'active',
+            hadRecentActivity: true,
+            rogue: true,
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: TASK_VELOCITY_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('TASK_VELOCITY_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      velocity: {
+        period: 'week',
+        averageCompleted: '3.5',
+        averageCreated: '2.0',
+        dailyVelocity: '0.50',
+        backlogGrowthRate: '-1.5',
+      },
+      throughput: {
+        intervals: [
+          {
+            start: '2026-06-05T00:00:00.000Z',
+            end: '2026-06-12T23:59:59.000Z',
+            created: 14,
+            completed: 24,
+            label: '6/12/2026',
+          },
+        ],
+        totalCompleted: 24,
+        totalCreated: 14,
+      },
+      breakdown: { medianCompletionHours: '12.5', tasksAnalyzed: 1961 },
+      projections: { tasksPerDay: '0.50', tasksPerWeek: '3.5', tasksPerMonth: '15.0' },
+      optimization: 'omnijs_v3',
+      dateRange: { start: '2026-06-05', end: '2026-06-12' },
+    },
+  };
+
+  it('(a) accepts full payload with ISO string start/end in intervals', () => {
+    // Verifying Date.toJSON() → ISO string on the wire (emitter uses Date objects,
+    // JSON.stringify calls Date.prototype.toJSON() producing ISO-8601 string).
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects interval with non-string start (wrong type)', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        throughput: {
+          ...minimalPayload.data.throughput,
+          intervals: [{ start: new Date(), end: '2026-06-12T23:59:59.000Z', created: 1, completed: 2, label: 'x' }],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in velocity', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, velocity: { ...minimalPayload.data.velocity, rogue: true } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in interval', () => {
+    const result = TASK_VELOCITY_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        throughput: {
+          ...minimalPayload.data.throughput,
+          intervals: [
+            {
+              start: '2026-06-05T00:00:00.000Z',
+              end: '2026-06-12T23:59:59.000Z',
+              created: 1,
+              completed: 2,
+              label: 'x',
+              rogue: true,
+            },
+          ],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: OVERDUE_ANALYSIS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
+  const overdueTask = {
+    id: 'task1',
+    name: 'Overdue task',
+    dueDate: '2026-06-01T17:00:00.000Z',
+    daysOverdue: 11,
+    project: 'Work',
+    tags: ['urgent'],
+    blocked: false,
+    isNext: true,
+  };
+
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      summary: {
+        totalOverdue: 1,
+        blockedCount: 0,
+        unblockedCount: 1,
+        blockedPercentage: 0.0,
+        avgDaysOverdue: 11.0,
+        mostOverdue: overdueTask,
+      },
+      insights: ['1 overdue tasks found'],
+      groupedByUrgency: { critical: [], high: [overdueTask], medium: [], low: [] },
+      projectBottlenecks: [
+        { name: 'Work', overdueCount: 1, blockedCount: 0, avgDaysOverdue: '11.0', blockageRate: '0.0' },
+      ],
+      blockedTasks: [],
+      metadata: {
+        generated_at: '2026-06-12T10:00:00.000Z',
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 800,
+        tasksAnalyzed: 100,
+        note: 'All analysis calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts full payload with overdue task', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload where mostOverdue is null (no overdue tasks)', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: {
+          totalOverdue: 0,
+          blockedCount: 0,
+          unblockedCount: 0,
+          blockedPercentage: 0.0,
+          avgDaysOverdue: 0.0,
+          mostOverdue: null,
+        },
+        insights: ['No overdue tasks found - excellent!'],
+        groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
+        projectBottlenecks: [],
+        blockedTasks: [],
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed blockedPercentage (string not number)', () => {
+    // blockedPercentage: parseFloat(toFixed(1)) → number; must NOT be string
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        summary: { ...minimalPayload.data.summary, blockedPercentage: '0.0' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in overdue task row', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        groupedByUrgency: { critical: [], high: [{ ...overdueTask, rogue: true }], medium: [], low: [] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra urgency bucket key (groupedByUrgency is strict)', () => {
+    const result = OVERDUE_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        groupedByUrgency: { critical: [], high: [], medium: [], low: [], extreme: [] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: WORKFLOW_ANALYSIS_V3_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
+  const minimalPayload = {
+    ok: true,
+    v: '3',
+    data: {
+      insights: [{ category: 'productivity', insight: '75% of tasks are ready', priority: 'medium' }],
+      patterns: {
+        workloadDistribution: { byProject: {}, byTag: {}, timeBuckets: {} },
+        workflowMetrics: { availablePercentage: '75.0', overduePercentage: '5.0' },
+        deferralAnalysis: { totalDeferred: 10, strategicDeferrals: 8, problematicDeferrals: 2 },
+      },
+      recommendations: [
+        { category: 'dependency_management', recommendation: 'Review blocked tasks', priority: 'high' },
+      ],
+      totalTasks: 200,
+      totalProjects: 15,
+      analysisTime: 1200,
+      dataPoints: 200,
+      metadata: {
+        analysisDepth: 'standard',
+        focusAreas: ['productivity', 'workload'],
+        maxInsights: 15,
+        method: 'omnijs_v3_single_bridge',
+        optimization: 'omnijs_v3',
+        query_time_ms: 1200,
+        note: 'All analysis calculated in single OmniJS bridge call',
+      },
+    },
+  };
+
+  it('(a) accepts minimal payload without data key (includeRawData=false → undefined-dropped)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse(minimalPayload);
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with data key (includeRawData=true passthrough)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, data: { tasks: [], projects: [], workload: {} } },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects wrong-typed insight (priority not string)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        insights: [{ category: 'productivity', insight: 'x', priority: 5 }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in patterns (patterns is strict)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        patterns: { ...minimalPayload.data.patterns, extraPattern: {} },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in metadata', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: { ...minimalPayload.data, metadata: { ...minimalPayload.data.metadata, rogue: true } },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: REVIEWS_LIST_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
+  it('(a) accepts payload with project items', () => {
+    // metadata is always emitted by projects-for-review.ts on the success branch → required.
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'My Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+        },
+      ],
+      metadata: {
+        total_found: 1,
+        filter_applied: { overdue: false },
+        generated_at: '2026-06-12T10:00:00.000Z',
+        search_criteria: { overdue_only: false, days_ahead: 7, status_filter: ['active'], folder_filter: null },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with all optional fields on project', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'My Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+          note: 'Some note',
+          folder: 'Work',
+          dueDate: '2026-07-01T17:00:00.000Z',
+          lastReviewDate: '2026-06-01T00:00:00.000Z',
+          nextReviewDate: '2026-07-01T00:00:00.000Z',
+          reviewInterval: { unit: 'weeks', steps: 4 },
+          taskCounts: { total: 5, available: 3, completed: 2 },
+        },
+      ],
+      metadata: {
+        total_found: 1,
+        generated_at: '2026-06-12T10:00:00.000Z',
+        filter_applied: { overdue: true },
+        search_criteria: { overdue_only: true, days_ahead: 7 },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects project missing required flagged field', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [{ id: 'p1', name: 'Project', status: 'active', sequential: false, completedByChildren: false }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key on project row', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [
+        {
+          id: 'p1',
+          name: 'Project',
+          status: 'active',
+          flagged: false,
+          sequential: false,
+          completedByChildren: false,
+          rogue: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: MARK_REVIEWED_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('MARK_REVIEWED_TYPED_SCHEMA', () => {
+  it('(a) accepts full mark-reviewed payload', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'My Project',
+        lastReviewDate: '2026-06-12T12:00:00.000Z',
+        nextReviewDate: '2026-07-10T12:00:00.000Z',
+        reviewInterval: { unit: 'weeks', steps: 4 },
+      },
+      changes: ['Last review date set to 2026-06-12'],
+      message: "Project 'My Project' marked as reviewed",
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts payload with null reviewInterval and null dates', () => {
+    // changes/message always emitted on the success branch → required.
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'My Project',
+        lastReviewDate: '2026-06-12T12:00:00.000Z',
+        nextReviewDate: null,
+        reviewInterval: null,
+      },
+      changes: ['Last review date set to 2026-06-12'],
+      message: "Project 'My Project' marked as reviewed",
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required project field', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({ success: true, message: 'done' });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in project', () => {
+    const result = MARK_REVIEWED_TYPED_SCHEMA.safeParse({
+      success: true,
+      project: {
+        id: 'p1',
+        name: 'Project',
+        lastReviewDate: null,
+        nextReviewDate: null,
+        reviewInterval: null,
+        rogue: true,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: SET_SCHEDULE_TYPED_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('SET_SCHEDULE_TYPED_SCHEMA', () => {
+  it('(a) accepts full set-schedule payload with success + failure items', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [
+          {
+            projectId: 'p1',
+            projectName: 'My Project',
+            changes: ['Review interval set to every 4 weeks'],
+            reviewInterval: { unit: 'weeks', steps: 4 },
+            nextReviewDate: '2026-07-10T12:00:00.000Z',
+          },
+        ],
+        failed: [{ projectId: 'p2', projectName: 'Missing Project', error: 'Project not found' }],
+        summary: { total_requested: 2, successful_count: 1, failed_count: 1 },
+      },
+      message: 'Batch review schedule update completed: 1 successful, 1 failed',
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts failed entry without projectName (project not found early failure)', () => {
+    // message always emitted on the success branch → required.
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [],
+        failed: [{ projectId: 'p2', error: 'Project not found' }],
+        summary: { total_requested: 1, successful_count: 0, failed_count: 1 },
+      },
+      message: 'Batch review schedule update completed: 0 successful, 1 failed',
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects missing required results.summary', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: { successful: [], failed: [] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in successful entry', () => {
+    const result = SET_SCHEDULE_TYPED_SCHEMA.safeParse({
+      success: true,
+      results: {
+        successful: [
+          { projectId: 'p1', projectName: 'P', changes: [], reviewInterval: null, nextReviewDate: null, rogue: true },
+        ],
+        failed: [],
+        summary: { total_requested: 1, successful_count: 1, failed_count: 0 },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: Deepened RecurringPatternsSchema
+// ---------------------------------------------------------------------------
+
+describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
+  it('(a) accepts payload where mostCommon is null', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 0,
+      patterns: [],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge for 3-4x faster property access' },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects pattern entry missing percentage field', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 1, examples: [] }], // missing percentage
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) accepts steps as string ("unknown" when no pattern matched)', () => {
+    // The emitter sets steps = ruleData.steps || 'unknown' which produces string 'unknown'
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [
+        {
+          pattern: 'unknown_unknown',
+          unit: 'unknown',
+          steps: 'unknown',
+          count: 1,
+          percentage: 100,
+          examples: ['Task'],
+        },
+      ],
+      byProject: [],
+      mostCommon: null,
+      duration: 50,
+      debug: { optimizationUsed: 'OmniJS bridge' },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(c) rejects closed-world: extra key in pattern entry', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [{ pattern: 'days_1', unit: 'days', steps: 1, count: 1, percentage: 100, examples: [], rogue: true }],
+      byProject: [],
+      mostCommon: null,
+      duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in byProject entry', () => {
+    const result = RecurringPatternsSchema.safeParse({
+      totalRecurring: 1,
+      patterns: [],
+      byProject: [{ project: 'Work', recurringCount: 1, patterns: [], rogue: true }],
+      mostCommon: null,
+      duration: 100,
+      debug: { optimizationUsed: 'OmniJS bridge' },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OMN-158 Task 3: Deepened SlimmedDataSchema
+// ---------------------------------------------------------------------------
+
+describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
+  it('(a) accepts full payload with all optional fields on task row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [
+        {
+          id: 't1',
+          name: 'Buy milk',
+          completed: false,
+          flagged: true,
+          status: 'available',
+          tags: ['errands'],
+          project: 'Shopping',
+          projectId: 'p1',
+          deferDate: '2026-06-12T08:00:00.000Z',
+          dueDate: '2026-06-15T17:00:00.000Z',
+          creationDate: '2026-06-01T08:00:00.000Z',
+          modificationDate: '2026-06-10T10:00:00.000Z',
+          estimatedMinutes: 15,
+          noteHead: 'Get 2%',
+          children: 0,
+        },
+      ],
+      projects: [
+        {
+          id: 'p1',
+          name: 'Shopping',
+          status: 'active',
+          taskCount: 5,
+          availableTaskCount: 3,
+          lastReviewDate: '2026-06-01T00:00:00.000Z',
+          nextReviewDate: '2026-07-01T00:00:00.000Z',
+        },
+      ],
+      tags: [{ id: 'tag1', name: 'errands', taskCount: 3 }],
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('(b) rejects task row missing required completed field', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [{ id: 't1', name: 'Task', flagged: false, status: 'available', tags: [] }],
+      projects: [],
+      tags: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in task row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [{ id: 't1', name: 'Task', completed: false, flagged: false, status: 'available', tags: [], rogue: true }],
+      projects: [],
+      tags: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in tag row', () => {
+    const result = SlimmedDataSchema.safeParse({
+      tasks: [],
+      projects: [],
+      tags: [{ id: 'tag1', name: 'Work', taskCount: 3, rogue: true }],
     });
     expect(result.success).toBe(false);
   });

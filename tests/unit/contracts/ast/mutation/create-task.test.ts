@@ -11,6 +11,8 @@ import {
   type TaskLoweringNames,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskCreateData } from '../../../../../src/contracts/mutations.js';
+import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 /** A TaskCreateData exercising every field (project container variant). */
 const FULL_FIELD_DATA: TaskCreateData = {
@@ -299,6 +301,7 @@ describe('emitted create-task program executes (vm)', () => {
     const result = vm.runInNewContext(program, sandbox) as string;
     const parsed = JSON.parse(result);
 
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
     expect(parsed.created).toBe(true);
     expect(parsed.taskId).toBe('fake-task-id');
     expect(parsed.name).toBe('Full');

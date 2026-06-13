@@ -10,6 +10,8 @@ import {
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { DeleteResultSchema, BulkDeleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 describe('buildDeleteTaskProgram — golden emission', () => {
   it('captures name BEFORE deleteObject and echoes the requested id (spec §3)', () => {
@@ -112,6 +114,7 @@ describe('emitted delete programs execute (vm)', () => {
     const parsed = JSON.parse(
       vm.runInNewContext(emitProgram(buildDeleteTaskProgram({ taskId: 't1' })), sandbox) as string,
     );
+    expectMatchesSchema(DeleteResultSchema, parsed);
     expect(parsed).toEqual({ taskId: 't1', name: 'Doomed', deleted: true });
     expect(deleted).toEqual([task]);
   });
@@ -123,6 +126,7 @@ describe('emitted delete programs execute (vm)', () => {
     const parsed = JSON.parse(
       vm.runInNewContext(emitProgram(buildDeleteProjectProgram({ projectId: 'p1' })), sandbox) as string,
     );
+    expectMatchesSchema(DeleteResultSchema, parsed);
     expect(parsed).toEqual({ projectId: 'p1', name: 'Doomed Project', deleted: true });
     expect(deleted).toEqual([proj]);
   });
@@ -154,6 +158,7 @@ describe('emitted delete programs execute (vm)', () => {
     const parsed = JSON.parse(
       vm.runInNewContext(emitProgram(buildBulkDeleteTasksProgram({ taskIds: ['a', 'b', 'c'] })), sandbox) as string,
     );
+    expectMatchesSchema(BulkDeleteResultSchema, parsed);
     expect(parsed.deleted).toEqual([{ id: 'a', name: 'A' }]);
     expect(parsed.errors).toEqual([
       { taskId: 'b', error: 'Task not found' },

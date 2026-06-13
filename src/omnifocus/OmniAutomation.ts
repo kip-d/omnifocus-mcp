@@ -8,6 +8,7 @@ import {
   createScriptError,
   detectKnownErrorShape,
   truncateRawOutput,
+  slimUnionIssues,
 } from './script-result-types.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 // Remove conflicting import
@@ -92,7 +93,7 @@ export class OmniAutomation {
       return createScriptError(
         'Script output did not match the expected success shape',
         'Unrecognized script output shape',
-        { raw: truncateRawOutput(result), issues: validation.error.issues },
+        { raw: truncateRawOutput(result), issues: slimUnionIssues(schema, result, validation.error.issues) },
       );
     } catch (error) {
       if (error instanceof OmniAutomationError) {

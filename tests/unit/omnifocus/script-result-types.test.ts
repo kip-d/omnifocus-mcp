@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { detectKnownErrorShape, truncateRawOutput } from '../../../src/omnifocus/script-result-types.js';
+import { z } from 'zod';
+import {
+  detectKnownErrorShape,
+  truncateRawOutput,
+  slimUnionIssues,
+} from '../../../src/omnifocus/script-result-types.js';
 
 describe('detectKnownErrorShape', () => {
   it('detects legacy {error: true} with verbatim wire context', () => {
@@ -39,6 +44,121 @@ describe('detectKnownErrorShape', () => {
     expect(detectKnownErrorShape('Error: timeout')).toBeNull(); // strings are NOT a known shape — schema handles them
     expect(detectKnownErrorShape(null)).toBeNull();
     expect(detectKnownErrorShape({ error: 'iteration aborted' })).toBeNull(); // error-as-string ≠ known shape; fails closed at schema step
+  });
+});
+
+describe('slimUnionIssues', () => {
+  // Schemas used in tests
+  const RenamedBranch = z
+    .object({ action: z.literal('renamed'), oldName: z.string(), newName: z.string(), message: z.string() })
+    .strict();
+  const DeletedBranch = z.object({ action: z.literal('deleted'), tagName: z.string(), message: z.string() }).strict();
+  const CreatedPathBranch = z
+    .object({
+      action: z.literal('created'),
+      tagName: z.string(),
+      tagId: z.string(),
+      path: z.string(),
+      createdSegments: z.array(z.string()),
+      message: z.string(),
+    })
+    .strict();
+  const CreatedFlatBranch = z
+    .object({
+      action: z.literal('created'),
+      tagName: z.string(),
+      tagId: z.string(),
+      parentTagName: z.string().nullable(),
+      parentTagId: z.string().nullable(),
+      message: z.string(),
+    })
+    .strict();
+
+  const TestUnion = z.union([RenamedBranch, DeletedBranch, CreatedPathBranch, CreatedFlatBranch]);
+
+  // Non-union schema for passthrough tests
+  const PlainSchema = z.object({ taskId: z.string(), name: z.string() }).strict();
+
+  it('returns input unchanged when issues array is empty', () => {
+    const issues: z.ZodIssue[] = [];
+    expect(slimUnionIssues(TestUnion, {}, issues)).toBe(issues);
+  });
+
+  it('returns input unchanged when top issue is not invalid_union', () => {
+    const validation = PlainSchema.safeParse({ taskId: 123, name: 'x' });
+    expect(validation.success).toBe(false);
+    const issues = validation.error!.issues;
+    expect(issues[0].code).not.toBe('invalid_union');
+    expect(slimUnionIssues(TestUnion, { taskId: 123, name: 'x' }, issues)).toBe(issues);
+  });
+
+  it('returns input unchanged for a non-union schema', () => {
+    const failVal = { taskId: 123 };
+    const validation = TestUnion.safeParse(failVal);
+    expect(validation.success).toBe(false);
+    const issues = validation.error!.issues;
+    // Pass a non-union schema — should return issues unchanged
+    expect(slimUnionIssues(PlainSchema, failVal, issues)).toBe(issues);
+  });
+
+  it('slims to the single matching branch (renamed near-miss: oldName wrong type)', () => {
+    // action:'renamed' matches only RenamedBranch; oldName is wrong type
+    const value = { action: 'renamed', oldName: 123, newName: 'x', message: 'y' };
+    const validation = TestUnion.safeParse(value);
+    expect(validation.success).toBe(false);
+    const original = validation.error!.issues;
+    expect(original[0].code).toBe('invalid_union');
+
+    const slimmed = slimUnionIssues(TestUnion, value, original);
+    // Must not be the full unionErrors — must be only the renamed branch's issues
+    expect(slimmed).not.toBe(original);
+    // All slimmed issues should reference the 'renamed' branch (oldName wrong type)
+    expect(slimmed.length).toBeGreaterThan(0);
+    // The slimmed issues should not contain reference to other branches' keys
+    const paths = slimmed.map((i) => i.path[0] as string);
+    expect(paths).toContain('oldName');
+    // Should not contain issues about keys like 'tagName' (deleted branch) or 'tagId' (created)
+    expect(paths.every((p) => !['tagName', 'tagId', 'path', 'createdSegments'].includes(p))).toBe(true);
+  });
+
+  it('returns input unchanged when no branch action literal matches (action:bogus)', () => {
+    const value = { action: 'bogus', oldName: 'a', newName: 'b', message: 'c' };
+    const validation = TestUnion.safeParse(value);
+    expect(validation.success).toBe(false);
+    const original = validation.error!.issues;
+    expect(slimUnionIssues(TestUnion, value, original)).toBe(original);
+  });
+
+  it('returns input unchanged when multiple branches share the same action literal (created: two branches)', () => {
+    // action:'created' matches BOTH CreatedPathBranch and CreatedFlatBranch
+    const value = { action: 'created', tagName: 'Work', tagId: 't1', path: 123, message: 'y' };
+    const validation = TestUnion.safeParse(value);
+    expect(validation.success).toBe(false);
+    const original = validation.error!.issues;
+    expect(slimUnionIssues(TestUnion, value, original)).toBe(original);
+  });
+
+  it('returns input unchanged for shared-literal schema (both branches share completed:literal(true))', () => {
+    // Both branches have completed:literal(true) → both match the literal → multiple match → unchanged.
+    const CompleteSchema = z.union([
+      z.object({ taskId: z.string(), name: z.string(), completed: z.literal(true) }).strict(),
+      z.object({ projectId: z.string(), name: z.string(), completed: z.literal(true) }).strict(),
+    ]);
+    // A value where completed:true is present but something else is wrong (taskId wrong type)
+    const value = { taskId: 123, name: 'x', completed: true };
+    const validation = CompleteSchema.safeParse(value);
+    expect(validation.success).toBe(false);
+    const original = validation.error!.issues;
+    // Both branches match completed:literal(true) → multiple match → unchanged
+    expect(slimUnionIssues(CompleteSchema, value, original)).toBe(original);
+  });
+
+  it('returns input unchanged when value is not an object (array)', () => {
+    const value = ['not', 'an', 'object'];
+    const validation = TestUnion.safeParse(value);
+    expect(validation.success).toBe(false);
+    const original = validation.error!.issues;
+    expect(slimUnionIssues(TestUnion, value, original)).toBe(original);
   });
 });
 

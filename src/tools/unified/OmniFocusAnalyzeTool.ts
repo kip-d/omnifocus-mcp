@@ -13,15 +13,27 @@ import {
 } from '../../utils/response-format.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
-  V3EnvelopeSuccessSchema,
   astEnvelopeSchema,
   listResultSchema,
-  reviewSuccessSchema,
   SlimmedDataSchema,
   RecurringPatternsSchema,
+  TaskRowSchema,
+  ProjectRowSchema,
+  TaskListMetadataSchema,
+  ProjectListMetadataSchema,
+  TagItemSchema,
+  TagSummarySchema,
+  RecurringTaskRowSchema,
+  RecurringTasksSummarySchema,
+  RecurringTasksMetadataSchema,
+  PRODUCTIVITY_STATS_V3_SCHEMA,
+  TASK_VELOCITY_V3_SCHEMA,
+  OVERDUE_ANALYSIS_V3_SCHEMA,
+  WORKFLOW_ANALYSIS_V3_SCHEMA,
+  REVIEWS_LIST_TYPED_SCHEMA,
+  MARK_REVIEWED_TYPED_SCHEMA,
+  SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
-import { z } from 'zod';
-
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
@@ -48,12 +60,7 @@ import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
 // Response types
-import type {
-  ProductivityStatsData,
-  OverdueAnalysisData,
-  WorkflowAnalysisData,
-  ReviewListData,
-} from '../../omnifocus/script-response-types.js';
+import type { OverdueAnalysisData, ReviewListData } from '../../omnifocus/script-response-types.js';
 import type { OverdueAnalysisDataV2, RecurringTaskV2 } from '../response-types-v2.js';
 import type { ProjectId } from '../../utils/branded-types.js';
 
@@ -287,49 +294,59 @@ interface ExtractionResult {
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 // ---------------------------------------------------------------------------
-// MODULE-SCOPE SUCCESS SCHEMAS (OMN-139)
+// MODULE-SCOPE SUCCESS SCHEMAS (OMN-139 / OMN-158)
 // Instantiated once; never constructed per-request.
 // Source-verified against each emitting script before finalizing.
-// The `as z.ZodTypeAny` casts at call sites are a deliberate variance bridge:
-// each schema validates the full {ok, v, data} wire envelope while T is the
-// declared payload type the caller unwraps from data. TypeScript cannot unify
-// the envelope type with T directly, so the cast is intentional and must stay.
-// Typed-payload schemas (eliminating the cast entirely) are OMN-158 territory.
+// OMN-158: per-operation typed v3 envelopes replace the shared ANALYZE_V3_SCHEMA;
+// typed review schemas replace the z.unknown() shapes.
 // ---------------------------------------------------------------------------
 
-/** Analytics v3 envelope (all four v3 analytics scripts). */
-const ANALYZE_V3_SCHEMA = V3EnvelopeSuccessSchema;
-
-/** AST recurring-tasks envelope: {ok:true, v:'ast', tasks, summary, metadata}. */
-const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks');
-
-/** AST tag items envelope: {ok:true, v:'ast', items, summary?}. */
-const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items');
-
-/** Filtered-projects list: {projects|items, metadata?}. */
-const PROJECTS_LIST_SCHEMA = listResultSchema(['projects', 'items'], { metadata: true });
-
-/** Task list: {tasks|items, metadata?}. */
-const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], { metadata: true });
-
-/** projects-for-review script: {success:true, projects, metadata?}. */
-const REVIEWS_LIST_SCHEMA = reviewSuccessSchema({
-  projects: z.array(z.unknown()),
-  metadata: z.unknown().optional(),
+/**
+ * AST recurring-tasks envelope: {ok:true, v:'ast', tasks, summary, metadata}.
+ * Source: analyze-recurring-tasks-ast.ts buildRecurringTasksScript.
+ */
+const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks', {
+  rowSchema: RecurringTaskRowSchema,
+  summarySchema: RecurringTasksSummarySchema,
+  metadataSchema: RecurringTasksMetadataSchema,
 });
 
-/** mark-project-reviewed script: {success:true, project, changes?, message?}. */
-const MARK_REVIEWED_SCHEMA = reviewSuccessSchema({
-  project: z.unknown(),
-  changes: z.unknown().optional(),
-  message: z.unknown().optional(),
+/**
+ * AST tag items envelope: {ok:true, v:'ast', items, summary?}.
+ * Analyze tool receives 'basic' mode items ({id, name} objects).
+ * Source: tag-script-builder.ts buildBasicTagsScript.
+ */
+const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items', {
+  rowSchema: TagItemSchema,
+  summarySchema: TagSummarySchema,
 });
 
-/** set-review-schedule / clear-review-schedule script: {success:true, results, message?}. */
-const SET_SCHEDULE_SCHEMA = reviewSuccessSchema({
-  results: z.unknown(),
-  message: z.unknown().optional(),
+/**
+ * Filtered-projects list: {projects|items, metadata?}.
+ * Source: buildFilteredProjectsScript.
+ */
+const PROJECTS_LIST_SCHEMA = listResultSchema(['projects', 'items'], {
+  rowSchema: ProjectRowSchema,
+  metadata: ProjectListMetadataSchema,
 });
+
+/**
+ * Task list: {tasks|items, metadata?}.
+ * Source: buildListTasksScriptV4 (wraps filtered/inbox/id_lookup inner scripts).
+ */
+const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], {
+  rowSchema: TaskRowSchema,
+  metadata: TaskListMetadataSchema,
+});
+
+// OMN-158: per-operation typed schemas imported from script-response-schemas.ts.
+// PRODUCTIVITY_STATS_V3_SCHEMA / TASK_VELOCITY_V3_SCHEMA / OVERDUE_ANALYSIS_V3_SCHEMA /
+// WORKFLOW_ANALYSIS_V3_SCHEMA / REVIEWS_LIST_TYPED_SCHEMA / MARK_REVIEWED_TYPED_SCHEMA /
+// SET_SCHEDULE_TYPED_SCHEMA are module-scope constants defined in script-response-schemas.ts.
+// Re-exported aliases kept here for local readability.
+const REVIEWS_LIST_SCHEMA = REVIEWS_LIST_TYPED_SCHEMA;
+const MARK_REVIEWED_SCHEMA = MARK_REVIEWED_TYPED_SCHEMA;
+const SET_SCHEDULE_SCHEMA = SET_SCHEDULE_TYPED_SCHEMA;
 
 // ---------------------------------------------------------------------------
 // Main tool
@@ -507,7 +524,7 @@ SCOPE FILTERING:
       const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, {
         options: { period, includeProjectStats, includeTagStats, includeInactive: false },
       });
-      const result = await this.execJson<ProductivityStatsData>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
+      const result = await this.execJson(script, PRODUCTIVITY_STATS_V3_SCHEMA);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -752,7 +769,7 @@ SCOPE FILTERING:
         options: { period: groupBy, startDate: rangeStart, endDate: rangeEnd },
       });
 
-      const result = await this.execJson<TaskVelocityV3Data>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
+      const result = await this.execJson(script, TASK_VELOCITY_V3_SCHEMA);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -942,7 +959,7 @@ SCOPE FILTERING:
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
-      const result = await this.execJson<OverdueDataUnion>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
+      const result = await this.execJson(script, OVERDUE_ANALYSIS_V3_SCHEMA);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -955,7 +972,9 @@ SCOPE FILTERING:
         );
       }
 
-      const envelope = result.data as { ok?: boolean; v?: string; data?: OverdueDataUnion } | OverdueDataUnion;
+      const envelope = result.data as unknown as
+        | { ok?: boolean; v?: string; data?: OverdueDataUnion }
+        | OverdueDataUnion;
       const scriptData: OverdueDataUnion =
         'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueDataUnion);
 
@@ -1990,7 +2009,7 @@ SCOPE FILTERING:
         options: { analysisDepth, focusAreas, maxInsights, includeRawData },
       });
 
-      const result = await this.execJson<WorkflowAnalysisData>(script, ANALYZE_V3_SCHEMA as z.ZodTypeAny);
+      const result = await this.execJson(script, WORKFLOW_ANALYSIS_V3_SCHEMA);
 
       if (isScriptError(result)) {
         return createErrorResponseV2(
@@ -3136,7 +3155,7 @@ SCOPE FILTERING:
     }
 
     const script = buildProjectsForReviewScript({ filter: args });
-    const result = await this.execJson<ReviewListData>(script, REVIEWS_LIST_SCHEMA as z.ZodTypeAny);
+    const result = await this.execJson(script, REVIEWS_LIST_SCHEMA);
     if (isScriptError(result)) {
       return createErrorResponseV2(
         'manage_reviews',

@@ -8,6 +8,8 @@ import {
 import { validateMutationProgram } from '../../../../../src/contracts/ast/mutation/validator.js';
 import { emitProgram } from '../../../../../src/contracts/ast/mutation/emitter.js';
 import type { BatchTaskSpec } from '../../../../../src/contracts/ast/mutation-script-builder.js';
+import { BatchCreateResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 // These tests work at the PROGRAM level (buildBatchCreateTasksProgram →
 // emitProgram), pre-launcher, so no extractOmniJsProgram decoding is needed —
@@ -74,7 +76,14 @@ function makeSandbox(
 }
 
 function runBatch(program: string, sandbox: Record<string, unknown>): { results: Array<Record<string, unknown>> } {
-  return JSON.parse(vm.runInNewContext(program, sandbox) as string) as { results: Array<Record<string, unknown>> };
+  const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string) as {
+    results: Array<Record<string, unknown>>;
+  };
+  // OMN-158 Task 4 (M1): every batch wire envelope — success-only AND partial-failure
+  // mixes — is tied to BatchCreateResultSchema here, so the failure-item union branch
+  // ({ taskId: null, success: false, error }) gets a mechanical drift guard too.
+  expectMatchesSchema(BatchCreateResultSchema, parsed);
+  return parsed;
 }
 
 describe('buildBatchCreateTasksProgram', () => {

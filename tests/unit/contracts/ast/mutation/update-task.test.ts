@@ -12,6 +12,8 @@ import {
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskUpdateData } from '../../../../../src/contracts/mutations.js';
+import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 function emit(changes: TaskUpdateData, taskId = 't1'): string {
   const program = buildUpdateTaskProgram({ taskId, changes });
@@ -366,6 +368,7 @@ describe('emitted update-task program executes (vm)', () => {
     const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { name: 'New name' } }));
     const sandbox: Record<string, unknown> = { Task: { byIdentifier: () => task } };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
     expect(parsed).toEqual({
       taskId: 'fake-task-id',
       name: 'New name', // read back from the stub, not echoed
@@ -386,6 +389,7 @@ describe('emitted update-task program executes (vm)', () => {
       },
     };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
     expect(parsed.updated).toBe(true);
     expect(parsed.name).toBe('x'); // the other change persisted
     expect(parsed.warnings).toEqual(['move: boom']);
@@ -404,6 +408,7 @@ describe('emitted update-task program executes (vm)', () => {
       tags: [],
     };
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
     expect(parsed.updated).toBe(true);
     expect(parsed.warnings).toEqual([]);
     expect(calls).toEqual(['clearTags', 'addTag']);

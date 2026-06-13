@@ -9,6 +9,8 @@ import {
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { CompleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { expectMatchesSchema } from './assert-schema.js';
 
 describe('buildCompleteTaskProgram — golden emission', () => {
   it('emits resolve, guard, markComplete, read-back envelope — nothing else', () => {
@@ -100,6 +102,7 @@ describe('emitted complete programs execute (vm)', () => {
     const { sandbox, calls } = makeSandbox(true);
     const program = emitProgram(buildCompleteTaskProgram({ taskId: 't1' }));
     const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(CompleteResultSchema, parsed);
     expect(parsed).toEqual({
       taskId: 't1',
       name: 'Fixture',
