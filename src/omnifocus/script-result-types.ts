@@ -7,6 +7,31 @@
 import { z } from 'zod';
 
 /**
+ * Canonical script-error context vocabulary (OMN-159).
+ *
+ * Wire-contract: these strings are observable on the MCP wire — consumers and the
+ * failure-log clustering pipeline may pattern-match on them. Rename only within a
+ * deprecation window. All context strings emitted by script-result-types.ts,
+ * OmniAutomation.ts, and src/tools/base.ts MUST come from this constant.
+ */
+export const SCRIPT_ERROR_CONTEXT = {
+  /** {ok:false} modern JxaEnvelope error branch */
+  ERROR_ENVELOPE: 'Script error envelope',
+  /** {error:true} legacy dialect OR {success:false} review-script dialect */
+  SCRIPT_REPORTED: 'Script reported an error',
+  /** OmniAutomationError thrown from execute() and caught in executeJson() */
+  EXECUTION_ERROR: 'Script execution error',
+  /** Non-OmniAutomationError thrown and caught in executeJson() */
+  UNEXPECTED_ERROR: 'Unexpected error during script execution',
+  /** Output matched no known error dialect and failed the success schema */
+  UNRECOGNIZED_SHAPE: 'Unrecognized script output shape',
+  /** execJson null-guard: executeJson resolved null or undefined (mock-safety path) */
+  NULL_RESULT: 'Script returned null or undefined',
+  /** execJson catch: unexpected exception from executeJson itself */
+  EXECUTION_EXCEPTION: 'Script execution exception',
+} as const;
+
+/**
  * Discriminated union for script execution results
  * Replaces manual checking of result.error/result.success patterns
  */
@@ -53,8 +78,9 @@ export function createScriptError(error: string, context?: string, details?: unk
  * the order of THIS function vs schema validation is load-bearing — see spec §3.2.
  * Returns null when the value matches no known error dialect.
  *
- * Wire-contract: the context strings emitted here ('Script error envelope', 'Legacy script error')
- * are wire-observable — MCP clients may pattern-match on them. Rename only with a deprecation window.
+ * Wire-contract: context strings come from SCRIPT_ERROR_CONTEXT. Rename only with a deprecation window.
+ * For the {success:false} dialect: the emitted context is always SCRIPT_REPORTED; the script's own
+ * `context` field (if present) is preserved in `details.scriptContext` so callers can still inspect it.
  */
 export function detectKnownErrorShape(value: unknown): ScriptError | null {
   if (!value || typeof value !== 'object') return null;
@@ -64,26 +90,51 @@ export function detectKnownErrorShape(value: unknown): ScriptError | null {
   if (obj.ok === false) {
     const err = obj.error as Record<string, unknown> | undefined;
     const message = err && typeof err.message === 'string' ? err.message : 'Script reported an error envelope';
-    return createScriptError(message, 'Script error envelope', value);
+    return createScriptError(message, SCRIPT_ERROR_CONTEXT.ERROR_ENVELOPE, value);
   }
 
-  // Legacy: {error: true | 'true', message?, details?} — context string is wire-observable, preserve verbatim
+  // Legacy: {error: true | 'true', message?, details?} — uses canonical SCRIPT_REPORTED context.
+  // The legacy dialect MAY carry a `context` field (some AST scripts emit one), but B2 does not
+  // preserve it in details — only the {success:false} dialect does, per spec §3. details passes
+  // through verbatim (asymmetry vs. the {success:false} branch below).
   if (obj.error === true || obj.error === 'true') {
     const message = typeof obj.message === 'string' ? obj.message : 'Script execution failed';
-    return createScriptError(message, 'Legacy script error', obj.details ?? 'No additional context');
+    return createScriptError(message, SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED, obj.details ?? 'No additional context');
   }
 
-  // Review-script dialect: {success: false, ...} — script's own context wins (spec §3.4)
+  // Review-script dialect: {success: false, ...} — canonical context is SCRIPT_REPORTED;
+  // script's own context field moves to details.scriptContext so callers can inspect it.
   if (obj.success === false) {
     const message =
       (typeof obj.message === 'string' && obj.message) ||
       (typeof obj.error === 'string' && obj.error) ||
       'Script execution failed';
-    const context = typeof obj.context === 'string' ? obj.context : 'Legacy script error';
-    return createScriptError(message, context, obj.details ?? value);
+    return createScriptError(message, SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED, buildSuccessFalseDetails(obj, value));
   }
 
   return null;
+}
+
+/**
+ * Build the details object for the {success:false} dialect.
+ * The script's `context` field moves to `details.scriptContext`; existing
+ * `details` fields are spread in so they remain accessible.
+ * Falls back to the raw envelope `value` when neither `details` nor a script
+ * context is present.
+ *
+ * Consumer contract: consumers inspect `details.scriptContext` for the script's
+ * original context; the rest of `details` is dialect-dependent and best-effort.
+ */
+function buildSuccessFalseDetails(obj: Record<string, unknown>, value: unknown): unknown {
+  const scriptContext = typeof obj.context === 'string' ? obj.context : undefined;
+  if (obj.details !== undefined && obj.details !== null && typeof obj.details === 'object') {
+    const base = obj.details as Record<string, unknown>;
+    return scriptContext ? { ...base, scriptContext } : base;
+  }
+  if (obj.details !== undefined) {
+    return scriptContext ? { raw: obj.details, scriptContext } : { raw: obj.details };
+  }
+  return scriptContext ? { scriptContext } : value;
 }
 
 /** Serialize raw script output for error details, truncated to keep responses bounded. */

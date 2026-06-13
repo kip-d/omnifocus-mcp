@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { OmniAutomation, OmniAutomationError } from '../../../src/omnifocus/OmniAutomation';
+import { SCRIPT_ERROR_CONTEXT } from '../../../src/omnifocus/script-result-types';
 import { TagMutationResultSchema, CompleteResultSchema } from '../../../src/omnifocus/script-response-schemas';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -395,14 +396,18 @@ describe('OmniAutomation', () => {
       expect(result.error).toBe('x');
     });
 
-    // 3. Context precedence: {success: false, context, message} → script's own context wins
-    it('preserves the script-supplied context when success:false dialect detected', async () => {
+    // 3. Context canonicalization: {success: false, context, message} → SCRIPT_REPORTED;
+    //    script's own context field moves to details.scriptContext (OMN-159).
+    it('canonicalizes context to SCRIPT_REPORTED and moves script context to details for success:false dialect', async () => {
       const raw = JSON.stringify({ success: false, context: 'projects_for_review', message: 'm' });
       const result = await emitJsonOutput(raw, tasksSchema);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('m');
-      expect(result.context).toBe('projects_for_review');
+      // Emitted context is now the canonical string
+      expect(result.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
+      // Script's original context is preserved in details
+      expect((result.details as Record<string, unknown>)?.scriptContext).toBe('projects_for_review');
     });
 
     // 4. Valid payload: output matches schema → success:true, data equals payload
@@ -442,14 +447,31 @@ describe('OmniAutomation', () => {
     });
 
     // 7. Legacy error dialect: {error: true, message: '...'} → success:false, error text preserved,
-    //    context 'Legacy script error'. End-to-end coverage of the third detection branch.
-    it('detects legacy {error: true, message} dialect with a schema → success:false, context Legacy script error', async () => {
+    //    context is canonical SCRIPT_REPORTED (OMN-159: 'Legacy script error' retired).
+    it('detects legacy {error: true, message} dialect with a schema → success:false, canonical SCRIPT_REPORTED context', async () => {
       const raw = JSON.stringify({ error: true, message: 'boom' });
       const result = await emitJsonOutput(raw, tasksSchema);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('boom');
-      expect(result.context).toBe('Legacy script error');
+      expect(result.context).toBe(SCRIPT_ERROR_CONTEXT.SCRIPT_REPORTED);
+    });
+
+    // 8. Kill-test for OMN-159 headline rename: when execute() throws OmniAutomationError,
+    //    executeJson() RETURNS (does not rethrow) a ScriptError with EXECUTION_ERROR context.
+    //    ('OmniAutomation execution error' was the old name; 'Script execution error' is the new canonical form.)
+    it('returns EXECUTION_ERROR context when execute() throws OmniAutomationError (kill-test for OMN-159 rename)', async () => {
+      // Override execute to throw an OmniAutomationError — tests the catch branch of executeJson
+      vi.spyOn(omniAutomation, 'execute').mockRejectedValue(
+        new OmniAutomationError('osascript failed', { script: 'test', stderr: 'err output' }),
+      );
+
+      const result = await omniAutomation.executeJson('test script', tasksSchema);
+
+      expect(result.success).toBe(false);
+      expect(result.context).toBe(SCRIPT_ERROR_CONTEXT.EXECUTION_ERROR);
+      // error message comes from the OmniAutomationError
+      expect(result.error).toBe('osascript failed');
     });
   });
 
