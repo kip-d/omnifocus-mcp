@@ -272,8 +272,15 @@ templates, read the emission carefully):**
   analysisTime, dataPoints:number · metadata{analysisDepth:string, focusAreas:string[], maxInsights:number, method,
   optimization:string, query_time_ms:number}.strict(). All R except data.
 - RECURRING_TASKS items (astEnvelopeSchema('tasks', RecurringTaskRowSchema, summary, metadata)): row {id,name:string R ·
-  project,projectId:string O · repetitionRule{unit:string R, steps:number R, ruleString:string O,
-  \_inferenceSource:string O, method:string O}.strict() R · frequency:string R · deferDate,dueDate,nextDue:string O ·
+  project,projectId:string O · repetitionRule{unit:string **NULLABLE** R, steps:number R, ruleString:string O,
+  \_inferenceSource:string O, method:string **NULLABLE** O}.strict() R · frequency:string R ·
+  deferDate,dueDate,nextDue:string O · **CORRECTION (Task 2 spec-review found vs emitter analyze-recurring-tasks-ast.ts
+  ~216/228): the emitter emits `unit: null` and `method: null` when there is no ruleString and no name-inference — so
+  `unit` is required but `.nullable()` (NOT plain string), and `method` is `.optional().nullable()`. The bullet
+  originally said `unit:string R` which would fail-closed on an unparseable-rule recurring task. NOTE:
+  RecurringTaskRowSchema already LANDED in Task 2's commit 6586318 as a compile dependency, currently with
+  `unit: z.string().optional()` — FIX IT HERE: re-verify the whole row against the emitter, correct unit/method
+  nullability, and ADD the fixture tests this schema never got (Task 2 only added it to satisfy the type system).**
   daysUntilDue:number O · isOverdue:boolean O · overdueDays:number O · lastCompleted:string O}.strict(); summary
   {totalRecurring,returned,overdue,dueThisWeek:number, byFrequency:z.record(z.number())}.strict(); metadata
   {query_time_ms:number, optimization:string, options:z.unknown() O (echo)}.strict(). **Also check
