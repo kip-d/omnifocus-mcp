@@ -21,7 +21,12 @@ import {
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
 import { transformTagFilters, transformFolderFilters, transformPerspectiveFilters } from './reject-filters.js';
-import { TASK_KEY_DISPOSITION, FOLDER_TASKS_REJECTION, ON_HOLD_TASKS_REJECTION } from './task-key-disposition.js';
+import {
+  TASK_KEY_DISPOSITION,
+  FOLDER_TASKS_REJECTION,
+  ON_HOLD_TASKS_REJECTION,
+  terminalBranchRejection,
+} from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -133,6 +138,7 @@ export class QueryCompiler {
         }
         const filters = normalizeFilter(raw);
         if (query.type === 'tasks') {
+          this.assertSatisfiableTerminalBranches(filters); // OMN-172 S4
           return {
             ...base,
             type: 'tasks',
@@ -162,6 +168,33 @@ export class QueryCompiler {
         throw new Error(`Unhandled query type: ${JSON.stringify(_exhaustive)}`);
       }
     }
+  }
+
+  /**
+   * OMN-172 (S4): reject an OR branch that requests a terminal state (dropped/completed)
+   * the base will exclude, making the branch silently unsatisfiable. `includeCompleted`
+   * is export-only, so for tasks the base excludes a terminal state iff the top-level
+   * filter does not pin it to `true` (undefined → default-exclude; explicit `false` →
+   * same effect; only top-level `true` lifts the exclusion). See the S4 design §3.
+   */
+  private assertSatisfiableTerminalBranches(filters: NormalizedTaskFilter): void {
+    const branches = filters.orBranches;
+    if (!branches || branches.length === 0) return;
+    const STATES = ['dropped', 'completed'] as const;
+    branches.forEach((branch, i) => {
+      for (const state of STATES) {
+        const baseExcludes = filters[state] !== true;
+        if (baseExcludes && branch[state] === true) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ['query', 'filters', 'OR', i, state],
+              message: terminalBranchRejection(i, state),
+            },
+          ]);
+        }
+      }
+    });
   }
 
   /**

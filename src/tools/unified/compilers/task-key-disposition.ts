@@ -48,3 +48,13 @@ export const ON_HOLD_TASKS_REJECTION =
   "status:'on_hold' is not supported on tasks or export queries — on-hold is a project status. " +
   "Query projects with status:'on_hold' first, then tasks by projectId. " +
   '(Tasks whose project is on hold also match available:false.)';
+
+// OMN-172 (S4): a terminal status inside an OR branch is unsatisfiable because
+// tasks queries exclude that terminal state at the base by default and an OR
+// branch cannot re-include it (the base AND-composes over the OR node). Worded
+// in compiled terms: at the check site status:'dropped' has already collapsed
+// to dropped:true (see the S4 design §3.3).
+export const terminalBranchRejection = (branchIndex: number, state: 'dropped' | 'completed'): string =>
+  `OR[${branchIndex}] requires ${state} tasks (status:'${state}' / ${state}:true), but tasks queries exclude ` +
+  `${state} tasks by default and an OR branch cannot re-include them. To include ${state} tasks, set ` +
+  `status:'${state}' (or ${state}:true) at the top level of filters instead of inside an OR branch, or remove the branch.`;
