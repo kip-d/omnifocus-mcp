@@ -430,12 +430,13 @@ export function listResultSchema<TRow extends z.ZodTypeAny, TMeta extends z.ZodT
   opts: { rowSchema?: TRow; metadata?: TMeta | true; extras?: Record<string, z.ZodTypeAny> } = {},
 ) {
   // Build the metadata field: typed schema if provided, unknown if legacy boolean true, absent otherwise.
-  const metadataEntry: Record<string, z.ZodTypeAny> =
-    opts.metadata === undefined
-      ? {}
-      : opts.metadata === true
-        ? { metadata: z.unknown().optional() }
-        : { metadata: (opts.metadata as TMeta).optional() };
+  let metadataEntry: Record<string, z.ZodTypeAny> = {};
+  if (opts.metadata === true) {
+    metadataEntry = { metadata: z.unknown().optional() };
+  } else if (opts.metadata !== undefined) {
+    // narrowed to TMeta — `true` and `undefined` ruled out above
+    metadataEntry = { metadata: opts.metadata.optional() };
+  }
 
   const variants = itemKeys.map((k) =>
     z
