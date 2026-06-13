@@ -432,6 +432,69 @@ describe('TaskWriteResultSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects create-variant with wrong-typed leaf: flagged as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: '',
+      flagged: 'yes', // wrong type
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      estimatedMinutes: null,
+      tags: [],
+      project: null,
+      inInbox: true,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects create-variant with wrong-typed leaf: tags as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: '',
+      flagged: false,
+      dueDate: null,
+      deferDate: null,
+      plannedDate: null,
+      estimatedMinutes: null,
+      tags: 'Work', // wrong type, should be array
+      project: null,
+      inInbox: true,
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects update-variant carrying create-only keys (cross-variant hybrid)', () => {
+    // update + note (only on create) should fail the update branch
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      note: 'some note',
+      flagged: false,
+      updated: true,
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects update-variant with wrong-typed leaf: warnings as string', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      flagged: false,
+      updated: true,
+      warnings: 'none', // wrong type
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -494,6 +557,17 @@ describe('CompleteResultSchema', () => {
       completed: true,
       completionDate: null,
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects wrong-typed leaf: completionDate as number', () => {
+    const result = CompleteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      completed: true,
+      completionDate: 12345, // wrong type, should be string|null
     });
     expect(result.success).toBe(false);
   });
@@ -574,7 +648,10 @@ describe('BulkDeleteResultSchema', () => {
 
   it('(a) accepts bulk-delete envelope with no errors (all deleted)', () => {
     const result = BulkDeleteResultSchema.safeParse({
-      deleted: [{ id: 'abc', name: 'Task 1' }, { id: 'def', name: 'Task 2' }],
+      deleted: [
+        { id: 'abc', name: 'Task 1' },
+        { id: 'def', name: 'Task 2' },
+      ],
       errors: [],
       message: 'Deleted 2 of 2 tasks',
     });
@@ -611,6 +688,34 @@ describe('BulkDeleteResultSchema', () => {
       errors: [],
       message: 'Deleted 0 of 0 tasks',
       error: 'something',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects extra key inside deleted item', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 'abc', name: 'Task 1', rogue: true }],
+      errors: [],
+      message: 'Deleted 1 of 1 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed leaf inside deleted item: id as number', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [{ id: 123, name: 'Task 1' }], // id should be string
+      errors: [],
+      message: 'Deleted 1 of 1 tasks',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects extra key inside errors item', () => {
+    const result = BulkDeleteResultSchema.safeParse({
+      deleted: [],
+      errors: [{ taskId: 'abc', error: 'not found', rogue: true }],
+      message: 'Deleted 0 of 1 tasks',
     });
     expect(result.success).toBe(false);
   });
@@ -774,6 +879,29 @@ describe('FolderCreateResultSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects wrong-typed: warnings as string not array', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: null,
+      warnings: 'none', // wrong type
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed: parentFolder as number', () => {
+    const result = FolderCreateResultSchema.safeParse({
+      folderId: 'f123',
+      name: 'My Folder',
+      parentFolder: 42, // wrong type, should be string|null
+      warnings: [],
+      created: true,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -784,8 +912,8 @@ describe('BatchCreateResultSchema', () => {
   it('(a) accepts batch-create envelope with results array', () => {
     const result = BatchCreateResultSchema.safeParse({
       results: [
-        { tempId: 't1', taskId: 'abc', success: true },
-        { tempId: 't2', taskId: null, success: false, error: 'Not found' },
+        { tempId: 't1', taskId: 'abc', success: true, warnings: [] },
+        { tempId: 't2', taskId: null, success: false, error: 'Not found', warnings: [] },
       ],
     });
     expect(result.success).toBe(true);
@@ -805,6 +933,42 @@ describe('BatchCreateResultSchema', () => {
     const result = BatchCreateResultSchema.safeParse({
       results: [],
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) accepts success batch item with warnings', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc123', success: true, warnings: [] }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(leaf) accepts failure batch item', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: null, success: false, error: 'Project not found', warnings: [] }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(leaf) rejects extra key inside success batch item', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc123', success: true, warnings: [], rogue: true }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects wrong-typed field inside success batch item: taskId as number', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 123, success: true, warnings: [] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects hybrid: success:true with error key (cross-variant)', () => {
+    const result = BatchCreateResultSchema.safeParse({
+      results: [{ tempId: 't1', taskId: 'abc', success: true, warnings: [], error: 'oops' }],
     });
     expect(result.success).toBe(false);
   });
@@ -944,6 +1108,56 @@ describe('TagMutationResultSchema', () => {
       tagName: 'Work',
       message: "Tag 'Work' deleted successfully.",
       error: 'aborted',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // OMN-158 leaf-strict tests
+  it('(leaf) rejects path-created with wrong-typed createdSegments: not array of strings', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'created',
+      tagName: 'Work',
+      tagId: 'tid1',
+      path: 'Context : Work',
+      createdSegments: [{ name: 'Work' }], // should be string[]
+      message: 'Created 1 tag(s)',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects merged_with_warning with wrong-typed tasksMerged: string not number', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged_with_warning',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: '3', // wrong type, should be number
+      warning: 'could not delete',
+      message: 'Merged 3 tasks but could not delete source tag',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects reparented-to-root carrying newParentTagId (cross-variant hybrid)', () => {
+    // reparented-to-root must NOT have newParentTagId; the two-variant union enforces this
+    const result = TagMutationResultSchema.safeParse({
+      action: 'reparented',
+      tagName: 'Work',
+      newParentTagId: 'npid1', // must be absent on to-root variant
+      message: "Tag 'Work' moved to root level",
+    });
+    // After OMN-158: should fail because to-root variant is strict (no newParentTagId)
+    // and with-parent variant requires newParentTagName (missing here)
+    expect(result.success).toBe(false);
+  });
+
+  it('(leaf) rejects merged_with_warning missing required warning key', () => {
+    const result = TagMutationResultSchema.safeParse({
+      action: 'merged_with_warning',
+      sourceTag: 'OldTag',
+      targetTag: 'NewTag',
+      tasksMerged: 3,
+      // warning key absent - should fail after OMN-158
+      message: 'Merged 3 tasks but could not delete source tag',
     });
     expect(result.success).toBe(false);
   });

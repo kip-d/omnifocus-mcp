@@ -4,8 +4,18 @@ import { z } from 'zod';
  * OMN-139 family success schemas. Rules (spec §3.2 — normative):
  *  - SUCCESS BRANCH ONLY. Error branches are detectKnownErrorShape's job.
  *  - Discriminators are LITERALS (z.literal(true)), never z.boolean().
- *  - Top-level closed-world (.strict()); leaves lenient (z.unknown()). Leaf-strict = OMN-158.
+ *  - Top-level closed-world (.strict()); leaves leaf-strict per OMN-158.
  */
+
+// ---------------------------------------------------------------------------
+// Shared leaf vocabulary (OMN-158 plan §"Shared leaf vocabulary")
+// ---------------------------------------------------------------------------
+
+/** ISO-8601 date string emitted via toISOString(); type-only (no format regex). */
+const isoDate = z.string();
+const isoDateOrNull = isoDate.nullable();
+/** OMN-137 best-effort warning labels: 'label: message' strings. */
+const warningsArray = z.array(z.string());
 
 /** Analytics v3 envelope: {ok: true, v, data}. */
 export const V3EnvelopeSuccessSchema = z.object({ ok: z.literal(true), v: z.string(), data: z.unknown() }).strict();
@@ -190,35 +200,45 @@ export const FolderListSchema = z
 /**
  * Write-tool task create/update result (NOT v3-wrapped — wrapInLauncher returns the OmniJS payload raw).
  *
- * Source-verified against src/contracts/ast/mutation/defs.ts (grep the envelope construction):
- *  - buildCreateTaskProgram envelope:
- *    {taskId, name, note, flagged, dueDate, deferDate, plannedDate, estimatedMinutes, tags, project, inInbox, warnings, created:true}
- *  - buildUpdateTaskProgram envelope:
- *    {taskId, name, flagged, updated:true, warnings}  ← FEWER keys than create; both must validate.
+ * Source-verified against src/contracts/ast/mutation/defs.ts:
+ *  - buildCreateTaskProgram envelope (lines ~410-426):
+ *    {taskId, name, note, flagged, dueDate, deferDate, plannedDate, estimatedMinutes, tags,
+ *     project, inInbox, warnings, created:true}
+ *  - buildUpdateTaskProgram envelope (lines ~751-758):
+ *    {taskId, name, flagged, updated:true, warnings} — exactly 5 keys, do NOT add note/dates/tags.
  *
- * The .refine() enforces at least one discriminator is present.
+ * OMN-158 rider 3: two strict variants (create/update) replacing single object + .refine().
+ * .strict() before any .refine() — no .refine() survives.
  */
-export const TaskWriteResultSchema = z
+const TaskCreateResult = z
   .object({
     taskId: z.string(),
     name: z.string(),
-    note: z.unknown().optional(),
-    flagged: z.unknown().optional(),
-    dueDate: z.unknown().optional(),
-    deferDate: z.unknown().optional(),
-    plannedDate: z.unknown().optional(),
-    estimatedMinutes: z.unknown().optional(),
-    tags: z.unknown().optional(),
-    project: z.unknown().optional(),
-    inInbox: z.unknown().optional(),
-    warnings: z.unknown().optional(),
-    created: z.literal(true).optional(),
-    updated: z.literal(true).optional(),
+    note: z.string(),
+    flagged: z.boolean(),
+    dueDate: isoDateOrNull,
+    deferDate: isoDateOrNull,
+    plannedDate: isoDateOrNull,
+    estimatedMinutes: z.number().nullable(),
+    tags: z.array(z.string()),
+    project: z.string().nullable(),
+    inInbox: z.boolean(),
+    warnings: warningsArray,
+    created: z.literal(true),
   })
-  .strict()
-  .refine((o) => o.created === true || o.updated === true, {
-    message: 'missing created/updated discriminator',
-  });
+  .strict();
+
+const TaskUpdateResult = z
+  .object({
+    taskId: z.string(),
+    name: z.string(),
+    flagged: z.boolean(),
+    updated: z.literal(true),
+    warnings: warningsArray,
+  })
+  .strict();
+
+export const TaskWriteResultSchema = z.union([TaskCreateResult, TaskUpdateResult]);
 
 /**
  * Complete result — task or project variant.
@@ -235,7 +255,7 @@ export const CompleteResultSchema = z.union([
       taskId: z.string(),
       name: z.string(),
       completed: z.literal(true),
-      completionDate: z.unknown(),
+      completionDate: isoDateOrNull,
     })
     .strict(),
   z
@@ -243,7 +263,7 @@ export const CompleteResultSchema = z.union([
       projectId: z.string(),
       name: z.string(),
       completed: z.literal(true),
-      completionDate: z.unknown(),
+      completionDate: isoDateOrNull,
     })
     .strict(),
 ]);
@@ -286,8 +306,8 @@ export const DeleteResultSchema = z.union([
  */
 export const BulkDeleteResultSchema = z
   .object({
-    deleted: z.array(z.unknown()),
-    errors: z.array(z.unknown()),
+    deleted: z.array(z.object({ id: z.string(), name: z.string() }).strict()),
+    errors: z.array(z.object({ taskId: z.string(), error: z.string() }).strict()),
     message: z.string(),
   })
   .strict();
@@ -307,15 +327,15 @@ export const ProjectWriteResultSchema = z.union([
     .object({
       projectId: z.string(),
       name: z.string(),
-      note: z.unknown(),
-      flagged: z.unknown(),
-      sequential: z.unknown(),
-      dueDate: z.unknown(),
-      deferDate: z.unknown(),
-      plannedDate: z.unknown(),
-      folder: z.unknown(),
-      tags: z.unknown(),
-      warnings: z.unknown(),
+      note: z.string(),
+      flagged: z.boolean(),
+      sequential: z.boolean(),
+      dueDate: isoDateOrNull,
+      deferDate: isoDateOrNull,
+      plannedDate: isoDateOrNull,
+      folder: z.string().nullable(),
+      tags: z.array(z.string()),
+      warnings: warningsArray,
       created: z.literal(true),
     })
     .strict(),
@@ -323,10 +343,10 @@ export const ProjectWriteResultSchema = z.union([
     .object({
       projectId: z.string(),
       name: z.string(),
-      flagged: z.unknown(),
-      status: z.unknown(),
+      flagged: z.boolean(),
+      status: z.enum(['active', 'on_hold', 'completed', 'dropped']),
       updated: z.literal(true),
-      warnings: z.unknown(),
+      warnings: warningsArray,
     })
     .strict(),
 ]);
@@ -341,8 +361,8 @@ export const FolderCreateResultSchema = z
   .object({
     folderId: z.string(),
     name: z.string(),
-    parentFolder: z.unknown(),
-    warnings: z.unknown(),
+    parentFolder: z.string().nullable(),
+    warnings: warningsArray,
     created: z.literal(true),
   })
   .strict();
@@ -350,14 +370,34 @@ export const FolderCreateResultSchema = z
 /**
  * Batch create result.
  *
- * Source-verified against src/contracts/ast/mutation/defs.ts (buildBatchCreateTasksProgram):
- *  return_({results: ref('results')})  — an array of per-item result objects.
+ * Source-verified against src/contracts/ast/mutation/emitter.ts (batchItem emitter, lines ~373-374):
+ *  success: {tempId, taskId: task.id.primaryKey, success: true, warnings}
+ *  failure: {tempId, taskId: null, success: false, error, warnings}
  *
- * Leaf contents are unknown (OMN-158 will add per-item shape strictness).
+ * Per-item taskId:null and success:literal(false) are SUCCESS-contract data (spec §5, plan note).
  */
+const BatchItemSuccessResult = z
+  .object({
+    tempId: z.string(),
+    taskId: z.string(),
+    success: z.literal(true),
+    warnings: warningsArray,
+  })
+  .strict();
+
+const BatchItemFailureResult = z
+  .object({
+    tempId: z.string(),
+    taskId: z.null(),
+    success: z.literal(false),
+    error: z.string(),
+    warnings: warningsArray,
+  })
+  .strict();
+
 export const BatchCreateResultSchema = z
   .object({
-    results: z.array(z.unknown()),
+    results: z.array(z.union([BatchItemSuccessResult, BatchItemFailureResult])),
   })
   .strict();
 
@@ -367,9 +407,10 @@ export const BatchCreateResultSchema = z
  * Source-verified against src/contracts/ast/mutation/defs.ts (each tag program):
  *
  *  created (path):  {action: 'created', tagName, tagId, path, createdSegments, message}
- *                   — buildCreateTagProgram, path variant
+ *                   — buildCreateTagProgram, path variant (lines ~1083-1097)
  *  created (flat):  {action: 'created', tagName, tagId, parentTagName, parentTagId, message}
- *                   — buildCreateTagProgram, flat variant
+ *                   — buildCreateTagProgram, flat variant (lines ~1122-1135)
+ *                   NOTE: parentTagName/parentTagId are REQUIRED but may be null (json(null) when no parent)
  *  renamed:         {action: 'renamed', oldName, newName, message}
  *                   — buildRenameTagProgram
  *  deleted:         {action: 'deleted', tagName, message}
@@ -377,16 +418,17 @@ export const BatchCreateResultSchema = z
  *  merged:          {action: 'merged', sourceTag, targetTag, tasksMerged, message}
  *                   — buildMergeTagsProgram (delete succeeded)
  *  merged_with_warning: {action: 'merged_with_warning', sourceTag, targetTag, tasksMerged, warning, message}
- *                   — buildMergeTagsProgram (best-effort delete failed; warning key appears)
+ *                   — buildMergeTagsProgram (best-effort delete failed; warning key appears via undefined-drop)
  *  nested:          {action: 'nested', tagName, parentTagName, parentTagId, message}
  *                   — buildNestTagProgram / lowerTagMove('nest')
  *  unparented:      {action: 'unparented', tagName, message}
  *                   — buildUnparentTagProgram / lowerTagMove('unparent')
- *  reparented:      {action: 'reparented', tagName, [newParentTagName, newParentTagId,] message}
- *                   — buildReparentTagProgram / lowerTagMove('reparent')
- *                   NOTE: the reparent-to-root variant omits newParentTagName/newParentTagId
- *                   (keys are conditionally absent — JSON.stringify drops undefined);
- *                   the schema makes them optional so both sub-variants pass.
+ *  reparented (with-parent): {action: 'reparented', tagName, newParentTagName, newParentTagId, message}
+ *                   — lowerTagMove('reparent') with parentTagName present (lines ~1326-1334)
+ *  reparented (to-root): {action: 'reparented', tagName, message}
+ *                   — lowerTagMove('reparent') without parentTagName (lines ~1338-1344)
+ *                   NOTE: newParentTag* keys are STRUCTURALLY ABSENT (separate envelope literal at build time,
+ *                   not JSON.stringify undefined-dropping). OMN-158 splits into two strict variants.
  */
 export const TagMutationResultSchema = z.union([
   // created (path variant): has path + createdSegments keys, no parentTagName/parentTagId
@@ -396,18 +438,18 @@ export const TagMutationResultSchema = z.union([
       tagName: z.string(),
       tagId: z.string(),
       path: z.string(),
-      createdSegments: z.array(z.unknown()),
+      createdSegments: z.array(z.string()),
       message: z.string(),
     })
     .strict(),
-  // created (flat variant): has parentTagName/parentTagId keys, no path/createdSegments
+  // created (flat variant): has parentTagName/parentTagId keys (required, may be null), no path/createdSegments
   z
     .object({
       action: z.literal('created'),
       tagName: z.string(),
       tagId: z.string(),
-      parentTagName: z.unknown(),
-      parentTagId: z.unknown(),
+      parentTagName: z.string().nullable(),
+      parentTagId: z.string().nullable(),
       message: z.string(),
     })
     .strict(),
@@ -441,7 +483,8 @@ export const TagMutationResultSchema = z.union([
       sourceTag: z.string(),
       targetTag: z.string(),
       tasksMerged: z.number(),
-      warning: z.unknown(),
+      // warning is always present on this branch (the action literal itself is the discriminator)
+      warning: z.string(),
       message: z.string(),
     })
     .strict(),
@@ -461,13 +504,21 @@ export const TagMutationResultSchema = z.union([
       message: z.string(),
     })
     .strict(),
-  // reparented: newParentTagName/newParentTagId are optional (to-root variant omits them)
+  // reparented (with-parent): newParentTag* keys present — separate envelope literal from to-root
   z
     .object({
       action: z.literal('reparented'),
       tagName: z.string(),
-      newParentTagName: z.string().optional(),
-      newParentTagId: z.string().optional(),
+      newParentTagName: z.string(),
+      newParentTagId: z.string(),
+      message: z.string(),
+    })
+    .strict(),
+  // reparented (to-root): newParentTag* keys structurally absent — separate envelope literal at build time
+  z
+    .object({
+      action: z.literal('reparented'),
+      tagName: z.string(),
       message: z.string(),
     })
     .strict(),
