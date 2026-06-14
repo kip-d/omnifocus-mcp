@@ -15,6 +15,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // OMN-182: auto-record one per-machine suite-timing row on every NON-unit run (integration,
+    // smoke, full `npm test`). Unit-only runs skip it — they're fast feedback, not a baseline.
+    // The reporter writes to ~/.local/state (not a tracked file), so it can't dirty a worktree.
+    reporters: isUnitTestOnly ? ['default'] : ['default', './tests/support/suite-timing-reporter.ts'],
     // setup-worker-guard (OMN-143) runs in every worker. It arms wherever an
     // IPC channel exists — which under vitest 3's default forks pool includes
     // unit workers (deliberate: it only fires on a ppid TRANSITION to 1, i.e.

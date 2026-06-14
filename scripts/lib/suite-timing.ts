@@ -1,33 +1,31 @@
 /**
- * Suite-timing baseline (OMN-173) — pure row/parse/deviation logic.
+ * Suite-timing store (OMN-173 / OMN-182) — per-machine, append-only JSONL time-series.
  *
- * The canonical store is a tracked Markdown table (docs/dev/SUITE_TIMING_LOG.md), one row
- * per recorded run, newest first. A Markdown table was chosen over JSONL on purpose: the
- * ticket's framing is "drift is a diff, not a memory", and a table makes every regression a
- * readable git diff while staying machine-parseable (fixed columns, no pipes inside cells).
+ * WHY per-machine (not a tracked file): this mirrors the of-mcp-redeploy cold-start log
+ * (`$XDG_STATE_HOME/of-mcp-redeploy/`). The record answers "is THIS machine getting slower,
+ * and was a slow run the machine being bogged down vs. genuinely more/slower tests?" — which
+ * is inherently machine-local, not a repo artifact. Storing it outside git also means a row is
+ * written on *every* integration run without ever dirtying a worktree. JSONL (one record per
+ * line) is the natural shape: append-only, robust to partial writes, trivially machine-parseable.
  *
- * This module holds the side-effect-free logic (build a row, render it, insert it, parse the
- * table back, flag deviation) so it can be unit-tested without running Ollama or the suite.
- * The CLIs (record-suite-timing.ts, check-suite-timing.ts) are thin wrappers over it.
+ * This module holds the pure logic (build a record, serialize/parse, env-normalized deviation)
+ * plus thin impure helpers (capture env, resolve the log path, append). The vitest reporter
+ * writes integration rows automatically; the conformance probe path writes conformance rows.
  */
 
-/** Per-model conformance result for one run. Elapsed/load are null when unmeasured (e.g. a pre-instrumentation seed). */
+import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+import { execFileSync } from 'child_process';
+import { homedir, loadavg, cpus, freemem, totalmem, platform } from 'os';
+import { dirname, join } from 'path';
+
+// ── Conformance probe artifact (written by the probe via PROBE_TIMING_JSON) ─────────────
+
+/** Per-model conformance result for one run. Elapsed/load are null when unmeasured. */
 export interface ConformanceModel {
   model: string;
   scorePct: number | null;
   elapsedS: number | null;
   loadS: number | null;
-}
-
-/** One recorded run. Any suite not run in a given invocation is null (rendered "—"). */
-export interface RunRow {
-  date: string;
-  build: string;
-  integrationWallS: number | null;
-  integrationTests: number | null;
-  conformance: ConformanceModel[];
-  conformanceTotalS: number | null;
-  notes: string;
 }
 
 /** The conformance timing artifact the probe writes when PROBE_TIMING_JSON is set. */
@@ -49,144 +47,44 @@ export interface ConformanceArtifact {
 
 export const ARTIFACT_SCHEMA = 'omn-173-conformance-timing@1';
 
-/** The integration timing artifact the vitest reporter writes when INTEGRATION_TIMING_JSON is set (OMN-182). */
-export interface IntegrationArtifact {
-  schema: string;
+// ── The per-run record (one JSONL line) ─────────────────────────────────────────────────
+
+/** Machine load snapshot at record time — lets a slow run be attributed to a busy machine. */
+export interface EnvStatus {
+  /** 1-minute load average. */
+  loadAvg1: number;
+  cpuCount: number;
+  /** loadAvg1 / cpuCount — >1 means the machine was oversubscribed during the run. */
+  loadPerCpu: number;
+  /** System-wide memory in use, percent (macOS `memory_pressure`, else os free/total). */
+  memUsedPct: number;
+}
+
+export interface RunRecord {
+  /** ISO-8601 local timestamp. */
+  ts: string;
+  /** git rev-parse --short HEAD at record time. */
+  build: string;
+  suite: 'integration' | 'conformance';
   wallMs: number;
-  totalTests: number;
+  /** Integration: tests that ran (pass+fail). null for conformance. */
+  totalTests: number | null;
+  /** Derived wall ÷ tests (ms), so "slower per test" is separable from "more tests". */
+  perTestMs: number | null;
+  env: EnvStatus;
+  notes?: string;
+  /** Conformance only: per-model breakdown + total. */
+  conformance?: ConformanceModel[];
+  conformanceTotalS?: number | null;
 }
 
-export const INTEGRATION_ARTIFACT_SCHEMA = 'omn-182-integration-timing@1';
+const SCHEMA_VERSION = 'omn-182-suite-timing@1';
 
-export const TABLE_HEADER =
-  '| Date | Build | Integration wall | Tests | Conformance (model score elapsed/load) | Conf total | Notes |';
-export const TABLE_SEPARATOR =
-  '|------|-------|------------------|-------|----------------------------------------|-----------|-------|';
-
-const SENTINEL = '—';
-
-function num(v: number | null, suffix = ''): string {
-  return v === null ? SENTINEL : `${v}${suffix}`;
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
-/** One decimal for sub-minute seconds; markdown cells must never contain a literal `|`. */
-function sec1(v: number | null): string {
-  return v === null ? 'n/a' : `${v.toFixed(1)}s`;
-}
-
-/** Render the conformance cell: `llama3.1:8b 100% 31.2s/8.1s; qwen2.5:7b 84% 41.8s/7.0s`. */
-export function formatConformanceCell(models: ConformanceModel[]): string {
-  if (models.length === 0) return SENTINEL;
-  return models
-    .map((m) => {
-      const score = m.scorePct === null ? 'n/a' : `${m.scorePct}%`;
-      const elapsed = m.elapsedS === null && m.loadS === null ? 'n/a' : `${sec1(m.elapsedS)}/${sec1(m.loadS)}`;
-      return `${m.model} ${score} ${elapsed}`;
-    })
-    .join('; ');
-}
-
-/** Parse the conformance cell back into models. Tolerates the `n/a` placeholders. */
-export function parseConformanceCell(cell: string): ConformanceModel[] {
-  const trimmed = cell.trim();
-  if (trimmed === SENTINEL || trimmed === '') return [];
-  return trimmed
-    .split(';')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      // model  score%|n/a  elapsed/load. `\S+` then literal-space backtracks linearly, and
-      // the input is our own fixed-format table cell (not external/adversarial), so slow-regex
-      // does not apply here.
-      // eslint-disable-next-line sonarjs/slow-regex -- bounded, non-adversarial input (see above)
-      const m = /^(\S+) +(\d+%|n\/a) +(.+)$/.exec(entry);
-      if (!m) return { model: entry, scorePct: null, elapsedS: null, loadS: null };
-      const [, model, scoreTok, timeTok] = m;
-      const scorePct = scoreTok === 'n/a' ? null : parseInt(scoreTok, 10);
-      let elapsedS: number | null = null;
-      let loadS: number | null = null;
-      if (timeTok !== 'n/a') {
-        const [eTok, lTok] = timeTok.split('/');
-        elapsedS = parseSecTok(eTok);
-        loadS = parseSecTok(lTok);
-      }
-      return { model, scorePct, elapsedS, loadS };
-    });
-}
-
-function parseSecTok(tok: string | undefined): number | null {
-  if (!tok) return null;
-  const t = tok.trim();
-  if (t === 'n/a') return null;
-  const n = parseFloat(t.replace(/s$/, ''));
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Render a row as one Markdown table line. Cells are guaranteed pipe-free. */
-export function renderRow(row: RunRow): string {
-  const cells = [
-    row.date,
-    row.build,
-    num(row.integrationWallS, 's'),
-    num(row.integrationTests),
-    formatConformanceCell(row.conformance),
-    num(row.conformanceTotalS, 's'),
-    row.notes.replace(/\|/g, '/').trim() || SENTINEL,
-  ];
-  return `| ${cells.join(' | ')} |`;
-}
-
-/** Insert a new row immediately under the table separator (newest first). Throws if the table is absent. */
-export function insertRow(markdown: string, row: RunRow): string {
-  const lines = markdown.split('\n');
-  const sepIdx = lines.findIndex((l) => l.replace(/\s/g, '').startsWith('|---'));
-  if (sepIdx === -1) {
-    throw new Error('suite-timing log has no Markdown table separator (|---…) — cannot insert a row');
-  }
-  lines.splice(sepIdx + 1, 0, renderRow(row));
-  return lines.join('\n');
-}
-
-/** Parse all data rows from the log (skips the header + separator). */
-export function parseRows(markdown: string): RunRow[] {
-  const lines = markdown.split('\n');
-  const rows: RunRow[] = [];
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t.startsWith('|')) continue;
-    if (t.replace(/\s/g, '').startsWith('|---')) continue;
-    const cells = splitCells(t);
-    // header row
-    if (cells[0] === 'Date') continue;
-    if (cells.length < 7) continue;
-    rows.push({
-      date: cells[0],
-      build: cells[1],
-      integrationWallS: parseSecTok(cells[2] === SENTINEL ? undefined : cells[2]),
-      integrationTests: cells[3] === SENTINEL ? null : intOrNull(cells[3]),
-      conformance: parseConformanceCell(cells[4]),
-      conformanceTotalS: parseSecTok(cells[5] === SENTINEL ? undefined : cells[5]),
-      notes: cells[6] === SENTINEL ? '' : cells[6],
-    });
-  }
-  return rows;
-}
-
-function intOrNull(s: string): number | null {
-  const n = parseInt(s, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-function splitCells(line: string): string[] {
-  // Strip the leading/trailing pipe, then split. Cells never contain `|` by construction.
-  return line
-    .replace(/^\s*\|/, '')
-    .replace(/\|\s*$/, '')
-    .split('|')
-    .map((c) => c.trim());
-}
-
-/** Map a probe artifact into the conformance half of a row. */
+/** Map a probe artifact into conformance model rows. */
 export function conformanceFromArtifact(art: ConformanceArtifact): {
   conformance: ConformanceModel[];
   conformanceTotalS: number;
@@ -202,22 +100,115 @@ export function conformanceFromArtifact(art: ConformanceArtifact): {
   };
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
+export function buildIntegrationRecord(input: {
+  build: string;
+  ts: string;
+  wallMs: number;
+  totalTests: number | null;
+  env: EnvStatus;
+  notes?: string;
+}): RunRecord {
+  const { build, ts, wallMs, totalTests, env, notes } = input;
+  const perTestMs = totalTests && totalTests > 0 ? Math.round(wallMs / totalTests) : null;
+  return { ts, build, suite: 'integration', wallMs, totalTests, perTestMs, env, notes };
 }
 
-/** Map an integration timing artifact into the integration half of a row (whole-second wall). */
-export function integrationFromArtifact(art: IntegrationArtifact): {
-  integrationWallS: number;
-  integrationTests: number;
-} {
+export function buildConformanceRecord(input: {
+  build: string;
+  ts: string;
+  env: EnvStatus;
+  conformance: ConformanceModel[];
+  conformanceTotalS: number | null;
+  notes?: string;
+}): RunRecord {
+  const { build, ts, env, conformance, conformanceTotalS, notes } = input;
+  const wallMs = conformanceTotalS === null ? 0 : Math.round(conformanceTotalS * 1000);
   return {
-    integrationWallS: Math.round(art.wallMs / 1000),
-    integrationTests: art.totalTests,
+    ts,
+    build,
+    suite: 'conformance',
+    wallMs,
+    totalTests: null,
+    perTestMs: null,
+    env,
+    conformance,
+    conformanceTotalS,
+    notes,
   };
 }
 
-// ── Deviation check ───────────────────────────────────────────────────────────
+// ── Serialize / parse (JSONL) ────────────────────────────────────────────────────────────
+
+export function serializeRun(rec: RunRecord): string {
+  return JSON.stringify(rec);
+}
+
+/** Parse an append-only JSONL log, oldest-first, skipping blank/garbage (partial-write) lines. */
+export function parseRuns(text: string): RunRecord[] {
+  const out: RunRecord[] = [];
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      out.push(JSON.parse(t) as RunRecord);
+    } catch {
+      // tolerate a torn final line / hand-edits — a per-machine log is not a transaction store
+    }
+  }
+  return out;
+}
+
+// ── Impure helpers: env capture, path resolution, append ─────────────────────────────────
+
+function memUsedPctDarwin(): number | null {
+  try {
+    const out = execFileSync('memory_pressure', [], { encoding: 'utf8', timeout: 5000 });
+    const m = /System-wide memory free percentage:\s*(\d+)%/.exec(out);
+    if (m) return 100 - parseInt(m[1], 10);
+  } catch {
+    // memory_pressure absent or slow — fall through to the os-based estimate
+  }
+  return null;
+}
+
+/** Snapshot machine load. Best-effort: a probe that fails degrades to a sentinel, never throws. */
+export function captureEnv(): EnvStatus {
+  const cpuCount = cpus().length || 1;
+  const loadAvg1 = round1(loadavg()[0] ?? 0);
+  const loadPerCpu = round1(loadAvg1 / cpuCount);
+  const memUsedPct =
+    (platform() === 'darwin' ? memUsedPctDarwin() : null) ?? Math.round((1 - freemem() / totalmem()) * 100);
+  return { loadAvg1, cpuCount, loadPerCpu, memUsedPct };
+}
+
+/** Resolve the per-machine log path. SUITE_TIMING_LOG_PATH overrides (used by tests). */
+export function defaultLogPath(): string {
+  const override = process.env.SUITE_TIMING_LOG_PATH;
+  if (override) return override;
+  const stateHome = process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state');
+  return join(stateHome, 'of-mcp-suite-timing', 'runs.jsonl');
+}
+
+export { SCHEMA_VERSION };
+
+/** Append one record as a JSONL line, creating the directory on first write. */
+export function appendRun(logPath: string, rec: RunRecord): void {
+  mkdirSync(dirname(logPath), { recursive: true });
+  appendFileSync(logPath, serializeRun(rec) + '\n');
+}
+
+export function readRuns(logPath: string): RunRecord[] {
+  if (!existsSync(logPath)) return [];
+  return parseRuns(readFileSync(logPath, 'utf8'));
+}
+
+// ── Deviation check (newest vs rolling median of prior same-suite runs) ──────────────────
+
+export function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
 
 export interface DeviationFinding {
   metric: string;
@@ -229,33 +220,34 @@ export interface DeviationFinding {
 export interface DeviationResult {
   ok: boolean;
   findings: DeviationFinding[];
-  /** Metrics skipped because there was no prior history to baseline against. */
+  /** Metrics skipped for want of prior same-suite history. */
   skipped: string[];
-}
-
-function median(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  /** Env of the newest run, echoed so a flagged drift can be read as machine-bound. */
+  latestEnv: EnvStatus | null;
 }
 
 /**
- * Flag metrics where the newest row deviates from the rolling median of the prior `window`
- * rows by more than `thresholdPct`. Rows are newest-first (as stored). A metric with no
- * prior data points is reported as skipped, not failed — a baseline needs history.
+ * Flag metrics where the newest record deviates from the rolling median of the prior `window`
+ * records OF THE SAME SUITE by more than `thresholdPct`. Records are oldest-first (file order).
  */
-export function checkDeviation(rows: RunRow[], opts: { thresholdPct?: number; window?: number } = {}): DeviationResult {
+export function checkRecordDeviation(
+  records: RunRecord[],
+  opts: { thresholdPct?: number; window?: number } = {},
+): DeviationResult {
   const thresholdPct = opts.thresholdPct ?? 25;
   const window = opts.window ?? 5;
   const findings: DeviationFinding[] = [];
   const skipped: string[] = [];
-  if (rows.length === 0) return { ok: true, findings, skipped };
+  if (records.length === 0) return { ok: true, findings, skipped, latestEnv: null };
 
-  const latest = rows[0];
-  const prior = rows.slice(1, 1 + window);
+  const latest = records[records.length - 1];
+  const priorSameSuite = records
+    .slice(0, -1)
+    .filter((r) => r.suite === latest.suite)
+    .slice(-window);
 
   const evaluate = (metric: string, latestVal: number | null, priorVals: (number | null)[]): void => {
-    if (latestVal === null) return; // suite not run this time — nothing to compare
+    if (latestVal === null) return;
     const hist = priorVals.filter((v): v is number => v !== null && v > 0);
     if (hist.length === 0) {
       skipped.push(metric);
@@ -268,25 +260,31 @@ export function checkDeviation(rows: RunRow[], opts: { thresholdPct?: number; wi
     }
   };
 
-  evaluate(
-    'integration_wall_s',
-    latest.integrationWallS,
-    prior.map((r) => r.integrationWallS),
-  );
-  evaluate(
-    'conformance_total_s',
-    latest.conformanceTotalS,
-    prior.map((r) => r.conformanceTotalS),
-  );
-
-  // Per-model conformance elapsed, keyed by model name.
-  for (const m of latest.conformance) {
+  if (latest.suite === 'integration') {
     evaluate(
-      `conformance_elapsed_s[${m.model}]`,
-      m.elapsedS,
-      prior.map((r) => r.conformance.find((x) => x.model === m.model)?.elapsedS ?? null),
+      'integration_wall_ms',
+      latest.wallMs,
+      priorSameSuite.map((r) => r.wallMs),
     );
+    evaluate(
+      'integration_per_test_ms',
+      latest.perTestMs,
+      priorSameSuite.map((r) => r.perTestMs),
+    );
+  } else {
+    evaluate(
+      'conformance_total_s',
+      latest.conformanceTotalS ?? null,
+      priorSameSuite.map((r) => r.conformanceTotalS ?? null),
+    );
+    for (const m of latest.conformance ?? []) {
+      evaluate(
+        `conformance_elapsed_s[${m.model}]`,
+        m.elapsedS,
+        priorSameSuite.map((r) => r.conformance?.find((x) => x.model === m.model)?.elapsedS ?? null),
+      );
+    }
   }
 
-  return { ok: findings.length === 0, findings, skipped };
+  return { ok: findings.length === 0, findings, skipped, latestEnv: latest.env };
 }

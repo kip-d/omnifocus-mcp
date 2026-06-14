@@ -1,28 +1,26 @@
 /**
  * Suite-timing vitest reporter (OMN-182).
  *
- * Writes an integration timing artifact (schema `omn-182-integration-timing@1`) consumed by
- * `scripts/record-suite-timing.ts --integration-json`. This replaces the manual
- * `--integration-wall <s> --integration-tests <n>` bookkeeping that kept the suite-timing log
- * stagnant — running `npm run baseline:integration` now captures the numbers automatically.
+ * Appends ONE JSONL record per integration run to the per-machine suite-timing log
+ * (`$XDG_STATE_HOME/of-mcp-suite-timing/runs.jsonl`, see scripts/lib/suite-timing.ts). It is
+ * attached only to non-unit runs (vitest.config.ts gates on `isUnitTestOnly`), so it records
+ * every real integration run automatically — no manual bookkeeping, no opt-in target.
  *
- * GATED ON `INTEGRATION_TIMING_JSON`: when that env var is unset the reporter is a complete
- * no-op. That is deliberate — it lets the reporter be attached via `--reporter` on the
- * dedicated `baseline:integration` target WITHOUT a row ever being written by a plain
- * `test:integration` run, so verifying sessions never get a dirty SUITE_TIMING_LOG.md.
+ * Writing to a per-machine state file (not a tracked repo file) is deliberate: recording every
+ * run never dirties a worktree, and the captured machine load (load/cpu/mem) is inherently
+ * machine-local data that lets a slow run be attributed to a busy box vs. genuine suite growth.
  *
  * `totalTests` counts tests that actually ran (pass + fail), excluding skipped ones — matching
  * the historical row semantics (e.g. "166 passed / 0 failed / 22 skipped" was recorded as 166).
  */
 
-import { writeFileSync } from 'fs';
+import { execFileSync } from 'child_process';
 import type { Reporter } from 'vitest/node';
-import { INTEGRATION_ARTIFACT_SCHEMA, type IntegrationArtifact } from '../../scripts/lib/suite-timing.js';
+import { appendRun, buildIntegrationRecord, captureEnv, defaultLogPath } from '../../scripts/lib/suite-timing.js';
 
 /** Minimal structural view of a vitest task tree node — enough to walk and count leaf tests. */
 interface TaskNode {
   type?: string;
-  mode?: string;
   result?: { state?: string };
   tasks?: TaskNode[];
 }
@@ -41,6 +39,14 @@ function countRanTests(tasks: TaskNode[] | undefined): number {
   return n;
 }
 
+function gitShort(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 export default class SuiteTimingReporter implements Reporter {
   private startMs = 0;
 
@@ -49,19 +55,25 @@ export default class SuiteTimingReporter implements Reporter {
   }
 
   onFinished(files: TaskNode[] = []): void {
-    const out = process.env.INTEGRATION_TIMING_JSON;
-    if (!out) return; // no-op unless explicitly recording
-
-    const artifact: IntegrationArtifact = {
-      schema: INTEGRATION_ARTIFACT_SCHEMA,
+    const logPath = defaultLogPath();
+    const record = buildIntegrationRecord({
+      build: gitShort(),
+      ts: new Date().toISOString(),
       wallMs: Date.now() - this.startMs,
       totalTests: files.reduce((sum, f) => sum + countRanTests(f.tasks), 0),
-    };
-    writeFileSync(out, JSON.stringify(artifact, null, 2) + '\n');
-    process.stderr.write(
-      `[suite-timing] wrote integration artifact → ${out} (${artifact.totalTests} tests, ${Math.round(
-        artifact.wallMs / 1000,
-      )}s)\n`,
-    );
+      env: captureEnv(),
+      notes: process.env.SUITE_TIMING_NOTE,
+    });
+    try {
+      appendRun(logPath, record);
+      process.stderr.write(
+        `[suite-timing] recorded run → ${logPath} (${record.totalTests} tests, ${Math.round(
+          record.wallMs / 1000,
+        )}s, load/cpu ${record.env.loadPerCpu})\n`,
+      );
+    } catch (e) {
+      // Never let timing bookkeeping fail a test run — loudly note and move on.
+      process.stderr.write(`[suite-timing] could not write ${logPath}: ${String(e)}\n`);
+    }
   }
 }
