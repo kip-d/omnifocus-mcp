@@ -148,11 +148,15 @@ export function parseRuns(text: string): RunRecord[] {
 
 function memUsedPctDarwin(): number | null {
   try {
-    const out = execFileSync('memory_pressure', [], { encoding: 'utf8', timeout: 5000 });
+    // Absolute path: a no-arg memory_pressure is a one-shot snapshot (~instant), but the absolute
+    // path skips the PATH search AND keeps it working under a restricted PATH (e.g. launchd) where
+    // it would otherwise vanish and silently fall back to the useless-on-macOS os.freemem estimate.
+    // The 2s timeout is a safety net that never fires in practice.
+    const out = execFileSync('/usr/bin/memory_pressure', [], { encoding: 'utf8', timeout: 2000 });
     const m = /System-wide memory free percentage:\s*(\d+)%/.exec(out);
     if (m) return 100 - parseInt(m[1], 10);
   } catch {
-    // memory_pressure absent or slow — fall through to the os-based estimate
+    // memory_pressure absent (non-macOS path, or removed) — fall through to the os-based estimate
   }
   return null;
 }
