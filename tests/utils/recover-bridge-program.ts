@@ -49,7 +49,12 @@ export function recoverInnerPrograms(script: string): string[] {
   return out;
 }
 
-/** Convenience: the single recovered OmniJS program (throws if not exactly one). */
+/**
+ * Convenience for single-boundary builders: the first recovered OmniJS program.
+ * Throws if none was found. NOTE: for the nested list-tasks path (which yields the
+ * intermediate program at [0] and the innermost predicate at [1]) this returns the
+ * OUTER program — use recoverInnerPrograms there and pick the level you mean.
+ */
 export function recoverInnerProgram(script: string): string {
   const programs = recoverInnerPrograms(script);
   if (programs.length === 0) throw new Error('no JSON.stringify bridge program found in script');

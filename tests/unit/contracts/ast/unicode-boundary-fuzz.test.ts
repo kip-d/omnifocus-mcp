@@ -67,8 +67,13 @@ describe('OMN-129: read boundary survives Unicode direction-control / zero-width
         // Outer JXA wrapper parses (structural channel).
         expect(parses(script)).toBe(true);
         // Every recovered OmniJS program parses and carries the term verbatim — the
-        // char survived as a string value, not as code that broke the program. This
-        // is the assertion that bit on U+2028/U+2029 before the sanitize fix.
+        // char survived as a string value, not as code that broke the program. For the
+        // comment-bearing builders (FilteredProjects/TaskCount/ListTasks) parses(inner)
+        // is the assertion that bit on U+2028/U+2029 before the sanitize fix: an
+        // unscrubbed separator split the `// Filter:` line, orphaning the closing quote
+        // into a syntax error. For the predicate-only builders (folders/tags) there is
+        // no comment channel, so parses(inner) confirms inertness inside string literals
+        // and the round-trip below is the load-bearing data-fidelity check.
         const inners = recoverInnerPrograms(script);
         expect(inners.length).toBeGreaterThan(0);
         for (const inner of inners) {

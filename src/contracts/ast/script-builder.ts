@@ -1833,8 +1833,8 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
 
   const isEmpty = isEmptyFolderFilter(filter);
   const filterDescription = describeFolderFilter(filter);
-  // OMN-170 S2: generated inside the OmniJS body; value terms injected via
-  // JSON.stringify and the whole source escaped by escapeTemplateString below.
+  // OMN-170 S2 / OMN-129: generated inside the OmniJS body; value terms injected via
+  // JSON.stringify, and the whole source crosses the boundary via JSON.stringify below.
   const folderPredicate = generateFolderFilterCode(filter);
 
   const omniJsSource = `
