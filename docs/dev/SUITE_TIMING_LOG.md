@@ -40,9 +40,9 @@ npm run baseline:check                       # newest run vs rolling median of p
 npm run baseline:check -- --threshold 20 --window 8
 ```
 
-Exits non-zero when a metric (integration wall / per-test, or conformance total / per-model elapsed) deviates beyond the
-threshold, and echoes the run's machine load so a flagged regression can be read as contention vs. a genuine slowdown.
-Metrics with no prior same-suite history are skipped, not failed.
+Exits non-zero when a metric (`<suite>_wall_ms` for either suite, plus integration per-test or per-model conformance
+elapsed) deviates beyond the threshold, and echoes the run's machine load so a flagged regression can be read as
+contention vs. a genuine slowdown. Metrics with no prior same-suite history are skipped, not failed.
 
 ## Inspect the log
 
