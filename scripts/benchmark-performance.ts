@@ -516,9 +516,6 @@ sendRequest('initialize', {
   },
 });
 
-// Always enable cache warming for production-realistic benchmarks
-const enableCacheWarming = true;
-
 // Timeout (generous for warm cache startup - 10 tests * 180s max each = 30 minutes)
 setTimeout(() => {
   console.error('\n❌ Benchmark timed out after 30 minutes');

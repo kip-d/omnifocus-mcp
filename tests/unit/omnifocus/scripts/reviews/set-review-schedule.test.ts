@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSetReviewScheduleScript } from '../../../../../src/omnifocus/scripts/reviews/set-review-schedule';
+import { buildSetReviewScheduleScript } from '../../../../../src/omnifocus/scripts/reviews/set-review-schedule.js';
 
 describe('buildSetReviewScheduleScript', () => {
   it('serializes all three params (set-interval call site shape)', () => {

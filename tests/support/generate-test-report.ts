@@ -4,7 +4,7 @@
  * Creates an HTML report showing test coverage and results
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import path from 'path';
 
 interface TestResults {

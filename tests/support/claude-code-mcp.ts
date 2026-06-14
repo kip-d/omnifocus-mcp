@@ -82,7 +82,8 @@ class MCPTester {
   private server: ChildProcess | null = null;
   private messageId: number = 0;
   private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
-  private testResults: TestResult[] = [];
+  private _testResults: TestResult[] = [];
+  get testResults(): TestResult[] { return this._testResults; }
 
   async start(): Promise<void> {
     console.log(`Starting MCP server: ${CONFIG.serverPath}`);
@@ -225,14 +226,14 @@ class MCPTester {
             console.log(`      Result: productivity stats generated`);
           }
 
-          this.testResults.push({ tool: test.name, success: true, time: elapsed });
+          this._testResults.push({ tool: test.name, success: true, time: elapsed });
         } catch (parseError) {
           console.log(`      Raw result length: ${response.result.content[0].text.length} chars`);
-          this.testResults.push({ tool: test.name, success: true, time: elapsed });
+          this._testResults.push({ tool: test.name, success: true, time: elapsed });
         }
       } else {
         console.error(`   ❌ ${test.name} failed:`, response.error);
-        this.testResults.push({ tool: test.name, success: false, time: elapsed, error: response.error });
+        this._testResults.push({ tool: test.name, success: false, time: elapsed, error: response.error });
       }
     }
   }
@@ -278,8 +279,8 @@ class MCPTester {
     console.log('Test Summary');
     console.log('========================================');
 
-    const successful = this.testResults.filter((r) => r.success).length;
-    const total = this.testResults.length;
+    const successful = this._testResults.filter((r) => r.success).length;
+    const total = this._testResults.length;
 
     console.log(`Tools tested: ${total}`);
     console.log(`Successful: ${successful}`);
@@ -293,7 +294,7 @@ class MCPTester {
     }
 
     console.log('\nPerformance:');
-    for (const result of this.testResults) {
+    for (const result of this._testResults) {
       if (result.success) {
         console.log(`   ${result.tool}: ${result.time}ms`);
       } else {

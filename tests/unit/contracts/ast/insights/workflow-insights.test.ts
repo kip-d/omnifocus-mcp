@@ -8,7 +8,6 @@ import {
   OPPORTUNITY_INSIGHTS,
   ALL_WORKFLOW_INSIGHTS,
   WORKFLOW_RECOMMENDATIONS,
-  INSIGHTS_BY_FOCUS_AREA,
   getInsightsForFocusAreas,
   sortByPriority,
   highPriorityOnly,
@@ -18,13 +17,26 @@ import {
   generateRecommendations,
   createEmptyMetrics,
   type AnalysisMetrics,
+  type TaskMetrics,
+  type ProjectMetrics,
+  type DeferralMetrics,
+  type WorkloadMetrics,
+  type TimeMetrics,
 } from '../../../../../src/contracts/analytics-types.js';
 
 // =============================================================================
 // TEST FIXTURES
 // =============================================================================
 
-function createTestMetrics(overrides: Partial<AnalysisMetrics> = {}): AnalysisMetrics {
+interface PartialMetricsOverrides {
+  tasks?: Partial<TaskMetrics>;
+  projects?: Partial<ProjectMetrics>;
+  deferrals?: Partial<DeferralMetrics>;
+  workload?: Partial<WorkloadMetrics>;
+  time?: Partial<TimeMetrics>;
+}
+
+function createTestMetrics(overrides: PartialMetricsOverrides = {}): AnalysisMetrics {
   const base = createEmptyMetrics();
   return {
     ...base,

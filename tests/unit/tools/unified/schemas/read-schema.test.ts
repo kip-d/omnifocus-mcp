@@ -389,7 +389,7 @@ describe('ReadSchema', () => {
       };
       const result = ReadSchema.safeParse(input);
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && result.data.query.type === 'projects') {
         expect(result.data.query.fields).toEqual(['id', 'name', 'status', 'folder', 'folderPath']);
       }
     });

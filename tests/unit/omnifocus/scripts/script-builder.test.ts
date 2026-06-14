@@ -5,7 +5,7 @@ import {
   extractExpectedParameters,
   validateScriptParameters,
   ScriptParameters,
-} from '../../../../src/omnifocus/scripts/shared/script-builder';
+} from '../../../../src/omnifocus/scripts/shared/script-builder.js';
 
 describe('Script Builder', () => {
   describe('buildParameterDeclarations', () => {

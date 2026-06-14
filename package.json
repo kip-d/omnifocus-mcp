@@ -41,6 +41,7 @@
     "format:check": "npx prettier --check \"**/*.{ts,js,json,md}\"",
     "prepare": "husky",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
     "diagnose-failures": "npx tsx scripts/diagnose-failures.ts",
     "analyze-tokens": "npx tsx scripts/analyze-token-usage.ts",

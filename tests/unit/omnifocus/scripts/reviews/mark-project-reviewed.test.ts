@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMarkProjectReviewedScript } from '../../../../../src/omnifocus/scripts/reviews/mark-project-reviewed';
+import { buildMarkProjectReviewedScript } from '../../../../../src/omnifocus/scripts/reviews/mark-project-reviewed.js';
 
 describe('buildMarkProjectReviewedScript', () => {
   it('serializes all three params into the script body', () => {

@@ -57,6 +57,15 @@ jobs:
           echo "🔍 Running TypeScript type checking..."
           npm run typecheck
 
+      - name: TypeScript type checking (tests + scripts)
+        run: |
+          echo "🔍 Type-checking tests/ and scripts/ (tsconfig.test.json)..."
+          # OMN-176: gate the type-level forcing functions (OMN-172/175 satisfies
+          # maps, OMN-161 union-narrowing pins). The main tsconfig excludes tests/,
+          # and vitest runs via esbuild (strips types without checking) — so without
+          # this step those `satisfies`/`@ts-expect-error` guards never fail CI.
+          npm run typecheck:test
+
       - name: Lint check (errors only)
         run: |
           echo "📋 Running lint check..."

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { MutationCompiler } from '../../../../../src/tools/unified/compilers/MutationCompiler.js';
+import { MutationCompiler, type CompiledMutation } from '../../../../../src/tools/unified/compilers/MutationCompiler.js';
 import type { WriteInput } from '../../../../../src/tools/unified/schemas/write-schema.js';
+
+type CompiledCreate = Extract<CompiledMutation, { operation: 'create' }>;
+type CompiledUpdate = Extract<CompiledMutation, { operation: 'update' }>;
 
 describe('MutationCompiler', () => {
   const compiler = new MutationCompiler();
@@ -18,7 +21,7 @@ describe('MutationCompiler', () => {
       },
     };
 
-    const compiled = compiler.compile(input);
+    const compiled = compiler.compile(input) as CompiledCreate;
 
     expect(compiled.operation).toBe('create');
     expect(compiled.target).toBe('task');
@@ -39,7 +42,7 @@ describe('MutationCompiler', () => {
       },
     };
 
-    const compiled = compiler.compile(input);
+    const compiled = compiler.compile(input) as CompiledUpdate;
 
     expect(compiled.operation).toBe('update');
     expect(compiled.taskId).toBe('task-123');

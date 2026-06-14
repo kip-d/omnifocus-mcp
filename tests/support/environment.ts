@@ -74,14 +74,14 @@ export class TestEnvironment {
    * Skip test if OmniFocus is not available
    */
   static skipIfNoOmniFocus(testName: string, testFn: () => void | Promise<void>): void {
-    test.skipIf(!this.isOmniFocusRunning(), testName, testFn);
+    test.skipIf(!this.isOmniFocusRunning())(testName, testFn);
   }
 
   /**
    * Skip test if OmniFocus document is not open
    */
   static skipIfNoDocument(testName: string, testFn: () => void | Promise<void>): void {
-    test.skipIf(!this.isOmniFocusDocumentOpen(), testName, testFn);
+    test.skipIf(!this.isOmniFocusDocumentOpen())(testName, testFn);
   }
 
   /**

@@ -81,7 +81,8 @@ describe('Completed Project Task Handling', () => {
       // This test simulates the scenario where a project is marked as completed
       // and we want to ensure its tasks are not returned when filtering for incomplete tasks
 
-      const _mockScript = `
+      // Mock script demonstrating the scenario
+      `
         ${getUnifiedHelpers()}
         
         // Simulate a task in a completed project

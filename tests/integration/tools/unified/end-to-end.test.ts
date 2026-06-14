@@ -16,7 +16,6 @@ const E2E_LIMITED_REPEAT_TAG = runScopedTag('limited-repeat');
 
 describe('Unified Tools End-to-End Integration', () => {
   let serverProcess: ChildProcess;
-  let _serverReady = false;
 
   // Helper to send JSON-RPC request and get response
   async function sendRequest(request: unknown): Promise<unknown> {
@@ -93,7 +92,6 @@ describe('Unified Tools End-to-End Integration', () => {
     });
 
     expect(initResult).toBeDefined();
-    _serverReady = true;
   }, 30000);
 
   afterAll(() => {

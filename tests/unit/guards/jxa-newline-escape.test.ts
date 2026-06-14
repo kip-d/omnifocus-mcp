@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-const filesRequiringEscapedJoins = [
+const filesRequiringEscapedJoins: string[] = [
   // All files that previously needed this check have been archived or deleted:
   // - minimal-tag-bridge.ts: deleted 2026-01-04 (unused, tag logic now inline in mutation-script-builder)
   // - list-tasks-omnijs.ts: archived 2025-12-17 (replaced by AST-powered list-tasks-ast.ts)

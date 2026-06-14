@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   validateMutation,
   createMutation,
-  type TaskMutation,
   type CreateMutation,
   type UpdateMutation,
   type CompleteMutation,
   type DeleteMutation,
   type BatchMutation,
   type BulkDeleteMutation,
+  type DayOfWeek,
 } from '../../../src/contracts/mutations.js';
 
 describe('validateMutation', () => {
@@ -269,7 +269,7 @@ describe('validateMutation', () => {
           repetitionRule: {
             frequency: 'weekly',
             interval: 1,
-            daysOfWeek: [7], // Invalid: 0-6 only
+            daysOfWeek: [7] as unknown as DayOfWeek[], // Invalid: 0-6 only (testing runtime validation)
           },
         },
       };

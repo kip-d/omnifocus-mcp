@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateFilterAST, ValidationResult } from '../../../../src/contracts/ast/validator.js';
+import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
 import type { FilterNode } from '../../../../src/contracts/ast/types.js';
 
 describe('validateFilterAST', () => {

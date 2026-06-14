@@ -36,12 +36,12 @@ export class McpTestRunner {
   async start(): Promise<void> {
     console.log('Starting MCP server for testing...\n');
 
-    this.server = spawn('node', [this.options.serverPath], {
+    this.server = spawn('node', [this.options.serverPath!], {
       stdio: ['pipe', 'pipe', 'inherit'],
     });
 
     this.rl = createInterface({
-      input: this.server.stdout,
+      input: this.server.stdout!,
       crlfDelay: Infinity,
     });
 
@@ -155,7 +155,7 @@ export class McpTestRunner {
 export async function testToolCall(toolName: string, args: any, options: McpTestOptions = {}): Promise<void> {
   const runner = new McpTestRunner({
     ...options,
-    onResponse: (response, requestId) => {
+    onResponse: (_response, requestId) => {
       if (requestId === 2) {
         // After initialize
         runner.sendRequest('tools/list');

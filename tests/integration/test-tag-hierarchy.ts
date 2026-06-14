@@ -132,9 +132,9 @@ const testTagHierarchy = async () => {
     });
 
     const tags = result.result?.data || [];
-    const parentTag = tags.find((t: any) => t.name === parentTagName);
-    const childTag = tags.find((t: any) => t.name === childTagName);
-    const nestedTag = tags.find((t: any) => t.name === testTagName);
+    const parentTag = tags.find((t: { name: string }) => t.name === parentTagName);
+    const childTag = tags.find((t: { name: string }) => t.name === childTagName);
+    tags.find((t: { name: string }) => t.name === testTagName);
 
     if (parentTag) {
       console.log('   ✓ Parent tag found:');

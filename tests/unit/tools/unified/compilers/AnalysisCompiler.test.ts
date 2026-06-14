@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { AnalysisCompiler } from '../../../../../src/tools/unified/compilers/AnalysisCompiler.js';
+import { AnalysisCompiler, type CompiledAnalysis } from '../../../../../src/tools/unified/compilers/AnalysisCompiler.js';
 import type { AnalyzeInput } from '../../../../../src/tools/unified/schemas/analyze-schema.js';
+
+type CompiledProductivityStats = Extract<CompiledAnalysis, { type: 'productivity_stats' }>;
+type CompiledParseMeetingNotes = Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>;
 
 describe('AnalysisCompiler', () => {
   const compiler = new AnalysisCompiler();
@@ -21,7 +24,7 @@ describe('AnalysisCompiler', () => {
       },
     };
 
-    const compiled = compiler.compile(input);
+    const compiled = compiler.compile(input) as CompiledProductivityStats;
 
     expect(compiled.type).toBe('productivity_stats');
     expect(compiled.scope?.dateRange?.start).toBe('2025-01-01');
@@ -29,7 +32,7 @@ describe('AnalysisCompiler', () => {
   });
 
   it('should compile parse meeting notes analysis', () => {
-    const input: AnalyzeInput = {
+    const input = {
       analysis: {
         type: 'parse_meeting_notes',
         params: {
@@ -37,9 +40,9 @@ describe('AnalysisCompiler', () => {
           extractTasks: true,
         },
       },
-    };
+    } as AnalyzeInput;
 
-    const compiled = compiler.compile(input);
+    const compiled = compiler.compile(input) as CompiledParseMeetingNotes;
 
     expect(compiled.type).toBe('parse_meeting_notes');
     expect(compiled.params?.text).toBe('Follow up with Sarah');

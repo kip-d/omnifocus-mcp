@@ -5,12 +5,12 @@
  * TODO: These tests need to be updated for v3.0.0 unified API:
  * - Change 'tasks' → 'omnifocus_read' with query.type: 'tasks'
  * - Change 'projects' → 'omnifocus_read' with query.type: 'projects'
- * - Change cleanupTestData() → cleanup()
+ * - Change cleanup() → cleanup()
  * - Review performance thresholds (may need adjustment)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { MCPTestClient } from '../integration/helpers/mcp-test-client';
+import { MCPTestClient } from '../integration/helpers/mcp-test-client.js';
 
 describe.skip('Performance Benchmarks', () => {
   let testManager: MCPTestClient;
@@ -21,7 +21,7 @@ describe.skip('Performance Benchmarks', () => {
   });
 
   afterAll(async () => {
-    await testManager.cleanupTestData();
+    await testManager.cleanup();
     await testManager.stop();
   });
 
@@ -108,7 +108,7 @@ describe.skip('Performance Benchmarks', () => {
 
       const startTime = Date.now();
 
-      await testManager.cleanupTestData();
+      await testManager.cleanup();
 
       const duration = Date.now() - startTime;
 
@@ -144,7 +144,7 @@ describe.skip('Performance Benchmarks', () => {
       // Perform a series of operations
       for (let i = 0; i < 10; i++) {
         await testManager.createTestTask(`Memory Test Task ${i}`);
-        await testManager.cleanupTestData();
+        await testManager.cleanup();
       }
 
       const finalMemory = process.memoryUsage();

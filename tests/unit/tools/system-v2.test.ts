@@ -1,8 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SystemTool } from '../../../src/tools/system/SystemTool.js';
+import { z } from 'zod';
+import { SystemTool, SystemToolSchema } from '../../../src/tools/system/SystemTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { DiagnosticOmniAutomation } from '../../../src/omnifocus/DiagnosticOmniAutomation.js';
 import * as versionUtils from '../../../src/utils/version.js';
+
+// Output type for executeValidated: Zod fills in .default() values before dispatch
+type SystemArgs = z.output<typeof SystemToolSchema>;
+
+// Shape of result.data for the diagnostics operation (DiagnosticsResult is not exported)
+type DiagnosticsData = {
+  tests: Record<string, { success: boolean; error?: string; result?: unknown }>;
+};
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js');
@@ -71,7 +80,7 @@ describe('SystemTool', () => {
 
       vi.mocked(versionUtils.getVersionInfo).mockReturnValue(mockVersionInfo);
 
-      const result = await tool.executeValidated({ operation: 'version' });
+      const result = await tool.executeValidated({ operation: 'version' } as SystemArgs);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockVersionInfo);
@@ -83,11 +92,11 @@ describe('SystemTool', () => {
         throw new Error('Failed to get version');
       });
 
-      const result = await tool.executeValidated({ operation: 'version' });
+      const result = await tool.executeValidated({ operation: 'version' } as SystemArgs);
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('VERSION_ERROR');
-      expect(result.error.message).toBe('Failed to get version');
+      expect(result.error!.code).toBe('VERSION_ERROR');
+      expect(result.error!.message).toBe('Failed to get version');
     });
   });
 
@@ -120,13 +129,13 @@ describe('SystemTool', () => {
 
       const result = await tool.executeValidated({
         operation: 'diagnostics',
-      });
+      } as SystemArgs);
 
       expect(result.success).toBe(true);
-      expect(result.data.tests).toBeDefined();
-      expect(result.data.tests.basic_connection.success).toBe(true);
-      expect(result.data.tests.collection_access.success).toBe(true);
-      expect(result.data.tests.property_access.success).toBe(true);
+      expect((result.data as DiagnosticsData).tests).toBeDefined();
+      expect((result.data as DiagnosticsData).tests.basic_connection.success).toBe(true);
+      expect((result.data as DiagnosticsData).tests.collection_access.success).toBe(true);
+      expect((result.data as DiagnosticsData).tests.property_access.success).toBe(true);
       expect(result.metadata.health).toBe('healthy');
     });
 
@@ -140,11 +149,11 @@ describe('SystemTool', () => {
       const result = await tool.executeValidated({
         operation: 'diagnostics',
         testScript: 'list_tasks',
-      });
+      } as SystemArgs);
 
       expect(result.success).toBe(true);
-      expect(result.data.tests.list_tasks_script).toBeDefined();
-      expect(result.data.tests.list_tasks_script.success).toBe(true);
+      expect((result.data as DiagnosticsData).tests.list_tasks_script).toBeDefined();
+      expect((result.data as DiagnosticsData).tests.list_tasks_script.success).toBe(true);
       expect(result.metadata.test_script).toBe('list_tasks');
     });
 
@@ -156,11 +165,11 @@ describe('SystemTool', () => {
 
       const result = await tool.executeValidated({
         operation: 'diagnostics',
-      });
+      } as SystemArgs);
 
       expect(result.success).toBe(true);
-      expect(result.data.tests.basic_connection.success).toBe(false);
-      expect(result.data.tests.basic_connection.error).toBe('Connection failed');
+      expect((result.data as DiagnosticsData).tests.basic_connection.success).toBe(false);
+      expect((result.data as DiagnosticsData).tests.basic_connection.error).toBe('Connection failed');
       expect(result.metadata.health).toBe('degraded');
     });
 
@@ -170,12 +179,12 @@ describe('SystemTool', () => {
 
       const result = await tool.executeValidated({
         operation: 'diagnostics',
-      });
+      } as SystemArgs);
 
       // Should still return success: true but with failed tests
       expect(result.success).toBe(true);
-      expect(result.data.tests.basic_connection.success).toBe(false);
-      expect(result.data.tests.basic_connection.error).toBe('Critical failure');
+      expect((result.data as DiagnosticsData).tests.basic_connection.success).toBe(false);
+      expect((result.data as DiagnosticsData).tests.basic_connection.error).toBe('Critical failure');
     });
   });
 
@@ -183,11 +192,11 @@ describe('SystemTool', () => {
     it('should return error for invalid operation', async () => {
       const result = await tool.executeValidated({
         operation: 'invalid' as any,
-      });
+      } as SystemArgs);
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('INVALID_OPERATION');
-      expect(result.error.message).toContain('Invalid operation: invalid');
+      expect(result.error!.code).toBe('INVALID_OPERATION');
+      expect(result.error!.message).toContain('Invalid operation: invalid');
     });
   });
 
