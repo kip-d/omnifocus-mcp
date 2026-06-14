@@ -78,8 +78,6 @@ export interface RunRecord {
   conformanceTotalS?: number | null;
 }
 
-const SCHEMA_VERSION = 'omn-182-suite-timing@1';
-
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
@@ -188,8 +186,6 @@ export function defaultLogPath(): string {
   const stateHome = process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state');
   return join(stateHome, 'of-mcp-suite-timing', 'runs.jsonl');
 }
-
-export { SCHEMA_VERSION };
 
 /** Append one record as a JSONL line, creating the directory on first write. */
 export function appendRun(logPath: string, rec: RunRecord): void {
