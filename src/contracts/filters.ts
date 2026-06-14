@@ -515,6 +515,20 @@ export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): f
   return (filter as Record<string, unknown>)[NORMALIZED_FILTER_BRAND] === true;
 }
 
+/**
+ * Return a brand-free shallow copy of a filter (OMN-177).
+ *
+ * The `__normalized__` brand is an internal NormalizedTaskFilter marker, not a
+ * filter the user applied. Echo sites that surface a filter in user-facing
+ * metadata (`filters_applied`) must route it through this helper so the brand
+ * never reaches the wire. Does not mutate the input.
+ */
+export function stripNormalizedBrand(filter: TaskFilter | NormalizedTaskFilter): Record<string, unknown> {
+  const rest = { ...(filter as Record<string, unknown>) };
+  delete rest[NORMALIZED_FILTER_BRAND];
+  return rest;
+}
+
 // =============================================================================
 // NORMALIZATION
 // =============================================================================

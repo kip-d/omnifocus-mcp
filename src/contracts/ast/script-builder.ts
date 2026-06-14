@@ -14,7 +14,7 @@
  */
 
 import type { TaskFilter, ProjectFilter, NormalizedTaskFilter, TextOperator, FolderFilter } from '../filters.js';
-import { normalizeFilter } from '../filters.js';
+import { normalizeFilter, stripNormalizedBrand } from '../filters.js';
 import {
   generateFilterCode,
   generateProjectFilterCode,
@@ -2113,7 +2113,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     const endTime = Date.now();
     return JSON.stringify({
       count: count,
-      filters_applied: ${JSON.stringify(filter)},
+      filters_applied: ${JSON.stringify(stripNormalizedBrand(filter))},
       query_time_ms: endTime - startTime,
       optimization: 'omnijs_count${needsTags ? '_with_tags' : '_no_tags'}',
       filter_description: ${JSON.stringify(filterDescription)},

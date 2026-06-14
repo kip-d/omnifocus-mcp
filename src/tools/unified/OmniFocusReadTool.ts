@@ -45,6 +45,7 @@ import {
 } from '../../utils/response-format.js';
 import type { ExportDataV2 } from '../response-types-v2.js';
 import type { TaskFilter, ProjectFilter } from '../../contracts/filters.js';
+import { stripNormalizedBrand } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
   getDefaultSort,
@@ -541,7 +542,7 @@ PERFORMANCE:
       mode: mode || 'count_only',
       count_only: true,
       total_count: count,
-      filters_applied: countFilter as unknown as Record<string, unknown>,
+      filters_applied: stripNormalizedBrand(countFilter),
       optimization: data.optimization || 'ast_omnijs_bridge',
       filter_description: data.filter_description,
       warning: data.warning,
