@@ -17,26 +17,30 @@
  * OMN-146 closes the latent footgun the canonical way (mirrors
  * `mcp-test-client.ts`): one persistent `readline` listener feeds a
  * `pendingRequests` Map keyed by request id, so every response routes to its
- * own request. Under the existing sequential callers the behavior is identical;
- * the extraction is just the moment to converge on the safe shape instead of
- * copying the wrinkle a fifth time.
+ * own request. Under the existing sequential callers the behavior is identical.
  *
- * ── Guard env (OMN-46) ──────────────────────────────────────────────────────
- * The default (guarded) server inherits the parent's env — vitest sets
- * NODE_ENV=test and importing `sandbox-manager` sets SANDBOX_GUARD_ENABLED, so
- * the in-server write guards fire. This intentionally preserves the suites'
- * pre-extraction behavior (which relied on that inheritance). `start({ guarded:
- * false })` reproduces `create-paths`'s loud-not-found probe environment: a
- * fresh child with NODE_ENV=development and SANDBOX_GUARD_ENABLED removed, so
- * the script-level not-found guard is reachable (the guard's pre-flight masks
- * it on a guarded server). DISABLE_FAILURE_LOG keeps those deliberate failures
- * out of the real failure log.
+ * ── Guard env (OMN-46 / OMN-77) ─────────────────────────────────────────────
+ * The guard-relevant env is set EXPLICITLY, not inherited. The pre-extraction
+ * guarded server passed no env and relied on the child inheriting NODE_ENV=test
+ * (vitest) and SANDBOX_GUARD_ENABLED (a side-effect of importing
+ * `sandbox-manager` in the parent). That was safe only because all four callers
+ * imported sandbox-manager — but as a shared primitive a future caller might
+ * not, and would then spawn a guarded server with the in-server write guard
+ * silently absent. So `start()` sets NODE_ENV=test + SANDBOX_GUARD_ENABLED=true
+ * + OMNIFOCUS_MCP_DISABLE_FAILURE_LOG=1 outright (identical to the values that
+ * were inherited today; this is the hard-won lesson already encoded in
+ * `mcp-test-client.ts`). `start({ guarded: false })` instead REMOVES
+ * SANDBOX_GUARD_ENABLED and runs NODE_ENV=development, reproducing
+ * create-paths's loud-not-found probe child: the script-level not-found guard
+ * is masked by the sandbox guard's pre-flight on a guarded server, so the probe
+ * needs an unguarded one. DISABLE_FAILURE_LOG keeps those deliberate failures
+ * out of the real failure log on either path.
  *
  * NOT a unit gate: every consumer mutates the real OmniFocus DB and runs only
  * under `npm run test:integration`.
  */
-import { spawn, ChildProcess } from 'child_process';
-import { createInterface } from 'readline';
+import { spawn, ChildProcess, type SpawnOptions } from 'child_process';
+import { createInterface, type Interface } from 'readline';
 import path from 'path';
 
 /** Resolve `dist/index.js` from this helper's location (tests/integration/helpers → repo root). */
@@ -46,10 +50,9 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface StartOptions {
   /**
-   * `true` (default): inherit the parent env (NODE_ENV=test +
-   * SANDBOX_GUARD_ENABLED from the sandbox-manager import) so the write guards
-   * fire. `false`: spawn an unguarded child (NODE_ENV=development, no
-   * SANDBOX_GUARD_ENABLED) for the loud-not-found probes whose script-level
+   * `true` (default): the in-server write guard fires (NODE_ENV=test +
+   * SANDBOX_GUARD_ENABLED=true). `false`: an unguarded child (NODE_ENV=development,
+   * no SANDBOX_GUARD_ENABLED) for the loud-not-found probes whose script-level
    * guard is masked by the sandbox guard's pre-flight.
    */
   guarded?: boolean;
@@ -64,36 +67,51 @@ interface PendingRequest {
 /**
  * One spawned MCP server (`node dist/index.js`) over stdio, with id-correlated
  * JSON-RPC. Construct via `UnifiedTestServer.start()` (spawns + initializes);
- * `kill()` when done.
+ * `kill()` when done (also drains in-flight requests and closes the reader).
  */
 export class UnifiedTestServer {
   private nextId = 1;
   private readonly pending = new Map<number, PendingRequest>();
+  private readonly rl: Interface;
 
   private constructor(readonly proc: ChildProcess) {
     if (!proc.stdout || !proc.stdin) {
       throw new Error('Server process is missing stdout/stdin pipes');
     }
-    const rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
-    rl.on('line', (line: string) => this.handleLine(line));
+    this.rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
+    this.rl.on('line', (line: string) => this.handleLine(line));
+    // If the child dies with requests still in flight, fail them fast with a
+    // clear cause instead of letting each hang to the timeout.
+    proc.once('exit', (code, signal) =>
+      this.rejectAllPending(
+        new Error(`Server process exited (code=${code}, signal=${signal}) with requests in flight`),
+      ),
+    );
   }
 
   /** Spawn a server and complete the MCP `initialize` handshake. */
   static async start(options: StartOptions = {}): Promise<UnifiedTestServer> {
     const guarded = options.guarded ?? true;
-    const spawnOptions: Parameters<typeof spawn>[2] = { stdio: ['pipe', 'pipe', 'pipe'] };
-    if (!guarded) {
-      const env: Record<string, string | undefined> = {
-        ...process.env,
-        NODE_ENV: 'development',
-        OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
-      };
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      NODE_ENV: guarded ? 'test' : 'development',
+      OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
+    };
+    if (guarded) {
+      env.SANDBOX_GUARD_ENABLED = 'true';
+    } else {
       delete env.SANDBOX_GUARD_ENABLED;
-      spawnOptions.env = env;
     }
+    const spawnOptions: SpawnOptions = { stdio: ['pipe', 'pipe', 'pipe'], env };
     const proc = spawn('node', [SERVER_PATH], spawnOptions);
     const server = new UnifiedTestServer(proc);
-    await server.initialize();
+    try {
+      await server.initialize();
+    } catch (err) {
+      // Don't leak the spawned child if the handshake never completes.
+      server.kill();
+      throw err;
+    }
     return server;
   }
 
@@ -107,11 +125,15 @@ export class UnifiedTestServer {
       return; // partial / non-JSON line — ignore
     }
     if (parsed.jsonrpc !== '2.0' || typeof parsed.id !== 'number') return;
+    // Settle only on a well-formed result/error frame; a frame carrying neither
+    // key is left for the timeout (don't resolve a request with `undefined`).
+    const isError = 'error' in parsed;
+    if (!isError && !('result' in parsed)) return;
     const entry = this.pending.get(parsed.id);
     if (!entry) return; // notification or already-settled id
     this.pending.delete(parsed.id);
     clearTimeout(entry.timer);
-    if ('error' in parsed) {
+    if (isError) {
       entry.reject(new Error(`MCP error: ${JSON.stringify(parsed.error)}`));
     } else {
       entry.resolve(parsed.result);
@@ -155,12 +177,25 @@ export class UnifiedTestServer {
       method: 'tools/call',
       params: { name, arguments: args },
     });
-    const content = (result as { content: Array<{ text: string }> }).content;
+    const content = (result as { content?: Array<{ text?: string }> } | null)?.content;
+    if (!Array.isArray(content) || typeof content[0]?.text !== 'string') {
+      throw new Error(`Unexpected tools/call result shape: ${JSON.stringify(result)?.slice(0, 300)}`);
+    }
     return JSON.parse(content[0].text);
   }
 
-  /** Terminate the child process. */
+  private rejectAllPending(error: Error): void {
+    for (const entry of this.pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    this.pending.clear();
+  }
+
+  /** Terminate the child process and tear down: reject in-flight requests, close the reader. */
   kill(): void {
+    this.rejectAllPending(new Error('Server killed before request completed'));
+    this.rl.close();
     this.proc.kill();
   }
 }
