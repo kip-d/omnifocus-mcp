@@ -233,7 +233,9 @@ multiple machines or sessions).
 ## Workflow norms
 
 - PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
-- Run a code-review subagent before merge; gate the merge on a Safe/Approved verdict.
+- Before merge, **stop and have Kip run `/code-review`** (user-invoked slash command → main-loop Opus); gate the merge
+  on a Safe/Approved verdict. Do **not** dispatch a `superpowers:code-reviewer` subagent — `/code-review` can't be
+  model-dispatched, and a `~/.claude` hook blocks the old reviewer (which would also run on the pinned Sonnet model).
 - Merge via `gh pr merge --squash --auto` — never `--admin`.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
 
