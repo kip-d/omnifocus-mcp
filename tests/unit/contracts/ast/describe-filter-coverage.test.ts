@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { NormalizedTaskFilter } from '../../../../src/contracts/filters.js';
+import type { NormalizedTaskFilter, ProjectFilter } from '../../../../src/contracts/filters.js';
 import { describeFilterForScript } from '../../../../src/contracts/ast/script-builder.js';
 import { describeProjectFilter } from '../../../../src/contracts/ast/filter-generator.js';
 
@@ -110,8 +110,61 @@ describe('OMN-172 F10: describeFilterForScript key coverage', () => {
   }
 });
 
-describe('OMN-172 F10: describeProjectFilter parity', () => {
-  it('describes id (not "all projects")', () => {
-    expect(describeProjectFilter({ id: 'p1' } as never)).not.toBe('all projects');
-  });
+// =============================================================================
+// OMN-175: describeProjectFilter exhaustive forcing function
+//
+// Mirrors the tasks-side KEY_COVERAGE above for the project side. OMN-172 closed
+// the filter_description↔filters_applied drift class for tasks with a
+// `satisfies Record<keyof NormalizedTaskFilter, Coverage>` map, but the project
+// side only got a single `id` assertion. A future ProjectFilter key would then
+// silently read "all projects" again — reopening, on the project side, the exact
+// class S4 closed for tasks. This partition + satisfies makes adding any new
+// ProjectFilter key a compile error until it's classified described-or-exempt.
+// =============================================================================
+const PROJECT_KEY_COVERAGE = {
+  // identity / status
+  id: 'described',
+  status: 'described',
+  // booleans
+  flagged: 'described',
+  needsReview: 'described',
+  // text / name
+  text: 'described',
+  textOperator: 'exempt', // operator modifier, not a standalone predicate
+  name: 'described',
+  nameOperator: 'exempt',
+  // folder
+  folderId: 'described',
+  folderName: 'described',
+  topLevelOnly: 'described',
+  // OR logic
+  orBranches: 'described', // recursed per branch, joined by OR
+  // pagination — EXEMPT (not filter predicates)
+  limit: 'exempt',
+  offset: 'exempt',
+} satisfies Record<keyof ProjectFilter, Coverage>;
+
+// One representative single-key value per DESCRIBED key.
+const PROJECT_SAMPLE: Partial<Record<keyof ProjectFilter, ProjectFilter>> = {
+  id: { id: 'p1' },
+  status: { status: ['active'] },
+  flagged: { flagged: true },
+  needsReview: { needsReview: true },
+  text: { text: 'foo' },
+  name: { name: 'foo' },
+  folderId: { folderId: 'f1' },
+  folderName: { folderName: 'Work' },
+  topLevelOnly: { topLevelOnly: true },
+  orBranches: { orBranches: [{ flagged: true }] },
+};
+
+describe('OMN-175 F10 parity: describeProjectFilter key coverage', () => {
+  for (const [key, cov] of Object.entries(PROJECT_KEY_COVERAGE)) {
+    if (cov !== 'described') continue;
+    const sample = PROJECT_SAMPLE[key as keyof ProjectFilter];
+    it(`describes ${key} (not "all projects")`, () => {
+      expect(sample, `add a PROJECT_SAMPLE entry for described key ${key}`).toBeDefined();
+      expect(describeProjectFilter(sample!)).not.toBe('all projects');
+    });
+  }
 });
