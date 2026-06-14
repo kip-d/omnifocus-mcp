@@ -27,10 +27,11 @@ Unit-only runs do **not** record (fast feedback, not a baseline). Set `SUITE_TIM
 
 ## Each record (one JSONL line)
 
-`{ ts, build, suite, wallMs, totalTests, perTestMs, env: { loadAvg1, cpuCount, loadPerCpu, memUsedPct }, conformance?, conformanceTotalS?, notes? }`
+`{ ts, build, suite, wallMs, totalTests, perTestMs, env: { loadAvg1, cpuCount, loadPerCpu, memUsedPct }, conformance?, notes? }`
 
-The three signals that disambiguate a slow run: **test count** (more tests) vs. **perTestMs** (slower per test) vs.
-**env.loadPerCpu / memUsedPct** (machine was busy).
+`wallMs` is the canonical wall on **every** record (integration suite wall, or conformance total wall); conformance rows
+carry the per-model breakdown in `conformance[]`. The three signals that disambiguate a slow run: **test count** (more
+tests) vs. **perTestMs** (slower per test) vs. **env.loadPerCpu / memUsedPct** (machine was busy).
 
 ## How to check for drift
 

@@ -73,19 +73,18 @@ export interface RunRecord {
   perTestMs: number | null;
   env: EnvStatus;
   notes?: string;
-  /** Conformance only: per-model breakdown + total. */
+  /** Conformance only: per-model breakdown. The total wall lives in the shared `wallMs`. */
   conformance?: ConformanceModel[];
-  conformanceTotalS?: number | null;
 }
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-/** Map a probe artifact into conformance model rows. */
+/** Map a probe artifact into conformance model rows + the total wall (full-precision ms). */
 export function conformanceFromArtifact(art: ConformanceArtifact): {
   conformance: ConformanceModel[];
-  conformanceTotalS: number;
+  wallMs: number;
 } {
   return {
     conformance: art.models.map((m) => ({
@@ -94,7 +93,7 @@ export function conformanceFromArtifact(art: ConformanceArtifact): {
       elapsedS: m.elapsedMs === null ? null : round1(m.elapsedMs / 1000),
       loadS: m.loadMs === null ? null : round1(m.loadMs / 1000),
     })),
-    conformanceTotalS: round1(art.totalWallMs / 1000),
+    wallMs: art.totalWallMs,
   };
 }
 
@@ -116,23 +115,12 @@ export function buildConformanceRecord(input: {
   ts: string;
   env: EnvStatus;
   conformance: ConformanceModel[];
-  conformanceTotalS: number | null;
+  /** Total conformance wall (ms) — the canonical wall, shared with integration records. */
+  wallMs: number;
   notes?: string;
 }): RunRecord {
-  const { build, ts, env, conformance, conformanceTotalS, notes } = input;
-  const wallMs = conformanceTotalS === null ? 0 : Math.round(conformanceTotalS * 1000);
-  return {
-    ts,
-    build,
-    suite: 'conformance',
-    wallMs,
-    totalTests: null,
-    perTestMs: null,
-    env,
-    conformance,
-    conformanceTotalS,
-    notes,
-  };
+  const { build, ts, env, conformance, wallMs, notes } = input;
+  return { ts, build, suite: 'conformance', wallMs, totalTests: null, perTestMs: null, env, conformance, notes };
 }
 
 // ── Serialize / parse (JSONL) ────────────────────────────────────────────────────────────
@@ -256,23 +244,20 @@ export function checkRecordDeviation(
     }
   };
 
+  // Wall is a single metric across suites — `wallMs` is the canonical wall on every record.
+  evaluate(
+    `${latest.suite}_wall_ms`,
+    latest.wallMs,
+    priorSameSuite.map((r) => r.wallMs),
+  );
+
   if (latest.suite === 'integration') {
-    evaluate(
-      'integration_wall_ms',
-      latest.wallMs,
-      priorSameSuite.map((r) => r.wallMs),
-    );
     evaluate(
       'integration_per_test_ms',
       latest.perTestMs,
       priorSameSuite.map((r) => r.perTestMs),
     );
   } else {
-    evaluate(
-      'conformance_total_s',
-      latest.conformanceTotalS ?? null,
-      priorSameSuite.map((r) => r.conformanceTotalS ?? null),
-    );
     for (const m of latest.conformance ?? []) {
       evaluate(
         `conformance_elapsed_s[${m.model}]`,

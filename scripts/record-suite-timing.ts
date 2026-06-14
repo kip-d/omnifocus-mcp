@@ -68,13 +68,13 @@ function main(): void {
   const confJsonPath = arg('conformance-json') ?? process.env.PROBE_TIMING_JSON;
   if (!confJsonPath) die('nothing to record — pass --conformance-json (or set PROBE_TIMING_JSON)');
 
-  const { conformance, conformanceTotalS } = conformanceFromArtifact(loadConformanceArtifact(confJsonPath));
+  const { conformance, wallMs } = conformanceFromArtifact(loadConformanceArtifact(confJsonPath));
   const record = buildConformanceRecord({
     build: arg('build') ?? gitShort(),
     ts: arg('date') ?? new Date().toISOString(),
     env: captureEnv(),
     conformance,
-    conformanceTotalS,
+    wallMs,
     notes: arg('notes'),
   });
 

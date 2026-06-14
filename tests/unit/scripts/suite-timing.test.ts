@@ -54,16 +54,17 @@ describe('buildIntegrationRecord', () => {
 });
 
 describe('buildConformanceRecord', () => {
-  it('tags suite=conformance and carries the model breakdown + total', () => {
+  it('tags suite=conformance, stores the wall in the shared wallMs field, carries the model breakdown', () => {
     const r = buildConformanceRecord({
       build: 'abc1234',
       ts: '2026-06-14T16:00:00-04:00',
       env: env(),
       conformance: [{ model: 'llama3.1:8b', scorePct: 100, elapsedS: 16, loadS: 2 }],
-      conformanceTotalS: 45.2,
+      wallMs: 45_200,
     });
     expect(r.suite).toBe('conformance');
-    expect(r.conformanceTotalS).toBe(45.2);
+    expect(r.wallMs).toBe(45_200); // canonical wall — no separate conformanceTotalS
+    expect(r).not.toHaveProperty('conformanceTotalS');
     expect(r.conformance?.[0].model).toBe('llama3.1:8b');
     expect(r.totalTests).toBeNull();
     expect(r.perTestMs).toBeNull();
@@ -130,7 +131,7 @@ describe('checkRecordDeviation (newest vs rolling median, per suite)', () => {
       ts: '2026-06-13T00:00:00-04:00',
       env: env(),
       conformance: [],
-      conformanceTotalS: 45,
+      wallMs: 45_000,
     });
     // A lone integration run with only a conformance run before it has no integration baseline.
     const res = checkRecordDeviation([conf, intRecord({ wallMs: 9_000_000 })], { thresholdPct: 25 });
@@ -154,12 +155,12 @@ describe('checkRecordDeviation (newest vs rolling median, per suite)', () => {
   });
 });
 
-describe('conformanceFromArtifact (probe artifact → model rows, unchanged)', () => {
-  it('maps ms to seconds and keeps the stable schema tag', () => {
+describe('conformanceFromArtifact (probe artifact → model rows + full-precision wall)', () => {
+  it('returns the wall as full-precision ms (no round-trip through seconds) and per-model seconds', () => {
     const art: ConformanceArtifact = {
       schema: ARTIFACT_SCHEMA,
       ollama: { startedByUs: true, startMs: 100 },
-      totalWallMs: 45_200,
+      totalWallMs: 45_237,
       models: [
         {
           model: 'llama3.1:8b',
@@ -173,8 +174,20 @@ describe('conformanceFromArtifact (probe artifact → model rows, unchanged)', (
         },
       ],
     };
-    const { conformance, conformanceTotalS } = conformanceFromArtifact(art);
-    expect(conformanceTotalS).toBe(45.2);
+    const { conformance, wallMs } = conformanceFromArtifact(art);
+    expect(wallMs).toBe(45_237); // full ms precision — NOT rounded to 45_200 via 45.2s
     expect(conformance[0]).toEqual({ model: 'llama3.1:8b', scorePct: 100, elapsedS: 16, loadS: 2 });
+  });
+});
+
+describe('checkRecordDeviation — wall is a single metric across suites', () => {
+  it('flags a conformance wall regression under conformance_wall_ms (no conformance_total_s)', () => {
+    const mk = (wallMs: number): RunRecord =>
+      buildConformanceRecord({ build: 'b', ts: '2026-06-13T00:00:00-04:00', env: env(), conformance: [], wallMs });
+    const records = [mk(45_000), mk(46_000), mk(44_000), mk(80_000)]; // newest +78% vs median 45_000
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
+    expect(res.ok).toBe(false);
+    expect(res.findings.some((f) => f.metric === 'conformance_wall_ms')).toBe(true);
+    expect(res.findings.some((f) => f.metric === 'conformance_total_s')).toBe(false);
   });
 });
