@@ -53,6 +53,11 @@ import { RUN_NAME_PREFIX, RUN_TAG_PREFIX, runScopedName, runScopedTag } from '..
 
 const execFileAsync = promisify(execFile);
 
+// OMN-147: every osascript spawn carries a child timeout so a TCC-wedged
+// AppleEvent can't leave an orphaned osascript child that re-poisons later runs
+// (vitest's hook timeout bounds the SUITE, not the abandoned child).
+const OSASCRIPT_TIMEOUT_MS = 30_000;
+
 const TS = Date.now();
 
 // 'OMN138T' (tags) — must not contain 'OMN138D', 'OMN138U', or 'OMN-138'.
@@ -118,7 +123,9 @@ async function probeTagByName(tagName: string): Promise<TagProbe | null> {
     '})()',
   ].join('\n');
   const jxa = `(() => { const app = Application('OmniFocus'); return app.evaluateJavascript(${JSON.stringify(omniJs)}); })()`;
-  const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa]);
+  const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa], {
+    timeout: OSASCRIPT_TIMEOUT_MS,
+  });
   const matches = JSON.parse(stdout.trim()) as TagProbe[];
   if (matches.length > 1) {
     throw new Error(`probeTagByName('${tagName}'): ${matches.length} tags share this name — ambiguous oracle`);
@@ -145,7 +152,7 @@ async function osascriptDeleteTagByExactName(tagName: string): Promise<void> {
     '})()',
   ].join('\n');
   const jxa = `(() => { const app = Application('OmniFocus'); return app.evaluateJavascript(${JSON.stringify(omniJs)}); })()`;
-  await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa]);
+  await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa], { timeout: OSASCRIPT_TIMEOUT_MS });
 }
 
 describe('OMN-128 slice 6: live tag mutation paths (AST lowerings, persisted read-backs)', () => {

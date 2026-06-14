@@ -11,10 +11,17 @@
  * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+// OMN-147: args-array execFile (not shell `exec`) so the script is passed as an
+// argv element — no shell quoting to get wrong — and every spawn carries a child
+// timeout (see OSASCRIPT_TIMEOUT_MS) so a TCC-wedged AppleEvent can't leave an
+// orphaned osascript child that re-poisons later runs.
+const execFileAsync = promisify(execFile);
+
+/** Child-process timeout for every osascript spawn (wedge-orphan hygiene). */
+const OSASCRIPT_TIMEOUT_MS = 30_000;
 
 // Enable sandbox guard when this module is imported
 // This ensures integration tests that use the sandbox are protected
@@ -97,7 +104,9 @@ async function executeJXA<T>(script: string): Promise<T> {
   `;
 
   try {
-    const { stdout } = await execAsync(`osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`);
+    const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', wrappedScript], {
+      timeout: OSASCRIPT_TIMEOUT_MS,
+    });
     return JSON.parse(stdout.trim()) as T;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
