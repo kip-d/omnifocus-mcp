@@ -261,13 +261,6 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 ---
 
-## 🐛 Bug Tracking
-
-- **[docs/bugs/analytics-validation-test-bug.md](bugs/analytics-validation-test-bug.md)** - Analytics validation test
-  bug analysis
-
----
-
 ## 🏆 Success Stories
 
 - **[docs/success-stories/2025-12-04-design-to-tasks-workflow.md](success-stories/2025-12-04-design-to-tasks-workflow.md)** -

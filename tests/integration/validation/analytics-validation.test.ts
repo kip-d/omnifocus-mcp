@@ -75,12 +75,20 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
-      if (tasksResult.data?.tasks?.length > 0) {
+      // OMN-140: assert the query shape explicitly so an unexpected response
+      // structure fails with a meaningful message instead of a bare TypeError
+      // ("Cannot read properties of undefined"). An empty array is legitimate
+      // (timing); a missing `tasks` array is a contract violation.
+      expectOk(tasksResult, 'active tasks lookup');
+      const activeTasks = tasksResult.data?.tasks;
+      expect(Array.isArray(activeTasks)).toBe(true);
+
+      if (activeTasks.length > 0) {
         await client.callTool('omnifocus_write', {
           mutation: {
             operation: 'complete',
             target: 'task',
-            id: tasksResult.data.tasks[0].id,
+            id: activeTasks[0].id,
           },
         });
       }
@@ -230,13 +238,15 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
+      // OMN-140: assert tool success BEFORE touching nested data so a failed
+      // call surfaces its real error (expectOk reports result.error) instead of
+      // crashing with "Cannot read properties of undefined (reading 'stats')".
+      expectOk(productivityResult, 'cross-tool productivity_stats');
+      expectOk(velocityResult, 'cross-tool task_velocity');
+
       // ✅ Both should report > 0 tasks (our test tasks + possibly others)
       expect(productivityResult.data.stats.overview.totalTasks).toBeGreaterThan(0);
       expect(velocityResult.data.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
-
-      // Both tools should succeed
-      expectOk(productivityResult, 'cross-tool productivity_stats');
-      expectOk(velocityResult, 'cross-tool task_velocity');
     }, 90000);
   });
 });
