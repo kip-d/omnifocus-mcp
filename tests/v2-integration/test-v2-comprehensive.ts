@@ -57,7 +57,11 @@ async function runComprehensiveTests() {
   console.log('🚀 OmniFocus MCP v2.0.0 Comprehensive Test Suite\n');
   console.log('='.repeat(60));
 
-  const results = {
+  const results: {
+    passed: number;
+    failed: number;
+    tests: Array<{ name: string; status: string; error?: string }>;
+  } = {
     passed: 0,
     failed: 0,
     tests: [],
@@ -245,7 +249,7 @@ async function runComprehensiveTests() {
   // Test 10: Performance - Query today's tasks
   test('Performance: Query today tasks < 2s', () => {
     const start = Date.now();
-    const result = callTool('mcp__omnifocus__tasks', {
+    callTool('mcp__omnifocus__tasks', {
       mode: 'today',
       limit: '50',
       details: 'false',

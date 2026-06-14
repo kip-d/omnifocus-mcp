@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { CacheManager } from '../../src/cache/CacheManager.js';
-import { CacheCategory } from '../../src/cache/types.js';
 
 // Mock the logger
 vi.mock('../../src/utils/logger.js', () => ({
@@ -376,7 +375,7 @@ describe('CacheManager', () => {
       vi.useFakeTimers();
 
       // Create a new cache - this should set up the interval
-      const testCache = new CacheManager();
+      new CacheManager();
 
       // Verify an interval was set up by advancing time and checking if any timers exist
       expect(vi.getTimerCount()).toBeGreaterThan(0);

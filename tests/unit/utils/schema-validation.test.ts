@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeDateInput, normalizeBooleanInput, normalizeStringInput } from '../../../src/utils/response-format';
+import { normalizeDateInput, normalizeBooleanInput, normalizeStringInput } from '../../../src/utils/response-format.js';
 
 describe('Schema Validation Helpers', () => {
   describe('normalizeDateInput', () => {
@@ -196,8 +196,8 @@ describe('Schema Validation Helpers', () => {
       expect(normalizeBooleanInput('')).toBe(null);
       expect(normalizeBooleanInput('null')).toBe(null);
       expect(normalizeBooleanInput('undefined')).toBe(null);
-      expect(normalizeBooleanInput({})).toBe(null);
-      expect(normalizeBooleanInput([])).toBe(null);
+      expect(normalizeBooleanInput({} as unknown as string)).toBe(null);
+      expect(normalizeBooleanInput([] as unknown as string)).toBe(null);
     });
 
     it('should handle whitespace', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getOmniFocusVersion, getVersionInfo, clearVersionCache } from '../../../src/omnifocus/version-detection';
+import { getOmniFocusVersion, getVersionInfo, clearVersionCache } from '../../../src/omnifocus/version-detection.js';
 
 describe('OmniFocus Version Detection', () => {
   beforeEach(() => {

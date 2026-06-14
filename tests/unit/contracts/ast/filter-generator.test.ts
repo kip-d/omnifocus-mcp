@@ -16,7 +16,7 @@ describe('generateFilterCode', () => {
   describe('end-to-end pipeline', () => {
     it('generates OmniJS code for simple boolean filter', () => {
       const filter: TaskFilter = { completed: false };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toBe('task.completed === false');
     });
@@ -28,7 +28,7 @@ describe('generateFilterCode', () => {
         tags: ['work'],
         tagsOperator: 'OR',
       };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.completed === false');
       expect(result.predicate).toContain('task.flagged === true');
@@ -45,7 +45,7 @@ describe('generateFilterCode', () => {
 
     it('OMN-115: fastSearch emits a name-only predicate (no task.note read)', () => {
       const filter: TaskFilter = { search: 'review', fastSearch: true };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
       expect(result.predicate).not.toContain('task.note');
@@ -53,7 +53,7 @@ describe('generateFilterCode', () => {
 
     it('OMN-115: default search still reads task.note', () => {
       const filter: TaskFilter = { search: 'review' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
       expect(result.predicate).toContain('task.note');
@@ -61,7 +61,7 @@ describe('generateFilterCode', () => {
 
     it('OMN-142: name filter emits a name-only predicate (no task.note read)', () => {
       const filter: TaskFilter = { name: 'review', nameOperator: 'CONTAINS' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
       expect(result.predicate).not.toContain('task.note');
@@ -69,7 +69,7 @@ describe('generateFilterCode', () => {
 
     it('OMN-142: name MATCHES emits a regex test, still name only', () => {
       const filter: TaskFilter = { name: '^review', nameOperator: 'MATCHES' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
       expect(result.predicate).toContain('test');
@@ -78,7 +78,7 @@ describe('generateFilterCode', () => {
 
     it('OMN-114: parentTaskId emits a null-guarded parent id comparison', () => {
       const filter: TaskFilter = { parentTaskId: 'abc123' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       // Must guard against null parent before reading .id.primaryKey.
       expect(result.predicate).toBe('(task.parent && task.parent.id.primaryKey === "abc123")');
@@ -104,7 +104,7 @@ describe('generateFilterCode', () => {
   describe('tag filters', () => {
     it('generates OR tag filter', () => {
       const filter: TaskFilter = { tags: ['urgent', 'important'], tagsOperator: 'OR' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('taskTags.some');
       expect(result.predicate).toContain('urgent');
@@ -113,7 +113,7 @@ describe('generateFilterCode', () => {
 
     it('generates AND tag filter', () => {
       const filter: TaskFilter = { tags: ['work', 'meeting'], tagsOperator: 'AND' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('every');
       expect(result.predicate).toContain('work');
@@ -122,7 +122,7 @@ describe('generateFilterCode', () => {
 
     it('generates NOT_IN tag filter', () => {
       const filter: TaskFilter = { tags: ['waiting'], tagsOperator: 'NOT_IN' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('!');
       expect(result.predicate).toContain('some');
@@ -133,7 +133,7 @@ describe('generateFilterCode', () => {
   describe('date filters', () => {
     it('generates due date before filter', () => {
       const filter: TaskFilter = { dueBefore: '2025-12-31' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.dueDate !== null');
       expect(result.predicate).toContain('task.dueDate <=');
@@ -142,7 +142,7 @@ describe('generateFilterCode', () => {
 
     it('generates due date after filter', () => {
       const filter: TaskFilter = { dueAfter: '2025-01-01' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.dueDate !== null');
       expect(result.predicate).toContain('task.dueDate >=');
@@ -155,7 +155,7 @@ describe('generateFilterCode', () => {
         dueBefore: '2025-12-31',
         dueDateOperator: 'BETWEEN',
       };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.dueDate !== null');
       expect(result.predicate).toContain('>=');
@@ -166,7 +166,7 @@ describe('generateFilterCode', () => {
   describe('text filters', () => {
     it('generates contains text filter', () => {
       const filter: TaskFilter = { text: 'review', textOperator: 'CONTAINS' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('includes');
       expect(result.predicate).toContain('review');
@@ -174,7 +174,7 @@ describe('generateFilterCode', () => {
 
     it('generates matches text filter', () => {
       const filter: TaskFilter = { text: '^meeting', textOperator: 'MATCHES' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('test');
       expect(result.predicate).toContain('^meeting');
@@ -184,28 +184,28 @@ describe('generateFilterCode', () => {
   describe('synthetic status fields end-to-end', () => {
     it('generates OmniJS code for dropped: true using Task.Status enum', () => {
       const filter: TaskFilter = { dropped: true };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toBe('task.taskStatus === Task.Status.Dropped');
     });
 
     it('generates OmniJS code for dropped: false', () => {
       const filter: TaskFilter = { dropped: false };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toBe('task.taskStatus !== Task.Status.Dropped');
     });
 
     it('generates OmniJS code for available: true using Task.Status enum', () => {
       const filter: TaskFilter = { available: true };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toBe('task.taskStatus === Task.Status.Available');
     });
 
     it('generates OmniJS code for blocked: true using Task.Status enum', () => {
       const filter: TaskFilter = { blocked: true };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toBe('task.taskStatus === Task.Status.Blocked');
     });
@@ -214,7 +214,7 @@ describe('generateFilterCode', () => {
   describe('tagStatusValid end-to-end', () => {
     it('generates OmniJS code for tagStatusValid: true', () => {
       const filter: TaskFilter = { tagStatusValid: true };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.tags.length === 0');
       expect(result.predicate).toContain('Tag.Status.Active');
@@ -222,7 +222,7 @@ describe('generateFilterCode', () => {
 
     it('generates OmniJS code for tagStatusValid: false', () => {
       const filter: TaskFilter = { tagStatusValid: false };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.tags.length > 0');
       expect(result.predicate).toContain('!task.tags.some');
@@ -232,7 +232,7 @@ describe('generateFilterCode', () => {
   describe('defer date end-to-end', () => {
     it('generates OmniJS code for defer date range', () => {
       const filter: TaskFilter = { deferAfter: '2025-01-01', deferBefore: '2025-06-30' };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.deferDate !== null');
       expect(result.predicate).toContain('2025-01-01');
@@ -247,7 +247,7 @@ describe('generateFilterCode', () => {
         plannedBefore: '2025-03-31',
         plannedDateOperator: 'BETWEEN',
       };
-      const result = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.plannedDate !== null');
       expect(result.predicate).toContain('>=');
@@ -288,7 +288,7 @@ describe('generateFilterCodeSafe', () => {
 describe('generateFilterFunction', () => {
   it('generates a callable function', () => {
     const filter: TaskFilter = { completed: false };
-    const fnCode = generateFilterFunction(filter, 'omnijs');
+    const fnCode = generateFilterFunction(filter);
 
     expect(fnCode).toContain('function matchesFilter(task, taskTags)');
     expect(fnCode).toContain('return');
@@ -297,7 +297,7 @@ describe('generateFilterFunction', () => {
 
   it('includes taskTags helper in function', () => {
     const filter: TaskFilter = { tags: ['work'], tagsOperator: 'OR' };
-    const fnCode = generateFilterFunction(filter, 'omnijs');
+    const fnCode = generateFilterFunction(filter);
 
     expect(fnCode).toContain('taskTags = taskTags || (task.tags');
   });

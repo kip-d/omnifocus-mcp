@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const originalEnv = { ...process.env };
 const originalPlatform = process.platform;
 
-const serverConnectMock = vi.fn<[], Promise<void>>(() => Promise.resolve());
-const serverCloseMock = vi.fn<[], Promise<void>>(() => Promise.resolve());
+const serverConnectMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
+const serverCloseMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const ServerMock = vi.fn(() => ({
   connect: serverConnectMock,
   close: serverCloseMock,

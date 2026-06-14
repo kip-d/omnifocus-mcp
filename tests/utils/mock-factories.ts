@@ -1,10 +1,6 @@
 import { vi } from 'vitest';
-import { z } from 'zod';
 import {
-  createEntityResponse,
-  createErrorResponse,
-  createSuccessResponse,
-  OperationTimer,
+  createListResponseV2,
 } from '../../src/utils/response-format.js';
 import { SchemaTestHelper } from './schema-helpers.js';
 
@@ -35,7 +31,7 @@ export function createManageFolderMock(defaultResponses: Record<string, any> = {
       }
       return 'test script';
     }),
-    execute: vi.fn().mockImplementation(async (script: string) => {
+    execute: vi.fn().mockImplementation(async (_script: string) => {
       // Return operation-specific responses based on what buildScript was called with
       switch (lastOperation) {
         case 'create':
@@ -106,7 +102,7 @@ export function createManageFolderMock(defaultResponses: Record<string, any> = {
         default:
           return {
             error: true,
-            message: `Unsupported operation: ${operation}`,
+            message: `Unsupported operation: ${lastOperation}`,
           };
       }
     }),
@@ -329,7 +325,7 @@ export class ResponseBuilder {
   }
 
   static entity(operation: string, entity: any, metadata: any = {}) {
-    return createEntityResponse(operation, entity, metadata);
+    return createListResponseV2(operation, [entity], 'other', metadata);
   }
 }
 

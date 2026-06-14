@@ -1,16 +1,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-import { BaseTool } from '../../../src/tools/base';
-import { CacheManager } from '../../../src/cache/CacheManager';
-import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation';
+import { BaseTool } from '../../../src/tools/base.js';
+import { CacheManager } from '../../../src/cache/CacheManager.js';
+import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
 import { OmniFocusReadTool } from '../../../src/tools/unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from '../../../src/tools/unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from '../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 import { SystemTool } from '../../../src/tools/system/SystemTool.js';
+import { StandardResponseV2 } from '../../../src/utils/response-format.js';
 import * as fs from 'fs';
 import * as os from 'os';
+
+/**
+ * Narrowed view of the error details that the Enhanced Error Categorization
+ * tests assert on.  Matches what handleErrorV2 populates at runtime.
+ */
+type TestErrorDetails = {
+  errorType?: string;
+  severity?: string;
+  recoverable?: boolean;
+  actionable?: string;
+  recovery?: string;
+  originalError?: Error & { message: string };
+  context?: unknown;
+};
+
+/**
+ * Typed McpError.data for the throwMcpError tests.
+ */
+type McpErrorData = {
+  validation_errors?: unknown;
+  code?: string;
+  script?: string;
+  stderr?: string;
+};
 
 // Mock dependencies
 vi.mock('../../../src/omnifocus/OmniAutomation');
@@ -22,6 +47,7 @@ vi.mock('os');
 class TestTool extends BaseTool<z.ZodObject<any>> {
   name = 'test-tool';
   description = 'A test tool for testing BaseTool';
+  meta = undefined;
 
   schema = z.object({
     stringParam: z.string(),
@@ -59,9 +85,10 @@ class TestTool extends BaseTool<z.ZodObject<any>> {
 }
 
 // Test tool that throws errors
-class ErrorTestTool extends BaseTool<z.ZodObject<any>> {
+class ErrorTestTool extends BaseTool<z.ZodObject<any>, StandardResponseV2<unknown> & { error?: { code: string; message: string; suggestion?: string; details?: TestErrorDetails } }> {
   name = 'error-test-tool';
   description = 'A test tool that throws errors';
+  meta = undefined;
 
   schema = z.object({
     errorType: z.enum(['permission', 'timeout', 'not-running', 'omni-automation', 'generic']),
@@ -266,6 +293,7 @@ describe('BaseTool', () => {
         name = 'no-schema-tool';
         description = 'Missing inputSchema override';
         schema = z.object({ x: z.string() });
+        meta = undefined;
 
         protected async executeValidated(args: any): Promise<any> {
           return { data: args };
@@ -323,7 +351,7 @@ describe('BaseTool', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(McpError);
         expect((error as McpError).code).toBe(ErrorCode.InvalidParams);
-        expect((error as McpError).data?.validation_errors).toBeDefined();
+        expect(((error as McpError).data as McpErrorData)?.validation_errors).toBeDefined();
       }
     });
 
@@ -461,6 +489,7 @@ describe('BaseTool', () => {
     class ThrowingTool extends BaseTool {
       name = 'throwing-tool';
       description = 'Test throwMcpError method';
+      meta = undefined;
       schema = z.object({
         errorType: z.string(),
         shouldThrow: z.boolean().optional(),
@@ -519,7 +548,7 @@ describe('BaseTool', () => {
         expect(error).toBeInstanceOf(McpError);
         expect((error as McpError).code).toBe(ErrorCode.InternalError);
         expect((error as McpError).message).toContain('Not authorized');
-        expect((error as McpError).data?.code).toBe('PERMISSION_DENIED');
+        expect(((error as McpError).data as McpErrorData)?.code).toBe('PERMISSION_DENIED');
       }
     });
 
@@ -532,8 +561,8 @@ describe('BaseTool', () => {
         await tool.execute({ errorType: 'omni', shouldThrow: true });
       } catch (error) {
         expect(error).toBeInstanceOf(McpError);
-        expect((error as McpError).data?.script).toBe('script');
-        expect((error as McpError).data?.stderr).toBe('stderr');
+        expect(((error as McpError).data as McpErrorData)?.script).toBe('script');
+        expect(((error as McpError).data as McpErrorData)?.stderr).toBe('stderr');
       }
     });
 
@@ -558,11 +587,12 @@ describe('BaseTool', () => {
       const jsonSchema = readTool.inputSchema;
 
       // The top-level schema should have a 'query' property
-      expect(jsonSchema.properties).toBeDefined();
-      expect(jsonSchema.properties.query).toBeDefined();
+      const topProps = jsonSchema.properties as Record<string, unknown>;
+      expect(topProps).toBeDefined();
+      expect(topProps.query).toBeDefined();
 
       // query should be a flat object (NOT a oneOf with 6 branches)
-      const querySchema = jsonSchema.properties.query as Record<string, unknown>;
+      const querySchema = topProps.query as Record<string, unknown>;
       expect(querySchema.type).toBe('object');
       expect(querySchema.oneOf).toBeUndefined();
 
@@ -747,7 +777,7 @@ describe('BaseTool', () => {
       const result = await errorTestTool.execute({ errorType: 'generic' });
 
       expect(result.error?.details?.originalError).toBeInstanceOf(Error);
-      expect(result.error?.details?.originalError.message).toContain('Generic error for testing');
+      expect(result.error?.details?.originalError?.message).toContain('Generic error for testing');
     });
 
     it('should include context in categorized errors', async () => {

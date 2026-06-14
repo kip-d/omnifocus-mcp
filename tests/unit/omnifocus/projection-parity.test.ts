@@ -11,6 +11,7 @@
  */
 
 import * as fs from 'fs';
+import { fileURLToPath, URL } from 'url';
 import { describe, it, expect } from 'vitest';
 import { TaskRowSchema, ProjectRowSchema } from '../../../src/omnifocus/script-response-schemas.js';
 
@@ -42,7 +43,7 @@ function extractSwitchCaseLabels(slice: string): Set<string> {
 // ---------------------------------------------------------------------------
 
 const scriptBuilderSrc = fs.readFileSync(
-  new URL('../../../src/contracts/ast/script-builder.ts', import.meta.url).pathname,
+  fileURLToPath(new URL('../../../src/contracts/ast/script-builder.ts', import.meta.url)),
   'utf-8',
 );
 

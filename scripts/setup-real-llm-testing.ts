@@ -8,9 +8,6 @@
 
 import { Ollama } from 'ollama';
 import { spawn } from 'child_process';
-import { promisify } from 'util';
-
-const sleep = promisify(setTimeout);
 
 interface TestModel {
   name: string;

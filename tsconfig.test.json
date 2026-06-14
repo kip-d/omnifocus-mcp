@@ -8,5 +8,6 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["tests/**/*", "src/**/*", "scripts/**/*"],
-  "exclude": ["node_modules", "dist", "dist-test"]
+  "// exclude note": "OMN-176: tests/manual is ad-hoc hand-run debug scripts (mostly .js), not part of the automated suite or CI. Several import modules deliberately removed in the unified-API migration. Type-gating them would force production-source stubs for dead imports — net-negative. The gate's purpose (the OMN-172/175 satisfies forcing functions + OMN-161 union pins) lives in tests/unit.",
+  "exclude": ["node_modules", "dist", "dist-test", "tests/manual/**"]
 }

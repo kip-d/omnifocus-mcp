@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { BaseTool } from '../../../src/tools/base.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
+import { ScriptResult } from '../../../src/omnifocus/script-result-types.js';
 
 // Trivial pass-through schema satisfying the required execJson signature.
 // The schema is never actually evaluated in these tests (executeJson is mocked
@@ -24,10 +25,43 @@ class MockCache extends CacheManager {
 class TestTool extends BaseTool<any, any> {
   name = 'test_tool';
   description = 'Test tool for circuit breaker testing';
+  meta = undefined;
   schema = { parse: vi.fn() } as any;
 
   async executeValidated(): Promise<any> {
     return { success: true };
+  }
+
+  /** Public wrapper — exposes the protected execJson for white-box tests. */
+  execJson<T = unknown>(script: string, schema: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+    return super.execJson(script, schema);
+  }
+
+  /** Public wrapper — exposes the protected executeWithRetry for white-box tests. */
+  executeWithRetry<T>(
+    operation: () => Promise<T>,
+    options?: {
+      maxRetries?: number;
+      initialDelay?: number;
+      maxDelay?: number;
+      isTransientError?: (error: unknown) => boolean;
+      onRetry?: (attempt: number, error: unknown) => void;
+    },
+  ): Promise<T> {
+    return super.executeWithRetry(operation, options ?? {});
+  }
+
+  /** Public wrapper — exposes the protected createEnhancedErrorResponse for white-box tests. */
+  createEnhancedErrorResponse(
+    error: unknown,
+    operation: string,
+    context?: {
+      toolName?: string;
+      operationType?: string;
+      inputSummary?: Record<string, unknown>;
+    },
+  ): Error & { recovery_suggestions?: string[]; related_documentation?: string[] } {
+    return super.createEnhancedErrorResponse(error, operation, context);
   }
 }
 
@@ -56,7 +90,9 @@ describe('BaseTool Circuit Breaker Integration', () => {
     const result = await tool.execJson('test-script', ANY_SCHEMA);
 
     expect(result.success).toBe(true);
-    expect(result.data).toEqual({ test: 'data' });
+    if (result.success) {
+      expect(result.data).toEqual({ test: 'data' });
+    }
     expect(mockExecuteJson).toHaveBeenCalledWith('test-script', ANY_SCHEMA);
   });
 
@@ -100,7 +136,9 @@ describe('BaseTool Circuit Breaker Integration', () => {
 
     // Should return error result instead of throwing
     expect(result.success).toBe(false);
-    expect(result.error).toContain('NULL_RESULT');
+    if (!result.success) {
+      expect(result.error).toContain('NULL_RESULT');
+    }
   });
 
   it('should reset circuit breaker on successful operation', async () => {

@@ -32,14 +32,6 @@ interface EstimateResult {
   contextUsage: number;
 }
 
-interface NoteItem {
-  type: 'task' | 'project';
-  id: string;
-  name: string;
-  noteLength: number;
-  tokens: number;
-}
-
 interface Task {
   id: string;
   name: string;
@@ -80,17 +72,13 @@ interface Tag {
   name: string;
   parentId?: string;
   parentName?: string;
+  taskCount?: number;
 }
 
 class TokenAnalyzer {
   private server: ChildProcess | null = null;
   private messageId: number = 0;
   private pendingRequests: Map<number, (value: MCPResponse) => void> = new Map();
-
-  // Actual database sizes from user
-  private actualTaskCount: number = 1158;
-  private actualProjectCount: number = 124;
-  private actualTagCount: number = 50;
 
   async startServer(): Promise<void> {
     console.log('🚀 Starting MCP server for analysis...');
@@ -100,7 +88,7 @@ class TokenAnalyzer {
     });
 
     const rl = createInterface({
-      input: this.server.stdout,
+      input: this.server.stdout!,
       crlfDelay: Infinity,
     });
 
@@ -110,7 +98,7 @@ class TokenAnalyzer {
         if (response.id && this.pendingRequests.has(response.id)) {
           const resolver = this.pendingRequests.get(response.id);
           this.pendingRequests.delete(response.id);
-          resolver(response);
+          resolver?.(response);
         }
       } catch (e) {
         // Ignore non-JSON output
@@ -127,7 +115,7 @@ class TokenAnalyzer {
       const requestId = ++this.messageId;
       this.pendingRequests.set(requestId, resolve);
 
-      this.server.stdin.write(
+      this.server!.stdin!.write(
         JSON.stringify({
           jsonrpc: '2.0',
           id: requestId,
@@ -159,7 +147,7 @@ class TokenAnalyzer {
       });
 
       // Send initialized notification
-      this.server.stdin.write(
+      this.server!.stdin!.write(
         JSON.stringify({
           jsonrpc: '2.0',
           method: 'notifications/initialized',
@@ -245,7 +233,7 @@ class TokenAnalyzer {
       // Analyze the data
       this.analyzeTokenUsage(systemInfo, taskCounts, projectCounts, tagCounts);
     } catch (error) {
-      console.error('❌ Analysis failed:', error.message);
+      console.error('❌ Analysis failed:', error instanceof Error ? error.message : error);
     }
   }
 
@@ -261,12 +249,12 @@ class TokenAnalyzer {
     let systemData, tasksData, projectsData, tagsData;
 
     try {
-      systemData = JSON.parse(systemInfo.result.content[0].text);
-      tasksData = JSON.parse(taskCounts.result.content[0].text);
-      projectsData = JSON.parse(projectCounts.result.content[0].text);
-      tagsData = JSON.parse(tagCounts.result.content[0].text);
+      systemData = JSON.parse(systemInfo.result!.content[0].text);
+      tasksData = JSON.parse(taskCounts.result!.content[0].text);
+      projectsData = JSON.parse(projectCounts.result!.content[0].text);
+      tagsData = JSON.parse(tagCounts.result!.content[0].text);
     } catch (e) {
-      console.log('⚠️  Could not parse some responses:', e.message);
+      console.log('⚠️  Could not parse some responses:', e instanceof Error ? e.message : e);
       console.log('\nDEBUG - systemInfo type:', typeof systemInfo);
       console.log('DEBUG - taskCounts type:', typeof taskCounts);
       console.log('DEBUG - projectCounts type:', typeof projectCounts);
@@ -306,11 +294,6 @@ class TokenAnalyzer {
     console.log(`  📋 Tasks: ${allTasks.length}`);
     console.log(`  📁 Projects: ${allProjects.length}`);
     console.log(`  🏷️  Tags: ${allTags.length}`);
-
-    // Use actual retrieved counts instead of estimates
-    const actualTaskCount = allTasks.length;
-    const actualProjectCount = allProjects.length;
-    const actualTagCount = allTags.length;
 
     // Approach 1: Raw Export (current format)
     const rawExport = this.estimateRawExport(allTasks, allProjects, allTags);
@@ -405,7 +388,7 @@ class TokenAnalyzer {
     };
   }
 
-  estimateSmartSummary(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
+  estimateSmartSummary(tasks: Task[], projects: Project[], _tags: Tag[]): EstimateResult {
     // Smart summary focuses on key insights and patterns
     const summary = {
       system_summary: {
@@ -481,18 +464,18 @@ class TokenAnalyzer {
     };
   }
 
-  estimateQueryBased(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
+  estimateQueryBased(tasks: Task[], _projects: Project[], _tags: Tag[]): EstimateResult {
     // Query-based focuses on specific analysis needs
     const queryResults = {
       query: 'overdue_and_blocked_analysis',
       data: {
         overdue: tasks
-          .filter((t) => t.dueDate && new Date(t.dueDate) < new Date())
+          .filter((t): t is Task & { dueDate: string } => !!t.dueDate && new Date(t.dueDate) < new Date())
           .slice(0, 5)
           .map((t) => ({
             id: t.id,
             name: t.name,
-            days_overdue: Math.floor((new Date() - new Date(t.dueDate)) / (1000 * 60 * 60 * 24)),
+            days_overdue: Math.floor((new Date().getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24)),
           })),
         blocked: tasks
           .filter((t) => t.blocked)
@@ -595,12 +578,12 @@ class TokenAnalyzer {
     console.log('\n📝 Note Size Analysis:\n');
 
     // Analyze task notes
-    const tasksWithNotes = tasks.filter((t) => t.note && t.note.length > 0);
+    const tasksWithNotes = tasks.filter((t): t is Task & { note: string } => !!t.note && t.note.length > 0);
     const taskNoteChars = tasksWithNotes.reduce((sum, t) => sum + t.note.length, 0);
     const taskNoteTokens = Math.round(taskNoteChars / 3.5);
 
     // Analyze project notes
-    const projectsWithNotes = projects.filter((p) => p.note && p.note.length > 0);
+    const projectsWithNotes = projects.filter((p): p is Project & { note: string } => !!p.note && p.note.length > 0);
     const projectNoteChars = projectsWithNotes.reduce((sum, p) => sum + p.note.length, 0);
     const projectNoteTokens = Math.round(projectNoteChars / 3.5);
 
@@ -735,7 +718,7 @@ async function main() {
     await analyzer.startServer();
     await analyzer.analyzeDatabase();
   } catch (e) {
-    console.error('❌ Analysis failed:', e.message);
+    console.error('❌ Analysis failed:', e instanceof Error ? e.message : e);
   } finally {
     await analyzer.stop();
     console.log('\n✅ Analysis script completed. Exiting...');

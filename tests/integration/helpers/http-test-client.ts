@@ -162,7 +162,7 @@ export class HTTPTestClient {
       throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<{ status: string; version: string; sessions: number }>;
   }
 
   /**
@@ -177,7 +177,7 @@ export class HTTPTestClient {
       throw new Error(`Sessions check failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<{ activeSessions: number; sessionIds: string[] }>;
   }
 
   /**

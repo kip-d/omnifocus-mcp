@@ -4,7 +4,7 @@ import {
   createDateField,
   createClearDateField,
   dateSchemaHelpers,
-} from '../../../../src/tools/schemas/date-schemas';
+} from '../../../../src/tools/schemas/date-schemas.js';
 
 describe('Date Schemas', () => {
   describe('LocalDateTimeSchema', () => {

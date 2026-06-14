@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildUpdateTaskScript } from '../../src/contracts/ast/mutation-script-builder';
+import { buildUpdateTaskScript } from '../../src/contracts/ast/mutation-script-builder.js';
 
 describe('Task Search Limit Bug Fix (AST Builder)', () => {
   it('should avoid whose() and use O(1) Task.byIdentifier lookup', async () => {

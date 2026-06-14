@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { ReadSchema } from '../../../../src/tools/unified/schemas/read-schema';
-import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema';
-import { AnalyzeSchema } from '../../../../src/tools/unified/schemas/analyze-schema';
-import { parseWithNormalization } from '../../../../src/tools/normalization/normalize-input';
+import { ReadSchema } from '../../../../src/tools/unified/schemas/read-schema.js';
+import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
+import { AnalyzeSchema } from '../../../../src/tools/unified/schemas/analyze-schema.js';
+import { parseWithNormalization } from '../../../../src/tools/normalization/normalize-input.js';
 
 // OMN-122: normalize-then-strict input layer.
 // Invariants asserted across every leniency (the TDD contract from the ticket):

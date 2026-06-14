@@ -32,7 +32,7 @@ describe('startup timing line (integration)', () => {
     const stderr = await runServerOnce();
     const matches = stderr.match(/STARTUP COMPLETE .*\[stdio\]/g) ?? [];
     expect(matches).toHaveLength(1);
-    const line = matches[0];
+    const line = matches[0]!;
     const total = Number(line.match(/COMPLETE (\d+)ms/)![1]);
     const parts = [...line.matchAll(/(?:load|init|perms|warm|register|ready) (\d+)/g)].map((m) => Number(m[1]));
     expect(parts).toHaveLength(6);

@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createErrorResponseV2, createSuccessResponseV2 } from '../../../src/utils/response-format.js';
+import type { TaskSummary } from '../../../src/utils/response-format.js';
 
 describe('Error Response Format Tests', () => {
   it('creates V2 error responses with correct structure', () => {
@@ -13,10 +14,10 @@ describe('Error Response Format Tests', () => {
     );
 
     expect(error.success).toBe(false);
-    expect(error.error.code).toBe('TEST_ERROR');
-    expect(error.error.message).toBe('Test error message');
-    expect(error.error.suggestion).toBe('Try again');
-    expect(error.error.details).toEqual({ detail: 'extra info' });
+    expect(error.error!.code).toBe('TEST_ERROR');
+    expect(error.error!.message).toBe('Test error message');
+    expect(error.error!.suggestion).toBe('Try again');
+    expect(error.error!.details).toEqual({ detail: 'extra info' });
     expect(error.metadata.operation).toBe('test');
   });
 
@@ -24,13 +25,13 @@ describe('Error Response Format Tests', () => {
     const success = createSuccessResponseV2(
       'test-tool',
       { items: [{ id: 1, name: 'test' }] },
-      { total: 1 },
+      { total: 1, total_count: 1, returned_count: 1 } satisfies TaskSummary,
       { operation: 'list', from_cache: false },
     );
 
     expect(success.success).toBe(true);
     expect(success.data.items).toHaveLength(1);
-    expect(success.summary.total).toBe(1);
+    expect((success.summary as TaskSummary | undefined)!.total).toBe(1);
     expect(success.metadata.operation).toBe('list');
     expect(success.metadata.from_cache).toBe(false);
   });
@@ -39,10 +40,10 @@ describe('Error Response Format Tests', () => {
     const error = createErrorResponseV2('test-tool', 'SIMPLE_ERROR', 'Simple error');
 
     expect(error.success).toBe(false);
-    expect(error.error.code).toBe('SIMPLE_ERROR');
-    expect(error.error.message).toBe('Simple error');
-    expect(error.error.suggestion).toBeUndefined();
-    expect(error.error.details).toBeUndefined();
+    expect(error.error!.code).toBe('SIMPLE_ERROR');
+    expect(error.error!.message).toBe('Simple error');
+    expect(error.error!.suggestion).toBeUndefined();
+    expect(error.error!.details).toBeUndefined();
     expect(error.metadata).toBeDefined();
   });
 });

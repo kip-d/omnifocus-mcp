@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { BaseTool } from '../../../../src/tools/base';
-import { CacheManager } from '../../../../src/cache/CacheManager';
+import { BaseTool } from '../../../../src/tools/base.js';
+import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
-import { ReadSchema } from '../../../../src/tools/unified/schemas/read-schema';
+import { ReadSchema } from '../../../../src/tools/unified/schemas/read-schema.js';
 
 vi.mock('../../../../src/omnifocus/OmniAutomation');
 vi.mock('../../../../src/cache/CacheManager');

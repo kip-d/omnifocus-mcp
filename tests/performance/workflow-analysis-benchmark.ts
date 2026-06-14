@@ -99,7 +99,6 @@ function analyzePerformanceCharacteristics() {
     }));
 
   const projectStats: any = {};
-  const insights: string[] = [];
 
   for (const task of tasks) {
     // Simulate core operations
@@ -119,8 +118,7 @@ function analyzePerformanceCharacteristics() {
 
     // Simulate deferral analysis
     if (task.deferDate && task.deferDate > new Date()) {
-      const deferDays = Math.floor((task.deferDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      const isStrategic = deferDays <= 90;
+      Math.floor((task.deferDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     }
   }
 

@@ -49,7 +49,7 @@ function startMCPServer(): Promise<void> {
       }
     });
 
-    mcpProcess.stderr.on('data', (data: Buffer) => {
+    mcpProcess.stderr.on('data', (_data: Buffer) => {
       // Ignore stderr (logs)
     });
 

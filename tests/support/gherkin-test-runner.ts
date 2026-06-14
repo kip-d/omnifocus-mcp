@@ -6,8 +6,6 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface, Interface } from 'readline';
-import { readFileSync } from 'fs';
-import path from 'path';
 
 interface MCPRequest {
   jsonrpc: '2.0';
@@ -31,7 +29,7 @@ interface GherkinStep {
   type: 'Given' | 'When' | 'Then' | 'And';
   text: string;
   data?: {
-    rows: Array<[string, string]>;
+    rows: Array<[string, ...string[]]>;
   };
 }
 
@@ -76,12 +74,13 @@ class GherkinTestRunner {
   private messageId: number = 0;
   private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
   private context: TestContext = {}; // Shared context between steps
-  private results: TestResults = {
+  private _results: TestResults = {
     scenarios: [],
     passed: 0,
     failed: 0,
     startTime: Date.now(),
   };
+  get results(): TestResults { return this._results; }
 
   async start(): Promise<void> {
     console.log('🥒 Gherkin Test Runner for OmniFocus MCP');
@@ -175,16 +174,16 @@ class GherkinTestRunner {
 
       result.duration = Date.now() - startTime;
       console.log(`✅ Scenario passed (${result.duration}ms)\n`);
-      this.results.passed++;
+      this._results.passed++;
     } catch (error) {
       result.passed = false;
       result.error = (error as Error).message;
       result.duration = Date.now() - startTime;
       console.error(`❌ Scenario failed: ${(error as Error).message}\n`);
-      this.results.failed++;
+      this._results.failed++;
     }
 
-    this.results.scenarios.push(result);
+    this._results.scenarios.push(result);
     return result;
   }
 
@@ -388,7 +387,7 @@ class GherkinTestRunner {
     }
   }
 
-  parseDataTable(data: { rows: Array<[string, string]> }): any {
+  parseDataTable(data: { rows: Array<[string, ...string[]]> }): any {
     const result: any = {};
 
     if (data.rows) {
@@ -447,19 +446,19 @@ class GherkinTestRunner {
   }
 
   printSummary(): void {
-    const duration = Date.now() - this.results.startTime;
+    const duration = Date.now() - this._results.startTime;
 
     console.log('\n========================================');
     console.log('Test Summary');
     console.log('========================================');
-    console.log(`Scenarios: ${this.results.passed + this.results.failed}`);
-    console.log(`Passed: ${this.results.passed} ✅`);
-    console.log(`Failed: ${this.results.failed} ❌`);
+    console.log(`Scenarios: ${this._results.passed + this._results.failed}`);
+    console.log(`Passed: ${this._results.passed} ✅`);
+    console.log(`Failed: ${this._results.failed} ❌`);
     console.log(`Duration: ${(duration / 1000).toFixed(2)}s`);
 
-    if (this.results.failed > 0) {
+    if (this._results.failed > 0) {
       console.log('\nFailed Scenarios:');
-      this.results.scenarios
+      this._results.scenarios
         .filter((s) => !s.passed)
         .forEach((s) => {
           console.log(`  ❌ ${s.name}`);

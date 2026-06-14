@@ -207,7 +207,7 @@ async function runTests() {
             const changes = data.data.project.changes || [];
             console.log(`   Changes: ${changes.join(', ')}`);
 
-            if (!changes.some((change) => change.includes('sequential'))) {
+            if (!changes.some((change: string) => change.includes('sequential'))) {
               console.error('   ❌ Sequential change not reported!');
               exitCode = 1;
             }

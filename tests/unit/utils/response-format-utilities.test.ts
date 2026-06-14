@@ -8,7 +8,7 @@ import {
   OperationTimerV2,
   generateTaskSummary,
   generateProjectSummary,
-} from '../../../src/utils/response-format';
+} from '../../../src/utils/response-format.js';
 
 describe('Response Format Utilities', () => {
   describe('OperationTimerV2', () => {
@@ -158,8 +158,8 @@ describe('Response Format Utilities', () => {
         timer.toMetadata(),
       );
 
-      expect(response.error.details).toBeUndefined();
-      expect(response.error.suggestion).toBeUndefined();
+      expect(response.error!.details).toBeUndefined();
+      expect(response.error!.suggestion).toBeUndefined();
     });
 
     it('should include recovery suggestions', () => {
@@ -177,8 +177,8 @@ describe('Response Format Utilities', () => {
         timer.toMetadata(),
       );
 
-      expect(response.error.details.recovery).toEqual(details.recovery);
-      expect(response.error.suggestion).toBe('Try one of the recovery options');
+      expect((response.error!.details as Record<string, unknown>).recovery).toEqual(details.recovery);
+      expect(response.error!.suggestion).toBe('Try one of the recovery options');
     });
 
     it('should handle Error objects in details', () => {
@@ -194,7 +194,7 @@ describe('Response Format Utilities', () => {
         timer.toMetadata(),
       );
 
-      expect(response.error.details.originalError).toBe(originalError);
+      expect((response.error!.details as Record<string, unknown>).originalError).toBe(originalError);
     });
   });
 
@@ -262,7 +262,7 @@ describe('Response Format Utilities', () => {
 
       expect(response.success).toBe(true);
       expect(response.data.tasks).toEqual(tasks);
-      expect(response.data.preview).toBeUndefined();
+      expect((response.data as Record<string, unknown>).preview).toBeUndefined();
       expect(response.summary).toBeDefined();
       expect((response.summary as any).total_count).toBe(2);
       expect((response.summary as any).returned_count).toBe(2);
@@ -642,9 +642,9 @@ describe('Response Format Utilities', () => {
       expect(errorResponse.success).toBe(false);
       expect(errorResponse.data).toEqual({});
       expect(errorResponse.error).toBeDefined();
-      expect(errorResponse.error.code).toBe('ERROR_CODE');
-      expect(errorResponse.error.message).toBe('Error message');
-      expect(errorResponse.error.suggestion).toBe('Try again');
+      expect(errorResponse.error!.code).toBe('ERROR_CODE');
+      expect(errorResponse.error!.message).toBe('Error message');
+      expect(errorResponse.error!.suggestion).toBe('Try again');
     });
 
     it('should have consistent metadata structure', () => {

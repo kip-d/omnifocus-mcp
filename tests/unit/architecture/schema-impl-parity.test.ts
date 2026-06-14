@@ -10,7 +10,7 @@
 // introduce a new declaration↔implementation pairing.
 
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL as NodeURL } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -635,7 +635,7 @@ describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
       it('every Zod discriminator value is advertised somewhere in inputSchema', () => {
         if (discriminatorSet.size === 0) return; // tool has no discriminatedUnion
         const advertised = new Set(jsonEnums.flatMap((e) => e.values));
-        const allow = new Set(EXPECTED_FLATTENINGS[name]?.discriminatorValuesNotAdvertised ?? []);
+        const allow = new Set<unknown>(EXPECTED_FLATTENINGS[name]?.discriminatorValuesNotAdvertised ?? []);
         const hidden = [...discriminatorSet].filter((v) => !advertised.has(v) && !allow.has(v));
         expect(
           hidden,
@@ -671,13 +671,9 @@ const TASK_CONTEXT_ONLY_KEYS = ['effectivePlannedDate', 'reason', 'daysOverdue']
 describe('Reverse parity: generateFieldProjection ↔ TaskFieldEnum (OMN-61)', () => {
   it('emits no undeclared top-level task projection key', () => {
     const declared = new Set<string>(TaskFieldEnum.options);
-    const { script } = buildFilteredTasksScript(
-      {},
-      {
-        fields: [...TaskFieldEnum.options],
-        performanceMode: 'lite',
-      },
-    );
+    // performanceMode is ProjectScriptOptions-only; the task builder has no stats block
+    // and ignores it, so omitting it here produces identical output.
+    const { script } = buildFilteredTasksScript({}, { fields: [...TaskFieldEnum.options] });
     const emitted = [...script.matchAll(/^[ \t]*([A-Za-z]\w*):[ \t]*task\./gm)].map((m) => m[1]);
     const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !TASK_CONTEXT_ONLY_KEYS.includes(k));
     expect(undeclared, `undeclared task projection key(s): ${undeclared.join(', ')}`).toEqual([]);
@@ -758,7 +754,7 @@ const mutationBuilderSource = [
   '../../../src/contracts/ast/mutation-script-builder.ts',
   '../../../src/contracts/ast/mutation/defs.ts',
 ]
-  .map((p) => stripComments(readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8')))
+  .map((p) => stripComments(readFileSync(fileURLToPath(new NodeURL(p, import.meta.url)), 'utf8')))
   .join('\n');
 const builderRefs = new Set(
   [...mutationBuilderSource.matchAll(/\b(?:data|changes|projectData)\.([A-Za-z]\w*)/g)].map((m) => m[1]),

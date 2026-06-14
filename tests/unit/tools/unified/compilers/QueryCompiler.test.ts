@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { QueryCompiler } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
+import { QueryCompiler, type CompiledQuery } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
+
+type CompiledTasks = Extract<CompiledQuery, { type: 'tasks' }>;
+type CompiledProjects = Extract<CompiledQuery, { type: 'projects' }>;
+type CompiledExport = Extract<CompiledQuery, { type: 'export' }>;
+type CompiledTags = Extract<CompiledQuery, { type: 'tags' }>;
 
 describe('QueryCompiler', () => {
   const compiler = new QueryCompiler();
@@ -20,7 +25,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       expect(compiled.type).toBe('tasks');
       expect(compiled.mode).toBe('all');
@@ -41,7 +46,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       expect(compiled.fastSearch).toBe(true);
       // Must also reach the filter object so the AST search builder emits name-only.
@@ -57,7 +62,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       expect(compiled.filters.fastSearch).toBeUndefined();
     });
@@ -70,7 +75,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       expect(compiled.filters.parentTaskId).toBe('abc123');
     });
@@ -84,7 +89,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       expect(compiled.type).toBe('tasks');
       expect(compiled.mode).toBe('smart_suggest');
@@ -101,7 +106,7 @@ describe('QueryCompiler', () => {
         },
       };
 
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
 
       // Tags are transformed: { any: [...] } -> tags: [...], tagsOperator: 'OR'
       expect(compiled.filters.tags).toEqual(['work', 'urgent']);
@@ -439,7 +444,7 @@ describe('QueryCompiler', () => {
           },
           limit: 10,
         },
-      });
+      }) as CompiledTasks;
 
       expect(result.filters.completed).toBe(false);
       expect(result.filters.tags).toEqual(['urgent', 'home']);
@@ -470,7 +475,7 @@ describe('QueryCompiler', () => {
       const input: ReadInput = {
         query: { type: 'tasks', mode: 'flagged', countOnly: true },
       };
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTasks;
       expect(compiled.type).toBe('tasks');
       expect(compiled.mode).toBe('flagged');
       expect(compiled.countOnly).toBe(true);
@@ -480,18 +485,18 @@ describe('QueryCompiler', () => {
       const input: ReadInput = {
         query: { type: 'projects', fields: ['id', 'name', 'status'] },
       };
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledProjects;
       expect(compiled.type).toBe('projects');
       expect(compiled.fields).toEqual(['id', 'name', 'status']);
-      expect(compiled.mode).toBeUndefined();
-      expect(compiled.countOnly).toBeUndefined();
+      expect((compiled as unknown as Record<string, unknown>).mode).toBeUndefined();
+      expect((compiled as unknown as Record<string, unknown>).countOnly).toBeUndefined();
     });
 
     it('should compile export query with export params', () => {
       const input: ReadInput = {
         query: { type: 'export', exportType: 'tasks', format: 'json' },
       };
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledExport;
       expect(compiled.type).toBe('export');
       expect(compiled.exportType).toBe('tasks');
       expect(compiled.format).toBe('json');
@@ -501,9 +506,9 @@ describe('QueryCompiler', () => {
       const input: ReadInput = {
         query: { type: 'tags' },
       };
-      const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input) as CompiledTags;
       expect(compiled.type).toBe('tags');
-      expect(compiled.mode).toBeUndefined();
+      expect((compiled as unknown as Record<string, unknown>).mode).toBeUndefined();
     });
   });
 
@@ -541,7 +546,7 @@ describe('QueryCompiler', () => {
           type: 'tasks',
           filters: { tags: { all: ['work'] } },
         },
-      });
+      }) as CompiledTasks;
 
       // tags.all already sets tagsOperator to AND in transformFilters,
       // but normalizeFilter also defaults it — result should be AND
@@ -555,7 +560,7 @@ describe('QueryCompiler', () => {
           type: 'tasks',
           filters: { text: { contains: 'hello' } },
         },
-      });
+      }) as CompiledTasks;
 
       // transformFilters sets textOperator to CONTAINS, normalization confirms it
       expect(result.filters.textOperator).toBe('CONTAINS');
@@ -920,27 +925,27 @@ describe('QueryCompiler', () => {
             outputDirectory: './test-export-out',
             includeCompleted: false,
           },
-        });
+        }) as CompiledExport;
         expect(compiled.type).toBe('export');
         expect(compiled.exportType).toBe('tasks');
         expect(compiled.format).toBe('csv');
         expect(compiled.outputDirectory).toBe('./test-export-out');
         expect(compiled.includeCompleted).toBe(false);
         // mode is task-only (OMN-74); export queries get undefined
-        expect(compiled.mode).toBeUndefined();
+        expect((compiled as unknown as Record<string, unknown>).mode).toBeUndefined();
       });
 
       it('echoes exportFields array', () => {
         const compiled = compiler.compile({
           query: { type: 'export', exportType: 'tasks', exportFields: ['id', 'name', 'dueDate'] },
-        });
+        }) as CompiledExport;
         expect(compiled.exportFields).toEqual(['id', 'name', 'dueDate']);
       });
 
       it('echoes includeStats for project export', () => {
         const compiled = compiler.compile({
           query: { type: 'export', exportType: 'projects', includeStats: true },
-        });
+        }) as CompiledExport;
         expect(compiled.includeStats).toBe(true);
       });
     });
@@ -1183,17 +1188,17 @@ describe('QueryCompiler', () => {
     });
 
     it('control: status "active" compiles without throwing (completed:false)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'active' } } } as never);
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'active' } } } as never) as CompiledTasks;
       expect(compiled.filters.completed).toBe(false);
     });
 
     it('control: status "completed" compiles without throwing (completed:true)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'completed' } } } as never);
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'completed' } } } as never) as CompiledTasks;
       expect(compiled.filters.completed).toBe(true);
     });
 
     it('control: status "dropped" compiles without throwing (dropped:true)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'dropped' } } } as never);
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'dropped' } } } as never) as CompiledTasks;
       expect(compiled.filters.dropped).toBe(true);
     });
 

@@ -15,7 +15,6 @@ interface WarmingResult {
 }
 
 let mcpProcess: any = null;
-let requestId = 1;
 const warmingResults: WarmingResult[] = [];
 let actualTotalTime: number | null = null;
 

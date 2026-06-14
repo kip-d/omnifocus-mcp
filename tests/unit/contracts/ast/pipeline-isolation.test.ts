@@ -200,12 +200,12 @@ describe('FilterPipeline', () => {
   });
 
   it('auto-builds and auto-validates when calling .emit()', () => {
-    const result = FilterPipeline.from({ flagged: true }).emit('omnijs');
+    const result = FilterPipeline.from({ flagged: true }).emit();
     expect(result.predicate).toBe('task.flagged === true');
   });
 
   it('emits true for empty filter', () => {
-    const result = FilterPipeline.from({}).emit('omnijs');
+    const result = FilterPipeline.from({}).emit();
     expect(result.predicate).toBe('true');
   });
 
@@ -217,7 +217,7 @@ describe('FilterPipeline', () => {
       tagsOperator: 'OR',
       dueBefore: '2025-12-31',
     };
-    const result = FilterPipeline.from(filter).emit('omnijs');
+    const result = FilterPipeline.from(filter).emit();
 
     expect(result.predicate).toContain('task.completed === false');
     expect(result.predicate).toContain('task.flagged === true');

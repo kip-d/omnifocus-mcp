@@ -3,7 +3,7 @@ import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAna
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
-import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
+import { createScriptSuccess } from '../../../../src/omnifocus/script-result-types.js';
 
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
