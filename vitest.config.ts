@@ -3,6 +3,12 @@ import { defineConfig } from 'vitest/config';
 // Detect if running only unit tests (explicit path or TEST_UNIT_ONLY env var)
 const isUnitTestOnly = process.argv.some((arg) => arg.includes('tests/unit')) || process.env.TEST_UNIT_ONLY === '1';
 
+// OMN-182: the suite-timing reporter records a row tagged suite:'integration', so it must attach
+// ONLY to integration runs — NOT smoke/performance/llm runs (which would pollute the integration
+// baseline with tiny, mislabeled records; test:pre-commit runs smoke on every commit). Gate on the
+// integration path explicitly rather than the broad !isUnitTestOnly.
+const isIntegrationRun = process.argv.some((arg) => arg.includes('tests/integration'));
+
 // When running ALL tests together (npm test), we need timeouts that work for integration/smoke tests
 // Only use short timeouts when explicitly running unit tests only
 const useShortTimeouts = isUnitTestOnly;
@@ -15,10 +21,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // OMN-182: auto-record one per-machine suite-timing row on every NON-unit run (integration,
-    // smoke, full `npm test`). Unit-only runs skip it — they're fast feedback, not a baseline.
-    // The reporter writes to ~/.local/state (not a tracked file), so it can't dirty a worktree.
-    reporters: isUnitTestOnly ? ['default'] : ['default', './tests/support/suite-timing-reporter.ts'],
+    // OMN-182: auto-record one per-machine suite-timing row on each INTEGRATION run (incl. the
+    // integration half of a full `npm test`, whose argv contains tests/integration). Other runs —
+    // unit, smoke, performance, llm — skip it: they aren't the integration baseline and a
+    // mislabeled record would skew it. The reporter writes to ~/.local/state, never a tracked file.
+    reporters: isIntegrationRun ? ['default', './tests/support/suite-timing-reporter.ts'] : ['default'],
     // setup-worker-guard (OMN-143) runs in every worker. It arms wherever an
     // IPC channel exists — which under vitest 3's default forks pool includes
     // unit workers (deliberate: it only fires on a ppid TRANSITION to 1, i.e.

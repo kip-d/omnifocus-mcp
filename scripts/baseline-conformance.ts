@@ -2,9 +2,10 @@
 /**
  * Active suite-timing for the CONFORMANCE probe (OMN-182).
  *
- * Runs the conformance probe with timing instrumentation, records one row to
- * docs/dev/SUITE_TIMING_LOG.md from the probe's artifact, then prints a NON-BLOCKING drift
- * warning (baseline:check). Removes the manual `--conformance-json` bookkeeping step.
+ * Runs the conformance probe with timing instrumentation, appends one conformance record to the
+ * per-machine JSONL log ($XDG_STATE_HOME/of-mcp-suite-timing/runs.jsonl) from the probe's artifact,
+ * then prints a NON-BLOCKING drift warning (baseline:check). Removes the manual `--conformance-json`
+ * bookkeeping step.
  *
  * Default models mirror the recorded baselines (llama3.1:8b, qwen2.5:7b); override by passing
  * model names. The probe owns the Ollama lifecycle (auto start/stop, unload) — OMN-163.
@@ -69,4 +70,6 @@ if (check.status === 1) {
   process.stderr.write('baseline:conformance: drift detected above (warning only — not failing the run).\n');
 }
 
-process.exit(probe.status ?? 0);
+// `?? 1`: spawnSync sets status=null when the probe was killed by a signal — treat that as failure
+// (we recorded a possibly-partial run), not success. Matches the no-artifact guard above.
+process.exit(probe.status ?? 1);

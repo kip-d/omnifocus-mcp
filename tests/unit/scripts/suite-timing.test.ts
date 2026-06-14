@@ -116,6 +116,14 @@ describe('checkRecordDeviation (newest vs rolling median, per suite)', () => {
     expect(checkRecordDeviation(records, { thresholdPct: 25 }).ok).toBe(true);
   });
 
+  it('flags a faster outlier too (signed delta, abs threshold)', () => {
+    // A suite that suddenly runs much faster (e.g. tests silently dropped) is also a regression.
+    const records = [...baseline([1_290_000, 1_300_000, 1_280_000]), intRecord({ wallMs: 700_000 })];
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
+    expect(res.ok).toBe(false);
+    expect(res.findings.find((f) => f.metric === 'integration_wall_ms')?.deltaPct).toBeLessThan(0);
+  });
+
   it('only baselines against prior runs of the SAME suite', () => {
     const conf = buildConformanceRecord({
       build: 'x',

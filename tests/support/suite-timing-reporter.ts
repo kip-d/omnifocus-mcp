@@ -48,7 +48,10 @@ function gitShort(): string {
 }
 
 export default class SuiteTimingReporter implements Reporter {
-  private startMs = 0;
+  // Stamp at construction so a missed onInit() can't yield wallMs ≈ Date.now() (a ~56,000-year
+  // wall that would poison the log as a permanent fastest-ever outlier). onInit refines it to the
+  // run's true start when it fires.
+  private startMs = Date.now();
 
   onInit(): void {
     this.startMs = Date.now();
