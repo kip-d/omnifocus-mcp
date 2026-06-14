@@ -19,6 +19,7 @@ import {
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 import { normalizeFilter } from '../../../../src/contracts/filters.js';
+import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 describe('buildFilteredTasksScript', () => {
   describe('basic script generation', () => {
@@ -1142,7 +1143,9 @@ describe('note truncation in project field projection', () => {
       },
     );
 
-    expect(result.script).toContain('note: project.note || ""');
+    // OMN-129: buildFilteredProjectsScript crosses the JSON.stringify boundary, so
+    // assert on the recovered (decoded) program where the double quotes are unescaped.
+    expect(recoverInnerProgram(result.script)).toContain('note: project.note || ""');
   });
 
   it('emits a reviewInterval projection when the reviewInterval field is requested (OMN-60)', () => {

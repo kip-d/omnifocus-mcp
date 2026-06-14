@@ -16,7 +16,6 @@
 import type { TagQueryOptions, TagSortBy } from '../tag-options.js';
 import type { TextOperator } from '../filters.js';
 import type { GeneratedScript } from './script-builder.js';
-import { escapeTemplateString } from './bridge-escape.js';
 
 // =============================================================================
 // MAIN TAG SCRIPT BUILDER
@@ -82,14 +81,7 @@ function buildTagNamesScript(options: TagScriptOptions = {}): GeneratedScript {
   const limitClause = limit ? `const limitCount = ${limit};` : '';
   const limitCheck = limit ? 'if (count >= limitCount) return;' : '';
 
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const startTime = Date.now();
-
-    const omniJsScript = \`
+  const namesOmniJsSource = `
       (() => {
         const tagNames = [];
         ${limitClause}
@@ -109,9 +101,17 @@ function buildTagNamesScript(options: TagScriptOptions = {}): GeneratedScript {
           total: tagNames.length
         });
       })()
-    \`;
+    `;
 
-    const resultJson = app.evaluateJavascript(omniJsScript);
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const startTime = Date.now();
+
+    // OMN-129: program crosses the JXA→OmniJS boundary as a JSON string literal.
+    const resultJson = app.evaluateJavascript(${JSON.stringify(namesOmniJsSource)});
     const result = JSON.parse(resultJson);
 
     // Sort by name (only option for names mode)
@@ -166,10 +166,11 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
   const namePredicate = tagNamePredicate(name, nameOperator);
   const hasFilter = !!name;
 
-  // OMN-170 S2: build the inner OmniJS as a plain source string, then wrap it via
-  // escapeTemplateString — the established nested-backtick safety mechanism. The
-  // name term lands inside this source (via namePredicate's JSON.stringify); the
-  // whole-source escape neutralizes any backtick/${ in the term (OMN-111/113).
+  // OMN-170 S2 / OMN-129: build the inner OmniJS as a plain source string, then
+  // hand it across the JXA→OmniJS boundary as a single JSON.stringify'd string
+  // literal (no nested backtick). The name term lands inside this source via
+  // namePredicate's JSON.stringify; JSON.stringify at the boundary neutralizes any
+  // backtick/${ in the term — killing the OMN-111/113 class outright.
   const tagsOmniJsSource = `
       (() => {
         const tags = [];
@@ -208,9 +209,7 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
   try {
     const startTime = Date.now();
 
-    const omniJsScript = \`${escapeTemplateString(tagsOmniJsSource)}\`;
-
-    const resultJson = app.evaluateJavascript(omniJsScript);
+    const resultJson = app.evaluateJavascript(${JSON.stringify(tagsOmniJsSource)});
     const result = JSON.parse(resultJson);
 
     // Sort by name
@@ -269,18 +268,7 @@ function buildFullTagsScript(options: FullTagScriptOptions = {}): GeneratedScrip
 
   const limitClause = limit ? `const limitCount = ${limit};` : '';
 
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const startTime = Date.now();
-    const includeUsageStats = ${includeUsageStats};
-    const includeEmpty = ${includeEmpty};
-    const sortBy = '${sortBy}';
-    ${limitClause}
-
-    const omniJsScript = \`
+  const fullOmniJsSource = `
       (() => {
         const tagDataMap = {};
         const tagUsageByName = {};
@@ -370,9 +358,21 @@ function buildFullTagsScript(options: FullTagScriptOptions = {}): GeneratedScrip
           total: tagsArray.length
         });
       })()
-    \`;
+    `;
 
-    const resultJson = app.evaluateJavascript(omniJsScript);
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const startTime = Date.now();
+    const includeUsageStats = ${includeUsageStats};
+    const includeEmpty = ${includeEmpty};
+    const sortBy = '${sortBy}';
+    ${limitClause}
+
+    // OMN-129: program crosses the JXA→OmniJS boundary as a JSON string literal.
+    const resultJson = app.evaluateJavascript(${JSON.stringify(fullOmniJsSource)});
     const result = JSON.parse(resultJson);
 
     // Filter empty tags if requested (only meaningful with usage stats)
@@ -443,15 +443,7 @@ function buildFullTagsScript(options: FullTagScriptOptions = {}): GeneratedScrip
  * Build script to get active tags only (tags with at least one incomplete task)
  */
 export function buildActiveTagsScript(): GeneratedScript {
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const startTime = Date.now();
-
-    // Pure OmniJS bridge to get active tags
-    const omniJsScript = \`
+  const activeOmniJsSource = `
       (() => {
         const tagUsage = {};
 
@@ -474,9 +466,18 @@ export function buildActiveTagsScript(): GeneratedScript {
           total: activeTags.length
         });
       })()
-    \`;
+    `;
 
-    const resultJson = app.evaluateJavascript(omniJsScript);
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const startTime = Date.now();
+
+    // Pure OmniJS bridge to get active tags (OMN-129: program crosses the
+    // JXA→OmniJS boundary as a JSON string literal, not a nested backtick).
+    const resultJson = app.evaluateJavascript(${JSON.stringify(activeOmniJsSource)});
     const result = JSON.parse(resultJson);
 
     // Sort alphabetically

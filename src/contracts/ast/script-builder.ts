@@ -25,7 +25,7 @@ import {
   describeFolderFilter,
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
-import { escapeTemplateString, escapeTemplateLiteralHazards, sanitizeForScriptComment } from './bridge-escape.js';
+import { sanitizeForScriptComment } from './bridge-escape.js';
 
 // =============================================================================
 // TYPES
@@ -1375,9 +1375,7 @@ export function buildFilteredProjectsScript(
   const app = Application('OmniFocus');
 
   try {
-    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
-
-    const resultJson = app.evaluateJavascript(omniJsScript);
+    const resultJson = app.evaluateJavascript(${JSON.stringify(omniJsSource)});
     const result = JSON.parse(resultJson);
 
     return JSON.stringify({
@@ -1390,7 +1388,7 @@ export function buildFilteredProjectsScript(
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',
-        filter_description: ${escapeTemplateLiteralHazards(JSON.stringify(filterDescription))}
+        filter_description: ${JSON.stringify(filterDescription)}
       }
     });
 
@@ -1462,9 +1460,7 @@ export function buildProjectByIdScript(projectId: string, fields: string[] = [])
   const app = Application('OmniFocus');
 
   try {
-    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
-
-    const resultJson = app.evaluateJavascript(omniJsScript);
+    const resultJson = app.evaluateJavascript(${JSON.stringify(omniJsSource)});
     return resultJson;
 
   } catch (error) {
@@ -1661,9 +1657,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
     const startTime = Date.now();
 
     // Use OmniJS bridge for fast bulk property access
-    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
-
-    const bridgeResult = app.evaluateJavascript(omniJsScript);
+    const bridgeResult = app.evaluateJavascript(${JSON.stringify(omniJsSource)});
     const parsed = JSON.parse(bridgeResult);
     const tasks = parsed.tasks;
     const tasksAdded = parsed.tasksCollected;
@@ -1768,7 +1762,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
         debug: {
           totalTasksProcessed: parsed.totalProcessed,
           maxTasksAllowed: maxTasks,
-          filterDescription: ${escapeTemplateLiteralHazards(JSON.stringify(filterDescription))},
+          filterDescription: ${JSON.stringify(filterDescription)},
           fieldsRequested: allFields,
           optimizationUsed: 'AST filter + OmniJS bridge'
         },
@@ -1839,8 +1833,8 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
 
   const isEmpty = isEmptyFolderFilter(filter);
   const filterDescription = describeFolderFilter(filter);
-  // OMN-170 S2: generated inside the OmniJS body; value terms injected via
-  // JSON.stringify and the whole source escaped by escapeTemplateString below.
+  // OMN-170 S2 / OMN-129: generated inside the OmniJS body; value terms injected via
+  // JSON.stringify, and the whole source crosses the boundary via JSON.stringify below.
   const folderPredicate = generateFolderFilterCode(filter);
 
   const omniJsSource = `
@@ -1989,9 +1983,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
   const app = Application('OmniFocus');
 
   try {
-    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
-
-    const result = app.evaluateJavascript(omniJsScript);
+    const result = app.evaluateJavascript(${JSON.stringify(omniJsSource)});
     return result;
 
   } catch (error) {
@@ -2132,8 +2124,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   const app = Application('OmniFocus');
 
   try {
-    const omniJsScript = \`${escapeTemplateString(omniJsSource)}\`;
-    return app.evaluateJavascript(omniJsScript);
+    return app.evaluateJavascript(${JSON.stringify(omniJsSource)});
   } catch (e) {
     return JSON.stringify({ error: true, message: e.message || String(e), context: 'task_count_omnijs' });
   }

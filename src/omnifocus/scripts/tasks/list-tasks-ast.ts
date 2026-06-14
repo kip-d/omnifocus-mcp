@@ -24,7 +24,6 @@ import {
   buildInboxScript,
   buildTaskByIdScript,
 } from '../../../contracts/ast/script-builder.js';
-import { escapeTemplateString } from '../../../contracts/ast/bridge-escape.js';
 
 /**
  * Build a V4 task query script using AST-generated filters
@@ -85,9 +84,10 @@ export function buildListTasksScriptV4(params: {
   const app = Application('OmniFocus');
 
   try {
-    // Execute AST-generated OmniJS script
-    const omniJsScript = \`${escapeTemplateString(generatedScript.script)}\`;
-    const resultJson = app.evaluateJavascript(omniJsScript);
+    // Execute AST-generated OmniJS script (OMN-129: the program crosses the
+    // JXA→OmniJS boundary as a single JSON.stringify'd string literal — no nested
+    // backtick, no hand-rolled escaper — which kills the OMN-111/113 class outright).
+    const resultJson = app.evaluateJavascript(${JSON.stringify(generatedScript.script)});
     const result = JSON.parse(resultJson);
 
     // Return with metadata
