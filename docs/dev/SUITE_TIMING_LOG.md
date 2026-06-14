@@ -10,12 +10,31 @@ This is the **time-series**. For the curated, per-test breakdown snapshot see
 
 ## How to record a row
 
+**Active path (OMN-182) — run the suite, the row records itself, drift is warned non-blocking:**
+
+```bash
+# Integration: runs the suite with the timing reporter → records a row → prints a drift warning.
+npm run baseline:integration                      # run in the background (~15 min vs live OmniFocus)
+
+# Conformance: runs the probe (default models llama3.1:8b, qwen2.5:7b) → records → warns.
+npm run baseline:conformance
+npm run baseline:conformance -- qwen2.5:7b --notes "post-merge"
+```
+
+These remove the manual `--integration-wall <s> --integration-tests <n>` / `--conformance-json` bookkeeping that left
+this log stagnant. The bare `npm run test:integration` / `npm run conformance` stay **pure** — they never write a row,
+so a verifying session's run does not dirty this file. Do **not** run the two baseline targets concurrently (OMN-178:
+parallel runs time out the probe's MCP init).
+
+**Manual path (escape hatch):**
+
 ```bash
 # Conformance: the probe writes a timing artifact when PROBE_TIMING_JSON is set.
 PROBE_TIMING_JSON=/tmp/conf.json npm run conformance -- llama3.1:8b qwen2.5:7b
 npm run baseline:record -- --conformance-json /tmp/conf.json --notes "post-merge"
 
-# Integration: capture the reported wall (seconds) and test count.
+# Integration: from the reporter artifact, or capture wall (seconds) + test count by hand.
+npm run baseline:record -- --integration-json /tmp/int.json
 npm run baseline:record -- --integration-wall 529 --integration-tests 159
 
 # Both halves of one run, or --dry-run to preview the row without writing.

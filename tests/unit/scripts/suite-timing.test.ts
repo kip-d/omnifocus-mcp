@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ARTIFACT_SCHEMA,
+  INTEGRATION_ARTIFACT_SCHEMA,
   TABLE_HEADER,
   TABLE_SEPARATOR,
   formatConformanceCell,
@@ -9,9 +10,11 @@ import {
   insertRow,
   parseRows,
   conformanceFromArtifact,
+  integrationFromArtifact,
   checkDeviation,
   type RunRow,
   type ConformanceArtifact,
+  type IntegrationArtifact,
 } from '../../../scripts/lib/suite-timing.js';
 
 const emptyLog = `# Suite Timing Log\n\n${TABLE_HEADER}\n${TABLE_SEPARATOR}\n`;
@@ -222,5 +225,43 @@ describe('checkDeviation', () => {
     const res = checkDeviation(rows, { thresholdPct: 25 });
     expect(res.ok).toBe(true);
     expect(res.findings).toEqual([]);
+  });
+});
+
+describe('integrationFromArtifact', () => {
+  function artifact(overrides: Partial<IntegrationArtifact> = {}): IntegrationArtifact {
+    return { schema: INTEGRATION_ARTIFACT_SCHEMA, wallMs: 1291_000, totalTests: 166, ...overrides };
+  }
+
+  it('maps wall milliseconds to whole seconds and passes the test count through', () => {
+    const mapped = integrationFromArtifact(artifact());
+    expect(mapped).toEqual({ integrationWallS: 1291, integrationTests: 166 });
+  });
+
+  it('rounds sub-second wall to the nearest whole second (rows are integer seconds)', () => {
+    // 529_600ms → 530s, not 529 — the log column carries whole-second walls.
+    const mapped = integrationFromArtifact(artifact({ wallMs: 529_600, totalTests: 159 }));
+    expect(mapped).toEqual({ integrationWallS: 530, integrationTests: 159 });
+  });
+
+  it('produces a row half that renders and round-trips through the table', () => {
+    const mapped = integrationFromArtifact(artifact({ wallMs: 642_000, totalTests: 166 }));
+    const r: RunRow = {
+      date: '2026-06-14',
+      build: 'deadbee',
+      integrationWallS: mapped.integrationWallS,
+      integrationTests: mapped.integrationTests,
+      conformance: [],
+      conformanceTotalS: null,
+      notes: 'baseline:integration',
+    };
+    const parsed = parseRows(insertRow(emptyLog, r));
+    expect(parsed[0].integrationWallS).toBe(642);
+    expect(parsed[0].integrationTests).toBe(166);
+  });
+
+  it('exposes a stable, distinct schema tag from the conformance artifact', () => {
+    expect(INTEGRATION_ARTIFACT_SCHEMA).toBe('omn-182-integration-timing@1');
+    expect(INTEGRATION_ARTIFACT_SCHEMA).not.toBe(ARTIFACT_SCHEMA);
   });
 });

@@ -23,10 +23,13 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 import {
   ARTIFACT_SCHEMA,
+  INTEGRATION_ARTIFACT_SCHEMA,
   conformanceFromArtifact,
+  integrationFromArtifact,
   insertRow,
   renderRow,
   type ConformanceArtifact,
+  type IntegrationArtifact,
   type RunRow,
 } from './lib/suite-timing.js';
 
@@ -60,43 +63,55 @@ function die(msg: string): never {
   process.exit(2);
 }
 
+/** Read + schema-validate a timing artifact, or die with a precise message. */
+function loadArtifact<T extends { schema: string }>(path: string, expectedSchema: string, label: string): T {
+  if (!existsSync(path)) die(`${label} JSON not found: ${path}`);
+  let art: T;
+  try {
+    art = JSON.parse(readFileSync(path, 'utf8')) as T;
+  } catch (e) {
+    die(`${label} JSON is not valid JSON: ${String(e)}`);
+  }
+  // `art` is definitely assigned here: die() returns `never`, so the catch path cannot fall through.
+  if (art.schema !== expectedSchema) {
+    die(`${label} JSON schema is "${art.schema}", expected "${expectedSchema}" — regenerate with the current tool`);
+  }
+  return art;
+}
+
 function main(): void {
   const confJsonPath = arg('conformance-json') ?? process.env.PROBE_TIMING_JSON;
+  const intJsonPath = arg('integration-json') ?? process.env.INTEGRATION_TIMING_JSON;
   const intWallRaw = arg('integration-wall');
   const intTestsRaw = arg('integration-tests');
   const notes = arg('notes') ?? '';
   const logPath = arg('log') ?? DEFAULT_LOG;
   const dryRun = flag('dry-run');
 
-  if (!confJsonPath && intWallRaw === undefined) {
-    die('nothing to record — pass --conformance-json and/or --integration-wall');
+  if (!confJsonPath && !intJsonPath && intWallRaw === undefined) {
+    die('nothing to record — pass --conformance-json, --integration-json, and/or --integration-wall');
   }
 
   let conformance: RunRow['conformance'] = [];
   let conformanceTotalS: number | null = null;
   if (confJsonPath) {
-    if (!existsSync(confJsonPath)) die(`conformance JSON not found: ${confJsonPath}`);
-    let art: ConformanceArtifact;
-    try {
-      art = JSON.parse(readFileSync(confJsonPath, 'utf8')) as ConformanceArtifact;
-    } catch (e) {
-      die(`conformance JSON is not valid JSON: ${String(e)}`);
-    }
-    // `art` is definitely assigned here: die() returns `never`, so the catch path cannot fall through.
-    if (art.schema !== ARTIFACT_SCHEMA) {
-      die(
-        `conformance JSON schema is "${art.schema}", expected "${ARTIFACT_SCHEMA}" — regenerate with the current probe`,
-      );
-    }
-    const c = conformanceFromArtifact(art);
+    const c = conformanceFromArtifact(loadArtifact<ConformanceArtifact>(confJsonPath, ARTIFACT_SCHEMA, 'conformance'));
     conformance = c.conformance;
     conformanceTotalS = c.conformanceTotalS;
   }
 
-  const integrationWallS = intWallRaw === undefined ? null : Number(intWallRaw);
+  let integrationWallS: number | null = intWallRaw === undefined ? null : Number(intWallRaw);
+  let integrationTests: number | null = intTestsRaw === undefined ? null : Number(intTestsRaw);
+  if (intJsonPath) {
+    // The reporter-written artifact is the authoritative source; it overrides any manual flags.
+    const mapped = integrationFromArtifact(
+      loadArtifact<IntegrationArtifact>(intJsonPath, INTEGRATION_ARTIFACT_SCHEMA, 'integration'),
+    );
+    integrationWallS = mapped.integrationWallS;
+    integrationTests = mapped.integrationTests;
+  }
   if (integrationWallS !== null && !Number.isFinite(integrationWallS))
     die('--integration-wall must be a number (seconds)');
-  const integrationTests = intTestsRaw === undefined ? null : Number(intTestsRaw);
   if (integrationTests !== null && !Number.isFinite(integrationTests)) die('--integration-tests must be a number');
 
   const row: RunRow = {

@@ -49,6 +49,8 @@
     "conformance": "npm run build && npx tsx scripts/llm-conformance-probe.ts",
     "baseline:record": "npx tsx scripts/record-suite-timing.ts",
     "baseline:check": "npx tsx scripts/check-suite-timing.ts",
+    "baseline:integration": "npx tsx scripts/baseline-integration.ts",
+    "baseline:conformance": "npx tsx scripts/baseline-conformance.ts",
     "prompts:list": "npx tsx scripts/list-prompts.ts",
     "benchmark": "npm run build && npx tsx scripts/benchmark-performance.ts",
     "ci:local": "./scripts/ci-local.sh"

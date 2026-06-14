@@ -49,6 +49,15 @@ export interface ConformanceArtifact {
 
 export const ARTIFACT_SCHEMA = 'omn-173-conformance-timing@1';
 
+/** The integration timing artifact the vitest reporter writes when INTEGRATION_TIMING_JSON is set (OMN-182). */
+export interface IntegrationArtifact {
+  schema: string;
+  wallMs: number;
+  totalTests: number;
+}
+
+export const INTEGRATION_ARTIFACT_SCHEMA = 'omn-182-integration-timing@1';
+
 export const TABLE_HEADER =
   '| Date | Build | Integration wall | Tests | Conformance (model score elapsed/load) | Conf total | Notes |';
 export const TABLE_SEPARATOR =
@@ -195,6 +204,17 @@ export function conformanceFromArtifact(art: ConformanceArtifact): {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/** Map an integration timing artifact into the integration half of a row (whole-second wall). */
+export function integrationFromArtifact(art: IntegrationArtifact): {
+  integrationWallS: number;
+  integrationTests: number;
+} {
+  return {
+    integrationWallS: Math.round(art.wallMs / 1000),
+    integrationTests: art.totalTests,
+  };
 }
 
 // ── Deviation check ───────────────────────────────────────────────────────────
