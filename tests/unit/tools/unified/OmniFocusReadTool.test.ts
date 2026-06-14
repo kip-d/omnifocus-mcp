@@ -904,6 +904,29 @@ describe('OmniFocusReadTool', () => {
       });
     });
 
+    // OMN-177: countOnly tasks queries echoed metadata.filters_applied built from
+    // the branded (normalized) filter, leaking the internal __normalized__ marker
+    // onto the wire. The echo must be brand-free.
+    describe('OMN-177: countOnly does not leak the __normalized__ brand', () => {
+      it('strips __normalized__ from metadata.filters_applied', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: {
+            count: 5,
+            filter_description: 'defer before 2026-12-31',
+            optimization: 'omnijs_count_no_tags',
+          },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'tasks', filters: { deferDate: { before: '2026-12-31' } }, countOnly: true },
+        })) as any;
+
+        expect(result.metadata.filters_applied).toBeDefined();
+        expect(Object.keys(result.metadata.filters_applied)).not.toContain('__normalized__');
+      });
+    });
+
     // OMN-44: tasks export silently dropped records and ignored includeCompleted.
     // Two distinct bugs in handleTaskExport: outputDirectory was never read
     // (only handleBulkExport consumed it), and includeCompleted was never

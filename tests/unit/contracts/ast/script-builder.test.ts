@@ -18,6 +18,7 @@ import {
   resolveEffectiveProjectFields,
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
+import { normalizeFilter } from '../../../../src/contracts/filters.js';
 
 describe('buildFilteredTasksScript', () => {
   describe('basic script generation', () => {
@@ -538,6 +539,24 @@ describe('buildTaskCountScript', () => {
 
       expect(result.script).toContain('task.taskStatus === Task.Status.Dropped');
       expect(result.script).not.toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+  });
+
+  // OMN-177: the count script echoes the raw input filter into filters_applied.
+  // When the caller passes an already-normalized (branded) filter — as the count
+  // path does — JSON.stringify must not carry the internal __normalized__ brand
+  // onto the wire.
+  describe('filters_applied brand leak (OMN-177)', () => {
+    it('omits the __normalized__ brand from a branded input filter', () => {
+      const branded = normalizeFilter({ deferBefore: '2026-12-31' });
+      // sanity: the input really is branded
+      expect((branded as Record<string, unknown>).__normalized__).toBe(true);
+
+      const { script } = buildTaskCountScript(branded);
+
+      expect(script).not.toContain('__normalized__');
+      // the real filter key is still echoed
+      expect(script).toContain('deferBefore');
     });
   });
 
