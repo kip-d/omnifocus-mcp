@@ -171,6 +171,15 @@ export function captureEnv(): EnvStatus {
   return { loadAvg1, cpuCount, loadPerCpu, memUsedPct };
 }
 
+/** Short HEAD SHA for stamping a record's `build`. 'unknown' when git is unavailable. */
+export function gitShort(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 /** Resolve the per-machine log path. SUITE_TIMING_LOG_PATH overrides (used by tests). */
 export function defaultLogPath(): string {
   const override = process.env.SUITE_TIMING_LOG_PATH;

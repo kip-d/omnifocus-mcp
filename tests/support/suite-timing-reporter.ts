@@ -14,9 +14,14 @@
  * the historical row semantics (e.g. "166 passed / 0 failed / 22 skipped" was recorded as 166).
  */
 
-import { execFileSync } from 'child_process';
 import type { Reporter } from 'vitest/node';
-import { appendRun, buildIntegrationRecord, captureEnv, defaultLogPath } from '../../scripts/lib/suite-timing.js';
+import {
+  appendRun,
+  buildIntegrationRecord,
+  captureEnv,
+  defaultLogPath,
+  gitShort,
+} from '../../scripts/lib/suite-timing.js';
 
 /** Minimal structural view of a vitest task tree node — enough to walk and count leaf tests. */
 interface TaskNode {
@@ -37,14 +42,6 @@ function countRanTests(tasks: TaskNode[] | undefined): number {
     }
   }
   return n;
-}
-
-function gitShort(): string {
-  try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-  } catch {
-    return 'unknown';
-  }
 }
 
 export default class SuiteTimingReporter implements Reporter {

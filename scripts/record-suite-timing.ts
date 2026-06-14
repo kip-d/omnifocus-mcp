@@ -14,7 +14,6 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { execFileSync } from 'child_process';
 import {
   ARTIFACT_SCHEMA,
   appendRun,
@@ -22,6 +21,7 @@ import {
   captureEnv,
   conformanceFromArtifact,
   defaultLogPath,
+  gitShort,
   serializeRun,
   type ConformanceArtifact,
 } from './lib/suite-timing.js';
@@ -32,14 +32,6 @@ function arg(name: string): string | undefined {
 }
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
-}
-
-function gitShort(): string {
-  try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-  } catch {
-    return 'unknown';
-  }
 }
 
 function die(msg: string): never {
