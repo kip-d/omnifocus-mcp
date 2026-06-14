@@ -36,11 +36,10 @@
  * `npm run test:integration`, excluded from `test:unit`.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, ChildProcess } from 'child_process';
-import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME } from '../../helpers/sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from '../../helpers/run-id.js';
+import { UnifiedTestServer } from '../../helpers/unified-test-server.js';
 
 // Fixed, unambiguous future datetimes (same rationale as field-roundtrip: not
 // a default time, so reading it back can only mean we wrote it).
@@ -69,67 +68,14 @@ const ORPHAN_FOLDER_NAME = `${FOLDER_NAME}-orphan`;
 const BOGUS_PARENT = `__TEST__ Nonexistent Parent ${OMN138_MARKER} ${TS}`;
 
 describe('OMN-138: live create paths (single + loud not-found + batch chain + folder)', () => {
-  let serverProcess: ChildProcess;
-  let nextId = 1;
+  let server: UnifiedTestServer;
   const createdTaskIds: string[] = [];
 
-  async function sendRequestTo(proc: ChildProcess, request: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const requestStr = JSON.stringify(request) + '\n';
-      let response = '';
-      const timeout = setTimeout(() => reject(new Error('Request timeout after 120s')), 120000);
-
-      const onData = (data: Buffer) => {
-        response += data.toString();
-        for (const line of response.split('\n')) {
-          if (line.trim().startsWith('{')) {
-            try {
-              const parsed = JSON.parse(line);
-              if (parsed.jsonrpc === '2.0' && 'result' in parsed) {
-                clearTimeout(timeout);
-                proc.stdout?.off('data', onData);
-                resolve(parsed.result);
-                return;
-              }
-              if (parsed.jsonrpc === '2.0' && 'error' in parsed) {
-                clearTimeout(timeout);
-                proc.stdout?.off('data', onData);
-                reject(new Error(`MCP error: ${JSON.stringify(parsed.error)}`));
-                return;
-              }
-            } catch {
-              /* keep collecting */
-            }
-          }
-        }
-      };
-      proc.stdout?.on('data', onData);
-      proc.stdin?.write(requestStr);
-    });
-  }
-
-  async function callToolOn(proc: ChildProcess, name: string, args: unknown): Promise<any> {
-    const result = await sendRequestTo(proc, {
-      jsonrpc: '2.0',
-      id: ++nextId,
-      method: 'tools/call',
-      params: { name, arguments: args },
-    });
-    const content = (result as { content: Array<{ text: string }> }).content;
-    return JSON.parse(content[0].text);
-  }
-
-  async function initializeServer(proc: ChildProcess): Promise<void> {
-    await sendRequestTo(proc, {
-      jsonrpc: '2.0',
-      id: ++nextId,
-      method: 'initialize',
-      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } },
-    });
-  }
-
+  // Thin adapter so the existing `client.callTool(...)` callsites stay intact;
+  // reads `server` at call time (assigned in beforeAll). See
+  // helpers/unified-test-server.ts for the spawn/JSON-RPC scaffolding.
   const client = {
-    callTool: async (name: string, args: unknown) => callToolOn(serverProcess, name, args),
+    callTool: (name: string, args: unknown) => server.callTool(name, args),
   };
 
   const tasksOf = (r: any): any[] => r.data?.tasks ?? r.data?.items ?? [];
@@ -157,9 +103,7 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
   }
 
   beforeAll(async () => {
-    const serverPath = path.join(__dirname, '../../../../dist/index.js');
-    serverProcess = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'pipe'] });
-    await initializeServer(serverProcess);
+    server = await UnifiedTestServer.start();
     // Not strictly needed (all fixtures are inbox tasks) but keeps fullCleanup
     // uniform with the sibling suites that share this teardown path.
     await ensureSandboxFolder();
@@ -197,7 +141,7 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
     } catch (e) {
       sweepError = e;
     } finally {
-      serverProcess?.kill();
+      server?.kill();
     }
 
     // 3. OMN-46 fixture-leak guard: osascript-driven whole-DB sweep of
@@ -292,19 +236,11 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
   it('create with nonexistent project errors loudly and creates nothing (no silent inbox fallback)', async () => {
     const cleanupCountBefore = createdTaskIds.length;
 
-    const env: Record<string, string | undefined> = {
-      ...process.env,
-      NODE_ENV: 'development',
-      OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
-    };
-    delete env.SANDBOX_GUARD_ENABLED;
-    const serverPath = path.join(__dirname, '../../../../dist/index.js');
-    const unguarded = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'pipe'], env });
+    const unguarded = await UnifiedTestServer.start({ guarded: false });
 
     let res: any;
     try {
-      await initializeServer(unguarded);
-      res = await callToolOn(unguarded, 'omnifocus_write', {
+      res = await unguarded.callTool('omnifocus_write', {
         mutation: {
           operation: 'create',
           target: 'task',
@@ -456,23 +392,15 @@ describe('OMN-138: live create paths (single + loud not-found + batch chain + fo
   // could fall outside the returned page and this check would silently
   // false-pass. Fine today (a handful of folders); revisit if that grows.
   it('folder create with nonexistent parent errors loudly and creates nothing', async () => {
-    const env: Record<string, string | undefined> = {
-      ...process.env,
-      NODE_ENV: 'development',
-      OMNIFOCUS_MCP_DISABLE_FAILURE_LOG: '1',
-    };
-    delete env.SANDBOX_GUARD_ENABLED;
-    const serverPath = path.join(__dirname, '../../../../dist/index.js');
-    const unguarded = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'pipe'], env });
+    const unguarded = await UnifiedTestServer.start({ guarded: false });
 
     let res: any;
     let read: any;
     try {
-      await initializeServer(unguarded);
-      res = await callToolOn(unguarded, 'omnifocus_write', {
+      res = await unguarded.callTool('omnifocus_write', {
         mutation: { operation: 'create_folder', data: { name: ORPHAN_FOLDER_NAME, parentFolder: BOGUS_PARENT } },
       });
-      read = await callToolOn(unguarded, 'omnifocus_read', { query: { type: 'folders' } });
+      read = await unguarded.callTool('omnifocus_read', { query: { type: 'folders' } });
     } finally {
       unguarded.kill();
     }

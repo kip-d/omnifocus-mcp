@@ -54,11 +54,10 @@
  * `npm run test:integration`, excluded from `test:unit`.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, ChildProcess } from 'child_process';
-import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME } from '../../helpers/sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from '../../helpers/run-id.js';
+import { UnifiedTestServer } from '../../helpers/unified-test-server.js';
 
 // Fixed, unambiguous future datetime (field-roundtrip rationale: NOT a default
 // time — :23 past 14:00 can only be a value we wrote).
@@ -93,68 +92,15 @@ const TAG_ADDED = runScopedTag(`omn138u-added-${TS}`);
 const BOGUS_TASK_ID = `zzzNoSuchTaskOMN138U${TS}`;
 
 describe('OMN-138: live update paths (task + project, persisted read-backs)', () => {
-  let serverProcess: ChildProcess;
-  let nextId = 1;
+  let server: UnifiedTestServer;
   const createdTaskIds: string[] = [];
   const createdProjectIds: string[] = [];
 
-  async function sendRequestTo(proc: ChildProcess, request: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const requestStr = JSON.stringify(request) + '\n';
-      let response = '';
-      const timeout = setTimeout(() => reject(new Error('Request timeout after 120s')), 120000);
-
-      const onData = (data: Buffer) => {
-        response += data.toString();
-        for (const line of response.split('\n')) {
-          if (line.trim().startsWith('{')) {
-            try {
-              const parsed = JSON.parse(line);
-              if (parsed.jsonrpc === '2.0' && 'result' in parsed) {
-                clearTimeout(timeout);
-                proc.stdout?.off('data', onData);
-                resolve(parsed.result);
-                return;
-              }
-              if (parsed.jsonrpc === '2.0' && 'error' in parsed) {
-                clearTimeout(timeout);
-                proc.stdout?.off('data', onData);
-                reject(new Error(`MCP error: ${JSON.stringify(parsed.error)}`));
-                return;
-              }
-            } catch {
-              /* keep collecting */
-            }
-          }
-        }
-      };
-      proc.stdout?.on('data', onData);
-      proc.stdin?.write(requestStr);
-    });
-  }
-
-  async function callToolOn(proc: ChildProcess, name: string, args: unknown): Promise<any> {
-    const result = await sendRequestTo(proc, {
-      jsonrpc: '2.0',
-      id: ++nextId,
-      method: 'tools/call',
-      params: { name, arguments: args },
-    });
-    const content = (result as { content: Array<{ text: string }> }).content;
-    return JSON.parse(content[0].text);
-  }
-
-  async function initializeServer(proc: ChildProcess): Promise<void> {
-    await sendRequestTo(proc, {
-      jsonrpc: '2.0',
-      id: ++nextId,
-      method: 'initialize',
-      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } },
-    });
-  }
-
+  // Thin adapter so the existing `client.callTool(...)` callsites stay intact;
+  // reads `server` at call time (assigned in beforeAll). See
+  // helpers/unified-test-server.ts for the spawn/JSON-RPC scaffolding.
   const client = {
-    callTool: async (name: string, args: unknown) => callToolOn(serverProcess, name, args),
+    callTool: (name: string, args: unknown) => server.callTool(name, args),
   };
 
   const tasksOf = (r: any): any[] => r.data?.tasks ?? r.data?.items ?? [];
@@ -246,9 +192,7 @@ describe('OMN-138: live update paths (task + project, persisted read-backs)', ()
   }
 
   beforeAll(async () => {
-    const serverPath = path.join(__dirname, '../../../../dist/index.js');
-    serverProcess = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'pipe'] });
-    await initializeServer(serverProcess);
+    server = await UnifiedTestServer.start();
     // Project fixtures + the folder-move destination live under the sandbox.
     await ensureSandboxFolder();
   }, 60000);
@@ -288,7 +232,7 @@ describe('OMN-138: live update paths (task + project, persisted read-backs)', ()
     } catch (e) {
       sweepError = e;
     } finally {
-      serverProcess?.kill();
+      server?.kill();
     }
 
     // 3. OMN-46 fixture-leak guard: osascript-driven whole-DB sweep of
