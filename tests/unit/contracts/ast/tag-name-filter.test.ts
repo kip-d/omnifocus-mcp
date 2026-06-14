@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTagsScript } from '../../../../src/contracts/ast/tag-script-builder.js';
+import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 /**
  * OMN-170 S2: tags-by-name filtering on the basic mode (the only mode the read
@@ -18,12 +19,13 @@ describe('buildTagsScript basic mode — name filter (OMN-170 S2)', () => {
 
   it('name CONTAINS → case-insensitive substring predicate on tag.name', () => {
     const { script } = buildTagsScript({ mode: 'basic', name: 'Home', nameOperator: 'CONTAINS' });
-    expect(script).toContain('(tag.name || \'\').toLowerCase().includes("home")');
+    // OMN-129: assert on the recovered (decoded) program where quotes are unescaped.
+    expect(recoverInnerProgram(script)).toContain('(tag.name || \'\').toLowerCase().includes("home")');
   });
 
   it('name MATCHES → safe RegExp predicate (OMN-149 pattern)', () => {
     const { script } = buildTagsScript({ mode: 'basic', name: '^Home$', nameOperator: 'MATCHES' });
-    expect(script).toContain("new RegExp(\"^Home$\", 'i').test((tag.name || ''))");
+    expect(recoverInnerProgram(script)).toContain("new RegExp(\"^Home$\", 'i').test((tag.name || ''))");
   });
 
   it('emits total_matched separately from total (OMN-154 count honesty)', () => {
@@ -32,12 +34,15 @@ describe('buildTagsScript basic mode — name filter (OMN-170 S2)', () => {
     expect(script).toContain('total_matched:');
   });
 
-  it('backtick-bearing name does not leave a raw backtick in the inner template', () => {
+  it('backtick-bearing name rides safely across the JSON.stringify boundary (OMN-129)', () => {
     const { script } = buildTagsScript({ mode: 'basic', name: 'a`b', nameOperator: 'CONTAINS' });
-    // The whole inner OmniJS source is escapeTemplateString-wrapped, so any
-    // backtick in the term is escaped (\`) and cannot terminate the template.
-    expect(script).not.toMatch(/includes\("a`b"/);
-    expect(script).toContain('a\\`b');
+    // OMN-129: the program crosses as a JSON string literal, so a backtick in the
+    // term is inert (it lives inside an OmniJS double-quoted string). The whole
+    // script and the recovered program both parse; the term rides as a plain value.
+    expect(() => new Function(script)).not.toThrow();
+    const inner = recoverInnerProgram(script);
+    expect(() => new Function(inner)).not.toThrow();
+    expect(inner).toContain('includes("a`b")');
   });
 
   it('filterDescription reflects the name filter', () => {

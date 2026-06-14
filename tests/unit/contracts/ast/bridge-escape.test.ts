@@ -1,37 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import {
-  escapeTemplateString,
-  escapeTemplateLiteralHazards,
-  sanitizeForScriptComment,
-} from '../../../../src/contracts/ast/bridge-escape.js';
+import { sanitizeForScriptComment } from '../../../../src/contracts/ast/bridge-escape.js';
 
-describe('escapeTemplateString', () => {
-  it('escapes backslash, backtick, and ${', () => {
-    expect(escapeTemplateString('a\\b')).toBe('a\\\\b');
-    expect(escapeTemplateString('a`b')).toBe('a\\`b');
-    expect(escapeTemplateString('a${x}b')).toBe('a\\${x}b');
-  });
-  it('is identity on benign input', () => {
-    expect(escapeTemplateString('plain text 123 _-.')).toBe('plain text 123 _-.');
-  });
-  it("does NOT alter newlines (that is sanitizeForScriptComment's job)", () => {
-    expect(escapeTemplateString('a\nb')).toBe('a\nb');
-  });
-});
-
-describe('escapeTemplateLiteralHazards', () => {
-  it('escapes backtick and ${ but NOT backslash', () => {
-    expect(escapeTemplateLiteralHazards('a`b')).toBe('a\\`b');
-    expect(escapeTemplateLiteralHazards('a${x}b')).toBe('a\\${x}b');
-    // backslash is left untouched (caller already JSON.stringify'd it)
-    expect(escapeTemplateLiteralHazards('a\\b')).toBe('a\\b');
-    expect(escapeTemplateLiteralHazards('a\\\\b')).toBe('a\\\\b');
-  });
-  it('is identity on benign input', () => {
-    expect(escapeTemplateLiteralHazards('plain text 123 _-.')).toBe('plain text 123 _-.');
-  });
-});
-
+// OMN-129 retired escapeTemplateString / escapeTemplateLiteralHazards: the read
+// side now crosses the JXA→OmniJS boundary via JSON.stringify(program) (see
+// bridge-injection.test.ts), so the hand-rolled template-literal escapers no longer
+// exist. sanitizeForScriptComment survives — JSON.stringify guards the outer string
+// literal, but a raw CR/LF inside a `// Filter:` comment still splits the inner
+// OmniJS that OmniFocus compiles, so control chars must be scrubbed from comments.
 describe('sanitizeForScriptComment', () => {
   it('collapses CR/LF/tab/control runs to a single space and trims', () => {
     expect(sanitizeForScriptComment('a\r\n\tb')).toBe('a b');
@@ -40,5 +15,17 @@ describe('sanitizeForScriptComment', () => {
   });
   it('is identity on benign single-line input', () => {
     expect(sanitizeForScriptComment('text: "abc" AND flagged')).toBe('text: "abc" AND flagged');
+  });
+
+  it('collapses U+2028/U+2029 — JS line/paragraph separators (OMN-129 fuzz)', () => {
+    // These are NOT C0 control chars, so JSON.stringify leaves them literal and they
+    // pass the boundary; but they ARE JS LineTerminators, so an un-scrubbed one would
+    // split the `// Filter:` comment in the compiled OmniJS. Constructed via charCode
+    // so no raw line terminator lands in this test's source.
+    const LS = String.fromCharCode(0x2028);
+    const PS = String.fromCharCode(0x2029);
+    expect(sanitizeForScriptComment(`a${LS}b`)).toBe('a b');
+    expect(sanitizeForScriptComment(`a${PS}b`)).toBe('a b');
+    expect(sanitizeForScriptComment(`a${LS}${PS}\nb`)).toBe('a b');
   });
 });

@@ -21,37 +21,78 @@ function parses(script: string): boolean {
   }
 }
 
-// A parse-only check (`new Function`) only sees the OUTER JXA wrapper — the
-// inner OmniJS is an opaque string to it, so it ONLY catches the backtick
-// structural break. The ${x} (eval-time) and newline (comment-split) channels
-// are invisible to parse alone. So additionally assert the hostile payload
-// never appears RAW in the generated script — only in escaped/sanitized form.
-// That assertion is what gives genuine RED→GREEN for the ${ and \n channels.
-function assertSafe(script: string, v: string) {
-  expect(parses(script)).toBe(true); // backtick structural channel
-  if (v === 'a`b') {
-    expect(script.includes('a`b')).toBe(false); // no raw unescaped backtick payload
-    expect(script.includes('a\\`b')).toBe(true); // present only as \`
-  } else if (v === 'a${x}b') {
-    expect(script.includes('a${x}b')).toBe(false); // no raw live ${x}
-    expect(script.includes('a\\${x}b')).toBe(true); // present only as \${x}
-  } else if (v.includes(NL)) {
-    expect(script.includes('a' + NL + 'b')).toBe(false); // no raw LF-bearing payload
-    // (comment channel → sanitized to "a b"; predicate channel → JSON-escaped "a\\nb")
-  } else if (v === BS) {
-    // A literal backslash round-trips through TWO correct escape layers:
-    //   1. JSON.stringify(predicate value)  : a\b   → a\\b   (JSON doubling)
-    //   2. escapeTemplateString(whole src)  : a\\b  → a\\\\b (template doubling)
-    // So quadruple-backslash in the generated TEXT is the CORRECT single-pass
-    // result, not corruption. The double-escape *bug* signature would be a
-    // further doubling to EIGHT backslashes — assert that never appears.
-    // `parses()` above is the load-bearing check: any escape that unbalanced
-    // the outer template literal would have thrown there.
-    expect(script.includes('a\\\\\\\\\\\\\\\\b')).toBe(false); // no 8x (double-escape)
+// OMN-129: the read side now crosses the JXA→OmniJS boundary the same way the
+// write side does — `app.evaluateJavascript(${JSON.stringify(program)})` — so the
+// program rides inside a JSON string literal, not a hand-escaped nested backtick.
+// Recover every program string that the generated JXA hands across the boundary
+// (recursing, since list-tasks nests one program inside another). A JSON-string
+// argument is the proof the retrofit landed; the old backtick boundary passed an
+// `omniJsScript` identifier and yields nothing here.
+function recoverInnerPrograms(script: string): string[] {
+  const out: string[] = [];
+  const marker = 'evaluateJavascript(';
+  let i = 0;
+  while ((i = script.indexOf(marker, i)) !== -1) {
+    let j = i + marker.length;
+    while (j < script.length && /\s/.test(script[j]!)) j++;
+    if (script[j] !== '"') {
+      i = j; // not a JSON-string argument (e.g. the old `evaluateJavascript(omniJsScript)`)
+      continue;
+    }
+    // Read one JSON string literal starting at j, honoring \" escapes.
+    let k = j + 1;
+    let lit = '"';
+    while (k < script.length) {
+      const ch = script[k]!;
+      lit += ch;
+      if (ch === '\\') {
+        lit += script[k + 1] ?? '';
+        k += 2;
+        continue;
+      }
+      if (ch === '"') {
+        k++;
+        break;
+      }
+      k++;
+    }
+    try {
+      const inner = JSON.parse(lit);
+      out.push(inner);
+      out.push(...recoverInnerPrograms(inner)); // nested boundary (list-tasks)
+    } catch {
+      // not a recoverable JSON string; skip
+    }
+    i = k;
+  }
+  return out;
+}
+
+// Under the JSON.stringify(program) boundary, backtick and ${ are inert — they
+// live inside a JSON string literal and again inside an OmniJS string literal, so
+// neither can break structure. `parses` is therefore the structural oracle for
+// those channels. The newline/comment channel still has teeth: the boundary
+// JSON.stringify escapes the OUTER string, but the inner OmniJS that OmniFocus
+// compiles sees the LF restored — a raw LF in a `// Filter:` comment would split
+// it into live code. sanitizeForScriptComment is what keeps that payload
+// single-line, so we assert it against the RECOVERED inner program (where the LF
+// is unescaped), not the outer text (where the boundary escaping hides it).
+function assertSafe(script: string, _v: string) {
+  expect(parses(script)).toBe(true); // outer structural validity (all channels)
+
+  const inners = recoverInnerPrograms(script);
+  expect(inners.length).toBeGreaterThan(0); // boundary is the JSON-string form
+
+  for (const inner of inners) {
+    expect(parses(inner)).toBe(true); // each recovered program is itself valid JS
+    // OMN-111/113 comment channel: the hostile LF-bearing payload must not survive
+    // contiguously into the compiled program (sanitized to a space in the comment,
+    // JSON-escaped to `a\nb` in the predicate string).
+    expect(inner.includes('a' + NL + 'b')).toBe(false);
   }
 }
 
-describe('OMN-65: bridge builders survive hostile filter strings', () => {
+describe('OMN-65/OMN-129: bridge builders survive hostile filter strings', () => {
   for (const v of [...HOSTILE, 'benign_abc']) {
     const tag = JSON.stringify(v);
     // comment-channel + predicate-channel builders (free text via `text`):
@@ -62,23 +103,20 @@ describe('OMN-65: bridge builders survive hostile filter strings', () => {
     // predicate-only builders (no in-body comment channel):
     // OMN-170 S2: folders filter free text via `filter.name` (the old `search`
     // string option was removed; the name predicate routes through the same
-    // escapeTemplateString-wrapped omniJsSource).
+    // omniJsSource that now crosses via JSON.stringify).
     it(`buildFilteredFoldersScript name=${tag}`, () =>
       assertSafe(buildFilteredFoldersScript({ filter: { name: v, nameOperator: 'CONTAINS' } }).script, v));
     it(`buildProjectByIdScript projectId=${tag}`, () => assertSafe(buildProjectByIdScript(v).script, v));
   }
 });
 
-// OMN-66: the list-tasks-ast.ts path was scoped OUT of OMN-65 because its
-// backtick/${ vectors are already neutralized by the whole-source
-// escapeTemplateString wrap at list-tasks-ast.ts:89. But that wrap
-// deliberately does NOT touch CR/LF/control chars — so a raw newline in
-// the user `text` filter could still split the `// Filter:` comment line.
-// Exercise the production entry point (buildListTasksScriptV4) so the test
-// runs against the wrapped form OmniFocus actually executes, not the
-// inner unwrapped builder output. Covers both the general-filter and
-// inbox routes since they share generateMatchesFilterBlock.
-describe('OMN-66: list-tasks-ast comment channel survives hostile filter strings', () => {
+// OMN-66: the list-tasks-ast.ts path nests one program inside another (the JXA
+// wrapper hands buildFilteredTasksScript's output across the boundary, and that
+// output crosses a second boundary internally). recoverInnerPrograms recurses, so
+// both levels are validated. The newline/comment channel is the live concern:
+// JSON.stringify guards the outer literals, sanitizeForScriptComment guards the
+// `// Filter:` line. Covers the general-filter and inbox routes.
+describe('OMN-66/OMN-129: list-tasks-ast survives hostile filter strings', () => {
   for (const v of [...HOSTILE, 'benign_abc']) {
     const tag = JSON.stringify(v);
     it(`buildListTasksScriptV4 general filter text=${tag}`, () =>

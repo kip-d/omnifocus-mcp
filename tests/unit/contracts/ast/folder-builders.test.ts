@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildFilteredFoldersScript } from '../../../../src/contracts/ast/script-builder.js';
+import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 describe('buildFilteredFoldersScript', () => {
   describe('basic script generation', () => {
@@ -111,19 +112,22 @@ describe('buildFilteredFoldersScript', () => {
 
     it('name CONTAINS → case-insensitive substring predicate on folder.name', () => {
       const result = buildFilteredFoldersScript({ filter: { name: 'Work', nameOperator: 'CONTAINS' } });
-      expect(result.script).toContain('(folder.name || \'\').toLowerCase().includes("work")');
+      // OMN-129: assert on the recovered (decoded) program where quotes are unescaped.
+      const inner = recoverInnerProgram(result.script);
+      expect(inner).toContain('(folder.name || \'\').toLowerCase().includes("work")');
       expect(result.filterDescription).toContain('name contains "Work"');
     });
 
     it('name MATCHES → safe RegExp predicate (no raw interpolation)', () => {
       const result = buildFilteredFoldersScript({ filter: { name: 'Wo.k', nameOperator: 'MATCHES' } });
-      expect(result.script).toContain('new RegExp("Wo.k", \'i\').test');
+      expect(recoverInnerProgram(result.script)).toContain('new RegExp("Wo.k", \'i\').test');
     });
 
     it('parentName → null-guarded substring on folder.parent.name', () => {
       const result = buildFilteredFoldersScript({ filter: { parentName: 'Bills' } });
-      expect(result.script).toContain('folder.parent');
-      expect(result.script).toContain('(folder.parent.name || \'\').toLowerCase().includes("bills")');
+      const inner = recoverInnerProgram(result.script);
+      expect(inner).toContain('folder.parent');
+      expect(inner).toContain('(folder.parent.name || \'\').toLowerCase().includes("bills")');
     });
 
     it('topLevelOnly → !folder.parent', () => {
@@ -143,12 +147,16 @@ describe('buildFilteredFoldersScript', () => {
       expect(result.script).not.toContain('total_available: flattenedFolders.length');
     });
 
-    it('backtick-bearing name does not leave a raw backtick in the final script (escapeTemplateString)', () => {
+    it('backtick-bearing name rides safely across the JSON.stringify boundary (OMN-129)', () => {
       const result = buildFilteredFoldersScript({ filter: { name: 'a`b', nameOperator: 'CONTAINS' } });
-      // The inner OmniJS source is wrapped in a backtick literal; any backtick in
-      // the term must be escaped (\\`) so it does not terminate the template.
-      expect(result.script).not.toMatch(/includes\("a`b"/);
-      expect(result.script).toContain('a\\`b');
+      // OMN-129: the program crosses as a JSON string literal, so a backtick in the
+      // term is inert — it lives inside an OmniJS double-quoted string and cannot
+      // break structure. The whole script parses, and the recovered program both
+      // parses and carries the term as a plain string value.
+      expect(() => new Function(result.script)).not.toThrow();
+      const inner = recoverInnerProgram(result.script);
+      expect(() => new Function(inner)).not.toThrow();
+      expect(inner).toContain('includes("a`b")');
     });
   });
 
