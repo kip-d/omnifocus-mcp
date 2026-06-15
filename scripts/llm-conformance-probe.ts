@@ -183,7 +183,18 @@ class McpServer {
   private pending = new Map<number, (msg: Record<string, unknown>) => void>();
 
   constructor() {
-    this.proc = spawn('node', ['dist/index.js'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    // OMN-178: decouple the probe's server boot from OmniFocus. The probe only ever calls
+    // tools/list (schema grading, no execution), so it needs zero OF access — but the real
+    // server warms its OmniFocus cache (projects/tags/tasks/perspectives, a 240s-budget burst
+    // of serialized AppleEvents) BEFORE the transport answers `initialize`. Run conformance
+    // alongside the live integration suite and that warm contends on the single OmniFocus app's
+    // AppleEvent channel, blowing past this probe's 30s init window (the parallel-run failure).
+    // NO_CACHE_WARMING=true makes the server skip the warm; the only residual OF touch is the
+    // permission check's hard 3s-bounded osascript, which fits the window even under contention.
+    this.proc = spawn('node', ['dist/index.js'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, NO_CACHE_WARMING: 'true' },
+    });
     this.proc.stdout?.on('data', (d: Buffer) => {
       this.buf += d.toString();
       const lines = this.buf.split('\n');
