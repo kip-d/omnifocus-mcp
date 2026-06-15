@@ -371,8 +371,8 @@ describe('OMN-130 #3: smart_suggest scoring uses available field (injected into 
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const overdueAvailable = makeTask({ name: 'avail', dueDate: yesterday, available: true });
-    const overdueNotAvailable = makeTask({ name: 'blocked', dueDate: yesterday, available: false });
+    const overdueAvailable = makeTask({ name: 'avail', dueDate: yesterday.toISOString(), available: true });
+    const overdueNotAvailable = makeTask({ name: 'blocked', dueDate: yesterday.toISOString(), available: false });
 
     // scoreForSmartSuggest returns top-N tasks sorted by score
     const result = scoreForSmartSuggest([overdueAvailable, overdueNotAvailable], 10);
