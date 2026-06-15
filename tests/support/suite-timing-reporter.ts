@@ -45,9 +45,10 @@ function countRanTests(tasks: TaskNode[] | undefined): number {
 }
 
 export default class SuiteTimingReporter implements Reporter {
-  // Stamp at construction so a missed onInit() can't yield wallMs ≈ Date.now() (a ~56,000-year
-  // wall that would poison the log as a permanent fastest-ever outlier). onInit refines it to the
-  // run's true start when it fires.
+  // Initialize to Date.now() (NOT 0): if onInit() never fires, wallMs is still finish−construction
+  // (a sane, slightly-inflated wall) rather than finish−epoch (~56,000 years) that a 0 default would
+  // produce and which would poison the log as a permanent fastest-ever outlier. onInit refines it to
+  // the run's true start when it fires.
   private startMs = Date.now();
 
   onInit(): void {

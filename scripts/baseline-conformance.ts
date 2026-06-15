@@ -68,6 +68,11 @@ if (record.status !== 0) process.exit(record.status ?? 1);
 const check = spawnSync('npx', ['tsx', 'scripts/check-suite-timing.ts'], { stdio: 'inherit' });
 if (check.status === 1) {
   process.stderr.write('baseline:conformance: drift detected above (warning only — not failing the run).\n');
+} else if (check.status !== 0) {
+  // exit 2 = the check itself errored (bad args, unreadable log). Don't let it pass silently.
+  process.stderr.write(
+    `baseline:conformance: drift check errored (exit ${check.status}) — row recorded, not checked.\n`,
+  );
 }
 
 // `?? 1`: spawnSync sets status=null when the probe was killed by a signal — treat that as failure

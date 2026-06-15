@@ -4,10 +4,12 @@ import { defineConfig } from 'vitest/config';
 const isUnitTestOnly = process.argv.some((arg) => arg.includes('tests/unit')) || process.env.TEST_UNIT_ONLY === '1';
 
 // OMN-182: the suite-timing reporter records a row tagged suite:'integration', so it must attach
-// ONLY to integration runs — NOT smoke/performance/llm runs (which would pollute the integration
-// baseline with tiny, mislabeled records; test:pre-commit runs smoke on every commit). Gate on the
-// integration path explicitly rather than the broad !isUnitTestOnly.
-const isIntegrationRun = process.argv.some((arg) => arg.includes('tests/integration'));
+// ONLY to a FULL integration-suite run. Match the integration directory as a discrete run target,
+// NOT a substring: a single-file run UNDER tests/integration/ (test:llm-simulation, test:real-llm,
+// or any `vitest tests/integration/foo.test.ts`) is a partial run that would write a tiny,
+// mislabeled row and skew the baseline median. Smoke/performance live outside the dir and are
+// already excluded; the substring form let the in-dir llm runs slip through.
+const isIntegrationRun = process.argv.some((arg) => arg === 'tests/integration' || arg === 'tests/integration/');
 
 // When running ALL tests together (npm test), we need timeouts that work for integration/smoke tests
 // Only use short timeouts when explicitly running unit tests only
