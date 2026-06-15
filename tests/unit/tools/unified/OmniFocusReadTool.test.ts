@@ -1033,12 +1033,16 @@ describe('OmniFocusReadTool', () => {
         })) as any;
 
         expect(result.success).toBe(true);
-        // No completed predicate emitted into the filter
+        // No completed predicate emitted into the AST filter.
+        // OMN-153: export now defaults-exclude project roots (task.project === null),
+        // so the matchesFilter predicate is task.project === null (not `return true;`).
+        // The predicate must still NOT constrain task.completed when includeCompleted:true.
         const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        // Filter description is emitted as a comment; check the predicate body
-        // does not constrain task.completed. The AST emits `true` for an empty
-        // filter.
-        expect(scriptArg).toContain('return true;');
+        // Extract the matchesFilter body to test only the predicate
+        const matchesFn = scriptArg.match(/function matchesFilter\(task\)\s*\{[^}]+\}/)?.[0] ?? '';
+        expect(matchesFn).not.toContain('completed');
+        // The project-root exclusion predicate IS present (OMN-153 export fix)
+        expect(matchesFn).toContain('task.project === null');
       });
 
       it('flags truncation in summary when the script reports limited=true', async () => {

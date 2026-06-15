@@ -16,13 +16,20 @@
  * 7. TaskFilter interface accepts includeProjectRoot
  * 8. TaskRowSchema accepts isProjectRoot
  * 9. describeFilterForScript handles includeProjectRoot
+ * 10. VM behavioral: root row is EXCLUDED by default; INCLUDED + marked with includeProjectRoot:true
+ * 11. Export path applies the same default exclusion
+ * 12. ID-lookup (buildTaskByIdScript / details=true) always carries isProjectRoot in its projection
  */
 
+import * as vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskCountScript,
+  buildExportTasksScript,
+  buildTaskByIdScript,
+  resolveEffectiveTaskFields,
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 import { FILTER_PROPERTY_NAMES } from '../../../../src/contracts/filters.js';
@@ -173,5 +180,121 @@ describe('OMN-153: TaskRowSchema', () => {
   it('rejects isProjectRoot with non-boolean (strict schema)', () => {
     const result = TaskRowSchema.safeParse({ id: 'abc', name: 'Task', isProjectRoot: 'yes' });
     expect(result.success).toBe(false);
+  });
+});
+
+// =============================================================================
+// VM behavioral test (#2): predicate execution, not just string presence
+// =============================================================================
+
+describe('OMN-153: VM behavioral — project-root exclusion and isProjectRoot marker', () => {
+  // Minimal sandbox matching what the generated script touches.
+  // Task.Status is needed for the OMN-157 dropped-exclusion predicate.
+  const Task = { Status: { Dropped: 'Dropped', Active: 'Active' } };
+
+  const regularTask = (name: string) => ({
+    id: { primaryKey: `id-${name}` },
+    name,
+    flagged: false,
+    completed: false,
+    taskStatus: Task.Status.Active,
+    inInbox: false,
+    tags: [],
+    dueDate: null,
+    deferDate: null,
+    containingProject: null,
+    // project: null → NOT a project root (normal task)
+    project: null,
+  });
+
+  const rootTask = (name: string) => ({
+    ...regularTask(name),
+    // project: non-null → IS a project root (task.project !== null in OmniJS)
+    project: { name: 'MyProject' },
+  });
+
+  function runScript(script: string, tasks: unknown[]): { tasks: unknown[]; count: number; total_matched: number } {
+    const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('default script: excludes the root row, returns only regular tasks', () => {
+    const tasks = [regularTask('alpha'), regularTask('beta'), rootTask('ProjectRoot')];
+    const { script } = buildFilteredTasksScript({}, { fields: ['id', 'name'] });
+    const result = runScript(script, tasks);
+    // 3 tasks total; 1 root → 2 returned
+    expect(result.tasks).toHaveLength(2);
+    expect(result.total_matched).toBe(2);
+    const names = (result.tasks as Array<{ name: string }>).map((t) => t.name);
+    expect(names).toContain('alpha');
+    expect(names).toContain('beta');
+    expect(names).not.toContain('ProjectRoot');
+  });
+
+  it('includeProjectRoot:true: includes root row AND carries isProjectRoot:true', () => {
+    const tasks = [regularTask('alpha'), rootTask('ProjectRoot')];
+    const filter: TaskFilter = { includeProjectRoot: true };
+    const { script } = buildFilteredTasksScript(filter, { fields: ['id', 'name', 'isProjectRoot'] });
+    const result = runScript(script, tasks);
+    // Both tasks returned
+    expect(result.tasks).toHaveLength(2);
+    const root = (result.tasks as Array<{ name: string; isProjectRoot?: boolean }>).find(
+      (t) => t.name === 'ProjectRoot',
+    );
+    expect(root).toBeDefined();
+    expect(root!.isProjectRoot).toBe(true);
+    // Regular task: isProjectRoot false
+    const regular = (result.tasks as Array<{ name: string; isProjectRoot?: boolean }>).find((t) => t.name === 'alpha');
+    expect(regular!.isProjectRoot).toBe(false);
+  });
+
+  it('default script: root in a mixed set is excluded even with other filters active', () => {
+    const tasks = [regularTask('flagged'), rootTask('ProjectRoot'), regularTask('other')];
+    // flagged filter: only root is "flagged" here — but root should still be excluded
+    const flaggedRoot = { ...rootTask('FlaggedRoot'), flagged: true };
+    const flaggedRegular = { ...regularTask('FlaggedRegular'), flagged: true };
+    const mixed = [...tasks, flaggedRoot, flaggedRegular];
+    const { script } = buildFilteredTasksScript({ flagged: true }, { fields: ['id', 'name'] });
+    const result = runScript(script, mixed);
+    // Only FlaggedRegular qualifies (flagged=true AND project===null)
+    expect(result.tasks).toHaveLength(1);
+    expect((result.tasks[0] as { name: string }).name).toBe('FlaggedRegular');
+  });
+});
+
+// =============================================================================
+// Export path test (#1): buildExportTasksScript must exclude project roots
+// =============================================================================
+
+describe('OMN-153: buildExportTasksScript — project-root exclusion', () => {
+  it('default export script contains task.project === null predicate', () => {
+    const result = buildExportTasksScript({});
+    expect(result.script).toContain('task.project === null');
+  });
+
+  it('export uses applyProjectRootDefault — no opt-in param today (follow-up deferred)', () => {
+    // The export path has no includeProjectRoot opt-in in ExportFilter yet.
+    // Default exclusion is the safe baseline. This test documents the current state.
+    const result = buildExportTasksScript({});
+    expect(result.script).toContain('task.project === null');
+  });
+});
+
+// =============================================================================
+// ID-lookup test (#3): buildTaskByIdScript (via details=true) carries isProjectRoot
+// =============================================================================
+
+describe('OMN-153: buildTaskByIdScript — isProjectRoot in details=true projection', () => {
+  it('resolveEffectiveTaskFields(undefined, true) includes isProjectRoot', () => {
+    // ID lookup always calls resolveEffectiveTaskFields(fields, true) — details=true.
+    // isProjectRoot is in DETAIL_FIELDS, so it must be present.
+    const fields = resolveEffectiveTaskFields(undefined, true);
+    expect(fields).toContain('isProjectRoot');
+  });
+
+  it('buildTaskByIdScript with details=true fields emits isProjectRoot projection', () => {
+    const fields = resolveEffectiveTaskFields(undefined, true);
+    const result = buildTaskByIdScript('test-id-123', fields);
+    expect(result.script).toContain('isProjectRoot: task.project !== null');
   });
 });

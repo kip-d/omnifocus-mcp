@@ -484,6 +484,37 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
 `;
 }
 
+// =============================================================================
+// PROJECT-ROOT EXCLUSION DEFAULT (OMN-153)
+// =============================================================================
+
+/**
+ * Inject `includeProjectRoot: false` when the caller has not set it.
+ *
+ * In OmniFocus a project IS a task (its root task). That root row appears in
+ * `flattenedTasks` and is indistinguishable from regular tasks without extra
+ * inspection. Completing or deleting it completes/deletes the PROJECT — a P5
+ * safety hazard. All task-script builders must default-exclude root rows so the
+ * hazard cannot arise from a bare query.
+ *
+ * Detection: `task.project !== null` (OmniJS Task.project returns the Project
+ * object only for the root task; null for all other tasks).
+ *
+ * Called by: buildFilteredTasksScript, buildInboxScript, buildTaskCountScript,
+ * buildExportTasksScript. Adding a new task-script builder? Route it through
+ * this helper — never inline the check.
+ *
+ * SCOPE: injects includeProjectRoot only.
+ * The existing dropped/completed defaults differ per builder (export defaults
+ * includeCompleted=true; inbox always excludes completed) and must stay inline
+ * in each builder until that interaction is audited. They are candidates for
+ * the same consolidation in a follow-up pass.
+ */
+function applyProjectRootDefault<F extends { includeProjectRoot?: boolean }>(filter: F): F {
+  if (filter.includeProjectRoot !== undefined) return filter;
+  return { ...filter, includeProjectRoot: false };
+}
+
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
 
@@ -497,13 +528,8 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // count-path OMN-52 shim).
   let effectiveFilter: typeof filter =
     !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
-  // OMN-153: exclude project-root rows by default. A project's root task appears
-  // in flattenedTasks and completing/deleting it completes/deletes the PROJECT —
-  // a P5 safety hazard. Default: inject includeProjectRoot: false (emit
-  // task.project === null predicate via FILTER_DEFS). Explicit true lifts it.
-  if (filter.includeProjectRoot === undefined) {
-    effectiveFilter = { ...effectiveFilter, includeProjectRoot: false };
-  }
+  // OMN-153: exclude project-root rows by default via the consolidated helper.
+  effectiveFilter = applyProjectRootDefault(effectiveFilter);
 
   // Build the AST to check if empty (user's filter, not the effective one)
   const ast = buildAST(filter);
@@ -632,10 +658,8 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   // routed through the AST because task.dropped is synthetic (emitter-only)
   let effectiveFilter: NormalizedTaskFilter =
     !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
-  // OMN-153: same default project-root exclusion as buildFilteredTasksScript.
-  if (filter.includeProjectRoot === undefined) {
-    effectiveFilter = { ...effectiveFilter, includeProjectRoot: false };
-  }
+  // OMN-153: same default project-root exclusion via consolidated helper.
+  effectiveFilter = applyProjectRootDefault(effectiveFilter);
 
   const filterCode = generateFilterCode(effectiveFilter);
   const filterDescription = describeFilterForScript(filter);
@@ -1630,7 +1654,14 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
   const { limit = 1000, fields = DEFAULT_EXPORT_FIELDS, format = 'json' } = options;
 
   // Normalize filter for AST generation
-  const taskFilter = normalizeExportFilter(filter);
+  const rawTaskFilter = normalizeExportFilter(filter);
+  // OMN-153: default-exclude project-root rows on the export path too.
+  // ExportFilter has no opt-in param today (follow-up: add includeProjectRoot
+  // to ExportFilter when there's a use case for exporting root rows).
+  // Preserves existing export completed/dropped behavior — export defaults
+  // includeCompleted=true (script-level completion check, not AST), so the
+  // dropped/completed interaction stays in the script body below, untouched.
+  const taskFilter = applyProjectRootDefault(rawTaskFilter);
 
   // Build AST and generate filter code
   const ast = buildAST(taskFilter);
@@ -2092,10 +2123,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     if (f.completed === undefined) f.completed = false;
     // OMN-157: dropped gets the same default for the same parity reason
     if (f.dropped === undefined) f.dropped = false;
-    // OMN-153: same-predicate rule — countOnly must exclude project-root rows
-    // by default, agreeing with the buildFilteredTasksScript row path.
-    if (f.includeProjectRoot === undefined) f.includeProjectRoot = false;
-    return f;
+    return applyProjectRootDefault(f);
   })();
 
   // Build AST and generate OmniJS filter code
