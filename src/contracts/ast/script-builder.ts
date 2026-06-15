@@ -692,18 +692,24 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 export function buildTaskByIdScript(taskId: string, fields: string[] = []): GeneratedScript {
   const fieldProjection = generateFieldProjection(fields);
 
+  // OMN-185: resolve the task directly via Task.byIdentifier (O(1)) instead of
+  // iterating flattenedTasks (O(n), pays the ~7-10s materialization floor for a
+  // single known id). Mirrors OMN-40's Project.byIdentifier fast path above.
+  // Task.byIdentifier returns null for an unknown/deleted id, so the guard keeps
+  // the {tasks:[], count:0} shape that NOT_FOUND read-backs depend on. The id
+  // filter is the sole selector (sibling keys are ignored — unchanged routing in
+  // list-tasks-ast.ts), and Task.byIdentifier resolves completed tasks too.
   const script = `
 (() => {
   const results = [];
   const targetId = ${JSON.stringify(taskId)};
 
-  flattenedTasks.forEach(task => {
-    if (task.id.primaryKey === targetId) {
-      results.push({
-        ${fieldProjection}
-      });
-    }
-  });
+  const task = Task.byIdentifier(targetId);
+  if (task) {
+    results.push({
+      ${fieldProjection}
+    });
+  }
 
   return JSON.stringify({
     tasks: results,

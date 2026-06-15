@@ -327,12 +327,33 @@ describe('buildInboxScript', () => {
 });
 
 describe('buildTaskByIdScript', () => {
-  it('generates script to find task by ID', () => {
+  it('uses Task.byIdentifier for O(1) lookup, never iterates flattenedTasks (OMN-185)', () => {
     const result = buildTaskByIdScript('abc123');
 
+    // OMN-185: mirror OMN-40's project fast path. A task id-lookup must resolve
+    // directly via Task.byIdentifier — iterating flattenedTasks pays the ~7-10s
+    // materialization floor for a single known id.
+    expect(result.script).toContain('Task.byIdentifier(targetId)');
+    expect(result.script).not.toContain('flattenedTasks');
+    expect(result.script).not.toContain('task.id.primaryKey === targetId');
     expect(result.script).toContain('targetId');
     expect(result.script).toContain('abc123');
-    expect(result.script).toContain('task.id.primaryKey === targetId');
+  });
+
+  it('guards the not-found case so a null task yields empty results (OMN-185)', () => {
+    const result = buildTaskByIdScript('abc123');
+
+    // Task.byIdentifier returns null for an unknown/deleted id; the guard keeps
+    // the {tasks:[], count:0} shape that NOT_FOUND read-back assertions rely on.
+    expect(result.script).toContain('if (task)');
+  });
+
+  it('preserves the id_lookup result shape', () => {
+    const result = buildTaskByIdScript('abc123');
+
+    expect(result.script).toContain("mode: 'id_lookup'");
+    expect(result.script).toContain('count: results.length');
+    expect(result.script).toContain('targetId: targetId');
   });
 
   it('generates field projections', () => {
