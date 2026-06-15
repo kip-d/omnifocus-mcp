@@ -85,6 +85,10 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
     },
     defaultSort: [{ field: 'dueDate', direction: 'asc' }],
   },
+  // OMN-130: available:true now emits a 4-status membership check (Available, DueSoon,
+  // Next, Overdue) — so mode:'available' returns all actionable-now tasks, including
+  // overdue and due-soon tasks. Previously only Task.Status.Available tasks were returned.
+  // BEHAVIOR CHANGE: overdue/due-soon/next tasks now appear in mode:'available' results.
   available: {
     augment: () => ({
       completed: false,

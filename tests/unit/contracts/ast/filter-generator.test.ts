@@ -196,11 +196,18 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toBe('task.taskStatus !== Task.Status.Dropped');
     });
 
-    it('generates OmniJS code for available: true using Task.Status enum', () => {
+    it('generates OmniJS code for available: true — 4-status membership check (OMN-130)', () => {
+      // OMN-130: available:true now emits a membership check across all actionable
+      // statuses {Available, DueSoon, Next, Overdue}, not a single === check.
       const filter: TaskFilter = { available: true };
       const result = generateFilterCode(filter);
 
-      expect(result.predicate).toBe('task.taskStatus === Task.Status.Available');
+      expect(result.predicate).toContain('Task.Status.Available');
+      expect(result.predicate).toContain('Task.Status.DueSoon');
+      expect(result.predicate).toContain('Task.Status.Next');
+      expect(result.predicate).toContain('Task.Status.Overdue');
+      expect(result.predicate).toContain('indexOf');
+      expect(result.predicate).toContain('!== -1');
     });
 
     it('generates OmniJS code for blocked: true using Task.Status enum', () => {

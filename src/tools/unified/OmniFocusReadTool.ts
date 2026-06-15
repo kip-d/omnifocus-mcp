@@ -220,6 +220,15 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
     scriptFields = [...new Set([...scriptFields, 'reason', 'daysOverdue', 'modified'])];
   }
 
+  // OMN-130 #3: smart_suggest scoring uses task.available (+30 pts). Force-inject
+  // 'available' so the score is reliable even when the caller passes explicit fields
+  // that omit it. MINIMAL_FIELDS already includes 'available' on the default path;
+  // this guards the explicit-fields case (mirror of the today-mode reason/daysOverdue
+  // injection above).
+  if (mode === 'smart_suggest' && !scriptFields.includes('available')) {
+    scriptFields = [...scriptFields, 'available'];
+  }
+
   // Note truncation: apply when not in detail mode
   // Truncate when using minimal fields OR when user explicitly requests note without details=true
   const shouldTruncateNotes = !compiled.details;
@@ -272,7 +281,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
 - inbox, available, blocked, search, all
-- smart_suggest: surfaces available next actions (NOT urgency-ranked — scored by deadline proximity/flagged/quick-win, but this is a convenience filter, not a priority ranking)
+- smart_suggest: surfaces available next actions (NOT urgency-ranked — scored by deadline proximity/flagged/quick-win, but this is a convenience shortlist, not a definitive priority ranking). Includes overdue, due-soon, and next tasks (all actionable statuses).
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:

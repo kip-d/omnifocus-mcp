@@ -26,6 +26,7 @@ import {
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
+import { ACTIONABLE_STATUSES } from './types.js';
 
 // =============================================================================
 // TYPES
@@ -231,22 +232,20 @@ function generateFieldProjection(
         projections.push('blocked: task.taskStatus === Task.Status.Blocked');
         break;
       case 'available':
-        // OMN-130: "actionable now" — true for any status that is not a blocker or
-        // terminal state. OmniFocus Task.Status has 7 members; the actionable set is
-        // {Available, DueSoon, Next, Overdue}. Blocked (defer date not elapsed,
-        // sequential predecessor incomplete, or on-hold project), Completed, and
-        // Dropped are non-actionable. Using indexOf (compatible with OmniJS) rather
-        // than Array.includes (not available in all OmniJS runtimes).
-        // Alternative considered: bare `=== Task.Status.Available` (old form) —
-        // rejected because it returned available:false for Overdue/DueSoon/Next tasks,
-        // making "can I act on this?" unanswerable for those common states (OMN-130).
-        projections.push(
-          'available: [Task.Status.Available, Task.Status.DueSoon, Task.Status.Next, Task.Status.Overdue].indexOf(task.taskStatus) !== -1',
-        );
+        // OMN-130: "actionable now" — uses the shared ACTIONABLE_STATUSES constant from
+        // types.ts so WHERE (filter-side emitter) and SELECT (projection) always agree.
+        // {Available, DueSoon, Next, Overdue} are actionable; Blocked (deferred / sequential
+        // predecessor / on-hold project), Completed, and Dropped are not.
+        // indexOf used over Array.includes for OmniJS runtime compatibility.
+        projections.push(`available: [${ACTIONABLE_STATUSES.join(', ')}].indexOf(task.taskStatus) !== -1`);
         break;
       case 'hasNote':
-        // OMN-130: cheap boolean — true when the task has any non-empty note text.
-        // Coalesce null/undefined to '' before checking length so it never throws.
+        // OMN-130: boolean presence marker — true when the task has any non-empty note text.
+        // Trade-off: OmniJS has no note-presence-only API, so (task.note || '') materializes
+        // the full note string per task. The boolean avoids sending multi-KB note bodies in
+        // minimal responses, but the per-task string read still happens in the OmniJS runtime.
+        // A client that needs the note body should request the 'note' field explicitly.
+        // Coalesce null/undefined to '' before .length so it never throws on a null note.
         projections.push("hasNote: (task.note || '').length > 0");
         break;
       case 'dueDate':

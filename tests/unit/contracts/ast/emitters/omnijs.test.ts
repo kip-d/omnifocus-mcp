@@ -160,8 +160,13 @@ describe('emitOmniJS', () => {
     });
   });
 
-  describe('available status comparisons', () => {
-    it('emits Task.Status.Available check for available: true', () => {
+  describe('available status comparisons (OMN-130: actionable-now 4-status set)', () => {
+    // OMN-130: available filter now emits a membership check across the full
+    // actionable-now set {Available, DueSoon, Next, Overdue}, not a single === check.
+    // available:true  → indexOf !== -1 (task IS in the actionable set)
+    // available:false → indexOf === -1 (task is NOT in the actionable set)
+
+    it('emits 4-status membership check for available: true', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.available',
@@ -169,10 +174,17 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.taskStatus === Task.Status.Available');
+      // Must reference all four actionable statuses
+      expect(code.predicate).toContain('Task.Status.Available');
+      expect(code.predicate).toContain('Task.Status.DueSoon');
+      expect(code.predicate).toContain('Task.Status.Next');
+      expect(code.predicate).toContain('Task.Status.Overdue');
+      // Must be a membership check (indexOf or includes), not a single ===
+      expect(code.predicate).toContain('indexOf');
+      expect(code.predicate).toContain('!== -1');
     });
 
-    it('emits not available check for available: false', () => {
+    it('emits inverted 4-status membership check for available: false', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.available',
@@ -180,10 +192,15 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.taskStatus !== Task.Status.Available');
+      expect(code.predicate).toContain('Task.Status.Available');
+      expect(code.predicate).toContain('Task.Status.DueSoon');
+      expect(code.predicate).toContain('Task.Status.Next');
+      expect(code.predicate).toContain('Task.Status.Overdue');
+      expect(code.predicate).toContain('indexOf');
+      expect(code.predicate).toContain('=== -1');
     });
 
-    it('emits not available for available != true', () => {
+    it('emits inverted membership check for available != true', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.available',
@@ -191,10 +208,10 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.taskStatus !== Task.Status.Available');
+      expect(code.predicate).toContain('=== -1');
     });
 
-    it('emits available for available != false', () => {
+    it('emits membership check for available != false', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.available',
@@ -202,7 +219,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.taskStatus === Task.Status.Available');
+      expect(code.predicate).toContain('!== -1');
     });
   });
 

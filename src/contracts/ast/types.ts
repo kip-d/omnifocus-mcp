@@ -150,6 +150,53 @@ function emitOmniJSStatusComparison(operator: ComparisonOperator, value: unknown
   return `task.taskStatus ${shouldEqual ? '===' : '!=='} ${statusEnum}`;
 }
 
+/**
+ * OMN-130: The set of OmniFocus Task.Status values that mean "actionable now".
+ *
+ * Shared between the projection side (generateFieldProjection 'available' case in
+ * script-builder.ts) and the filter side (SYNTHETIC_FIELD_DEFS 'task.available'
+ * emitter below) so WHERE and SELECT always agree on what "available" means.
+ *
+ * Statuses and their semantics (from OmniFocus.d.ts + jxa-omnifocus-expert):
+ *   Available — standard ready task
+ *   DueSoon   — ready task approaching its due date
+ *   Next      — next action in a sequential project (sequentially unlocked)
+ *   Overdue   — ready task past its due date
+ *
+ * NOT in this set (not actionable):
+ *   Blocked   — defer date not elapsed, sequential predecessor incomplete, or on-hold project
+ *   Completed — terminal state
+ *   Dropped   — terminal state
+ *
+ * Consequence: available:true and blocked:true form a coherent XOR partition over
+ * non-terminal tasks. An overdue task → available:true, blocked:false.
+ */
+export const ACTIONABLE_STATUSES = [
+  'Task.Status.Available',
+  'Task.Status.DueSoon',
+  'Task.Status.Next',
+  'Task.Status.Overdue',
+] as const;
+
+/**
+ * Emit the OmniJS predicate for the `task.available` filter field.
+ *
+ * Uses a membership check across ACTIONABLE_STATUSES — NOT a single === comparison
+ * (the old single-status form silently excluded Overdue/DueSoon/Next tasks).
+ *
+ * available:true  → [...statuses].indexOf(task.taskStatus) !== -1
+ * available:false → [...statuses].indexOf(task.taskStatus) === -1
+ *
+ * Separate from emitOmniJSStatusComparison because `dropped` and `blocked` remain
+ * single-status comparisons; only `available` uses the multi-member set.
+ */
+function emitOmniJSAvailable(operator: ComparisonOperator, value: unknown): string {
+  const matches = value as boolean;
+  const wantMember = (operator === '==') === matches;
+  const statusArray = `[${ACTIONABLE_STATUSES.join(', ')}]`;
+  return `${statusArray}.indexOf(task.taskStatus) ${wantMember ? '!==' : '==='} -1`;
+}
+
 function emitOmniJSTagStatusValid(operator: ComparisonOperator, value: unknown): string {
   const isValid = value as boolean;
   if (operator !== '==' && operator !== '!=') {
@@ -184,10 +231,9 @@ function emitOmniJSParentTaskId(operator: ComparisonOperator, value: unknown): s
 export const SYNTHETIC_FIELD_DEFS: readonly SyntheticFieldDef[] = [
   { field: 'task.parentTaskId', omnijs: emitOmniJSParentTaskId },
   { field: 'task.dropped', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Dropped') },
-  {
-    field: 'task.available',
-    omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Available'),
-  },
+  // OMN-130: task.available uses emitOmniJSAvailable (4-status membership check),
+  // NOT emitOmniJSStatusComparison — that helper is single-status only.
+  { field: 'task.available', omnijs: emitOmniJSAvailable },
   { field: 'task.blocked', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Blocked') },
   { field: 'task.tagStatusValid', omnijs: emitOmniJSTagStatusValid },
 ];
