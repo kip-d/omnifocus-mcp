@@ -167,24 +167,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       expectOk(overdueCreate, 'create Overdue Task Test');
       expectOk(futureCreate, 'create Future Task Test');
 
-      // OMN-184: force a cache-COLD overdue_analysis. The analytics cache has a
-      // 1h TTL and is NOT invalidated by task creates, and the shared server is
-      // a single module-level instance reused across the whole integration run.
-      // overdue_analysis caches under a FIXED key (params are hardcoded:
-      // includeRecentlyCompleted/groupBy/limit), so a sibling test that calls
-      // overdue_analysis first (e.g. the LLM-simulation suites) would leave a
-      // pre-seed snapshot that this test would otherwise read — making `>= 1`
-      // pass on stale data (or fail on a clean DB) instead of verifying OUR
-      // seed. Clearing the cache here guarantees the next call does a live
-      // OmniJS query that sees the task we just created. (Costs a re-warm of
-      // the shared caches — accepted: valid testing over speed.)
-      const cacheClear = await client.callTool('system', {
-        operation: 'cache',
-        cacheAction: 'clear',
-      });
-      expectOk(cacheClear, 'cache clear before overdue_analysis');
-
-      // Run overdue analysis (cache-cold → live query → reflects the seed)
+      // Run overdue analysis
       const result = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'overdue_analysis',
@@ -200,11 +183,14 @@ describe('Analytics Validation - Actual Calculations', () => {
       // Validate summary contains required fields
       expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
       expect(typeof result.data.stats.summary.overduePercentage).toBe('number');
-      // OMN-184: we seeded a 7-days-overdue task (expectOk above proves it
-      // exists) and the cache clear above guarantees this analysis is a live
-      // query against that world, so it MUST count at least one. `>= 0`
-      // accepted the empty world a silent seed failure would have produced —
-      // the vacuous pass; `>= 1` now genuinely verifies the seed is seen.
+      // OMN-184: we seeded a 7-days-overdue task and expectOk above proves the
+      // create succeeded. A successful create invalidates the analytics cache
+      // (omnifocus_write create → CacheManager.invalidateForTaskChange, which
+      // unconditionally clears the 'analytics' category), so this
+      // overdue_analysis is a guaranteed cache miss → live OmniJS query against
+      // the world that now contains our seed. The old `>= 0` accepted the empty
+      // world a silent seed failure would have produced — the vacuous pass;
+      // `>= 1` genuinely verifies the seeded task is counted.
       expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(1);
 
       // If there are overdue tasks, validate they have proper structure
