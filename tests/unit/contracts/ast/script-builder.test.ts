@@ -371,6 +371,44 @@ describe('buildTaskByIdScript', () => {
   });
 });
 
+describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
+  // Execute the generated OmniJS body with a stubbed Task.byIdentifier. This is a
+  // behavioral oracle the string-contains tests cannot be: a casing typo
+  // (`task.byIdentifier`), a dropped `mode` key, or a broken projection would pass
+  // the toContain checks but fail here. Mirrors the OMN-154 runTaskScript harness.
+  function runById(
+    script: string,
+    tasksById: Record<string, unknown>,
+  ): { tasks: any[]; count: number; mode: string; targetId: string } {
+    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const sandbox: Record<string, unknown> = { Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('found: returns the single task with id_lookup shape', () => {
+    const { script } = buildTaskByIdScript('id-abc', ['id', 'name', 'flagged']);
+    const result = runById(script, {
+      'id-abc': { id: { primaryKey: 'id-abc' }, name: 'Found', flagged: true },
+    });
+
+    expect(result.tasks).toHaveLength(1);
+    expect(result.tasks[0]).toMatchObject({ id: 'id-abc', name: 'Found', flagged: true });
+    expect(result.count).toBe(1);
+    expect(result.mode).toBe('id_lookup');
+    expect(result.targetId).toBe('id-abc');
+  });
+
+  it('not found: null from byIdentifier yields empty results (count 0)', () => {
+    const { script } = buildTaskByIdScript('missing', ['id', 'name']);
+    const result = runById(script, {}); // no entry → byIdentifier returns null
+
+    expect(result.tasks).toHaveLength(0);
+    expect(result.count).toBe(0);
+    expect(result.mode).toBe('id_lookup');
+    expect(result.targetId).toBe('missing');
+  });
+});
+
 describe('inInbox field projection', () => {
   it('should use task.inInbox for inInbox field projection (not containingProject)', () => {
     const result = buildFilteredTasksScript(

@@ -694,7 +694,12 @@ export function buildTaskByIdScript(taskId: string, fields: string[] = []): Gene
 
   // OMN-185: resolve the task directly via Task.byIdentifier (O(1)) instead of
   // iterating flattenedTasks (O(n), pays the ~7-10s materialization floor for a
-  // single known id). Mirrors OMN-40's Project.byIdentifier fast path above.
+  // single known id). Mirrors OMN-40's Project.byIdentifier fast-path PATTERN.
+  // NOTE the layering differs from buildProjectByIdScript: this builder returns
+  // only the inner OmniJS body — the caller (list-tasks-ast.ts) wraps it in
+  // app.evaluateJavascript — whereas buildProjectByIdScript self-wraps. `Task`
+  // is an OmniJS global and is defined ONLY inside that evaluateJavascript
+  // wrapper; running this script as bare JXA would throw `Task is not defined`.
   // Task.byIdentifier returns null for an unknown/deleted id, so the guard keeps
   // the {tasks:[], count:0} shape that NOT_FOUND read-backs depend on. The id
   // filter is the sole selector (sibling keys are ignored — unchanged routing in
