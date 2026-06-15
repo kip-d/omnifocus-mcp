@@ -186,9 +186,16 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
           if (!matchesName(tag)) return;
           totalMatched++;
           ${limitCheck}
+          // OMN-145: parentId is always emitted in basic mode (null for top-level tags).
+          // Option A (unconditional field) was chosen over an opt-in mode/fields param:
+          // an opt-in flag an LLM client won't know to set defeats "make hierarchy
+          // reachable"; additive parentId is lower-friction and lower-API-surface.
+          // Cost: one O(n) property access on an already-O(n) scan — negligible.
+          const parent = tag.parent;
           tags.push({
             id: tag.id.primaryKey,
-            name: tag.name
+            name: tag.name,
+            parentId: parent ? parent.id.primaryKey : null
           });
           count++;
         });

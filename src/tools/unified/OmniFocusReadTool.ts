@@ -96,7 +96,8 @@ const PROJECT_LIST_SCHEMA = listResultSchema(['projects', 'items'], {
 /**
  * Tag list result — emitted by buildTagsScript (basic mode in the read tool).
  * Wire shape: {ok: true, v: 'ast', items, summary}
- * Read tool uses basic mode: items are {id, name} objects.
+ * Read tool uses basic mode: items are {id, name, parentId} objects.
+ * OMN-145: parentId is null for top-level tags; non-null string ID for nested tags.
  *
  * Source: src/contracts/ast/tag-script-builder.ts — return JSON.stringify({ok:true, v:'ast', items, summary}).
  */
@@ -286,7 +287,7 @@ FOLDERS (type: "folders"):
 - Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter folders by name; filters: { folder: "<name>" } matches folders whose PARENT folder name contains <name>; filters: { folder: null } returns top-level folders only. Other filter keys (status, flagged, logical operators, etc.) reject with a steering error.
 
 TAGS (type: "tags"):
-- Returns a flat {id, name} list. Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter tags by name. Other filter keys reject with a steering error.
+- Returns a flat {id, name, parentId} list; parentId is null for top-level tags, a string ID for nested tags. Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter tags by name. Other filter keys reject with a steering error.
 
 EXPORT TO DISK:
 - outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
