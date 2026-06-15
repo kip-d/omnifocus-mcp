@@ -2,21 +2,13 @@ import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readLoadedBuild } from './build-info.js';
+import { readLoadedBuild, type LoadedBuild } from './build-info.js';
 
 export interface VersionInfo {
   name: string;
   version: string;
   description: string;
-  build: {
-    hash: string;
-    branch: string;
-    commitDate: string;
-    commitMessage: string;
-    dirty: boolean;
-    timestamp: string;
-    buildId: string;
-  };
+  build: LoadedBuild;
   runtime: {
     node: string;
     platform: string;
