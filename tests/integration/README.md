@@ -1,5 +1,8 @@
 # LLM Assistant Simulation Tests
 
+> **Suite execution model, timing, and why it runs serially:** see [`PERFORMANCE.md`](./PERFORMANCE.md). Run the
+> integration suite only via `run_in_background`, never kill it (orphaned-worker hazard, OMN-143).
+
 This directory contains integration tests that simulate how an LLM assistant (like Claude) would interact with our
 OmniFocus MCP server. These tests provide valuable insights into the real-world usage patterns and help ensure our tools
 work correctly in practice.
