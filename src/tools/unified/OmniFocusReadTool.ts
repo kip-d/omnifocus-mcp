@@ -187,7 +187,14 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   const limit = compiled.limit || 25;
   const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
 
-  const filter = augmentFilterForMode(mode, compiled.filters, {
+  // OMN-153: thread includeProjectRoot onto the filter BEFORE augmentFilterForMode
+  // so the project-root exclusion survives mode augmentation.
+  const baseFilters: typeof compiled.filters =
+    compiled.includeProjectRoot !== undefined
+      ? { ...compiled.filters, includeProjectRoot: compiled.includeProjectRoot }
+      : compiled.filters;
+
+  const filter = augmentFilterForMode(mode, baseFilters, {
     daysAhead: compiled.daysAhead,
   });
 
@@ -196,6 +203,17 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
 
   // Resolve effective fields: explicit > details=true > MINIMAL_FIELDS
   let scriptFields = resolveEffectiveTaskFields(userExplicitFields, compiled.details);
+
+  // OMN-153: when the caller opts in to project-root rows, auto-inject isProjectRoot
+  // into the projection so every root row is ALWAYS marked — regardless of whether the
+  // client asked for the field. Without this, a root row returned via includeProjectRoot:true
+  // on the DEFAULT projection carries NO marker and is indistinguishable from a regular task,
+  // which is the exact P5 safety hazard the ticket exists to prevent.
+  // details:true / explicit fields:[...'isProjectRoot'...] already get it through the normal
+  // resolveEffectiveTaskFields path; this guard covers the remaining default-field case.
+  if (compiled.includeProjectRoot === true && !scriptFields.includes('isProjectRoot')) {
+    scriptFields = [...scriptFields, 'isProjectRoot'];
+  }
 
   // Today mode needs extra fields for category counting
   if (mode === 'today') {
@@ -277,6 +295,8 @@ RESPONSE CONTROL:
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
 - countOnly: true returns only count (33x faster for "how many" questions) — tasks only
+- includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
+- fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Auto-included when includeProjectRoot: true; also requestable explicitly or via details: true.
 
 COMPLETED TASKS:
 - Use filters: { completed: true } or filters: { status: "completed" } to query completed tasks
@@ -354,6 +374,11 @@ PERFORMANCE:
             countOnly: { type: 'boolean' },
             fastSearch: { type: 'boolean' },
             daysAhead: { type: 'number' },
+            includeProjectRoot: {
+              type: 'boolean',
+              description:
+                'Tasks only: include project-root rows (default false). Project roots are excluded by default — completing/deleting a root row completes/deletes the PROJECT. When true, isProjectRoot: true is auto-injected into every root row.',
+            },
             details: { type: 'boolean' },
             includeStats: { type: 'boolean' },
             exportType: { type: 'string', enum: ['tasks', 'projects', 'all'] },
@@ -432,7 +457,7 @@ PERFORMANCE:
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
-      return this.executeCountOnly(filter, mode, timer);
+      return this.executeCountOnly(filter, mode, timer, compiled.includeProjectRoot);
     }
 
     // --- ID lookup fast path (always full detail) ---
@@ -508,12 +533,17 @@ PERFORMANCE:
     filter: TaskFilter,
     mode: TaskQueryMode | undefined,
     timer: OperationTimerV2,
+    includeProjectRoot?: boolean,
   ): Promise<unknown> {
     // Ensure inbox mode sets the inInbox filter (mode: "inbox" is not in
     // MODE_DEFINITIONS, so augmentFilterForMode passes through unchanged)
     const countFilter = { ...filter };
     if (mode === 'inbox' && !countFilter.inInbox) {
       countFilter.inInbox = true;
+    }
+    // OMN-153: thread includeProjectRoot so countOnly agrees with the row path.
+    if (includeProjectRoot !== undefined) {
+      countFilter.includeProjectRoot = includeProjectRoot;
     }
 
     const { script } = buildTaskCountScript(countFilter, { maxScan: 10000 });

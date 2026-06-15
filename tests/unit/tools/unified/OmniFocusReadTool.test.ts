@@ -1033,12 +1033,16 @@ describe('OmniFocusReadTool', () => {
         })) as any;
 
         expect(result.success).toBe(true);
-        // No completed predicate emitted into the filter
+        // No completed predicate emitted into the AST filter.
+        // OMN-153: export now defaults-exclude project roots (task.project === null),
+        // so the matchesFilter predicate is task.project === null (not `return true;`).
+        // The predicate must still NOT constrain task.completed when includeCompleted:true.
         const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        // Filter description is emitted as a comment; check the predicate body
-        // does not constrain task.completed. The AST emits `true` for an empty
-        // filter.
-        expect(scriptArg).toContain('return true;');
+        // Extract the matchesFilter body to test only the predicate
+        const matchesFn = scriptArg.match(/function matchesFilter\(task\)\s*\{[^}]+\}/)?.[0] ?? '';
+        expect(matchesFn).not.toContain('completed');
+        // The project-root exclusion predicate IS present (OMN-153 export fix)
+        expect(matchesFn).toContain('task.project === null');
       });
 
       it('flags truncation in summary when the script reports limited=true', async () => {
@@ -1863,6 +1867,64 @@ describe('OmniFocusReadTool', () => {
       expect(second.summary.total_projects).toBe(160);
       // execJson only called once (for the first query; second is cache hit)
       expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─── OMN-153: isProjectRoot auto-inject ──────────────────────────────────────
+
+  describe('OMN-153: isProjectRoot auto-injected into projection when includeProjectRoot: true', () => {
+    const taskPayload = {
+      success: true as const,
+      data: {
+        tasks: [{ id: 'p1', name: 'Project Root', completed: false, isProjectRoot: true }],
+        metadata: { total_matched: 1, sorted_in_script: false },
+      },
+    };
+
+    it('auto-injects isProjectRoot into the generated script when includeProjectRoot: true and no explicit fields', async () => {
+      execJsonSpy.mockResolvedValueOnce(taskPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', includeProjectRoot: true },
+      });
+
+      // The script sent to execJson must include the isProjectRoot projection
+      // because buildTaskQuery auto-injects it whenever includeProjectRoot:true
+      // is set — regardless of whether the client asked for the field.
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      expect(scriptText).toContain('isProjectRoot: task.project !== null');
+    });
+
+    it('does NOT auto-inject isProjectRoot when includeProjectRoot is omitted (default false)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true as const,
+        data: {
+          tasks: [{ id: 't1', name: 'Regular Task', completed: false }],
+          metadata: { total_matched: 1, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks' },
+      });
+
+      // No includeProjectRoot → default minimal fields → isProjectRoot NOT in projection
+      // (it IS in DETAIL_FIELDS, but default queries use MINIMAL_FIELDS)
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      expect(scriptText).not.toContain('isProjectRoot: task.project !== null');
+    });
+
+    it('does NOT duplicate isProjectRoot when caller already requests it explicitly', async () => {
+      execJsonSpy.mockResolvedValueOnce(taskPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', includeProjectRoot: true, fields: ['id', 'name', 'isProjectRoot'] },
+      });
+
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      // Should appear exactly once (Set dedup in buildTaskQuery)
+      const occurrences = (scriptText.match(/isProjectRoot: task\.project !== null/g) || []).length;
+      expect(occurrences).toBe(1);
     });
   });
 });

@@ -169,6 +169,7 @@ const TASK_FIELDS = [
   'parentTaskId',
   'parentTaskName',
   'inInbox',
+  'isProjectRoot', // OMN-153: true when the task IS a project root (task.project !== null in OmniJS)
 ] as const;
 
 const PROJECT_FIELDS = [
@@ -294,6 +295,9 @@ const TaskQuerySchema = BaseQuerySchema.merge(
     fastSearch: z.boolean().optional(),
     daysAhead: coerceNumber().min(1).max(30).optional(),
     countOnly: z.boolean().optional(),
+    // OMN-153: query-level param (like countOnly/fastSearch) — NOT a filters:{} key.
+    // Default false (exclude project-root rows). Set true only when inspecting project roots.
+    includeProjectRoot: z.boolean().optional(),
   }),
 ).strict();
 

@@ -185,6 +185,20 @@ export const FILTER_DEFS: readonly FilterDef[] = [
     }),
   ),
 
+  // --- Project-root exclusion (OMN-153) ---
+  // In OmniFocus a project IS a task (its root task). The root appears in
+  // flattenedTasks and is indistinguishable without extra inspection.
+  // Detection: task.project !== null (OmniJS Task.project returns the Project
+  // only for the project's root task; null for all other tasks).
+  // Default: exclude roots. The script-builder injects includeProjectRoot: false
+  // into effectiveFilter; this FilterDef emits ONLY when explicitly false.
+  // Opt-in (includeProjectRoot: true): the script-builder leaves the filter
+  // unset → null → FilterDef returns null → no exclusion emitted.
+  {
+    fields: ['task.project'],
+    build: (f) => (f.includeProjectRoot === false ? comparison('task.project', '==', null) : null),
+  },
+
   // --- Project filter ---
   // Support both filter.projectId (from advanced filters) and filter.project (from simple project param)
   {

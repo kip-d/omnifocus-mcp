@@ -933,6 +933,10 @@ describe('OMN-154: generated scripts count the full population (vm-executed)', (
     effectiveDueDate: null,
     effectiveDeferDate: null,
     containingProject: null,
+    // OMN-153: task.project is null for regular tasks in OmniJS (non-null only for
+    // a project's root task). Include it so the default project-root exclusion predicate
+    // (task.project === null) works correctly in these vm-executed tests.
+    project: null,
     available: true,
     blocked: false,
   });
