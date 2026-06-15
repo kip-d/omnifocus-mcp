@@ -54,7 +54,10 @@ describe('buildListTasksScriptV4', () => {
       });
 
       expect(script).toContain('task-123');
-      expect(script).toContain('task.id.primaryKey === targetId');
+      // OMN-185: the id path resolves via Task.byIdentifier (O(1)), not a
+      // flattenedTasks scan.
+      expect(script).toContain('Task.byIdentifier(targetId)');
+      expect(script).not.toContain('flattenedTasks');
     });
 
     it('uses flattenedTasks for general queries', () => {

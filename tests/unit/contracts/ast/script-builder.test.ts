@@ -327,12 +327,33 @@ describe('buildInboxScript', () => {
 });
 
 describe('buildTaskByIdScript', () => {
-  it('generates script to find task by ID', () => {
+  it('uses Task.byIdentifier for O(1) lookup, never iterates flattenedTasks (OMN-185)', () => {
     const result = buildTaskByIdScript('abc123');
 
+    // OMN-185: mirror OMN-40's project fast path. A task id-lookup must resolve
+    // directly via Task.byIdentifier — iterating flattenedTasks pays the ~7-10s
+    // materialization floor for a single known id.
+    expect(result.script).toContain('Task.byIdentifier(targetId)');
+    expect(result.script).not.toContain('flattenedTasks');
+    expect(result.script).not.toContain('task.id.primaryKey === targetId');
     expect(result.script).toContain('targetId');
     expect(result.script).toContain('abc123');
-    expect(result.script).toContain('task.id.primaryKey === targetId');
+  });
+
+  it('guards the not-found case so a null task yields empty results (OMN-185)', () => {
+    const result = buildTaskByIdScript('abc123');
+
+    // Task.byIdentifier returns null for an unknown/deleted id; the guard keeps
+    // the {tasks:[], count:0} shape that NOT_FOUND read-back assertions rely on.
+    expect(result.script).toContain('if (task)');
+  });
+
+  it('preserves the id_lookup result shape', () => {
+    const result = buildTaskByIdScript('abc123');
+
+    expect(result.script).toContain("mode: 'id_lookup'");
+    expect(result.script).toContain('count: results.length');
+    expect(result.script).toContain('targetId: targetId');
   });
 
   it('generates field projections', () => {
@@ -347,6 +368,44 @@ describe('buildTaskByIdScript', () => {
     const result = buildTaskByIdScript('abc123');
 
     expect(result.filterDescription).toBe('id = abc123');
+  });
+});
+
+describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
+  // Execute the generated OmniJS body with a stubbed Task.byIdentifier. This is a
+  // behavioral oracle the string-contains tests cannot be: a casing typo
+  // (`task.byIdentifier`), a dropped `mode` key, or a broken projection would pass
+  // the toContain checks but fail here. Mirrors the OMN-154 runTaskScript harness.
+  function runById(
+    script: string,
+    tasksById: Record<string, unknown>,
+  ): { tasks: any[]; count: number; mode: string; targetId: string } {
+    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const sandbox: Record<string, unknown> = { Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('found: returns the single task with id_lookup shape', () => {
+    const { script } = buildTaskByIdScript('id-abc', ['id', 'name', 'flagged']);
+    const result = runById(script, {
+      'id-abc': { id: { primaryKey: 'id-abc' }, name: 'Found', flagged: true },
+    });
+
+    expect(result.tasks).toHaveLength(1);
+    expect(result.tasks[0]).toMatchObject({ id: 'id-abc', name: 'Found', flagged: true });
+    expect(result.count).toBe(1);
+    expect(result.mode).toBe('id_lookup');
+    expect(result.targetId).toBe('id-abc');
+  });
+
+  it('not found: null from byIdentifier yields empty results (count 0)', () => {
+    const { script } = buildTaskByIdScript('missing', ['id', 'name']);
+    const result = runById(script, {}); // no entry → byIdentifier returns null
+
+    expect(result.tasks).toHaveLength(0);
+    expect(result.count).toBe(0);
+    expect(result.mode).toBe('id_lookup');
+    expect(result.targetId).toBe('missing');
   });
 });
 
