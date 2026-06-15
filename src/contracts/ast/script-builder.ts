@@ -26,6 +26,7 @@ import {
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
+import { ACTIONABLE_STATUSES } from './types.js';
 
 // =============================================================================
 // TYPES
@@ -81,6 +82,13 @@ export interface GeneratedScript {
 /**
  * Thin-default fields returned when no explicit fields or details flag is set.
  * Optimized for low token usage — covers the most common query needs.
+ *
+ * OMN-130: `hasNote` added — lets a client cheaply tell if a task has context
+ * worth reading without paying the token cost of the full `note` field.
+ * Decision record: `notePreview` (~120-char snippet) was considered as an
+ * alternative but rejected — it is redundant with the full `note` field in
+ * DETAIL_FIELDS and contradicts the token-cost goal of the lean default.
+ * `hasNote` answers "is there context?"; the client requests `note` if yes.
  */
 export const MINIMAL_FIELDS = [
   'id',
@@ -92,6 +100,7 @@ export const MINIMAL_FIELDS = [
   'tags',
   'project',
   'available',
+  'hasNote',
 ];
 
 /**
@@ -223,7 +232,21 @@ function generateFieldProjection(
         projections.push('blocked: task.taskStatus === Task.Status.Blocked');
         break;
       case 'available':
-        projections.push('available: task.taskStatus === Task.Status.Available');
+        // OMN-130: "actionable now" — uses the shared ACTIONABLE_STATUSES constant from
+        // types.ts so WHERE (filter-side emitter) and SELECT (projection) always agree.
+        // {Available, DueSoon, Next, Overdue} are actionable; Blocked (deferred / sequential
+        // predecessor / on-hold project), Completed, and Dropped are not.
+        // indexOf used over Array.includes for OmniJS runtime compatibility.
+        projections.push(`available: [${ACTIONABLE_STATUSES.join(', ')}].indexOf(task.taskStatus) !== -1`);
+        break;
+      case 'hasNote':
+        // OMN-130: boolean presence marker — true when the task has any non-empty note text.
+        // Trade-off: OmniJS has no note-presence-only API, so (task.note || '') materializes
+        // the full note string per task. The boolean avoids sending multi-KB note bodies in
+        // minimal responses, but the per-task string read still happens in the OmniJS runtime.
+        // A client that needs the note body should request the 'note' field explicitly.
+        // Coalesce null/undefined to '' before .length so it never throws on a null note.
+        projections.push("hasNote: (task.note || '').length > 0");
         break;
       case 'dueDate':
         projections.push('dueDate: task.dueDate ? task.dueDate.toISOString() : null');

@@ -1007,7 +1007,7 @@ describe('OMN-154: generated scripts count the full population (vm-executed)', (
 // =============================================================================
 
 describe('field set constants', () => {
-  it('MINIMAL_FIELDS contains exactly the 9 thin-default fields', () => {
+  it('MINIMAL_FIELDS contains exactly the 10 thin-default fields (OMN-130: hasNote added)', () => {
     expect(MINIMAL_FIELDS).toEqual([
       'id',
       'name',
@@ -1018,6 +1018,7 @@ describe('field set constants', () => {
       'tags',
       'project',
       'available',
+      'hasNote',
     ]);
   });
 

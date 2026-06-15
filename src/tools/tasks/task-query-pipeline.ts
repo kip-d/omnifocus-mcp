@@ -85,6 +85,10 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
     },
     defaultSort: [{ field: 'dueDate', direction: 'asc' }],
   },
+  // OMN-130: available:true now emits a 4-status membership check (Available, DueSoon,
+  // Next, Overdue) — so mode:'available' returns all actionable-now tasks, including
+  // overdue and due-soon tasks. Previously only Task.Status.Available tasks were returned.
+  // BEHAVIOR CHANGE: overdue/due-soon/next tasks now appear in mode:'available' results.
   available: {
     augment: () => ({
       completed: false,
@@ -104,6 +108,12 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
       flagged: true,
     }),
   },
+  // OMN-130: smart_suggest surfaces available next actions, NOT urgency-ranked tasks.
+  // The name/description was previously overstated (implied priority ranking).
+  // Behavior: filters to active (not completed/dropped) tasks, then scoreForSmartSuggest
+  // re-ranks by deadline proximity, flagged status, and quick-win estimate — but the
+  // result is a convenience shortlist for review, not a definitive priority order.
+  // Do NOT change this to a higher-fidelity ranking without a separate ticket.
   smart_suggest: {
     augment: () => ({
       completed: false,

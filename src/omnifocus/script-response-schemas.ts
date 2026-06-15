@@ -75,6 +75,8 @@ export const TaskRowSchema = z
     // OMN-153: marker emitted when 'isProjectRoot' is in the requested fields.
     // true when task.project !== null (i.e. this task IS a project root).
     isProjectRoot: z.boolean().optional(),
+    // OMN-130: cheap boolean — true when the task has any non-empty note text.
+    hasNote: z.boolean().optional(),
   })
   .strict();
 
