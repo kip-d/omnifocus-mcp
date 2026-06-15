@@ -7,7 +7,7 @@
  *
  * Modes:
  * - 'names': Just string array (fastest)
- * - 'basic': id + name objects (for most UI)
+ * - 'basic': id + name + parentId objects (for most UI)
  * - 'full': All properties + optional usage stats
  *
  * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
@@ -155,7 +155,8 @@ function buildTagNamesScript(options: TagScriptOptions = {}): GeneratedScript {
 }
 
 /**
- * Build script for 'basic' mode - returns {id, name} objects
+ * Build script for 'basic' mode - returns {id, name, parentId} objects
+ * (OMN-145: parentId is null for top-level tags, a string ID for nested tags)
  * Note: sortBy is ignored in basic mode (always sorted by name)
  */
 function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
@@ -257,7 +258,7 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
     script: script.trim(),
     filterDescription: hasFilter
       ? `name ${nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${name}"`
-      : 'all tags (basic: id + name)',
+      : 'all tags (basic: id + name + parentId)',
     isEmptyFilter: !hasFilter,
   };
 }

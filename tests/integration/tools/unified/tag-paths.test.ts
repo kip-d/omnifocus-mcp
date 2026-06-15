@@ -12,14 +12,16 @@
  * Two read-back channels are used:
  *
  *   - Tool seam (omnifocus_read { type: 'tags' }): tag existence + id. The
- *     tags query runs in basic mode and returns ONLY {id, name} — it does not
- *     expose parent linkage, so it cannot verify hierarchy.
+ *     tags query runs in basic mode and returns {id, name, parentId} (OMN-145),
+ *     so it CAN verify direct parent linkage via parentId. It does not expose
+ *     parentName, so full hierarchy cross-checks (name of the parent) still
+ *     require the osascript probe.
  *   - osascript hierarchy probe (probeTagByName): an independent OmniJS read
  *     of {id, name, parentId, parentName} straight off the live DB
- *     (tag.parent is OmniJS-only). Used wherever parent linkage is the thing
- *     under test (create-under-parent, path chain, nest/unnest/reparent).
- *     Same pattern as sandbox-manager's executeJXA — fully independent of the
- *     server code under test.
+ *     (tag.parent is OmniJS-only). Used wherever parentName or multi-hop
+ *     hierarchy is the thing under test (create-under-parent, path chain,
+ *     nest/unnest/reparent). Same pattern as sandbox-manager's executeJXA —
+ *     fully independent of the server code under test.
  *
  * Envelope values (tagId, createdSegments, tasksMerged) are operation OUTPUTS,
  * not persisted-state echoes — they are asserted as such AND cross-checked
@@ -190,8 +192,8 @@ describe('OMN-128 slice 6: live tag mutation paths (AST lowerings, persisted rea
     return scriptEnvelopeOf(res);
   }
 
-  /** Tool-seam read-back: full tags list ({id, name} per tag, basic mode). */
-  async function readTags(): Promise<Array<{ id: string; name: string }>> {
+  /** Tool-seam read-back: full tags list ({id, name, parentId} per tag, basic mode). */
+  async function readTags(): Promise<Array<{ id: string; name: string; parentId: string | null }>> {
     const res = await client.callTool('omnifocus_read', { query: { type: 'tags' } });
     expectOk(res, 'tags list read-back');
     return tagsOf(res);

@@ -7,7 +7,7 @@
  *
  * Modes:
  * - 'names': Just string array of tag names (fastest)
- * - 'basic': id + name objects (for most UI use cases)
+ * - 'basic': id + name + parentId objects (for most UI use cases; parentId null for top-level tags)
  * - 'full': All properties including usage stats (for admin/analysis)
  *
  * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
@@ -43,7 +43,7 @@ export interface TagQueryOptions {
   /**
    * Mode determines field projection level
    * - 'names': string[] (fastest, minimal data)
-   * - 'basic': { id, name }[] (default, for UI)
+   * - 'basic': { id, name, parentId }[] (default, for UI; parentId null for top-level)
    * - 'full': All properties including usage stats
    */
   mode: TagQueryMode;
@@ -90,7 +90,7 @@ export interface TagQueryOptions {
  */
 export const TAG_MODE_FIELDS = {
   names: [] as const, // Just string array, no object fields
-  basic: ['id', 'name'] as const,
+  basic: ['id', 'name', 'parentId'] as const,
   full: [
     'id',
     'name',
