@@ -8,21 +8,22 @@
 
 - The full integration suite runs **serially against the live OmniFocus app** (`singleFork`). This is required, not
   incidental — see [Why serial](#why-serial-singlefork-and-no-parallel-live-lane).
-- Measured wall: **~1016–1196 s (~17–20 min)** for **166 tests across 20 live files** (2026-06-14).
-- **The wall is fixture-bound, not test-body-bound.** Only ~526 s is test bodies; **~400–490 s (40–48 %) is per-file
-  fixture setup/teardown + the shared-server OmniFocus warm**, and that overhead swings ±90 s run-to-run independent of
-  any code change.
+- Measured wall: **~1016–1196 s (~17–20 min)** across the audit runs for **166 tests across 20 live files**
+  (2026-06-14); **~1019 s post-fix on a quiet host**.
+- **The wall is fixture-bound, not test-body-bound.** Only ~526 s is test bodies; the rest — **~400–570 s (39–48 %),
+  computed as wall minus test-body** — is per-file fixture setup/teardown + the shared-server OmniFocus warm, and it
+  swings ±90 s run-to-run independent of any code change.
 - **Do not track this suite by wall-clock delta.** A single wall number is dominated by fixture noise and OmniFocus
   cache state; it cannot reflect a test-body optimization. Track the **per-class test-body subtotal** instead (see
   [Measuring](#measuring--detecting-drift)).
 
 ## Where the time goes (measured 2026-06-14, quiet host)
 
-| Layer                              | Time           | Notes                                                                                                                                                                                                                                      |
-| ---------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Test bodies**                    | **~526 s**     | The `duration` vitest reports per test.                                                                                                                                                                                                    |
-| Fixture setup + teardown + OF warm | **~400–490 s** | Wall minus test-body. Per-file `beforeAll` sandbox + `afterAll` `fullCleanup` (~7 sequential `osascript`/AppleEvent calls + straggler sweeps) × 20 files, plus the shared-server cache warm (~13 s). Not counted in any test's `duration`. |
-| **Wall**                           | **~1016 s**    | What you wait for.                                                                                                                                                                                                                         |
+| Layer                              | Time        | Notes                                                                                                                                                                                                                                                              |
+| ---------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Test bodies**                    | **~526 s**  | The `duration` vitest reports per test.                                                                                                                                                                                                                            |
+| Fixture setup + teardown + OF warm | **~493 s**  | Wall minus test-body (this run; ~400–570 s across runs). Per-file `beforeAll` sandbox + `afterAll` `fullCleanup` (~7 sequential `osascript`/AppleEvent calls + straggler sweeps) × 20 files, plus the shared-server cache warm (~13 s). Not counted in `duration`. |
+| **Wall**                           | **~1019 s** | What you wait for (526 + 493).                                                                                                                                                                                                                                     |
 
 ### Test-body breakdown by class
 
@@ -33,20 +34,20 @@
 
 ## The ~7–10 s floor and the OMN-185 fix
 
-Any **filtered whole-DB task read** materialises `flattenedTasks` — a ~7–10 s floor on a large database
-([`perf_whole_db_count_floor`]). The audit's premise was that write-side read-backs paid this floor unnecessarily and
-could use a cheap `Task.byIdentifier` id-lookup. Investigation **inverted the premise**: the id-lookup path
-(`buildTaskByIdScript`) did _not_ use `Task.byIdentifier` — it iterated `flattenedTasks.forEach`, paying the _same_
+Any **filtered whole-DB task read** materialises `flattenedTasks` — a ~7–10 s floor on a large database (the
+`flattenedTasks` materialisation floor). The audit's premise was that write-side read-backs paid this floor
+unnecessarily and could use a cheap `Task.byIdentifier` id-lookup. Investigation **inverted the premise**: the id-lookup
+path (`buildTaskByIdScript`) did _not_ use `Task.byIdentifier` — it iterated `flattenedTasks.forEach`, paying the _same_
 floor. Projects got an O(1) `Project.byIdentifier` read fast path in OMN-40; tasks were the lone laggard.
 
 **OMN-185** gives task id-lookups the same O(1) path. Measured effect, reproduced across two runs at ~6× different host
 load (so it is host-independent, not noise):
 
-|                                            | pre-fix | post-fix | Δ                   |
-| ------------------------------------------ | ------- | -------- | ------------------- |
-| `update-operations` (≈100 % id read-backs) | 107 s   | 39–41 s  | **−62 to −64 %**    |
-| id-read-back files (subtotal)              | ~259 s  | ~152 s   | **~−105 s (−41 %)** |
-| floor-bound / other files                  | —       | —        | +noise only         |
+|                                            | pre-fix | post-fix | Δ                  |
+| ------------------------------------------ | ------- | -------- | ------------------ |
+| `update-operations` (≈100 % id read-backs) | 107 s   | ~40 s    | **−62 to −64 %**   |
+| id-read-back files (subtotal)              | ~259 s  | ~152 s   | **−107 s (−41 %)** |
+| floor-bound / other files                  | —       | —        | +noise only        |
 
 The **suite wall did not drop**, because the −92 s test-body win was absorbed by a +92 s swing in fixture overhead that
 run — the structural reason the wall is the wrong metric here.
@@ -61,7 +62,8 @@ project read materialises only the handful of projects in the sandbox folder, no
 
 ## Why serial (`singleFork`) and no parallel live lane
 
-Configured in `vitest.config.ts` (`pool: 'forks'`, `poolOptions.forks.singleFork: true`):
+Configured in `vitest.config.ts` (`pool: 'forks'`, `poolOptions.forks.singleFork: true` — applied whenever the run isn't
+unit-only, i.e. for every integration run):
 
 1. **One OmniFocus app; AppleEvents serialise.** Every live test drives the single OmniFocus instance over
    `osascript`/AppleEvents, which the app processes one at a time. Concurrent workers do not gain parallelism — they
@@ -69,7 +71,7 @@ Configured in `vitest.config.ts` (`pool: 'forks'`, `poolOptions.forks.singleFork
 2. **Orphaned-worker hazard (OMN-143).** Parallel forks against the live app have historically orphaned vitest workers
    whose teardowns then fire against live sessions. `singleFork` + the worker-guard
    (`tests/support/setup-worker-guard.ts`) exist specifically to prevent this. Any change here must preserve both. Run
-   the suite **only via `run_in_background`, never kill it** ([`tooling_integration_run_orphan_class`]).
+   the suite **only via `run_in_background`, never kill it** (orphaned-worker hazard).
 3. **The three non-OmniFocus files don't justify a second lane.** `mcp-protocol`, `http-transport`, `startup-timing`
    (~41 s combined) don't contend for AppleEvents and _could_ run in a parallel lane, but the saving is small and
    splitting the pool risks the `singleFork` guarantee the live files depend on. Not worth it.
@@ -82,7 +84,7 @@ within-suite serialisation above.)
 
 > **~400–490 s of the wall is irreducible per-file OmniFocus fixture overhead** (sandbox setup + `fullCleanup`
 > teardown + cache warm), and **~374 s of test-body time is load-bearing floor-bound filter/count/analytics work** that
-> must scan the real population to assert what it asserts. The remaining test-body lever — task id read-backs (~105 s) —
+> must scan the real population to assert what it asserts. The remaining test-body lever — task id read-backs (~107 s) —
 > was taken by **OMN-185**. The next lever on the wall is **fixture economics** (sharing a per-run sandbox/teardown
 > instead of per-file), tracked as **OMN-186**; it is deferred from this audit because it touches the OMN-143
 > leak-sensitive cleanup machinery and must keep cleanup folder-scoped.
