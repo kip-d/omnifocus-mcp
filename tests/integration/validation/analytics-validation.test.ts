@@ -49,6 +49,14 @@ describe('Analytics Validation - Actual Calculations', () => {
       const result1 = await client.createTestTask('Completed Task for Stats', { tags: [testSessionTag] });
       const result2 = await client.createTestTask('Another Completed', { tags: [testSessionTag] });
 
+      // OMN-184: assert the creates succeeded before reading `.data.task.taskId`.
+      // createTestTask returns {success:false} (no `.data`) when OmniFocus is
+      // busy/throttling; the bare access then crashes with an anonymous
+      // "Cannot read properties of undefined (reading 'task')" that hides which
+      // create failed. expectOk surfaces result.error and names the culprit.
+      expectOk(result1, 'create Completed Task for Stats');
+      expectOk(result2, 'create Another Completed');
+
       // Complete 3 out of 5 tasks
       await client.callTool('omnifocus_write', {
         mutation: {
@@ -135,7 +143,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       pastDate.setDate(pastDate.getDate() - 7); // 7 days ago
       const pastDateStr = pastDate.toISOString().split('T')[0];
 
-      await client.createTestTask('Overdue Task Test', {
+      const overdueCreate = await client.createTestTask('Overdue Task Test', {
         tags: [testSessionTag],
         dueDate: pastDateStr,
       });
@@ -145,10 +153,19 @@ describe('Analytics Validation - Actual Calculations', () => {
       futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
       const futureDateStr = futureDate.toISOString().split('T')[0];
 
-      await client.createTestTask('Future Task Test', {
+      const futureCreate = await client.createTestTask('Future Task Test', {
         tags: [testSessionTag],
         dueDate: futureDateStr,
       });
+
+      // OMN-184: assert both seed creates succeeded. These were fire-and-forget,
+      // which let a silent create failure pass the test VACUOUSLY: with no
+      // overdue task seeded, overdue_analysis finds 0 and the old
+      // `toBeGreaterThanOrEqual(0)` below still passed — green CI asserting
+      // nothing. Confirming the seed exists is what makes the `>= 1` demand
+      // below safe.
+      expectOk(overdueCreate, 'create Overdue Task Test');
+      expectOk(futureCreate, 'create Future Task Test');
 
       // Run overdue analysis
       const result = await client.callTool('omnifocus_analyze', {
@@ -166,7 +183,15 @@ describe('Analytics Validation - Actual Calculations', () => {
       // Validate summary contains required fields
       expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
       expect(typeof result.data.stats.summary.overduePercentage).toBe('number');
-      expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(0);
+      // OMN-184: we seeded a 7-days-overdue task and expectOk above proves the
+      // create succeeded. A successful create invalidates the analytics cache
+      // (omnifocus_write create → CacheManager.invalidateForTaskChange, which
+      // unconditionally clears the 'analytics' category), so this
+      // overdue_analysis is a guaranteed cache miss → live OmniJS query against
+      // the world that now contains our seed. The old `>= 0` accepted the empty
+      // world a silent seed failure would have produced — the vacuous pass;
+      // `>= 1` genuinely verifies the seeded task is counted.
+      expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(1);
 
       // If there are overdue tasks, validate they have proper structure
       if (result.data.stats.overdueTasks && result.data.stats.overdueTasks.length > 0) {
@@ -184,6 +209,10 @@ describe('Analytics Validation - Actual Calculations', () => {
       const result = await client.createTestTask('Velocity Test Task', {
         tags: [testSessionTag],
       });
+
+      // OMN-184: guard `.data.task.taskId` (same class as the ProductivityStats
+      // block) so a throttled create fails by name, not as a bare TypeError.
+      expectOk(result, 'create Velocity Test Task');
 
       await client.callTool('omnifocus_write', {
         mutation: {
@@ -243,6 +272,14 @@ describe('Analytics Validation - Actual Calculations', () => {
       // crashing with "Cannot read properties of undefined (reading 'stats')".
       expectOk(productivityResult, 'cross-tool productivity_stats');
       expectOk(velocityResult, 'cross-tool task_velocity');
+
+      // OMN-184: mirror the `.data` guard the other three blocks already have,
+      // so a success-but-empty envelope fails here rather than at the nested
+      // `.data.stats` / `.data.velocity` access. Normalizes the pattern by
+      // adding the assertion, not by dropping it elsewhere — diagnostic-rich
+      // failures are the cluster's intent (OMN-56/140).
+      expect(productivityResult.data).toBeDefined();
+      expect(velocityResult.data).toBeDefined();
 
       // ✅ Both should report > 0 tasks (our test tasks + possibly others)
       expect(productivityResult.data.stats.overview.totalTasks).toBeGreaterThan(0);
