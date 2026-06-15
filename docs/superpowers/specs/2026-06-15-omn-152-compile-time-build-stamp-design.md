@@ -34,7 +34,11 @@ hash is then compared against the frozen loaded hash to _detect_ staleness.
 
 - Respawning the stdio child on `/mcp` reconnect (separate concern).
 - Reaping orphaned processes (covered by the `of-mcp-redeploy` PPID-1 sweep already).
-- Changing the four callers' use of `build.*` (new fields are additive).
+- Changing the **production** callers' use of `build.*`. The three that read individual fields
+  (`http-server`/`session-manager` → `.version`, `index` → `.name`/`.version`/`.build.buildId`) are additive-safe. But
+  `SystemTool.getVersion()` returns the whole `VersionInfo` as `result.data`, and `tests/unit/tools/system-v2.test.ts`
+  asserts it with `toEqual(mockVersionInfo)` (exact structural equality) — so its mock MUST be extended with the new
+  fields (see Testing). This is the one non-additive consequence.
 
 ## Design
 
@@ -43,17 +47,22 @@ hash is then compared against the frozen loaded hash to _detect_ staleness.
 Plain ESM Node script (matches existing `scripts/check-script-sizes.js` convention; no `tsx`/compile dependency so it
 can run as a build step). Captures, reusing the exact git commands currently in `version.ts`:
 
-| Field            | Source                             |
-| ---------------- | ---------------------------------- |
-| `hash`           | `git rev-parse --short HEAD`       |
-| `branch`         | `git rev-parse --abbrev-ref HEAD`  |
-| `commitDate`     | `git show -s --format=%ci HEAD`    |
-| `commitMessage`  | `git show -s --format=%s HEAD`     |
-| `dirty`          | `git status --porcelain` non-empty |
-| `buildTimestamp` | ISO timestamp at build time        |
+| Field           | Source                             |
+| --------------- | ---------------------------------- |
+| `hash`          | `git rev-parse --short HEAD`       |
+| `branch`        | `git rev-parse --abbrev-ref HEAD`  |
+| `commitDate`    | `git show -s --format=%ci HEAD`    |
+| `commitMessage` | `git show -s --format=%s HEAD`     |
+| `dirty`         | `git status --porcelain` non-empty |
+| `timestamp`     | ISO timestamp at build time        |
+
+The JSON key is `timestamp` (matching the existing `VersionInfo.build.timestamp` field name — no rename). `buildId` is
+**not** stored in the JSON; it is derived at read time (see Component 3) from `hash` + `dirty`, keeping a single source
+of truth.
 
 Writes `dist/build-info.json`. On any git failure, writes a record with `hash: "unknown"` (and other fields
-`"unknown"`/`false`) — **never** fails the build (exit 0).
+`"unknown"`/`false`) — **never** fails the build (exit 0). Note: `dist/build-info.json` is matched by the
+`"files": ["dist/**/*"]` allowlist in `package.json`, so it ships in any npm publish — harmless and arguably useful.
 
 ### Component 2 — `package.json`
 
@@ -66,8 +75,10 @@ Add `"postbuild": "node scripts/stamp-build-info.js"`. npm runs `postbuild` auto
 **Module-load capture (top-level, runs once at process start):**
 
 - `readLoadedBuild()` — resolve `dist/build-info.json` relative to `import.meta.url` (`dist/utils/version.js` →
-  `../build-info.json`), parse into a frozen `LOADED_BUILD` const.
-  - File missing or unparseable (dev/source run via `tsx`, or pre-stamp) → sentinel `{ hash: "dev-unstamped", … }`.
+  `../build-info.json`), parse into a frozen `LOADED_BUILD` const. Derive `buildId = `${hash}${dirty ? '-dirty' : ''}``
+  here (it is not in the JSON).
+  - File missing or unparseable (dev/source run via `tsx`, or pre-stamp) → sentinel
+    `{ hash: "dev-unstamped", buildId: "dev-unstamped", … }`.
 - `PROCESS_STARTED_AT` — computed once: `new Date(Date.now() - process.uptime() * 1000).toISOString()`.
 
 **`getVersionInfo()` (per request):**
@@ -76,13 +87,19 @@ Add `"postbuild": "node scripts/stamp-build-info.js"`. npm runs `postbuild` auto
 - **Dev fallback:** when `LOADED_BUILD.hash === "dev-unstamped"`, populate `build.*` from request-time git (keeps dev
   output useful) and force `buildId: "dev-unstamped"`, `stale: false`.
 - `checkout.hash` — `readCheckoutHash()`: request-time `git rev-parse --short HEAD` from project root; failure →
-  `"unknown"`.
+  `"unknown"`. Populated in **all** modes including dev-fallback (so the field is always present); only the `stale` flag
+  is suppressed in dev.
 - `stale` — `true` iff `LOADED_BUILD` is stamped (not dev) AND `checkout.hash !== "unknown"` AND
-  `LOADED_BUILD.hash !== checkout.hash`.
+  `LOADED_BUILD.hash !== checkout.hash`. Forced `false` in dev-fallback regardless of `checkout.hash`.
 - `warning` — when `stale`: `"stale process: loaded build <X> but checkout is <Y> — restart the server"`.
 - `process` — `{ startedAt: PROCESS_STARTED_AT, uptimeSeconds: process.uptime() }` (uptime live per call).
 
 `readLoadedBuild()` and `readCheckoutHash()` are small internal seams so unit tests can stub `fs`/`child_process`.
+
+**Semantics change — `build.timestamp`:** today it is `new Date().toISOString()` computed at **request time** inside
+`getVersionInfo()` (despite its `build.` label). After this change it is sourced from `LOADED_BUILD`, i.e. the time the
+**build** ran. This is intentional and more correct, but any consumer that used `build.timestamp` as a request clock
+must move to `process.startedAt`/`uptimeSeconds`. (No current caller does — verified.)
 
 ### Component 4 — `VersionInfo` interface
 
@@ -112,6 +129,9 @@ diagnostic of last resort and must work even on a broken checkout.
 4. No `build-info.json` (dev) → `buildId: "dev-unstamped"`, `stale: false`, `build.*` from request-time git fallback.
 5. git failure on checkout read → `checkout.hash: "unknown"`, `stale: false` (cannot assert staleness without a known
    checkout).
+6. **Update `tests/unit/tools/system-v2.test.ts`** — its mock `VersionInfo` and the `toEqual(mockVersionInfo)` assertion
+   (line ~86) must be extended with the new `checkout`/`stale`/`process` fields, or the existing test fails on
+   exact-equality. This is required, not optional.
 
 **Live acceptance (`/verify`):** rebuild `dist/` **without** restarting the process → version probe reports the **OLD**
 buildId AND a stale-process warning. This reproduces the 2026-06-11 incident and proves the probe now catches it
