@@ -12,7 +12,7 @@ export interface LoadedBuild {
   buildId: string;
 }
 
-export const DEV_SENTINEL: LoadedBuild = {
+export const DEV_SENTINEL: LoadedBuild = Object.freeze({
   hash: 'dev-unstamped',
   branch: 'unknown',
   commitDate: 'unknown',
@@ -20,7 +20,7 @@ export const DEV_SENTINEL: LoadedBuild = {
   dirty: false,
   timestamp: 'unknown',
   buildId: 'dev-unstamped',
-};
+});
 
 let cache: LoadedBuild | undefined;
 

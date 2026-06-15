@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { getVersionInfo } from '../../utils/version.js';
+import { getVersionInfo, type VersionInfo } from '../../utils/version.js';
 import { getVersionInfo as getOmniFocusVersionInfo } from '../../omnifocus/version-detection.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 import {
@@ -50,30 +50,6 @@ export const SystemToolSchema = z
       .describe('Cache action: stats to get statistics, clear to invalidate all cached data'),
   })
   .strict();
-
-interface VersionInfo {
-  name: string;
-  version: string;
-  description: string;
-  build: {
-    hash: string;
-    branch: string;
-    commitDate: string;
-    commitMessage: string;
-    dirty: boolean;
-    timestamp: string;
-    buildId: string;
-  };
-  runtime: {
-    node: string;
-    platform: string;
-    arch: string;
-  };
-  git: {
-    repository: string;
-    homepage: string;
-  };
-}
 
 interface DiagnosticsResult {
   timestamp: string;
