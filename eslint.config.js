@@ -177,6 +177,19 @@ export default [
     },
   },
 
+  // Node.js build/utility scripts (plain .js, ESM, run directly with node).
+  // The base TS config only wires globals.node for *.ts files; explicit-path
+  // lint calls (e.g. from lint-staged) bypass the top-level ignores glob, so
+  // we must declare globals here rather than relying on the ignore.
+  {
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+
   // Ignore patterns
   {
     ignores: [
