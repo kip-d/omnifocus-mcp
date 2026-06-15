@@ -76,6 +76,9 @@ describe('SystemTool', () => {
           repository: 'https://github.com/example/omnifocus-mcp',
           homepage: 'https://example.com',
         },
+        checkout: { hash: 'abc123' },
+        stale: false,
+        process: { startedAt: '2024-01-01T11:00:00Z', uptimeSeconds: 42 },
       };
 
       vi.mocked(versionUtils.getVersionInfo).mockReturnValue(mockVersionInfo);

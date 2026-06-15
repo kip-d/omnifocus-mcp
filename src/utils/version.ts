@@ -2,20 +2,13 @@ import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readLoadedBuild, type LoadedBuild } from './build-info.js';
 
 export interface VersionInfo {
   name: string;
   version: string;
   description: string;
-  build: {
-    hash: string;
-    branch: string;
-    commitDate: string;
-    commitMessage: string;
-    dirty: boolean;
-    timestamp: string;
-    buildId: string;
-  };
+  build: LoadedBuild;
   runtime: {
     node: string;
     platform: string;
@@ -25,101 +18,113 @@ export interface VersionInfo {
     repository: string;
     homepage: string;
   };
+  checkout: { hash: string };
+  stale: boolean;
+  warning?: string;
+  process: { startedAt: string; uptimeSeconds: number };
 }
 
 interface PackageJson {
   name: string;
   version: string;
   description: string;
-  repository?: {
-    url?: string;
-  };
+  repository?: { url?: string };
   homepage?: string;
 }
 
-export function getVersionInfo(): VersionInfo {
-  // Get package.json version - find project root using script location
-  // This works regardless of what working directory the process was started from
-  const scriptPath = fileURLToPath(import.meta.url);
-  const scriptDir = dirname(scriptPath);
+// Captured once, at process start: makes buildId reflect load-time, not first-request time.
+const PROCESS_STARTED_AT = new Date(Date.now() - process.uptime() * 1000).toISOString();
+// Warm the memoized loaded-build read at module load (process start).
+readLoadedBuild();
 
-  // From dist/utils/version.js, go up to project root
-  // script location: dist/utils/version.js
-  // project root: go up 2 levels (../.. from dist/utils)
-  const projectRoot = join(scriptDir, '..', '..');
-  const packagePath = join(projectRoot, 'package.json');
+function resolveProjectRoot(): string {
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  // dist/utils/version.js → project root is two levels up.
+  return join(scriptDir, '..', '..');
+}
 
-  if (!existsSync(packagePath)) {
-    throw new Error(`Cannot find package.json at ${packagePath}. Script location: ${scriptPath}`);
-  }
-
-  const packageJson = JSON.parse(readFileSync(packagePath, 'utf8')) as PackageJson;
-
-  // Get git information
-  let gitCommitHash = 'unknown';
-  let gitBranch = 'unknown';
-  let gitCommitDate = 'unknown';
-  let gitCommitMessage = 'unknown';
-  let gitDirty = false;
-
+function readCheckoutHash(projectRoot: string): string {
   try {
-    // Run git commands from the project root directory
-    const gitOptions = { encoding: 'utf8' as const, cwd: projectRoot };
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: projectRoot }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
-    // Get short commit hash
-    gitCommitHash = execSync('git rev-parse --short HEAD', gitOptions).trim();
-
-    // Get current branch
-    gitBranch = execSync('git rev-parse --abbrev-ref HEAD', gitOptions).trim();
-
-    // Get commit date
-    gitCommitDate = execSync('git show -s --format=%ci HEAD', gitOptions).trim();
-
-    // Get commit message
-    gitCommitMessage = execSync('git show -s --format=%s HEAD', gitOptions).trim();
-
-    // Check if working directory is dirty
+// Request-time git, used ONLY for the dev fallback so dev output stays useful.
+function readRequestTimeBuild(projectRoot: string): VersionInfo['build'] {
+  const opt = { encoding: 'utf8' as const, cwd: projectRoot };
+  let hash = 'unknown';
+  let branch = 'unknown';
+  let commitDate = 'unknown';
+  let commitMessage = 'unknown';
+  let dirty = false;
+  try {
+    hash = execSync('git rev-parse --short HEAD', opt).trim();
+    branch = execSync('git rev-parse --abbrev-ref HEAD', opt).trim();
+    commitDate = execSync('git show -s --format=%ci HEAD', opt).trim();
+    commitMessage = execSync('git show -s --format=%s HEAD', opt).trim();
     try {
-      const status = execSync('git status --porcelain', gitOptions).trim();
-      gitDirty = status.length > 0;
+      dirty = execSync('git status --porcelain', opt).trim().length > 0;
     } catch {
-      // If git status fails, assume clean
+      /* assume clean */
     }
   } catch {
-    // If git commands fail, use defaults
+    /* defaults */
   }
+  return {
+    hash,
+    branch,
+    commitDate,
+    commitMessage,
+    dirty,
+    timestamp: new Date().toISOString(),
+    buildId: 'dev-unstamped',
+  };
+}
 
-  // Get build timestamp
-  const buildTimestamp = new Date().toISOString();
+export function getVersionInfo(): VersionInfo {
+  const projectRoot = resolveProjectRoot();
+  const packagePath = join(projectRoot, 'package.json');
+  if (!existsSync(packagePath)) {
+    throw new Error(`Cannot find package.json at ${packagePath}.`);
+  }
+  const packageJson = JSON.parse(readFileSync(packagePath, 'utf8')) as PackageJson;
 
-  // Get Node.js version
-  const nodeVersion = process.version;
+  const loaded = readLoadedBuild();
+  const isDev = loaded.buildId === 'dev-unstamped';
 
-  // Get platform information
-  const platform = process.platform;
-  const arch = process.arch;
+  const build: VersionInfo['build'] = isDev
+    ? readRequestTimeBuild(projectRoot)
+    : {
+        hash: loaded.hash,
+        branch: loaded.branch,
+        commitDate: loaded.commitDate,
+        commitMessage: loaded.commitMessage,
+        dirty: loaded.dirty,
+        timestamp: loaded.timestamp,
+        buildId: loaded.buildId,
+      };
+
+  const checkoutHash = readCheckoutHash(projectRoot);
+  const stale = !isDev && loaded.hash !== 'unknown' && checkoutHash !== 'unknown' && loaded.hash !== checkoutHash;
+  const warning = stale
+    ? `stale process: loaded build ${loaded.hash} but checkout is ${checkoutHash} — restart the server`
+    : undefined;
 
   return {
     name: packageJson.name,
     version: packageJson.version,
     description: packageJson.description,
-    build: {
-      hash: gitCommitHash,
-      branch: gitBranch,
-      commitDate: gitCommitDate,
-      commitMessage: gitCommitMessage,
-      dirty: gitDirty,
-      timestamp: buildTimestamp,
-      buildId: `${gitCommitHash}${gitDirty ? '-dirty' : ''}`,
-    },
-    runtime: {
-      node: nodeVersion,
-      platform: platform,
-      arch: arch,
-    },
+    build,
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
     git: {
       repository: packageJson.repository?.url || 'unknown',
       homepage: packageJson.homepage || 'unknown',
     },
+    checkout: { hash: checkoutHash },
+    stale,
+    ...(warning ? { warning } : {}),
+    process: { startedAt: PROCESS_STARTED_AT, uptimeSeconds: process.uptime() },
   };
 }
