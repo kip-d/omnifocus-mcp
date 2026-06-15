@@ -3,6 +3,14 @@ import { defineConfig } from 'vitest/config';
 // Detect if running only unit tests (explicit path or TEST_UNIT_ONLY env var)
 const isUnitTestOnly = process.argv.some((arg) => arg.includes('tests/unit')) || process.env.TEST_UNIT_ONLY === '1';
 
+// OMN-182: the suite-timing reporter records a row tagged suite:'integration', so it must attach
+// ONLY to a FULL integration-suite run. Match the integration directory as a discrete run target,
+// NOT a substring: a single-file run UNDER tests/integration/ (test:llm-simulation, test:real-llm,
+// or any `vitest tests/integration/foo.test.ts`) is a partial run that would write a tiny,
+// mislabeled row and skew the baseline median. Smoke/performance live outside the dir and are
+// already excluded; the substring form let the in-dir llm runs slip through.
+const isIntegrationRun = process.argv.some((arg) => arg === 'tests/integration' || arg === 'tests/integration/');
+
 // When running ALL tests together (npm test), we need timeouts that work for integration/smoke tests
 // Only use short timeouts when explicitly running unit tests only
 const useShortTimeouts = isUnitTestOnly;
@@ -15,6 +23,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // OMN-182: auto-record one per-machine suite-timing row on each INTEGRATION run (incl. the
+    // integration half of a full `npm test`, whose argv contains tests/integration). Other runs —
+    // unit, smoke, performance, llm — skip it: they aren't the integration baseline and a
+    // mislabeled record would skew it. The reporter writes to ~/.local/state, never a tracked file.
+    reporters: isIntegrationRun ? ['default', './tests/support/suite-timing-reporter.ts'] : ['default'],
     // setup-worker-guard (OMN-143) runs in every worker. It arms wherever an
     // IPC channel exists — which under vitest 3's default forks pool includes
     // unit workers (deliberate: it only fires on a ppid TRANSITION to 1, i.e.

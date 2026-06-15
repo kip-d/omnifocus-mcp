@@ -1,118 +1,166 @@
 import { describe, it, expect } from 'vitest';
 import {
   ARTIFACT_SCHEMA,
-  TABLE_HEADER,
-  TABLE_SEPARATOR,
-  formatConformanceCell,
-  parseConformanceCell,
-  renderRow,
-  insertRow,
-  parseRows,
   conformanceFromArtifact,
-  checkDeviation,
-  type RunRow,
+  median,
+  buildIntegrationRecord,
+  buildConformanceRecord,
+  serializeRun,
+  parseRuns,
+  checkRecordDeviation,
+  type EnvStatus,
+  type RunRecord,
   type ConformanceArtifact,
 } from '../../../scripts/lib/suite-timing.js';
 
-const emptyLog = `# Suite Timing Log\n\n${TABLE_HEADER}\n${TABLE_SEPARATOR}\n`;
+const env = (loadPerCpu = 0.25, memUsedPct = 40): EnvStatus => ({
+  loadAvg1: loadPerCpu * 24,
+  cpuCount: 24,
+  loadPerCpu,
+  memUsedPct,
+});
 
-function row(overrides: Partial<RunRow> = {}): RunRow {
-  return {
-    date: '2026-06-13',
+function intRecord(overrides: Partial<RunRecord> = {}): RunRecord {
+  return buildIntegrationRecord({
     build: 'abc1234',
-    integrationWallS: 529,
-    integrationTests: 159,
-    conformance: [{ model: 'llama3.1:8b', scorePct: 100, elapsedS: 31.2, loadS: 8.1 }],
-    conformanceTotalS: 55,
-    notes: '',
+    ts: '2026-06-14T16:00:00-04:00',
+    wallMs: 1_291_000,
+    totalTests: 166,
+    env: env(),
     ...overrides,
-  };
+  });
 }
 
-describe('formatConformanceCell / parseConformanceCell round-trip', () => {
-  it('round-trips a measured multi-model run', () => {
-    const models = [
-      { model: 'llama3.1:8b', scorePct: 100, elapsedS: 31.2, loadS: 8.1 },
-      { model: 'qwen2.5:7b', scorePct: 84, elapsedS: 41.8, loadS: 7.0 },
-    ];
-    const parsed = parseConformanceCell(formatConformanceCell(models));
-    expect(parsed).toEqual(models);
+describe('buildIntegrationRecord', () => {
+  it('tags suite=integration and derives perTestMs from wall ÷ tests', () => {
+    const r = intRecord({ wallMs: 1_660_000, totalTests: 166 });
+    expect(r.suite).toBe('integration');
+    expect(r.perTestMs).toBe(10000); // 1_660_000 / 166
+    expect(r.wallMs).toBe(1_660_000);
+    expect(r.totalTests).toBe(166);
   });
 
-  it('round-trips a pre-instrumentation seed (elapsed/load unknown)', () => {
-    const models = [{ model: 'llama3.1:8b', scorePct: 100, elapsedS: null, loadS: null }];
-    const parsed = parseConformanceCell(formatConformanceCell(models));
-    expect(parsed).toEqual(models);
+  it('leaves perTestMs null when the test count is zero or missing (no divide-by-zero)', () => {
+    expect(intRecord({ totalTests: 0 }).perTestMs).toBeNull();
+    expect(
+      buildIntegrationRecord({ build: 'b', ts: 't', wallMs: 5, totalTests: null, env: env() }).perTestMs,
+    ).toBeNull();
   });
 
-  it('treats the em-dash sentinel as no models', () => {
-    expect(parseConformanceCell('—')).toEqual([]);
-    expect(formatConformanceCell([])).toBe('—');
-  });
-});
-
-describe('renderRow', () => {
-  it('renders a single pipe-delimited line with the right cell count', () => {
-    const line = renderRow(row());
-    // 7 columns → 8 pipes
-    expect(line.match(/\|/g)?.length).toBe(8);
-    expect(line).toContain('2026-06-13');
-    expect(line).toContain('529s');
-    expect(line).toContain('llama3.1:8b 100% 31.2s/8.1s');
-  });
-
-  it('renders "—" for absent suites', () => {
-    const line = renderRow(
-      row({ integrationWallS: null, integrationTests: null, conformance: [], conformanceTotalS: null }),
-    );
-    expect(line).toContain('| — |');
-  });
-
-  it('never lets a note break the table (pipes are replaced)', () => {
-    const line = renderRow(row({ notes: 'has | a | pipe' }));
-    // exactly the 8 structural pipes, none from the note
-    expect(line.match(/\|/g)?.length).toBe(8);
-    expect(line).toContain('has / a / pipe');
+  it('carries the captured environment status through verbatim', () => {
+    const r = intRecord({ env: env(0.75, 88) });
+    expect(r.env).toEqual({ loadAvg1: 18, cpuCount: 24, loadPerCpu: 0.75, memUsedPct: 88 });
   });
 });
 
-describe('insertRow', () => {
-  it('inserts newest-first directly under the separator', () => {
-    const withOne = insertRow(emptyLog, row({ date: '2026-06-13', build: 'old' }));
-    const withTwo = insertRow(withOne, row({ date: '2026-06-14', build: 'new' }));
-    const rows = parseRows(withTwo);
-    expect(rows.map((r) => r.build)).toEqual(['new', 'old']);
-  });
-
-  it('throws when the table separator is missing', () => {
-    expect(() => insertRow('# no table here\n', row())).toThrow(/separator/);
-  });
-});
-
-describe('parseRows round-trip', () => {
-  it('parses back what renderRow wrote', () => {
-    const original = row({
-      conformance: [
-        { model: 'llama3.1:8b', scorePct: 100, elapsedS: 31.2, loadS: 8.1 },
-        { model: 'qwen2.5:7b', scorePct: 84, elapsedS: 41.8, loadS: 7.0 },
-      ],
-      notes: 'post-merge baseline',
+describe('buildConformanceRecord', () => {
+  it('tags suite=conformance, stores the wall in the shared wallMs field, carries the model breakdown', () => {
+    const r = buildConformanceRecord({
+      build: 'abc1234',
+      ts: '2026-06-14T16:00:00-04:00',
+      env: env(),
+      conformance: [{ model: 'llama3.1:8b', scorePct: 100, elapsedS: 16, loadS: 2 }],
+      wallMs: 45_200,
     });
-    const parsed = parseRows(insertRow(emptyLog, original));
-    expect(parsed).toEqual([original]);
-  });
-
-  it('skips the header and separator lines', () => {
-    expect(parseRows(emptyLog)).toEqual([]);
+    expect(r.suite).toBe('conformance');
+    expect(r.wallMs).toBe(45_200); // canonical wall — no separate conformanceTotalS
+    expect(r).not.toHaveProperty('conformanceTotalS');
+    expect(r.conformance?.[0].model).toBe('llama3.1:8b');
+    expect(r.totalTests).toBeNull();
+    expect(r.perTestMs).toBeNull();
   });
 });
 
-describe('conformanceFromArtifact', () => {
-  it('converts ms→s with one decimal and carries scores', () => {
+describe('serializeRun / parseRuns round-trip (JSONL store)', () => {
+  it('round-trips a record through one JSONL line', () => {
+    const r = intRecord();
+    expect(parseRuns(serializeRun(r))).toEqual([r]);
+  });
+
+  it('parses an append-only multi-line log oldest-first and skips blank/garbage lines', () => {
+    const a = intRecord({ ts: '2026-06-14T10:00:00-04:00', wallMs: 1_200_000 });
+    const b = intRecord({ ts: '2026-06-14T12:00:00-04:00', wallMs: 1_300_000 });
+    const log = `${serializeRun(a)}\n\nnot json — partial write\n${serializeRun(b)}\n`;
+    const parsed = parseRuns(log);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].ts).toBe('2026-06-14T10:00:00-04:00');
+    expect(parsed[1].ts).toBe('2026-06-14T12:00:00-04:00');
+  });
+
+  it('returns [] for an empty log', () => {
+    expect(parseRuns('')).toEqual([]);
+  });
+});
+
+describe('median', () => {
+  it('averages the two middle values for an even count', () => {
+    expect(median([10, 20, 30, 40])).toBe(25);
+  });
+  it('takes the middle value for an odd count', () => {
+    expect(median([5, 1, 3])).toBe(3);
+  });
+});
+
+describe('checkRecordDeviation (newest vs rolling median, per suite)', () => {
+  const baseline = (walls: number[]): RunRecord[] =>
+    walls.map((w, i) => intRecord({ ts: `2026-06-13T0${i}:00:00-04:00`, wallMs: w, totalTests: 166 }));
+
+  it('flags an integration wall regression beyond the threshold', () => {
+    const records = [...baseline([1_290_000, 1_300_000, 1_280_000]), intRecord({ wallMs: 1_900_000 })];
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
+    expect(res.ok).toBe(false);
+    expect(res.findings.some((f) => f.metric === 'integration_wall_ms')).toBe(true);
+  });
+
+  it('stays green when the newest run is within tolerance', () => {
+    const records = [...baseline([1_290_000, 1_300_000, 1_280_000]), intRecord({ wallMs: 1_310_000 })];
+    expect(checkRecordDeviation(records, { thresholdPct: 25 }).ok).toBe(true);
+  });
+
+  it('flags a faster outlier too (signed delta, abs threshold)', () => {
+    // A suite that suddenly runs much faster (e.g. tests silently dropped) is also a regression.
+    const records = [...baseline([1_290_000, 1_300_000, 1_280_000]), intRecord({ wallMs: 700_000 })];
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
+    expect(res.ok).toBe(false);
+    expect(res.findings.find((f) => f.metric === 'integration_wall_ms')?.deltaPct).toBeLessThan(0);
+  });
+
+  it('only baselines against prior runs of the SAME suite', () => {
+    const conf = buildConformanceRecord({
+      build: 'x',
+      ts: '2026-06-13T00:00:00-04:00',
+      env: env(),
+      conformance: [],
+      wallMs: 45_000,
+    });
+    // A lone integration run with only a conformance run before it has no integration baseline.
+    const res = checkRecordDeviation([conf, intRecord({ wallMs: 9_000_000 })], { thresholdPct: 25 });
+    expect(res.ok).toBe(true);
+    expect(res.skipped).toContain('integration_wall_ms');
+  });
+
+  it('skips metrics with no prior history rather than failing', () => {
+    const res = checkRecordDeviation([intRecord()], { thresholdPct: 25 });
+    expect(res.ok).toBe(true);
+    expect(res.skipped).toContain('integration_wall_ms');
+  });
+
+  it('surfaces the latest run env on the result so drift can be read as machine-bound', () => {
+    const records = [
+      ...baseline([1_290_000, 1_300_000, 1_280_000]),
+      intRecord({ wallMs: 1_900_000, env: env(0.95, 80) }),
+    ];
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
+    expect(res.latestEnv?.loadPerCpu).toBe(0.95);
+  });
+});
+
+describe('conformanceFromArtifact (probe artifact → model rows + full-precision wall)', () => {
+  it('returns the wall as full-precision ms (no round-trip through seconds) and per-model seconds', () => {
     const art: ConformanceArtifact = {
       schema: ARTIFACT_SCHEMA,
-      ollama: { startedByUs: true, startMs: 2000 },
-      totalWallMs: 55400,
+      ollama: { startedByUs: true, startMs: 100 },
+      totalWallMs: 45_237,
       models: [
         {
           model: 'llama3.1:8b',
@@ -120,107 +168,26 @@ describe('conformanceFromArtifact', () => {
           passed: 19,
           cases: 19,
           scorePct: 100,
-          elapsedMs: 31234,
-          loadMs: 8120,
-          caseExecMs: 23114,
+          elapsedMs: 16_000,
+          loadMs: 2_000,
+          caseExecMs: 14_000,
         },
       ],
     };
-    const out = conformanceFromArtifact(art);
-    expect(out.conformanceTotalS).toBe(55.4);
-    expect(out.conformance[0]).toEqual({ model: 'llama3.1:8b', scorePct: 100, elapsedS: 31.2, loadS: 8.1 });
-  });
-
-  it('passes through nulls for an unavailable model', () => {
-    const art: ConformanceArtifact = {
-      schema: ARTIFACT_SCHEMA,
-      ollama: { startedByUs: false, startMs: 0 },
-      totalWallMs: 1000,
-      models: [
-        {
-          model: 'ghost:7b',
-          available: false,
-          passed: 0,
-          cases: 19,
-          scorePct: null,
-          elapsedMs: null,
-          loadMs: null,
-          caseExecMs: null,
-        },
-      ],
-    };
-    expect(conformanceFromArtifact(art).conformance[0]).toEqual({
-      model: 'ghost:7b',
-      scorePct: null,
-      elapsedS: null,
-      loadS: null,
-    });
+    const { conformance, wallMs } = conformanceFromArtifact(art);
+    expect(wallMs).toBe(45_237); // full ms precision — NOT rounded to 45_200 via 45.2s
+    expect(conformance[0]).toEqual({ model: 'llama3.1:8b', scorePct: 100, elapsedS: 16, loadS: 2 });
   });
 });
 
-describe('checkDeviation', () => {
-  const baselineRows = (vals: number[]): RunRow[] =>
-    vals.map((v, i) =>
-      row({ date: `2026-06-${10 + i}`, integrationWallS: v, conformance: [], conformanceTotalS: null }),
-    );
-
-  it('passes when the newest is within tolerance of the prior median', () => {
-    // newest 540, prior median 530 → +1.9%
-    const rows = [
-      row({ integrationWallS: 540, conformance: [], conformanceTotalS: null }),
-      ...baselineRows([530, 520, 540]),
-    ];
-    const res = checkDeviation(rows, { thresholdPct: 25 });
-    expect(res.ok).toBe(true);
-    expect(res.findings).toEqual([]);
-  });
-
-  it('flags a slow regression beyond threshold', () => {
-    // newest 800, prior median 530 → +51%
-    const rows = [
-      row({ integrationWallS: 800, conformance: [], conformanceTotalS: null }),
-      ...baselineRows([530, 520, 540]),
-    ];
-    const res = checkDeviation(rows, { thresholdPct: 25 });
+describe('checkRecordDeviation — wall is a single metric across suites', () => {
+  it('flags a conformance wall regression under conformance_wall_ms (no conformance_total_s)', () => {
+    const mk = (wallMs: number): RunRecord =>
+      buildConformanceRecord({ build: 'b', ts: '2026-06-13T00:00:00-04:00', env: env(), conformance: [], wallMs });
+    const records = [mk(45_000), mk(46_000), mk(44_000), mk(80_000)]; // newest +78% vs median 45_000
+    const res = checkRecordDeviation(records, { thresholdPct: 25 });
     expect(res.ok).toBe(false);
-    expect(res.findings[0]).toMatchObject({ metric: 'integration_wall_s', latest: 800, deltaPct: 51 });
-  });
-
-  it('flags a faster outlier too (signed delta)', () => {
-    const rows = [
-      row({ integrationWallS: 300, conformance: [], conformanceTotalS: null }),
-      ...baselineRows([530, 520, 540]),
-    ];
-    const res = checkDeviation(rows, { thresholdPct: 25 });
-    expect(res.ok).toBe(false);
-    expect(res.findings[0].deltaPct).toBeLessThan(0);
-  });
-
-  it('skips metrics with no prior history rather than failing', () => {
-    const res = checkDeviation([row()], { thresholdPct: 25 });
-    expect(res.ok).toBe(true);
-    expect(res.skipped).toContain('integration_wall_s');
-  });
-
-  it('keys per-model conformance elapsed independently', () => {
-    const mk = (llamaElapsed: number): RunRow =>
-      row({
-        integrationWallS: null,
-        conformance: [{ model: 'llama3.1:8b', scorePct: 100, elapsedS: llamaElapsed, loadS: 8 }],
-        conformanceTotalS: null,
-      });
-    const rows = [mk(60), mk(31), mk(30), mk(32)]; // newest 60 vs median 31 → +94%
-    const res = checkDeviation(rows, { thresholdPct: 25 });
-    expect(res.findings.some((f) => f.metric === 'conformance_elapsed_s[llama3.1:8b]')).toBe(true);
-  });
-
-  it('does not compare a suite that was not run this time (null latest)', () => {
-    const rows = [
-      row({ integrationWallS: null, conformance: [], conformanceTotalS: null }),
-      ...baselineRows([530, 520, 540]),
-    ];
-    const res = checkDeviation(rows, { thresholdPct: 25 });
-    expect(res.ok).toBe(true);
-    expect(res.findings).toEqual([]);
+    expect(res.findings.some((f) => f.metric === 'conformance_wall_ms')).toBe(true);
+    expect(res.findings.some((f) => f.metric === 'conformance_total_s')).toBe(false);
   });
 });

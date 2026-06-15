@@ -1,36 +1,30 @@
 #!/usr/bin/env tsx
 /**
- * Record a suite-timing row (OMN-173).
+ * Record a CONFORMANCE suite-timing run (OMN-173 / OMN-182).
  *
- * Appends one row to docs/dev/SUITE_TIMING_LOG.md from a conformance timing artifact
- * (written by the probe via PROBE_TIMING_JSON) and/or a measured integration wall. Either
- * half may be omitted — the absent suite renders as "—". Date and build (git rev-parse) are
- * auto-filled. So drift is a diff, not a memory ([[project_mcp_cold_start_reconnect]]).
+ * Appends one conformance record to the per-machine JSONL log
+ * ($XDG_STATE_HOME/of-mcp-suite-timing/runs.jsonl) from a probe timing artifact (written by the
+ * probe via PROBE_TIMING_JSON). Integration runs record themselves via the vitest reporter, so
+ * this CLI handles only the conformance half (the probe is an explicit, Ollama-gated run).
  *
  * Usage:
- *   # conformance only (the probe wrote /tmp/conf.json)
  *   PROBE_TIMING_JSON=/tmp/conf.json npm run conformance -- llama3.1:8b qwen2.5:7b
  *   npx tsx scripts/record-suite-timing.ts --conformance-json /tmp/conf.json --notes "post-merge"
- *
- *   # integration only
- *   npx tsx scripts/record-suite-timing.ts --integration-wall 529 --integration-tests 159
- *
- *   # both, dry-run (print the row, don't write)
- *   npx tsx scripts/record-suite-timing.ts --conformance-json /tmp/conf.json --integration-wall 529 --dry-run
+ *   npx tsx scripts/record-suite-timing.ts --conformance-json /tmp/conf.json --dry-run
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { execFileSync } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
 import {
   ARTIFACT_SCHEMA,
+  appendRun,
+  buildConformanceRecord,
+  captureEnv,
   conformanceFromArtifact,
-  insertRow,
-  renderRow,
+  defaultLogPath,
+  gitShort,
+  serializeRun,
   type ConformanceArtifact,
-  type RunRow,
 } from './lib/suite-timing.js';
-
-const DEFAULT_LOG = 'docs/dev/SUITE_TIMING_LOG.md';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -40,85 +34,51 @@ function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
-function gitShort(): string {
-  try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-  } catch {
-    return 'unknown';
-  }
-}
-
-function todayLocal(): string {
-  // Local calendar date; the suite-timing log is a per-machine record, not a UTC ledger.
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 function die(msg: string): never {
   process.stderr.write(`record-suite-timing: ${msg}\n`);
   process.exit(2);
 }
 
+function loadConformanceArtifact(path: string): ConformanceArtifact {
+  if (!existsSync(path)) die(`conformance JSON not found: ${path}`);
+  let art: ConformanceArtifact;
+  try {
+    art = JSON.parse(readFileSync(path, 'utf8')) as ConformanceArtifact;
+  } catch (e) {
+    die(`conformance JSON is not valid JSON: ${String(e)}`);
+  }
+  // `art` is definitely assigned here: die() returns `never`, so the catch path cannot fall through.
+  if (art.schema !== ARTIFACT_SCHEMA) {
+    die(
+      `conformance JSON schema is "${art.schema}", expected "${ARTIFACT_SCHEMA}" — regenerate with the current probe`,
+    );
+  }
+  return art;
+}
+
 function main(): void {
   const confJsonPath = arg('conformance-json') ?? process.env.PROBE_TIMING_JSON;
-  const intWallRaw = arg('integration-wall');
-  const intTestsRaw = arg('integration-tests');
-  const notes = arg('notes') ?? '';
-  const logPath = arg('log') ?? DEFAULT_LOG;
-  const dryRun = flag('dry-run');
+  if (!confJsonPath) die('nothing to record — pass --conformance-json (or set PROBE_TIMING_JSON)');
 
-  if (!confJsonPath && intWallRaw === undefined) {
-    die('nothing to record — pass --conformance-json and/or --integration-wall');
-  }
-
-  let conformance: RunRow['conformance'] = [];
-  let conformanceTotalS: number | null = null;
-  if (confJsonPath) {
-    if (!existsSync(confJsonPath)) die(`conformance JSON not found: ${confJsonPath}`);
-    let art: ConformanceArtifact;
-    try {
-      art = JSON.parse(readFileSync(confJsonPath, 'utf8')) as ConformanceArtifact;
-    } catch (e) {
-      die(`conformance JSON is not valid JSON: ${String(e)}`);
-    }
-    // `art` is definitely assigned here: die() returns `never`, so the catch path cannot fall through.
-    if (art.schema !== ARTIFACT_SCHEMA) {
-      die(
-        `conformance JSON schema is "${art.schema}", expected "${ARTIFACT_SCHEMA}" — regenerate with the current probe`,
-      );
-    }
-    const c = conformanceFromArtifact(art);
-    conformance = c.conformance;
-    conformanceTotalS = c.conformanceTotalS;
-  }
-
-  const integrationWallS = intWallRaw === undefined ? null : Number(intWallRaw);
-  if (integrationWallS !== null && !Number.isFinite(integrationWallS))
-    die('--integration-wall must be a number (seconds)');
-  const integrationTests = intTestsRaw === undefined ? null : Number(intTestsRaw);
-  if (integrationTests !== null && !Number.isFinite(integrationTests)) die('--integration-tests must be a number');
-
-  const row: RunRow = {
-    date: arg('date') ?? todayLocal(),
+  const { conformance, wallMs } = conformanceFromArtifact(loadConformanceArtifact(confJsonPath));
+  const record = buildConformanceRecord({
     build: arg('build') ?? gitShort(),
-    integrationWallS,
-    integrationTests,
+    ts: arg('date') ?? new Date().toISOString(),
+    env: captureEnv(),
     conformance,
-    conformanceTotalS,
-    notes,
-  };
+    wallMs,
+    notes: arg('notes'),
+  });
 
-  if (dryRun) {
-    process.stdout.write(renderRow(row) + '\n');
+  if (flag('dry-run')) {
+    process.stdout.write(serializeRun(record) + '\n');
     return;
   }
 
-  if (!existsSync(logPath)) die(`log not found: ${logPath} (create it from the template first)`);
-  const updated = insertRow(readFileSync(logPath, 'utf8'), row);
-  writeFileSync(logPath, updated);
-  process.stderr.write(`Recorded row → ${logPath}\n`);
-  process.stdout.write(renderRow(row) + '\n');
+  const logPath = arg('log') ?? defaultLogPath();
+  appendRun(logPath, record);
+  process.stderr.write(`Recorded conformance run → ${logPath}\n`);
+  process.stdout.write(serializeRun(record) + '\n');
 }
 
 main();
