@@ -115,7 +115,7 @@ export function getVersionInfo(): VersionInfo {
       };
 
   const checkoutHash = readCheckoutHash(projectRoot);
-  const stale = !isDev && checkoutHash !== 'unknown' && loaded.hash !== checkoutHash;
+  const stale = !isDev && loaded.hash !== 'unknown' && checkoutHash !== 'unknown' && loaded.hash !== checkoutHash;
   const warning = stale
     ? `stale process: loaded build ${loaded.hash} but checkout is ${checkoutHash} — restart the server`
     : undefined;

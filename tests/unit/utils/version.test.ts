@@ -80,6 +80,14 @@ describe('getVersionInfo staleness', () => {
     expect(v.stale).toBe(false);
   });
 
+  it('unknown stamp (build-time git failed) → not stale even if checkout is known', () => {
+    vi.mocked(readLoadedBuild).mockReturnValue({ ...STAMPED, hash: 'unknown', buildId: 'unknown' });
+    gitMock({ 'rev-parse --short HEAD': 'abc1234' });
+    const v = getVersionInfo();
+    expect(v.stale).toBe(false);
+    expect(v.warning).toBeUndefined();
+  });
+
   it('always reports process uptime + startedAt', () => {
     vi.mocked(readLoadedBuild).mockReturnValue(STAMPED);
     gitMock({ 'rev-parse --short HEAD': 'abc1234' });
