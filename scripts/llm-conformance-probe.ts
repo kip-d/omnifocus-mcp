@@ -191,9 +191,12 @@ class McpServer {
     // AppleEvent channel, blowing past this probe's 30s init window (the parallel-run failure).
     // NO_CACHE_WARMING=true makes the server skip the warm; the only residual OF touch is the
     // permission check's hard 3s-bounded osascript, which fits the window even under contention.
+    // Also neutralize an inherited ENABLE_CACHE_WARMING — it short-circuits NO_CACHE_WARMING in
+    // the server's shouldWarmCache (forceCacheWarming || …), so a combined baseline runner that
+    // exports it for the integration side would otherwise silently re-enable the warm here.
     this.proc = spawn('node', ['dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NO_CACHE_WARMING: 'true' },
+      env: { ...process.env, NO_CACHE_WARMING: 'true', ENABLE_CACHE_WARMING: '' },
     });
     this.proc.stdout?.on('data', (d: Buffer) => {
       this.buf += d.toString();
