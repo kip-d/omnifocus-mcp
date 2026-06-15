@@ -170,6 +170,7 @@ const TASK_FIELDS = [
   'parentTaskName',
   'inInbox',
   'isProjectRoot', // OMN-153: true when the task IS a project root (task.project !== null in OmniJS)
+  'hasNote', // OMN-130: cheap boolean — true when the task has any non-empty note text
 ] as const;
 
 const PROJECT_FIELDS = [

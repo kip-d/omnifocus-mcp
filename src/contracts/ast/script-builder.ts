@@ -81,6 +81,13 @@ export interface GeneratedScript {
 /**
  * Thin-default fields returned when no explicit fields or details flag is set.
  * Optimized for low token usage — covers the most common query needs.
+ *
+ * OMN-130: `hasNote` added — lets a client cheaply tell if a task has context
+ * worth reading without paying the token cost of the full `note` field.
+ * Decision record: `notePreview` (~120-char snippet) was considered as an
+ * alternative but rejected — it is redundant with the full `note` field in
+ * DETAIL_FIELDS and contradicts the token-cost goal of the lean default.
+ * `hasNote` answers "is there context?"; the client requests `note` if yes.
  */
 export const MINIMAL_FIELDS = [
   'id',
@@ -92,6 +99,7 @@ export const MINIMAL_FIELDS = [
   'tags',
   'project',
   'available',
+  'hasNote',
 ];
 
 /**
@@ -223,7 +231,23 @@ function generateFieldProjection(
         projections.push('blocked: task.taskStatus === Task.Status.Blocked');
         break;
       case 'available':
-        projections.push('available: task.taskStatus === Task.Status.Available');
+        // OMN-130: "actionable now" — true for any status that is not a blocker or
+        // terminal state. OmniFocus Task.Status has 7 members; the actionable set is
+        // {Available, DueSoon, Next, Overdue}. Blocked (defer date not elapsed,
+        // sequential predecessor incomplete, or on-hold project), Completed, and
+        // Dropped are non-actionable. Using indexOf (compatible with OmniJS) rather
+        // than Array.includes (not available in all OmniJS runtimes).
+        // Alternative considered: bare `=== Task.Status.Available` (old form) —
+        // rejected because it returned available:false for Overdue/DueSoon/Next tasks,
+        // making "can I act on this?" unanswerable for those common states (OMN-130).
+        projections.push(
+          'available: [Task.Status.Available, Task.Status.DueSoon, Task.Status.Next, Task.Status.Overdue].indexOf(task.taskStatus) !== -1',
+        );
+        break;
+      case 'hasNote':
+        // OMN-130: cheap boolean — true when the task has any non-empty note text.
+        // Coalesce null/undefined to '' before checking length so it never throws.
+        projections.push("hasNote: (task.note || '').length > 0");
         break;
       case 'dueDate':
         projections.push('dueDate: task.dueDate ? task.dueDate.toISOString() : null');

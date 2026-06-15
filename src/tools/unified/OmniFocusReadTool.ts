@@ -271,7 +271,8 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - overdue: Tasks past their due date
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
-- inbox, available, blocked, search, smart_suggest, all
+- inbox, available, blocked, search, all
+- smart_suggest: surfaces available next actions (NOT urgency-ranked — scored by deadline proximity/flagged/quick-win, but this is a convenience filter, not a priority ranking)
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:
@@ -285,12 +286,13 @@ FILTER OPERATORS:
 - Projects filters: status, completed, flagged, name, text, folder, id. AND merges; OR: [...] returns the union of its branches; NOT: { status: "active"|"on_hold"|"completed"|"dropped" } matches the complement of that status over the four project states (broader than the tasks NOT, which is completed/active only).
 
 RESPONSE CONTROL:
-- Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available)
+- Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available, hasNote)
 - details: true returns all fields with full notes
 - fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true)
 - ID lookup always returns all fields with full notes
 - fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
-- fields (tasks): id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
+- fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
+- available: true when actionable now (OmniFocus status Available, Next, DueSoon, or Overdue); blocked: true when waiting on a predecessor, a future defer date, or an on-hold project (status Blocked). Completed/dropped tasks are neither.
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
