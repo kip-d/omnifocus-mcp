@@ -1865,4 +1865,62 @@ describe('OmniFocusReadTool', () => {
       expect(execJsonSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ─── OMN-153: isProjectRoot auto-inject ──────────────────────────────────────
+
+  describe('OMN-153: isProjectRoot auto-injected into projection when includeProjectRoot: true', () => {
+    const taskPayload = {
+      success: true as const,
+      data: {
+        tasks: [{ id: 'p1', name: 'Project Root', completed: false, isProjectRoot: true }],
+        metadata: { total_matched: 1, sorted_in_script: false },
+      },
+    };
+
+    it('auto-injects isProjectRoot into the generated script when includeProjectRoot: true and no explicit fields', async () => {
+      execJsonSpy.mockResolvedValueOnce(taskPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', includeProjectRoot: true },
+      });
+
+      // The script sent to execJson must include the isProjectRoot projection
+      // because buildTaskQuery auto-injects it whenever includeProjectRoot:true
+      // is set — regardless of whether the client asked for the field.
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      expect(scriptText).toContain('isProjectRoot: task.project !== null');
+    });
+
+    it('does NOT auto-inject isProjectRoot when includeProjectRoot is omitted (default false)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true as const,
+        data: {
+          tasks: [{ id: 't1', name: 'Regular Task', completed: false }],
+          metadata: { total_matched: 1, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks' },
+      });
+
+      // No includeProjectRoot → default minimal fields → isProjectRoot NOT in projection
+      // (it IS in DETAIL_FIELDS, but default queries use MINIMAL_FIELDS)
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      expect(scriptText).not.toContain('isProjectRoot: task.project !== null');
+    });
+
+    it('does NOT duplicate isProjectRoot when caller already requests it explicitly', async () => {
+      execJsonSpy.mockResolvedValueOnce(taskPayload satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', includeProjectRoot: true, fields: ['id', 'name', 'isProjectRoot'] },
+      });
+
+      const scriptText: string = execJsonSpy.mock.calls[0][0];
+      // Should appear exactly once (Set dedup in buildTaskQuery)
+      const occurrences = (scriptText.match(/isProjectRoot: task\.project !== null/g) || []).length;
+      expect(occurrences).toBe(1);
+    });
+  });
 });

@@ -203,6 +203,17 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // Resolve effective fields: explicit > details=true > MINIMAL_FIELDS
   let scriptFields = resolveEffectiveTaskFields(userExplicitFields, compiled.details);
 
+  // OMN-153: when the caller opts in to project-root rows, auto-inject isProjectRoot
+  // into the projection so every root row is ALWAYS marked — regardless of whether the
+  // client asked for the field. Without this, a root row returned via includeProjectRoot:true
+  // on the DEFAULT projection carries NO marker and is indistinguishable from a regular task,
+  // which is the exact P5 safety hazard the ticket exists to prevent.
+  // details:true / explicit fields:[...'isProjectRoot'...] already get it through the normal
+  // resolveEffectiveTaskFields path; this guard covers the remaining default-field case.
+  if (compiled.includeProjectRoot === true && !scriptFields.includes('isProjectRoot')) {
+    scriptFields = [...scriptFields, 'isProjectRoot'];
+  }
+
   // Today mode needs extra fields for category counting
   if (mode === 'today') {
     scriptFields = [...new Set([...scriptFields, 'reason', 'daysOverdue', 'modified'])];
@@ -283,8 +294,8 @@ RESPONSE CONTROL:
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
 - countOnly: true returns only count (33x faster for "how many" questions) — tasks only
-- includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows carry isProjectRoot: true when the isProjectRoot field is requested.
-- fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Only present when explicitly requested or when includeProjectRoot: true.
+- includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
+- fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Auto-included when includeProjectRoot: true; also requestable explicitly or via details: true.
 
 COMPLETED TASKS:
 - Use filters: { completed: true } or filters: { status: "completed" } to query completed tasks
@@ -365,7 +376,7 @@ PERFORMANCE:
             includeProjectRoot: {
               type: 'boolean',
               description:
-                'Tasks only: include project-root rows (default false). Project roots are excluded by default — completing/deleting a root row completes/deletes the PROJECT. Root rows carry isProjectRoot: true when the isProjectRoot field is requested.',
+                'Tasks only: include project-root rows (default false). Project roots are excluded by default — completing/deleting a root row completes/deletes the PROJECT. When true, isProjectRoot: true is auto-injected into every root row.',
             },
             details: { type: 'boolean' },
             includeStats: { type: 'boolean' },
