@@ -122,6 +122,9 @@ export const DETAIL_FIELDS = [
   'dropDate',
   'completionDate',
   'repetitionRule',
+  // OMN-153: boolean marker for project-root rows (useful in detail views and
+  // for agents that need to distinguish roots from regular tasks).
+  'isProjectRoot',
 ];
 
 /**
@@ -312,6 +315,11 @@ function generateFieldProjection(
       case 'dropDate':
         projections.push('dropDate: task.dropDate ? task.dropDate.toISOString() : null');
         break;
+      // OMN-153: marker so a project-root row is never again indistinguishable.
+      // task.project !== null is the OmniJS definition of "this task IS a project root".
+      case 'isProjectRoot':
+        projections.push('isProjectRoot: task.project !== null');
+        break;
     }
   }
 
@@ -487,7 +495,15 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // compiles onto it) or includeCompleted lifts it. isEmptyFilter and the
   // description stay keyed to the user's filter (same convention as the
   // count-path OMN-52 shim).
-  const effectiveFilter = !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+  let effectiveFilter: typeof filter =
+    !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+  // OMN-153: exclude project-root rows by default. A project's root task appears
+  // in flattenedTasks and completing/deleting it completes/deletes the PROJECT —
+  // a P5 safety hazard. Default: inject includeProjectRoot: false (emit
+  // task.project === null predicate via FILTER_DEFS). Explicit true lifts it.
+  if (filter.includeProjectRoot === undefined) {
+    effectiveFilter = { ...effectiveFilter, includeProjectRoot: false };
+  }
 
   // Build the AST to check if empty (user's filter, not the effective one)
   const ast = buildAST(filter);
@@ -614,7 +630,12 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 
   // OMN-157: same default dropped-exclusion as buildFilteredTasksScript —
   // routed through the AST because task.dropped is synthetic (emitter-only)
-  const effectiveFilter = !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+  let effectiveFilter: NormalizedTaskFilter =
+    !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
+  // OMN-153: same default project-root exclusion as buildFilteredTasksScript.
+  if (filter.includeProjectRoot === undefined) {
+    effectiveFilter = { ...effectiveFilter, includeProjectRoot: false };
+  }
 
   const filterCode = generateFilterCode(effectiveFilter);
   const filterDescription = describeFilterForScript(filter);
@@ -1031,6 +1052,9 @@ const BOOLEAN_FILTER_DESCRIPTORS: Array<{ key: keyof TaskFilter; trueLabel: stri
   { key: 'blocked', trueLabel: 'blocked', falseLabel: 'not blocked' },
   { key: 'available', trueLabel: 'available', falseLabel: 'not available' },
   { key: 'inInbox', trueLabel: 'inbox', falseLabel: 'not inbox' },
+  // OMN-153: includeProjectRoot appears in filters_applied; describe it so
+  // filter_description never contradicts filters_applied ("all tasks" + key present).
+  { key: 'includeProjectRoot', trueLabel: 'include project roots', falseLabel: 'exclude project roots' },
 ];
 
 /**
@@ -2068,6 +2092,9 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     if (f.completed === undefined) f.completed = false;
     // OMN-157: dropped gets the same default for the same parity reason
     if (f.dropped === undefined) f.dropped = false;
+    // OMN-153: same-predicate rule — countOnly must exclude project-root rows
+    // by default, agreeing with the buildFilteredTasksScript row path.
+    if (f.includeProjectRoot === undefined) f.includeProjectRoot = false;
     return f;
   })();
 

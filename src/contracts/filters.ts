@@ -178,6 +178,19 @@ export interface TaskFilter {
    */
   fastSearch?: boolean;
 
+  /**
+   * OMN-153: opt into receiving project-root rows (the task that IS the project).
+   *
+   * By default ALL tasks queries exclude project-root rows (task.project !== null
+   * in OmniJS) because a project's root task is indistinguishable from a real
+   * task in flattenedTasks and its completion/deletion deletes the PROJECT — a
+   * P5 safety hazard. Set true only when intentionally inspecting project roots.
+   *
+   * This is a QUERY-LEVEL param (like countOnly/fastSearch), NOT a filters:{} key.
+   * It threads from the compiled query onto the filter in OmniFocusReadTool.
+   */
+  includeProjectRoot?: boolean;
+
   // --- Project Status (preserved for project queries) ---
   projectStatus?: ProjectStatus[];
 
@@ -448,6 +461,7 @@ export const FILTER_PROPERTY_NAMES = [
   'parentTaskId', // OMN-114: direct children of a task
   'search',
   'fastSearch', // OMN-115: name-only fast search
+  'includeProjectRoot', // OMN-153: opt into project-root rows (query-level param, not a filters:{} key)
   'projectStatus',
   'folder',
   'folderTopLevel', // OMN-96

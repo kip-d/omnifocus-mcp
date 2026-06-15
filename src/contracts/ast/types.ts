@@ -236,6 +236,7 @@ export const KNOWN_FIELDS = [
 
   // Relationship properties
   'task.containingProject',
+  'task.project', // OMN-153: Task.project (OmniJS) — non-null ONLY for the project's root task
   'task.repetitionRule', // RepetitionRule object or null
   'taskTags', // Special: array of tag names
 

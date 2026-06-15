@@ -56,6 +56,7 @@ const KEY_COVERAGE = {
   todayMode: 'exempt',
   dueSoonDays: 'exempt',
   fastSearch: 'exempt',
+  includeProjectRoot: 'described', // OMN-153: appears in filters_applied; must be describable
   projectStatus: 'exempt',
   folder: 'exempt',
   folderTopLevel: 'exempt',
@@ -97,6 +98,7 @@ const SAMPLE: Partial<Record<keyof NormalizedTaskFilter, NormalizedTaskFilter>> 
   tagStatusValid: { tagStatusValid: true } as NormalizedTaskFilter,
   projectId: { projectId: 'p1' } as NormalizedTaskFilter,
   parentTaskId: { parentTaskId: 't1' } as NormalizedTaskFilter,
+  includeProjectRoot: { includeProjectRoot: true } as NormalizedTaskFilter,
 };
 
 describe('OMN-172 F10: describeFilterForScript key coverage', () => {

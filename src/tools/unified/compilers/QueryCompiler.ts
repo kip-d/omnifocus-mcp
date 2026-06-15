@@ -69,6 +69,7 @@ export type CompiledQuery =
       fastSearch?: boolean;
       daysAhead?: number;
       countOnly?: boolean;
+      includeProjectRoot?: boolean; // OMN-153: query-level param, threaded onto filter
     })
   | (CompiledQueryBase & { type: 'projects'; filters: ProjectFilter; includeStats?: boolean })
   | (CompiledQueryBase & { type: 'tags'; filters: TagFilter })
@@ -136,6 +137,12 @@ export class QueryCompiler {
         if ('fastSearch' in query && query.fastSearch !== undefined) {
           raw.fastSearch = query.fastSearch;
         }
+        // OMN-153: includeProjectRoot is a query-level param. Thread it onto the filter
+        // so the script builders can apply the default exclusion or opt-in projection.
+        // NOT processed through transformFilters (not a filters:{} input key).
+        if ('includeProjectRoot' in query && query.includeProjectRoot !== undefined) {
+          raw.includeProjectRoot = query.includeProjectRoot;
+        }
         const filters = normalizeFilter(raw);
         if (query.type === 'tasks') {
           this.assertSatisfiableTerminalBranches(filters); // OMN-172 S4
@@ -147,6 +154,7 @@ export class QueryCompiler {
             fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
             daysAhead: 'daysAhead' in query ? query.daysAhead : undefined,
             countOnly: 'countOnly' in query ? query.countOnly : undefined,
+            includeProjectRoot: 'includeProjectRoot' in query ? query.includeProjectRoot : undefined,
           };
         }
         return {

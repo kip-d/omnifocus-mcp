@@ -72,6 +72,9 @@ export const TaskRowSchema = z
     parentTaskName: z.string().nullable().optional(),
     reason: z.enum(['overdue', 'due_soon', 'flagged']).nullable().optional(),
     daysOverdue: z.number().optional(),
+    // OMN-153: marker emitted when 'isProjectRoot' is in the requested fields.
+    // true when task.project !== null (i.e. this task IS a project root).
+    isProjectRoot: z.boolean().optional(),
   })
   .strict();
 
