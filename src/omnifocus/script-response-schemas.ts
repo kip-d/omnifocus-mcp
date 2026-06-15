@@ -227,10 +227,12 @@ export const ProjectListMetadataSchema = z
 const TagNameItem = z.string();
 
 /**
- * Tag item for 'basic' mode — {id, name}.
- * Source: tag-script-builder.ts buildBasicTagsScript: {id, name}.
+ * Tag item for 'basic' mode — {id, name, parentId}.
+ * Source: tag-script-builder.ts buildBasicTagsScript: {id, name, parentId}.
+ * OMN-145: parentId is always emitted (null for top-level tags) so hierarchy
+ * is reachable through the read seam without a mode/fields opt-in param.
  */
-const TagBasicItem = z.object({ id: z.string(), name: z.string() }).strict();
+const TagBasicItem = z.object({ id: z.string(), name: z.string(), parentId: z.string().nullable() }).strict();
 
 /**
  * Tag usage stats sub-object (includeUsageStats=true only).

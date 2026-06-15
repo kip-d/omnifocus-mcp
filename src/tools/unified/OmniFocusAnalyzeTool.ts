@@ -313,7 +313,8 @@ const RECURRING_TASKS_SCHEMA = astEnvelopeSchema('tasks', {
 
 /**
  * AST tag items envelope: {ok:true, v:'ast', items, summary?}.
- * Analyze tool receives 'basic' mode items ({id, name} objects).
+ * Analyze tool receives 'basic' mode items ({id, name, parentId} objects).
+ * OMN-145: parentId is null for top-level tags, string ID for nested tags.
  * Source: tag-script-builder.ts buildBasicTagsScript.
  */
 const TAG_ITEMS_SCHEMA = astEnvelopeSchema('items', {
