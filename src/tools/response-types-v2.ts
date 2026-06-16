@@ -79,6 +79,9 @@ export interface OverdueAnalysisDataV2 {
     overdueTasks: Array<{
       id: string;
       name: string;
+      // OMN-187: always a string — the v3 script guards `if (!dueDate) return`
+      // before pushing a task to any urgency bucket, so overdue rows always have one.
+      dueDate: string;
       daysOverdue: number;
       project?: string;
       tags?: string[];
@@ -89,7 +92,9 @@ export interface OverdueAnalysisDataV2 {
       count: number;
       percentage: number;
     }>;
-    insights: Record<string, unknown>;
+    // OMN-187: typed concretely (not Record<string, unknown>) so the compiler
+    // catches a key/shape drift — the exact silent-default class this fix closes.
+    insights: { topRecommendations: string[] };
   };
   groupedAnalysis: Record<
     string,

@@ -53,40 +53,65 @@ export const ANALYZE_OVERDUE_V3 = `
           const tagBottlenecks = {};
 
           let tasksProcessed = 0;
+          let totalActive = 0;
+          // OMN-187: full-population overdue aggregates. The maxTasks cap below limits
+          // only the per-task DETAIL arrays (overdueTasks/bottlenecks = payload size);
+          // these counters reflect EVERY overdue task, so totalOverdue, avgDaysOverdue,
+          // blockedCount, overduePercentage, and oldestOverdueDate stay correct even
+          // when there are more than maxTasks overdue tasks.
+          let totalOverdueCount = 0;
+          let totalDaysOverdueAll = 0;
+          let blockedOverdueCount = 0;
+          let oldestDueTime = Infinity;
+          let oldestDueISO = null;
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
             try {
-              // Limit processing for performance
-              if (tasksProcessed >= maxTasks) return;
+              // OMN-187: one "active" predicate drives BOTH the overduePercentage
+              // denominator (totalActive) and the overdue numerator below, so the
+              // numerator is a subset of the denominator by construction (percentage
+              // can never exceed 100%). taskStatus is the effective status — a task in
+              // a dropped/completed project counts as terminal, the right universe for
+              // "% of active tasks overdue".
+              const activeStatus = task.taskStatus;
+              const isActive =
+                activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped;
+              if (isActive) {
+                totalActive++;
+              }
 
-              // Check if task is effectively completed
-              const isCompleted = task.completed || false;
-              if (isCompleted) return;
+              // Only active tasks can be overdue. These cheap checks run for EVERY task
+              // (before the detail cap) so the aggregates below see the full population.
+              if (!isActive) return;
 
-              // Check if task has a due date
               const dueDate = task.dueDate;
               if (!dueDate) return;
 
-              // Check if overdue
               const dueDateTime = dueDate.getTime();
               if (dueDateTime >= nowTime) return;
 
-              // Task is overdue - gather information
+              // Task is overdue. Full-population aggregates (UNCAPPED):
+              const daysOverdue = Math.floor((nowTime - dueDateTime) / (1000 * 60 * 60 * 24));
+              const isBlocked = activeStatus === Task.Status.Blocked;
+              totalOverdueCount++;
+              totalDaysOverdueAll += daysOverdue;
+              if (isBlocked) blockedOverdueCount++;
+              if (dueDateTime < oldestDueTime) {
+                oldestDueTime = dueDateTime;
+                oldestDueISO = dueDate.toISOString();
+              }
+
+              // Per-task DETAIL recording is capped for payload size — the summary
+              // aggregates above are already complete.
+              if (tasksProcessed >= maxTasks) return;
               tasksProcessed++;
 
               const taskId = task.id.primaryKey || 'unknown';
               const taskName = task.name || 'Unnamed Task';
 
-              // Check if blocked (using OmniJS Task.Status enum)
-              const isBlocked = task.taskStatus === Task.Status.Blocked;
-
-              // Check if next action (using shouldUseFloatingTimeZone as proxy for next status)
-              // Note: OmniJS doesn't expose task.next() directly, use available properties
-              const isNext = !isBlocked && task.taskStatus === Task.Status.Available;
-
-              // Calculate days overdue
-              const daysOverdue = Math.floor((nowTime - dueDateTime) / (1000 * 60 * 60 * 24));
+              // Next action: reuse the cached activeStatus (OMN-187 — no re-read).
+              const isNext = !isBlocked && activeStatus === Task.Status.Available;
 
               // Get project information
               const project = task.containingProject;
@@ -175,20 +200,21 @@ export const ANALYZE_OVERDUE_V3 = `
           // Sort overdue tasks by days overdue
           overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-          // Calculate statistics
-          const totalOverdue = overdueTasks.length;
-          const blockedCount = blockedOverdue.length;
+          // Calculate statistics from the FULL-POPULATION counters (uncapped), not the
+          // capped overdueTasks detail array — see the loop above (OMN-187).
+          const totalOverdue = totalOverdueCount;
+          const blockedCount = blockedOverdueCount;
           const unblockedCount = totalOverdue - blockedCount;
           const blockedPercentage = totalOverdue > 0 ?
             (blockedCount / totalOverdue * 100).toFixed(1) : '0.0';
 
-          // Calculate average days overdue
-          let totalDaysOverdue = 0;
-          for (let i = 0; i < overdueTasks.length; i++) {
-            totalDaysOverdue += overdueTasks[i].daysOverdue;
-          }
           const avgDaysOverdue = totalOverdue > 0 ?
-            (totalDaysOverdue / totalOverdue).toFixed(1) : '0.0';
+            (totalDaysOverdueAll / totalOverdue).toFixed(1) : '0.0';
+
+          // OMN-187: share of active tasks that are overdue (numerator ⊆ denominator,
+          // both full-population → always 0–100%).
+          const overduePercentage = totalActive > 0 ?
+            (totalOverdue / totalActive * 100).toFixed(1) : '0.0';
 
           // Find most problematic projects
           const projectList = [];
@@ -253,10 +279,13 @@ export const ANALYZE_OVERDUE_V3 = `
 
           return JSON.stringify({
             totalOverdue: totalOverdue,
+            totalActive: totalActive,
             blockedCount: blockedCount,
             unblockedCount: unblockedCount,
             blockedPercentage: parseFloat(blockedPercentage),
             avgDaysOverdue: parseFloat(avgDaysOverdue),
+            overduePercentage: parseFloat(overduePercentage),
+            oldestOverdueDate: oldestDueISO,
             mostOverdue: overdueTasks[0] || null,
             insights: insights,
             groupedByUrgency: groupedByUrgency,
@@ -284,6 +313,9 @@ export const ANALYZE_OVERDUE_V3 = `
             unblockedCount: analysis.unblockedCount,
             blockedPercentage: analysis.blockedPercentage,
             avgDaysOverdue: analysis.avgDaysOverdue,
+            overduePercentage: analysis.overduePercentage,
+            totalActive: analysis.totalActive,
+            oldestOverdueDate: analysis.oldestOverdueDate,
             mostOverdue: analysis.mostOverdue
           },
           insights: analysis.insights,

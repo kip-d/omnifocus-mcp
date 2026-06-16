@@ -14,39 +14,13 @@ export interface TaskData {
   flagged?: boolean;
 }
 
-// Project bottleneck structure for overdue analysis
-export interface ProjectBottleneck {
-  name: string;
-  overdueCount: number;
-  totalTasks?: number;
-}
-
-// Pattern data for analytics
-export interface PatternData {
-  type: string;
-  value: string;
-  count: number;
-  percentage: number;
-}
-
-// Overdue analysis script response
-export interface OverdueAnalysisData {
-  summary: {
-    totalOverdue: number;
-    overduePercentage: number;
-    averageDaysOverdue: number;
-    avgDaysOverdue?: number; // Alternative field name
-    oldestOverdueDate: string;
-    mostOverdue?: {
-      dueDate: string;
-    };
-  };
-  overdueTasks: TaskData[];
-  patterns: PatternData[];
-  projectBottlenecks?: ProjectBottleneck[];
-  recommendations?: string[];
-  groupedAnalysis: Record<string, unknown>;
-}
+// OMN-187: the former `OverdueAnalysisData` interface lived here as a hand-
+// maintained copy of the overdue payload shape and silently drifted from what
+// the v3 script emits — the root cause of the always-0/empty overdue_analysis
+// bug. The read-path now types against `OverdueAnalysisV3Data` (z.infer of
+// OVERDUE_ANALYSIS_V3_SCHEMA in script-response-schemas.ts); do not reintroduce
+// a parallel interface here. The `ProjectBottleneck` and `PatternData`
+// interfaces were deleted alongside it — they had no other consumers.
 
 // Stats overview for productivity analysis
 export interface StatsOverview {

@@ -60,7 +60,10 @@ import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
 // Response types
-import type { OverdueAnalysisData, ReviewListData } from '../../omnifocus/script-response-types.js';
+import type { ReviewListData } from '../../omnifocus/script-response-types.js';
+// OMN-187: read the overdue payload against the schema-inferred type so the
+// compiler forbids reading a field the v3 script never emits.
+import type { OverdueAnalysisV3Data } from '../../omnifocus/script-response-schemas.js';
 import type { OverdueAnalysisDataV2, RecurringTaskV2 } from '../response-types-v2.js';
 import type { ProjectId } from '../../utils/branded-types.js';
 
@@ -68,33 +71,11 @@ import type { ProjectId } from '../../utils/branded-types.js';
 // Internal type helpers
 // ---------------------------------------------------------------------------
 
-// Union type for overdue data (production script format vs test mock format)
-interface TestMockOverdueData {
-  summary: {
-    totalOverdue: number;
-    overduePercentage: number;
-    averageDaysOverdue: number;
-    oldestOverdueDate: string;
-  };
-  overdueTasks: Array<{
-    id: string;
-    name: string;
-    dueDate: string;
-    daysOverdue: number;
-    tags: string[];
-    projectId?: string;
-  }>;
-  patterns: Array<{
-    type: string;
-    value: string;
-    count: number;
-    percentage: number;
-  }>;
-  recommendations: string[];
-  groupedAnalysis?: Record<string, unknown>;
-}
-
-type OverdueDataUnion = OverdueAnalysisData | TestMockOverdueData;
+// OMN-187: the overdue read-path now consumes OverdueAnalysisV3Data (inferred
+// from OVERDUE_ANALYSIS_V3_SCHEMA) directly — see executeOverdueAnalysis. The
+// former TestMockOverdueData union + get*/isTestMockOverdueFormat helpers existed
+// only to straddle a legacy script shape that the v3 script never emitted; they
+// silently defaulted every field and are deleted.
 
 function classifyAnalyticsError(errorMessage: string): { errorCode: string; suggestion: string } {
   if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
@@ -116,45 +97,6 @@ function classifyAnalyticsError(errorMessage: string): { errorCode: string; sugg
     return { errorCode: 'NO_DATA', suggestion: 'Add some tasks to OmniFocus before running productivity analysis' };
   }
   return { errorCode: 'STATS_ERROR', suggestion: 'Ensure OmniFocus is running and has data to analyze' };
-}
-
-function isTestMockOverdueFormat(data: OverdueDataUnion): data is TestMockOverdueData {
-  return 'recommendations' in data && Array.isArray(data.recommendations);
-}
-
-function getRecommendations(data: OverdueDataUnion): string[] {
-  if (isTestMockOverdueFormat(data)) {
-    return data.recommendations;
-  }
-  return data.recommendations || [];
-}
-
-function getPatternsWithValue(
-  data: OverdueDataUnion,
-): Array<{ type: string; value: string; count: number; percentage: number }> {
-  if (isTestMockOverdueFormat(data)) {
-    return data.patterns;
-  }
-  return (data.patterns || []).map((p) => ({
-    type: p.type || 'unknown',
-    value: p.value || 'unknown',
-    count: p.count || 0,
-    percentage: p.percentage || 0,
-  }));
-}
-
-function getTaskProjectId(task: OverdueDataUnion['overdueTasks'][0]): string | undefined {
-  if ('projectId' in task) {
-    return task.projectId;
-  }
-  return undefined;
-}
-
-function getTaskDaysOverdue(task: OverdueDataUnion['overdueTasks'][0]): number {
-  if ('daysOverdue' in task) {
-    return task.daysOverdue;
-  }
-  return 0;
 }
 
 // V3 script response structure for task velocity
@@ -974,40 +916,54 @@ SCOPE FILTERING:
       }
 
       const envelope = result.data as unknown as
-        | { ok?: boolean; v?: string; data?: OverdueDataUnion }
-        | OverdueDataUnion;
-      const scriptData: OverdueDataUnion =
-        'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueDataUnion);
+        | { ok?: boolean; v?: string; data?: OverdueAnalysisV3Data }
+        | OverdueAnalysisV3Data;
+      const scriptData: OverdueAnalysisV3Data =
+        'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueAnalysisV3Data);
+
+      const { summary, groupedByUrgency, projectBottlenecks, insights } = scriptData;
+
+      // OMN-187: the v3 script returns overdue tasks split across urgency buckets
+      // (not a flat array). Flatten them back into one list, most-overdue first,
+      // so the response carries real per-task rows.
+      const urgencyKeys = ['critical', 'high', 'medium', 'low'] as const;
+      const allOverdue = urgencyKeys
+        .flatMap((key) => groupedByUrgency[key])
+        .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
       const responseData: OverdueAnalysisDataV2 = {
         stats: {
           summary: {
-            totalOverdue: scriptData.summary.totalOverdue ?? 0,
-            overduePercentage: scriptData.summary.overduePercentage ?? 0,
-            averageDaysOverdue: Number(scriptData.summary.averageDaysOverdue ?? 0),
-            oldestOverdueDate: scriptData.summary.oldestOverdueDate ?? '',
+            totalOverdue: summary.totalOverdue,
+            overduePercentage: summary.overduePercentage,
+            averageDaysOverdue: summary.avgDaysOverdue,
+            // OMN-187: exact oldest due date computed over the full population in the
+            // script (not derived from the capped mostOverdue sample).
+            oldestOverdueDate: summary.oldestOverdueDate ?? '',
           },
-          overdueTasks: (scriptData.overdueTasks ?? []).map((task) => ({
-            id: String(task.id || ''),
-            name: String(task.name || ''),
-            dueDate: task.dueDate ?? null,
-            project: getTaskProjectId(task) ? String(getTaskProjectId(task)) : undefined,
-            daysOverdue: getTaskDaysOverdue(task),
+          overdueTasks: allOverdue.map((task) => ({
+            id: task.id,
+            name: task.name,
+            dueDate: task.dueDate,
+            project: task.project,
+            tags: task.tags,
+            daysOverdue: task.daysOverdue,
           })),
-          patterns: getPatternsWithValue(scriptData),
-          insights: { topRecommendations: getRecommendations(scriptData) },
+          // projectBottlenecks → flat pattern rows (blockageRate is a toFixed string).
+          patterns: projectBottlenecks.map((b) => ({
+            type: 'project',
+            value: b.name,
+            count: b.overdueCount,
+            percentage: parseFloat(b.blockageRate) || 0,
+          })),
+          insights: { topRecommendations: insights },
         },
         groupedAnalysis: Object.fromEntries(
-          Object.entries(scriptData.groupedAnalysis ?? {}).map(([key, value]) => {
-            const groupData = value as { count?: number; averageDaysOverdue?: number; tasks?: unknown[] } | null;
-            return [
-              key,
-              {
-                count: groupData?.count ?? 0,
-                averageDaysOverdue: groupData?.averageDaysOverdue,
-                tasks: groupData?.tasks,
-              },
-            ];
+          urgencyKeys.map((key) => {
+            const tasks = groupedByUrgency[key];
+            const averageDaysOverdue =
+              tasks.length > 0 ? tasks.reduce((sum, t) => sum + t.daysOverdue, 0) / tasks.length : 0;
+            return [key, { count: tasks.length, averageDaysOverdue, tasks }];
           }),
         ),
       };
@@ -1069,11 +1025,13 @@ SCOPE FILTERING:
       if (
         topPattern &&
         typeof topPattern === 'object' &&
-        topPattern.type &&
+        typeof topPattern.value === 'string' &&
+        topPattern.value &&
         typeof topPattern.count === 'number' &&
         topPattern.count > 0
       ) {
-        findings.push(`Most overdue in: ${topPattern.type} (${topPattern.count} tasks)`);
+        // OMN-187: `value` is the project name; `type` is the category ('project').
+        findings.push(`Most overdue in: ${topPattern.value} (${topPattern.count} tasks)`);
       }
     }
 

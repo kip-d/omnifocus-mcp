@@ -2467,10 +2467,13 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
     data: {
       summary: {
         totalOverdue: 1,
+        totalActive: 20,
         blockedCount: 0,
         unblockedCount: 1,
         blockedPercentage: 0.0,
         avgDaysOverdue: 11.0,
+        overduePercentage: 5.0,
+        oldestOverdueDate: '2026-06-01T17:00:00.000Z',
         mostOverdue: overdueTask,
       },
       insights: ['1 overdue tasks found'],
@@ -2503,10 +2506,13 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
         ...minimalPayload.data,
         summary: {
           totalOverdue: 0,
+          totalActive: 20,
           blockedCount: 0,
           unblockedCount: 0,
           blockedPercentage: 0.0,
           avgDaysOverdue: 0.0,
+          overduePercentage: 0.0,
+          oldestOverdueDate: null,
           mostOverdue: null,
         },
         insights: ['No overdue tasks found - excellent!'],
