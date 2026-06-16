@@ -773,7 +773,9 @@ export function listResultSchema<TRow extends z.ZodTypeAny, TMeta extends z.ZodT
  *
  * limited is emitted on BOTH branches (true or false) — REQUIRED.
  * warning is emitted only on the scan-limit branch — OPTIONAL.
- * filters_applied echoes the raw filter object passed in — stays z.unknown() (passthrough echo).
+ * filters_applied echoes the EFFECTIVE filter — the user filter plus the auto-injected
+ * completed/dropped/project-root defaults the count actually applied (OMN-190) — stays
+ * z.unknown() (passthrough echo). The host surfaces this verbatim as metadata.filters_applied.
  */
 export const CountResultSchema = z
   .object({

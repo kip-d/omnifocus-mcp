@@ -572,6 +572,7 @@ PERFORMANCE:
       warning?: string;
       optimization?: string;
       filter_description?: string;
+      filters_applied?: Record<string, unknown>;
     };
     const count = data.count ?? 0;
     const response = createTaskResponseV2('tasks', [], {
@@ -580,7 +581,14 @@ PERFORMANCE:
       mode: mode || 'count_only',
       count_only: true,
       total_count: count,
-      filters_applied: stripNormalizedBrand(countFilter),
+      // OMN-190: surface the script's honest echo (the EFFECTIVE filter incl.
+      // auto-injected completed/dropped/project-root defaults), which the count
+      // script computes alongside filter_description. Rebuilding from countFilter
+      // here would re-introduce the very contradiction OMN-190 fixed — countFilter
+      // lacks the defaults, so filters_applied:{} would disagree with a
+      // filter_description that names three exclusions. Fall back to countFilter
+      // only if the script omitted the echo (defensive; CountResultSchema requires it).
+      filters_applied: data.filters_applied ?? stripNormalizedBrand(countFilter),
       optimization: data.optimization || 'ast_omnijs_bridge',
       filter_description: data.filter_description,
       warning: data.warning,

@@ -527,11 +527,13 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
  * buildExportTasksScript. Adding a new task-script builder? Route it through
  * this helper — never inline the check.
  *
- * SCOPE: injects includeProjectRoot only.
- * The existing dropped/completed defaults differ per builder (export defaults
- * includeCompleted=true; inbox always excludes completed) and must stay inline
- * in each builder until that interaction is audited. They are candidates for
- * the same consolidation in a follow-up pass.
+ * SCOPE: injects includeProjectRoot only (into the PREDICATE filter).
+ * The dropped/completed predicate defaults differ per builder (export defaults
+ * includeCompleted=true; inbox always excludes completed) and stay inline in each
+ * builder by design. For the HONESTY SURFACE (filter_description / filters_applied),
+ * OMN-190 consolidated all three defaults into applyHonestyDefaults — adding a new
+ * builder? Route the predicate through this helper AND the description through
+ * applyHonestyDefaults, or the new builder silently under-reports its exclusions.
  */
 function applyProjectRootDefault<F extends { includeProjectRoot?: boolean }>(filter: F): F {
   if (filter.includeProjectRoot !== undefined) return filter;
