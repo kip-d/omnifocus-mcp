@@ -451,6 +451,54 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.groupedAnalysis.critical.count).toBe(1);
       expect(res.data.groupedAnalysis.high.count).toBe(1);
     });
+
+    it('coalesces a null oldestOverdueDate to an empty string (OMN-187, no overdue tasks)', async () => {
+      // When there are zero overdue tasks the v3 script emits oldestOverdueDate: null;
+      // the tool must coalesce it to '' (OverdueAnalysisDataV2 types it as a string).
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            summary: {
+              totalOverdue: 0,
+              blockedCount: 0,
+              unblockedCount: 0,
+              blockedPercentage: 0,
+              avgDaysOverdue: 0,
+              overduePercentage: 0,
+              totalActive: 10,
+              oldestOverdueDate: null,
+              mostOverdue: null,
+            },
+            insights: ['No overdue tasks found - excellent!'],
+            groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
+            projectBottlenecks: [],
+            blockedTasks: [],
+            metadata: {
+              generated_at: '2026-06-16T10:00:00.000Z',
+              method: 'omnijs_v3_single_bridge',
+              optimization: 'omnijs_v3',
+              query_time_ms: 700,
+              tasksAnalyzed: 0,
+              note: 'All analysis calculated in single OmniJS bridge call',
+            },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'overdue_analysis' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.stats.summary.totalOverdue).toBe(0);
+      // null → '' (not null, not undefined).
+      expect(res.data.stats.summary.oldestOverdueDate).toBe('');
+      expect(res.data.stats.overdueTasks).toEqual([]);
+    });
   });
 
   // ==========================================================================
