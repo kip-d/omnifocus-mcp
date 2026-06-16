@@ -303,7 +303,7 @@ RESPONSE CONTROL:
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
-- countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives/export). Genuinely faster on tasks (33x) and projects (skips per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response (those scripts already enumerate all rows)
+- countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives/export). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row
 - includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
 - fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Auto-included when includeProjectRoot: true; also requestable explicitly or via details: true.
 
@@ -732,7 +732,12 @@ PERFORMANCE:
    * `counts` arg / applyCountHonesty — with returned_count:0 that would compute
    * `0 < population → truncated` and emit a false "Showing 0 of N (truncated)"
    * notice. A count-only result is row-less by design, not a truncated row set.
-   * Instead we override total_count (and the summary's total_*) by hand.
+   *
+   * The summary block is dropped: createListResponseV2 builds a projects summary
+   * from the (empty) rows, so its breakdown (active/on_hold/completed/…) would all
+   * be 0 and contradict total_count (e.g. active:0 alongside total_count:183). A
+   * count is a single number, not a dashboard — metadata.total_count is the answer.
+   * Mirrors the narrow-lookup summary suppression in handleProjectQuery.
    */
   private buildCountOnlyResponse(
     entityType: 'projects' | 'tags' | 'folders',
@@ -750,19 +755,8 @@ PERFORMANCE:
     // folders carry total_folders as their headline metric (mirrors the row path).
     if (entityType === 'folders') metadata.total_folders = population;
 
-    const response = createListResponseV2(entityType, [], entityType, metadata) as unknown as {
-      summary?: Record<string, unknown>;
-      metadata: StandardMetadataV2;
-    };
-
-    // projects is the only count-only entity with a summary (createListResponseV2
-    // generates none for tags/folders). Its row-derived total_* are 0 from the
-    // empty rows — override to the real population.
-    const summary = response.summary;
-    if (summary) {
-      if ('total_count' in summary) summary.total_count = population;
-      if ('total_projects' in summary) summary.total_projects = population;
-    }
+    const response = createListResponseV2(entityType, [], entityType, metadata) as unknown as Record<string, unknown>;
+    delete response.summary;
     return response;
   }
 

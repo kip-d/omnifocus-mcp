@@ -1603,8 +1603,9 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.count_only).toBe(true);
       expect(result.metadata.total_count).toBe(203);
       expect(result.data.projects).toEqual([]);
-      // headline summary must report the population, not the 0 from the empty rows
-      expect(result.summary.total_projects).toBe(203);
+      // No dashboard summary on a count-only result — its breakdown would be computed
+      // from the empty rows (active:0…) and contradict total_count.
+      expect(result.summary).toBeUndefined();
       // count-only is row-less by design, NOT a truncated row set (no false notice)
       expect('truncated' in result.metadata).toBe(false);
     });
@@ -1682,6 +1683,22 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.total_folders).toBe(9);
       expect(result.data.folders).toEqual([]);
       expect('truncated' in result.metadata).toBe(false);
+    });
+
+    // The shared countOnlyFromResult tail dispatches per-entity error labels; lock
+    // the tags/folders error paths too (not just projects).
+    it('tags: countOnly surfaces SCRIPT_ERROR on failure', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'tags', countOnly: true } })) as any;
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('folders: countOnly surfaces SCRIPT_ERROR on failure', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'folders', countOnly: true } })) as any;
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
     });
   });
 
