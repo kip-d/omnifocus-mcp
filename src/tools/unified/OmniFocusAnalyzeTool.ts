@@ -2693,6 +2693,11 @@ SCOPE FILTERING:
     // buildFilteredProjectsScript/buildTagsScript, which self-wrap). Passing the
     // bare body to execJson throws "Can't find variable: flattenedTasks", and the
     // swallowed failure silently disabled dedupe. Output shape is { tasks, metadata }.
+    //
+    // OMN-191: this inherits OMN-153's default project-root exclusion by design.
+    // A project root is named identically to its project but is NOT an actionable
+    // task, so it must not make "create a task named like the project" look like a
+    // duplicate. (To include roots in dedup, pass includeProjectRoot: true here.)
     const script = buildListTasksScriptV4({
       filter: { completed: false, dropped: false },
       fields: ['name', 'project'],

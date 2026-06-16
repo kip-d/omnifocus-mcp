@@ -288,27 +288,29 @@ describe('OmniFocusAnalyzeTool', () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       // OMN-139: executeJson now returns ScriptResult (schema validated); mock must match
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
-        ok: true,
-        v: '3',
-        data: {
-          velocity: {
-            period: '7 days',
-            averageCompleted: '6.5',
-            averageCreated: '7.2',
-            dailyVelocity: '6.5',
-            backlogGrowthRate: '+0.7',
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            velocity: {
+              period: '7 days',
+              averageCompleted: '6.5',
+              averageCreated: '7.2',
+              dailyVelocity: '6.5',
+              backlogGrowthRate: '+0.7',
+            },
+            throughput: {
+              intervals: [],
+              totalCompleted: 45,
+              totalCreated: 50,
+            },
+            breakdown: { medianCompletionHours: '3.5', tasksAnalyzed: 150 },
+            projections: { tasksPerDay: '6.5', tasksPerWeek: '45.5', tasksPerMonth: '195' },
+            optimization: 'Current velocity is sustainable',
           },
-          throughput: {
-            intervals: [],
-            totalCompleted: 45,
-            totalCreated: 50,
-          },
-          breakdown: { medianCompletionHours: '3.5', tasksAnalyzed: 150 },
-          projections: { tasksPerDay: '6.5', tasksPerWeek: '45.5', tasksPerMonth: '195' },
-          optimization: 'Current velocity is sustainable',
-        },
-      }));
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'task_velocity', params: { groupBy: 'day' } },
@@ -429,19 +431,21 @@ describe('OmniFocusAnalyzeTool', () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       // OMN-139: executeJson returns ScriptResult; wrap V3 envelope
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
-        ok: true,
-        v: '3',
-        data: {
-          insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
-          patterns: { bottlenecks: 3, projects: 2 },
-          recommendations: [{ recommendation: 'Batch similar tasks' }],
-          totalTasks: 123,
-          totalProjects: 12,
-          analysisTime: 250,
-          dataPoints: 4000,
-        },
-      }));
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
+            patterns: { bottlenecks: 3, projects: 2 },
+            recommendations: [{ recommendation: 'Batch similar tasks' }],
+            totalTasks: 123,
+            totalProjects: 12,
+            analysisTime: 250,
+            dataPoints: 4000,
+          },
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'workflow_analysis' },
@@ -455,11 +459,13 @@ describe('OmniFocusAnalyzeTool', () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       // OMN-139: executeJson returns ScriptResult; wrap V3 envelope
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
-        ok: true,
-        v: '3',
-        data: { insights: [], patterns: {}, recommendations: [] },
-      }));
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { insights: [], patterns: {}, recommendations: [] },
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'workflow_analysis' },
@@ -525,13 +531,15 @@ describe('OmniFocusAnalyzeTool', () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       // OMN-139: executeJson returns ScriptResult; mock must match RecurringPatternsSchema
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
-        totalRecurring: 5,
-        patterns: [{ pattern: 'weekly', count: 3 }],
-        byProject: [{ project: 'Work', count: 2 }],
-        mostCommon: { pattern: 'weekly', count: 3 },
-        duration: 250,
-      }));
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          totalRecurring: 5,
+          patterns: [{ pattern: 'weekly', count: 3 }],
+          byProject: [{ project: 'Work', count: 2 }],
+          mostCommon: { pattern: 'weekly', count: 3 },
+          duration: 250,
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'recurring_tasks', params: { operation: 'patterns' } },
@@ -880,6 +888,29 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(tasksScript).toContain('evaluateJavascript');
       });
 
+      it('OMN-191: the dedup tasks read excludes project-root rows by default (inherits OMN-153)', async () => {
+        // A project root is named identically to its project but is NOT an
+        // actionable task — it must not make "create a task named like the
+        // project" look like a duplicate. fetchExistingIncompleteTasks routes
+        // through buildListTasksScriptV4 -> buildFilteredTasksScript, which applies
+        // OMN-153's default project-root exclusion, so root rows never reach dedup.
+        const scripts: string[] = [];
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          return Promise.resolve({ tasks: [] });
+        });
+
+        await tool.execute({
+          analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', project: 'Y' }] } },
+        });
+
+        const tasksScript = scripts.find((s) => s.includes('flattenedTasks'));
+        expect(tasksScript).toBeDefined();
+        // OMN-153 predicate: a project root is the only task with task.project !== null,
+        // so excluding `task.project === null` rows keeps roots out of the dedup set.
+        expect(tasksScript).toContain('task.project === null');
+      });
+
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
         const res: any = await tool.execute({
           analysis: {
@@ -924,15 +955,17 @@ describe('OmniFocusAnalyzeTool', () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       // OMN-139: executeJson returns ScriptResult; mock must match REVIEWS_LIST_SCHEMA
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({
-        success: true,
-        projects: [
-          { id: 'p1', name: 'Overdue', nextReviewDate: yesterday },
-          { id: 'p2', name: 'Due Today', nextReviewDate: today },
-          { id: 'p3', name: 'Due Soon', nextReviewDate: soon },
-          { id: 'p4', name: 'No Schedule' },
-        ],
-      }));
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          success: true,
+          projects: [
+            { id: 'p1', name: 'Overdue', nextReviewDate: yesterday },
+            { id: 'p2', name: 'Due Today', nextReviewDate: today },
+            { id: 'p3', name: 'Due Soon', nextReviewDate: soon },
+            { id: 'p4', name: 'No Schedule' },
+          ],
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },

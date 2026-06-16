@@ -1528,6 +1528,51 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.filters_applied).toMatchObject({ inInbox: true });
     });
 
+    it('OMN-192: countOnly threads includeProjectRoot into the count filter via the compiled filter', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 3 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, countOnly: true, includeProjectRoot: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      // filters_applied echoes the countFilter; includeProjectRoot must reach it
+      // through the compiled filter alone (no redundant executeCountOnly merge).
+      expect(result.metadata.filters_applied).toMatchObject({ flagged: true, includeProjectRoot: true });
+    });
+
+    it('OMN-190: count metadata.filters_applied surfaces the script honest echo (no contradiction with filter_description)', async () => {
+      // Regression guard for the review finding: the host must NOT rebuild
+      // filters_applied from the pre-honesty countFilter — for a default query that
+      // would yield filters_applied:{} while filter_description names three
+      // exclusions (the exact OMN-172/177 contradiction OMN-190 fixes). The count
+      // script emits the honest echo in data.filters_applied; the host surfaces it.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          count: 5,
+          filters_applied: { completed: false, dropped: false, includeProjectRoot: false },
+          filter_description: 'active AND not dropped AND exclude project roots',
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.filters_applied).toEqual({
+        completed: false,
+        dropped: false,
+        includeProjectRoot: false,
+      });
+      // filter_description and filters_applied must agree (the invariant)
+      expect(result.metadata.filter_description).toBe('active AND not dropped AND exclude project roots');
+    });
+
     it('script error during count: returns SCRIPT_ERROR', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: false,

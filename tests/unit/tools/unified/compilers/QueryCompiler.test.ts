@@ -67,6 +67,26 @@ describe('QueryCompiler', () => {
       expect(compiled.filters.fastSearch).toBeUndefined();
     });
 
+    it('OMN-192: includeProjectRoot is single-sourced onto the compiled filter (like fastSearch)', () => {
+      const compiled = compiler.compile({
+        query: { type: 'tasks', filters: {}, includeProjectRoot: true },
+      } as ReadInput) as CompiledTasks;
+
+      // The compiled filter is the SINGLE source of truth — buildTaskQuery must
+      // NOT re-merge includeProjectRoot (the OMN-192 double-write). The top-level
+      // query-level field is retained for query-level reads (mirrors fastSearch).
+      expect(compiled.filters.includeProjectRoot).toBe(true);
+      expect(compiled.includeProjectRoot).toBe(true);
+    });
+
+    it('OMN-192: omits includeProjectRoot from the filter when not requested', () => {
+      const compiled = compiler.compile({
+        query: { type: 'tasks', filters: {} },
+      } as ReadInput) as CompiledTasks;
+
+      expect(compiled.filters.includeProjectRoot).toBeUndefined();
+    });
+
     it('OMN-114: passes parentTaskId filter through to the compiled filter', () => {
       const input: ReadInput = {
         query: {
@@ -1188,17 +1208,23 @@ describe('QueryCompiler', () => {
     });
 
     it('control: status "active" compiles without throwing (completed:false)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'active' } } } as never) as CompiledTasks;
+      const compiled = compiler.compile({
+        query: { type: 'tasks', filters: { status: 'active' } },
+      } as never) as CompiledTasks;
       expect(compiled.filters.completed).toBe(false);
     });
 
     it('control: status "completed" compiles without throwing (completed:true)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'completed' } } } as never) as CompiledTasks;
+      const compiled = compiler.compile({
+        query: { type: 'tasks', filters: { status: 'completed' } },
+      } as never) as CompiledTasks;
       expect(compiled.filters.completed).toBe(true);
     });
 
     it('control: status "dropped" compiles without throwing (dropped:true)', () => {
-      const compiled = compiler.compile({ query: { type: 'tasks', filters: { status: 'dropped' } } } as never) as CompiledTasks;
+      const compiled = compiler.compile({
+        query: { type: 'tasks', filters: { status: 'dropped' } },
+      } as never) as CompiledTasks;
       expect(compiled.filters.dropped).toBe(true);
     });
 

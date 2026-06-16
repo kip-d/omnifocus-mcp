@@ -527,15 +527,44 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
  * buildExportTasksScript. Adding a new task-script builder? Route it through
  * this helper — never inline the check.
  *
- * SCOPE: injects includeProjectRoot only.
- * The existing dropped/completed defaults differ per builder (export defaults
- * includeCompleted=true; inbox always excludes completed) and must stay inline
- * in each builder until that interaction is audited. They are candidates for
- * the same consolidation in a follow-up pass.
+ * SCOPE: injects includeProjectRoot only (into the PREDICATE filter).
+ * The dropped/completed predicate defaults differ per builder (export defaults
+ * includeCompleted=true; inbox always excludes completed) and stay inline in each
+ * builder by design. For the HONESTY SURFACE (filter_description / filters_applied),
+ * OMN-190 consolidated all three defaults into applyHonestyDefaults — adding a new
+ * builder? Route the predicate through this helper AND the description through
+ * applyHonestyDefaults, or the new builder silently under-reports its exclusions.
  */
 function applyProjectRootDefault<F extends { includeProjectRoot?: boolean }>(filter: F): F {
   if (filter.includeProjectRoot !== undefined) return filter;
   return { ...filter, includeProjectRoot: false };
+}
+
+/**
+ * OMN-190: the filter actually applied to the query — the user filter plus the
+ * auto-injected safety defaults (completed/dropped/project-root exclusions).
+ *
+ * Used ONLY for the honesty surface (filter_description + filters_applied) so
+ * those report what was really counted, not the user's (often empty) filter.
+ * This is DISTINCT from the predicate's effectiveFilter: the list/inbox builders
+ * enforce the completed exclusion out-of-band via completionCheck, so `completed`
+ * must NOT be fed to generateFilterCode (it would double the check) — but it MUST
+ * be described. Reverses the OMN-52 "description keyed to the user filter"
+ * convention (that keying was the bug OMN-190 fixes).
+ *
+ * Gating mirrors each builder exactly so the description never claims an
+ * exclusion that wasn't applied: completed/dropped default in only when unset and
+ * includeCompleted is false (count has no includeCompleted, so it passes false);
+ * project-root routes through the shared applyProjectRootDefault helper.
+ */
+function applyHonestyDefaults<F extends { completed?: boolean; dropped?: boolean; includeProjectRoot?: boolean }>(
+  filter: F,
+  includeCompleted: boolean,
+): F {
+  const f = { ...filter };
+  if (!includeCompleted && f.completed === undefined) f.completed = false;
+  if (!includeCompleted && f.dropped === undefined) f.dropped = false;
+  return applyProjectRootDefault(f);
 }
 
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
@@ -546,9 +575,9 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // through the AST emitter (taskStatus !== Task.Status.Dropped) — a raw
   // script-level check is a silent no-op. Gating mirrors the completed
   // default: an explicit filter.dropped (incl. status:'dropped', which
-  // compiles onto it) or includeCompleted lifts it. isEmptyFilter and the
-  // description stay keyed to the user's filter (same convention as the
-  // count-path OMN-52 shim).
+  // compiles onto it) or includeCompleted lifts it. isEmptyFilter stays keyed
+  // to the user's filter (it gates an optimization, not the surface); the
+  // description now reflects the effective filter (OMN-190).
   let effectiveFilter: typeof filter =
     !includeCompleted && filter.dropped === undefined ? { ...filter, dropped: false } : filter;
   // OMN-153: exclude project-root rows by default via the consolidated helper.
@@ -561,8 +590,10 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Generate the filter predicate code
   const filterCode = generateFilterCode(effectiveFilter);
 
-  // Build description
-  const filterDescription = describeFilterForScript(filter);
+  // OMN-190: describe the effective filter (auto-injected completed/dropped/
+  // project-root exclusions included) so filter_description never claims "all
+  // tasks" for a query that silently excludes three populations.
+  const filterDescription = describeFilterForScript(applyHonestyDefaults(filter, includeCompleted));
 
   // Generate field projection (thread dueSoonDays from filter for reason field)
   const fieldProjection = generateFieldProjection(fields, {
@@ -685,7 +716,9 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   effectiveFilter = applyProjectRootDefault(effectiveFilter);
 
   const filterCode = generateFilterCode(effectiveFilter);
-  const filterDescription = describeFilterForScript(filter);
+  // OMN-190: describe the effective filter (inbox + auto-injected exclusions),
+  // not the user's filter — see buildFilteredTasksScript.
+  const filterDescription = describeFilterForScript(applyHonestyDefaults(filter, includeCompleted));
   const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
 
   // Determine completion filter - exclude completed by default for inbox
@@ -2140,20 +2173,27 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   //
   // For inbox queries, also strip inInbox from the predicate since the
   // pre-filtered inbox collection (`doc.inboxTasks()`) already handles it.
+  //
+  // OMN-190: effectiveFilter is what we describe + echo (the honesty surface).
+  // It carries the auto-injected completed/dropped/project-root defaults AND
+  // keeps inInbox (so inbox counts are described as inbox). The predicate's
+  // filterForCode is the same set minus inInbox for the pre-filtered collection.
+  // Count has no includeCompleted option, so the defaults always apply (pass false).
+  const effectiveFilter = applyHonestyDefaults(normalizedFilter, false);
   const filterForCode = (() => {
-    const f = { ...normalizedFilter };
-    if (checkInbox) delete f.inInbox;
-    if (f.completed === undefined) f.completed = false;
-    // OMN-157: dropped gets the same default for the same parity reason
-    if (f.dropped === undefined) f.dropped = false;
-    return applyProjectRootDefault(f);
+    if (!checkInbox) return effectiveFilter;
+    const f = { ...effectiveFilter };
+    delete f.inInbox;
+    return f;
   })();
 
   // Build AST and generate OmniJS filter code
   const ast = buildAST(filterForCode);
   const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
   const filterCode = generateFilterCode(filterForCode);
-  const filterDescription = describeFilterForScript(normalizedFilter);
+  // OMN-190: describe the effective filter so the count never claims "all tasks"
+  // while silently excluding completed/dropped/project-root rows.
+  const filterDescription = describeFilterForScript(effectiveFilter);
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
   const needsTags = filterCode.predicate.includes('taskTags');
@@ -2194,7 +2234,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     const endTime = Date.now();
     return JSON.stringify({
       count: count,
-      filters_applied: ${JSON.stringify(stripNormalizedBrand(filter))},
+      filters_applied: ${JSON.stringify(stripNormalizedBrand(effectiveFilter))},
       query_time_ms: endTime - startTime,
       optimization: 'omnijs_count${needsTags ? '_with_tags' : '_no_tags'}',
       filter_description: ${JSON.stringify(filterDescription)},
