@@ -1702,6 +1702,74 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-133: forecast_past mode (overdue ∪ past-planned, exclude blocked)', () => {
+    it('runs two queries and merges the result sets, deduping by id', async () => {
+      // sub-query 1: dueDate-overdue → t1, t2
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Overdue A', dueDate: '2026-06-10T17:00:00.000Z' },
+            { id: 't2', name: 'Both', dueDate: '2026-06-11T17:00:00.000Z' },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+      // sub-query 2: planned-past → t2 (dup), t3
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't2', name: 'Both', plannedDate: '2026-06-09T08:00:00.000Z' },
+            { id: 't3', name: 'Planned past', plannedDate: '2026-06-08T08:00:00.000Z' },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalledTimes(2);
+      const ids = result.data.tasks.map((t: any) => t.id).sort();
+      expect(ids).toEqual(['t1', 't2', 't3']); // t2 appears once
+      expect(result.metadata.mode).toBe('forecast_past');
+    });
+
+    it('builds one dueDate (overdue) query and one plannedDate (past) query, both excluding blocked', async () => {
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } });
+
+      expect(execJsonSpy).toHaveBeenCalledTimes(2);
+      const scriptA = execJsonSpy.mock.calls[0][0] as string;
+      const scriptB = execJsonSpy.mock.calls[1][0] as string;
+      // one sub-query constrains dueDate, the other plannedDate
+      const combined = scriptA + scriptB;
+      expect(combined).toContain('task.dueDate');
+      expect(combined).toContain('task.plannedDate');
+      // both exclude blocked tasks (blocked:false → not-Blocked predicate)
+      expect(scriptA).toContain('Task.Status.Blocked');
+      expect(scriptB).toContain('Task.Status.Blocked');
+    });
+
+    it('surfaces SCRIPT_ERROR when either sub-query fails', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+  });
+
   describe('sort with date fields and null values (OMN-35 gap 3)', () => {
     // Inbox path exercises post-hoc sortTasks (non-inbox sorts are embedded in
     // OmniJS — sortedInScript:true — and skip post-hoc). Mirrors existing

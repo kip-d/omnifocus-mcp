@@ -25,7 +25,8 @@ export type TaskQueryMode =
   | 'available'
   | 'blocked'
   | 'flagged'
-  | 'smart_suggest';
+  | 'smart_suggest'
+  | 'forecast_past'; // OMN-133: handled by a dedicated two-query merge path, not MODE_DEFINITIONS
 
 interface ModeOptions {
   daysAhead?: number;

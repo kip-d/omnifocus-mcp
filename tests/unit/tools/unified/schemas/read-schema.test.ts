@@ -646,4 +646,16 @@ describe('ReadSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // OMN-133: forecast_past is a tasks-only mode (union of dueDate-overdue and
+  // plannedDate-past, excluding blocked).
+  describe('forecast_past mode (OMN-133)', () => {
+    it('tasks query accepts mode:"forecast_past"', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'tasks', mode: 'forecast_past' } }).success).toBe(true);
+    });
+
+    it('projects query with mode:"forecast_past" is rejected (tasks-only)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'projects', mode: 'forecast_past' } }).success).toBe(false);
+    });
+  });
 });

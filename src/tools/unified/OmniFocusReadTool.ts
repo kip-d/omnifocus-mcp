@@ -279,6 +279,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
 - inbox, available, blocked, search, all
+- forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. Reporting convenience that merges the dueDate-overdue and planned-past sets by id. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the deduped count of fetched rows; raise limit for an exact count on large sets (truncated:true marks a partial result).
 - smart_suggest: surfaces available next actions (NOT urgency-ranked — scored by deadline proximity/flagged/quick-win, but this is a convenience shortlist, not a definitive priority ranking). Includes overdue, due-soon, and next tasks (all actionable statuses).
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
@@ -364,6 +365,7 @@ PERFORMANCE:
                 'blocked',
                 'flagged',
                 'smart_suggest',
+                'forecast_past',
               ],
             },
             filters: { type: 'object' },
@@ -462,6 +464,14 @@ PERFORMANCE:
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tasks') throw new Error('handleTaskQuery: wrong type');
     const timer = new OperationTimerV2();
+
+    // OMN-133: forecast_past is a two-query union, not a single-filter mode — dispatch
+    // it before buildTaskQuery/countOnly. (Routing it through the generic countOnly
+    // path would count the un-augmented filter, i.e. every active task — wrong.)
+    if (compiled.mode === 'forecast_past') {
+      return this.executeForecastPast(compiled, timer);
+    }
+
     const { script, filter, mode, limit, sortedInScript, fieldsMode } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
@@ -536,6 +546,110 @@ PERFORMANCE:
       population: totalMatched,
       offset: compiled.offset || 0,
     });
+  }
+
+  /**
+   * OMN-133: forecast_past mode. The OmniFocus Forecast "Past" bucket is a union
+   * across two date fields — (dueDate < startOfToday) OR (plannedDate < startOfToday)
+   * — excluding blocked tasks. The top-level AST is AND-only, so this runs two
+   * independent queries (dueDate-overdue + planned-past) and merges by id, per the
+   * OMN-133 design (two simple tested queries, decoupled from the OR/NOT work).
+   *
+   * OF-UI parity note: a dueDate-overdue task buckets under "Today" (not "Past") in
+   * the Forecast UI, so this union is intentionally broader than the literal Past
+   * section — it answers "everything overdue or past-planned". total_count is the
+   * deduped union of fetched rows; very large sets truncate (raise limit).
+   *
+   * Alternative considered (recorded per the decision-record norm): a single query
+   * with `OR:[{dueDate:{before}},{plannedDate:{before}}]` is now expressible since
+   * the OMN-151/171 orBranches path shipped, and would give an exact limit-honest
+   * union count in one round-trip. The two-query merge is kept per the OMN-133
+   * design comment (decoupling + two tested predicates over one cross-field OR);
+   * revisit here if a future need wants the exact-count single-query form.
+   */
+  private async executeForecastPast(compiled: CompiledQuery, timer: OperationTimerV2): Promise<unknown> {
+    if (compiled.type !== 'tasks') throw new Error('executeForecastPast: wrong type');
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const cutoff = startOfToday.toISOString();
+
+    // Shared base: preserve caller filters, force the active + not-blocked scope.
+    const base: TaskFilter = { ...compiled.filters, completed: false, dropped: false, blocked: false };
+    const overdueFilter: TaskFilter = { ...base, dueBefore: cutoff, dueDateOperator: '<' };
+    const plannedFilter: TaskFilter = { ...base, plannedBefore: cutoff, plannedDateOperator: '<' };
+
+    const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
+    const scriptFields = resolveEffectiveTaskFields(userExplicitFields, compiled.details);
+    const noteTruncateLength = compiled.details ? undefined : NOTE_TRUNCATE_LENGTH;
+    const limit = compiled.limit || 25;
+
+    const runBranch = (filter: TaskFilter) =>
+      this.execJson(
+        buildListTasksScriptV4({ filter, fields: scriptFields, limit, noteTruncateLength }),
+        TASK_LIST_SCHEMA,
+      );
+
+    const scriptError = (result: ScriptResult) =>
+      createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to query forecast_past tasks',
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+
+    const overdueResult = await runBranch(overdueFilter);
+    if (!isScriptSuccess(overdueResult)) return scriptError(overdueResult);
+    const plannedResult = await runBranch(plannedFilter);
+    if (!isScriptSuccess(plannedResult)) return scriptError(plannedResult);
+
+    const extract = (data: unknown) => {
+      const d = data as { tasks?: unknown[]; items?: unknown[]; metadata?: { total_matched?: number } };
+      const tasks = parseTasks(d.tasks || d.items || []);
+      return { tasks, totalMatched: d.metadata?.total_matched };
+    };
+    const overdue = extract(overdueResult.data);
+    const planned = extract(plannedResult.data);
+
+    // Merge by id (overdue branch wins on conflict — same task, both predicates).
+    const byId = new Map<string, ReturnType<typeof parseTasks>[number]>();
+    for (const task of [...overdue.tasks, ...planned.tasks]) {
+      if (!byId.has(task.id)) byId.set(task.id, task);
+    }
+    let merged = [...byId.values()];
+
+    // Sort: user sort if supplied, else dueDate asc (the overdue default).
+    const sortOptions = (compiled.sort || [
+      { field: 'dueDate', direction: 'asc' },
+    ]) as import('../tasks/filter-types.js').SortOption[];
+    merged = sortTasks(merged, sortOptions);
+
+    // A branch that hit its own limit means the true union exceeds what we merged.
+    const branchTruncated =
+      (overdue.totalMatched !== undefined && overdue.totalMatched > overdue.tasks.length) ||
+      (planned.totalMatched !== undefined && planned.totalMatched > planned.tasks.length);
+
+    const offset = compiled.offset || 0;
+    const population = merged.length; // deduped union of fetched rows
+    const page = projectFields(merged.slice(offset, offset + limit), compiled.fields);
+
+    const metadata: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'forecast_past',
+      offset,
+      sort_applied: true,
+    };
+    if (branchTruncated) {
+      // applyCountHonesty only sees the fetched union; flag the deeper truncation.
+      metadata.truncated = true;
+      metadata.warning =
+        'forecast_past: at least one underlying set (overdue or past-planned) exceeded the limit; total_count is a lower bound. Raise limit for an exact count.';
+    }
+
+    return createTaskResponseV2('tasks', page, metadata, { population, offset });
   }
 
   private async executeCountOnly(
