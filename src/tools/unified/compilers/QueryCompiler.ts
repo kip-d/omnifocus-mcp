@@ -71,9 +71,9 @@ export type CompiledQuery =
       countOnly?: boolean;
       includeProjectRoot?: boolean; // OMN-153: query-level param, threaded onto filter
     })
-  | (CompiledQueryBase & { type: 'projects'; filters: ProjectFilter; includeStats?: boolean })
-  | (CompiledQueryBase & { type: 'tags'; filters: TagFilter })
-  | (CompiledQueryBase & { type: 'folders'; filters: FolderFilter })
+  | (CompiledQueryBase & { type: 'projects'; filters: ProjectFilter; includeStats?: boolean; countOnly?: boolean })
+  | (CompiledQueryBase & { type: 'tags'; filters: TagFilter; countOnly?: boolean })
+  | (CompiledQueryBase & { type: 'folders'; filters: FolderFilter; countOnly?: boolean })
   | (CompiledQueryBase & { type: 'perspectives'; filters: PerspectiveFilter })
   | (CompiledQueryBase & {
       type: 'export';
@@ -120,11 +120,22 @@ export class QueryCompiler {
           type: 'projects',
           filters: transformProjectFilters(query.filters ?? {}),
           includeStats: 'includeStats' in query ? query.includeStats : undefined,
+          countOnly: 'countOnly' in query ? query.countOnly : undefined, // OMN-174
         };
       case 'tags':
-        return { ...base, type: 'tags', filters: transformTagFilters(query.filters ?? {}) };
+        return {
+          ...base,
+          type: 'tags',
+          filters: transformTagFilters(query.filters ?? {}),
+          countOnly: 'countOnly' in query ? query.countOnly : undefined, // OMN-174
+        };
       case 'folders':
-        return { ...base, type: 'folders', filters: transformFolderFilters(query.filters ?? {}) };
+        return {
+          ...base,
+          type: 'folders',
+          filters: transformFolderFilters(query.filters ?? {}),
+          countOnly: 'countOnly' in query ? query.countOnly : undefined, // OMN-174
+        };
       case 'perspectives':
         return { ...base, type: 'perspectives', filters: transformPerspectiveFilters(query.filters ?? {}) };
       case 'tasks':

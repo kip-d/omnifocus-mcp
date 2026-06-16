@@ -315,6 +315,10 @@ const ProjectQuerySchema = BaseQuerySchema.merge(
     details: z.boolean().optional(),
     includeStats: z.boolean().optional(),
     mode: TaskModeEnum.optional(), // OMN-74: rejected via ReadSchema superRefine with guidance
+    // OMN-174: count-only fast path. Returns metadata.total_count (the matching
+    // population the projects script already computes — OMN-154) WITHOUT projecting
+    // rows or running the per-project taskCounts/nextTask enrichment.
+    countOnly: z.boolean().optional(),
   }),
 ).strict();
 
@@ -322,6 +326,7 @@ const ProjectQuerySchema = BaseQuerySchema.merge(
 const TagQuerySchema = BaseQuerySchema.merge(
   z.object({
     type: z.literal('tags'),
+    countOnly: z.boolean().optional(), // OMN-174: count-only (population without rows)
   }),
 ).strict();
 
@@ -336,6 +341,7 @@ const PerspectiveQuerySchema = BaseQuerySchema.merge(
 const FolderQuerySchema = BaseQuerySchema.merge(
   z.object({
     type: z.literal('folders'),
+    countOnly: z.boolean().optional(), // OMN-174: count-only (population without rows)
   }),
 ).strict();
 
