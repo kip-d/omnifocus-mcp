@@ -1702,65 +1702,36 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
-  describe('OMN-133: forecast_past mode (overdue ∪ past-planned, exclude blocked)', () => {
-    it('runs two queries and merges the result sets, deduping by id', async () => {
-      // sub-query 1: dueDate-overdue → t1, t2
+  describe('OMN-133: forecast_past mode (single OR query: dueDate-past ∨ plannedDate-past, exclude blocked)', () => {
+    it('runs ONE query whose OR script covers both dueDate-past and plannedDate-past, excluding blocked', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
             { id: 't1', name: 'Overdue A', dueDate: '2026-06-10T17:00:00.000Z' },
             { id: 't2', name: 'Both', dueDate: '2026-06-11T17:00:00.000Z' },
-          ],
-          metadata: { total_matched: 2 },
-        },
-      } satisfies ScriptResult);
-      // sub-query 2: planned-past → t2 (dup), t3
-      execJsonSpy.mockResolvedValueOnce({
-        success: true,
-        data: {
-          tasks: [
-            { id: 't2', name: 'Both', plannedDate: '2026-06-09T08:00:00.000Z' },
             { id: 't3', name: 'Planned past', plannedDate: '2026-06-08T08:00:00.000Z' },
           ],
-          metadata: { total_matched: 2 },
+          metadata: { total_matched: 3 },
         },
       } satisfies ScriptResult);
 
       const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
 
       expect(result.success).toBe(true);
-      expect(execJsonSpy).toHaveBeenCalledTimes(2);
-      const ids = result.data.tasks.map((t: any) => t.id).sort();
-      expect(ids).toEqual(['t1', 't2', 't3']); // t2 appears once
+      // Single OR query — the script does the union+dedup, not a merge in the tool.
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('task.dueDate');
+      expect(script).toContain('task.plannedDate');
+      expect(script).toContain('Task.Status.Blocked'); // blocked:false → not-Blocked predicate
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t1', 't2', 't3']);
       expect(result.metadata.mode).toBe('forecast_past');
+      // total_count is the script's exact, limit-independent union population.
+      expect(result.metadata.total_count).toBe(3);
     });
 
-    it('builds one dueDate (overdue) query and one plannedDate (past) query, both excluding blocked', async () => {
-      execJsonSpy.mockResolvedValue({
-        success: true,
-        data: { tasks: [], metadata: { total_matched: 0 } },
-      } satisfies ScriptResult);
-
-      await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } });
-
-      expect(execJsonSpy).toHaveBeenCalledTimes(2);
-      const scriptA = execJsonSpy.mock.calls[0][0] as string;
-      const scriptB = execJsonSpy.mock.calls[1][0] as string;
-      // one sub-query constrains dueDate, the other plannedDate
-      const combined = scriptA + scriptB;
-      expect(combined).toContain('task.dueDate');
-      expect(combined).toContain('task.plannedDate');
-      // both exclude blocked tasks (blocked:false → not-Blocked predicate)
-      expect(scriptA).toContain('Task.Status.Blocked');
-      expect(scriptB).toContain('Task.Status.Blocked');
-    });
-
-    it('surfaces SCRIPT_ERROR when either sub-query fails', async () => {
-      execJsonSpy.mockResolvedValueOnce({
-        success: true,
-        data: { tasks: [], metadata: { total_matched: 0 } },
-      } satisfies ScriptResult);
+    it('surfaces SCRIPT_ERROR when the query fails', async () => {
       execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
 
       const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
@@ -1769,14 +1740,11 @@ describe('OmniFocusReadTool', () => {
       expect(result.error.code).toBe('SCRIPT_ERROR');
     });
 
-    it('countOnly returns the deduped union count with no rows', async () => {
+    it('countOnly returns the exact union count with no rows', async () => {
+      // Single count script over the OR predicate → exact union (no rows).
       execJsonSpy.mockResolvedValueOnce({
         success: true,
-        data: { tasks: [{ id: 't1' }, { id: 't2' }], metadata: { total_matched: 2 } },
-      } satisfies ScriptResult);
-      execJsonSpy.mockResolvedValueOnce({
-        success: true,
-        data: { tasks: [{ id: 't2' }, { id: 't3' }], metadata: { total_matched: 2 } },
+        data: { count: 67 },
       } satisfies ScriptResult);
 
       const result = (await tool.execute({
@@ -1784,43 +1752,11 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
       expect(result.metadata.count_only).toBe(true);
-      expect(result.metadata.total_count).toBe(3); // t2 deduped
+      expect(result.metadata.total_count).toBe(67);
       expect(result.data.tasks).toEqual([]);
-      expect(result.summary.total_count).toBe(3);
-    });
-
-    it('offset slices into the sorted merged union', async () => {
-      const due = (n: number) => ({ id: `t${n}`, name: `T${n}`, dueDate: `2026-06-0${n}T17:00:00.000Z` });
-      // overdue branch returns t1,t2,t3 (dueDate asc); planned branch empty
-      execJsonSpy.mockResolvedValueOnce({
-        success: true,
-        data: { tasks: [due(1), due(2), due(3)], metadata: { total_matched: 3 } },
-      } satisfies ScriptResult);
-      execJsonSpy.mockResolvedValueOnce({
-        success: true,
-        data: { tasks: [], metadata: { total_matched: 0 } },
-      } satisfies ScriptResult);
-
-      const result = (await tool.execute({
-        query: { type: 'tasks', mode: 'forecast_past', offset: 1, limit: 1 },
-      })) as any;
-
-      // sorted dueDate asc → t1,t2,t3; slice(1,2) → [t2]
-      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t2']);
-    });
-
-    it('fetches offset+limit rows per branch so pagination is not short', async () => {
-      execJsonSpy.mockResolvedValue({
-        success: true,
-        data: { tasks: [], metadata: { total_matched: 0 } },
-      } satisfies ScriptResult);
-
-      await tool.execute({ query: { type: 'tasks', mode: 'forecast_past', offset: 20, limit: 10 } });
-
-      // each branch must fetch offset+limit = 30 (not just limit=10)
-      const scriptA = execJsonSpy.mock.calls[0][0] as string;
-      expect(scriptA).toContain('30');
+      expect(result.metadata.mode).toBe('forecast_past');
     });
   });
 
