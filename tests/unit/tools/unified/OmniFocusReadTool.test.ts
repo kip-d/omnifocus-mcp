@@ -1528,6 +1528,22 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.filters_applied).toMatchObject({ inInbox: true });
     });
 
+    it('OMN-192: countOnly threads includeProjectRoot into the count filter via the compiled filter', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 3 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true }, countOnly: true, includeProjectRoot: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      // filters_applied echoes the countFilter; includeProjectRoot must reach it
+      // through the compiled filter alone (no redundant executeCountOnly merge).
+      expect(result.metadata.filters_applied).toMatchObject({ flagged: true, includeProjectRoot: true });
+    });
+
     it('script error during count: returns SCRIPT_ERROR', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: false,

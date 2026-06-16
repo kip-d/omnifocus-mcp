@@ -187,14 +187,12 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   const limit = compiled.limit || 25;
   const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
 
-  // OMN-153: thread includeProjectRoot onto the filter BEFORE augmentFilterForMode
-  // so the project-root exclusion survives mode augmentation.
-  const baseFilters: typeof compiled.filters =
-    compiled.includeProjectRoot !== undefined
-      ? { ...compiled.filters, includeProjectRoot: compiled.includeProjectRoot }
-      : compiled.filters;
-
-  const filter = augmentFilterForMode(mode, baseFilters, {
+  // OMN-153/192: includeProjectRoot is a query-level param threaded onto the
+  // compiled filter at compile time (QueryCompiler, same path as fastSearch), so
+  // compiled.filters is the single source of truth — no re-merge here. It rides
+  // through augmentFilterForMode (which spreads ...filter, preserving it) into
+  // both the row script and the count filter.
+  const filter = augmentFilterForMode(mode, compiled.filters, {
     daysAhead: compiled.daysAhead,
   });
 
@@ -468,7 +466,7 @@ PERFORMANCE:
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
-      return this.executeCountOnly(filter, mode, timer, compiled.includeProjectRoot);
+      return this.executeCountOnly(filter, mode, timer);
     }
 
     // --- ID lookup fast path (always full detail) ---
@@ -544,7 +542,6 @@ PERFORMANCE:
     filter: TaskFilter,
     mode: TaskQueryMode | undefined,
     timer: OperationTimerV2,
-    includeProjectRoot?: boolean,
   ): Promise<unknown> {
     // Ensure inbox mode sets the inInbox filter (mode: "inbox" is not in
     // MODE_DEFINITIONS, so augmentFilterForMode passes through unchanged)
@@ -552,10 +549,9 @@ PERFORMANCE:
     if (mode === 'inbox' && !countFilter.inInbox) {
       countFilter.inInbox = true;
     }
-    // OMN-153: thread includeProjectRoot so countOnly agrees with the row path.
-    if (includeProjectRoot !== undefined) {
-      countFilter.includeProjectRoot = includeProjectRoot;
-    }
+    // OMN-192: includeProjectRoot already rides on `filter` (compiled.filters →
+    // augmentFilterForMode preserves it), so countFilter carries it without a
+    // separate thread — countOnly agrees with the row path by construction.
 
     const { script } = buildTaskCountScript(countFilter, { maxScan: 10000 });
     const result = await this.execJson(script, CountResultSchema);
