@@ -780,7 +780,7 @@ export function listResultSchema<TRow extends z.ZodTypeAny, TMeta extends z.ZodT
 export const CountResultSchema = z
   .object({
     count: z.number(),
-    filters_applied: z.unknown(), // passthrough echo of caller's filter object
+    filters_applied: z.unknown(), // passthrough echo of the effective filter (OMN-190); z.unknown() is optional-by-default
     query_time_ms: z.number(),
     optimization: z.string(),
     filter_description: z.string(),

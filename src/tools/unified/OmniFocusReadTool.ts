@@ -586,8 +586,10 @@ PERFORMANCE:
       // script computes alongside filter_description. Rebuilding from countFilter
       // here would re-introduce the very contradiction OMN-190 fixed — countFilter
       // lacks the defaults, so filters_applied:{} would disagree with a
-      // filter_description that names three exclusions. Fall back to countFilter
-      // only if the script omitted the echo (defensive; CountResultSchema requires it).
+      // filter_description that names three exclusions. The real count script
+      // always emits the echo; the countFilter fallback only fires for partial
+      // test mocks (CountResultSchema's z.unknown() field is optional-by-default,
+      // so a missing key parses as undefined rather than failing validation).
       filters_applied: data.filters_applied ?? stripNormalizedBrand(countFilter),
       optimization: data.optimization || 'ast_omnijs_bridge',
       filter_description: data.filter_description,

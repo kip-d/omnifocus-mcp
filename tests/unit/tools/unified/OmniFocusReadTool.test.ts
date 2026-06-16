@@ -1557,7 +1557,7 @@ describe('OmniFocusReadTool', () => {
           filters_applied: { completed: false, dropped: false, includeProjectRoot: false },
           filter_description: 'active AND not dropped AND exclude project roots',
         },
-      } as unknown as ScriptResult);
+      } satisfies ScriptResult);
 
       const result = (await tool.execute({
         query: { type: 'tasks', countOnly: true },
