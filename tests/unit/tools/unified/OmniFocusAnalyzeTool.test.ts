@@ -407,6 +407,7 @@ describe('OmniFocusAnalyzeTool', () => {
               avgDaysOverdue: 26.5,
               overduePercentage: 40,
               totalActive: 5,
+              oldestOverdueDate: '2025-10-01T17:00:00.000Z',
               mostOverdue: oldest,
             },
             insights: ['2 overdue tasks found'],

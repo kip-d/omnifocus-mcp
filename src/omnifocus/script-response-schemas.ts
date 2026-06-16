@@ -609,6 +609,9 @@ export const OverdueAnalysisDataSchema = z
         avgDaysOverdue: z.number(),
         overduePercentage: z.number(),
         totalActive: z.number(),
+        // OMN-187: exact oldest overdue due date over the FULL population (null when
+        // none) — tracked uncapped, so correct even past the maxTasks detail cap.
+        oldestOverdueDate: z.string().nullable(),
         mostOverdue: OverdueTaskRowSchema.nullable(),
       })
       .strict(),

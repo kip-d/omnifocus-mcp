@@ -937,8 +937,9 @@ SCOPE FILTERING:
             totalOverdue: summary.totalOverdue,
             overduePercentage: summary.overduePercentage,
             averageDaysOverdue: summary.avgDaysOverdue,
-            // Sorted most-overdue-first → mostOverdue is the oldest due date.
-            oldestOverdueDate: summary.mostOverdue?.dueDate ?? '',
+            // OMN-187: exact oldest due date computed over the full population in the
+            // script (not derived from the capped mostOverdue sample).
+            oldestOverdueDate: summary.oldestOverdueDate ?? '',
           },
           overdueTasks: allOverdue.map((task) => ({
             id: task.id,
@@ -1024,11 +1025,13 @@ SCOPE FILTERING:
       if (
         topPattern &&
         typeof topPattern === 'object' &&
-        topPattern.type &&
+        typeof topPattern.value === 'string' &&
+        topPattern.value &&
         typeof topPattern.count === 'number' &&
         topPattern.count > 0
       ) {
-        findings.push(`Most overdue in: ${topPattern.type} (${topPattern.count} tasks)`);
+        // OMN-187: `value` is the project name; `type` is the category ('project').
+        findings.push(`Most overdue in: ${topPattern.value} (${topPattern.count} tasks)`);
       }
     }
 
