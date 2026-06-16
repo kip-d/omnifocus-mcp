@@ -640,10 +640,12 @@ export const OverdueAnalysisDataSchema = z
 export const OVERDUE_ANALYSIS_V3_SCHEMA = v3EnvelopeSchema(OverdueAnalysisDataSchema);
 
 /**
- * OMN-187: the v3 overdue payload's real shape, inferred from the schema above.
- * Consumers MUST type their reads against this (not a hand-maintained parallel
- * interface) so the compiler forbids reading a field the script never emits —
- * exactly the drift that produced the always-0/empty overdue_analysis bug.
+ * OMN-187: the v3 overdue payload's real shape — the INNER `data` block, inferred
+ * from `OverdueAnalysisDataSchema` (not the OVERDUE_ANALYSIS_V3_SCHEMA envelope).
+ * The tool validates against the envelope, then unwraps `.data` to this. Consumers
+ * MUST type their reads against this (not a hand-maintained parallel interface) so
+ * the compiler forbids reading a field the script never emits — exactly the drift
+ * that produced the always-0/empty overdue_analysis bug.
  */
 export type OverdueAnalysisV3Data = z.infer<typeof OverdueAnalysisDataSchema>;
 

@@ -210,7 +210,8 @@ describe('Analytics Validation - Actual Calculations', () => {
       const task = overdueTasks[0];
       expect(task.id).toBeDefined();
       expect(task.name).toBeDefined();
-      expect(task.dueDate).toBeDefined();
+      // OMN-187: assert a real ISO string (toBeDefined would pass for null).
+      expect(typeof task.dueDate).toBe('string');
       expect(typeof task.daysOverdue).toBe('number');
     }, 120000);
   });

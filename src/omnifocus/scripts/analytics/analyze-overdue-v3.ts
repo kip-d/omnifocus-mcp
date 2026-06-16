@@ -53,28 +53,37 @@ export const ANALYZE_OVERDUE_V3 = `
           const tagBottlenecks = {};
 
           let tasksProcessed = 0;
-          // OMN-187: denominator for overduePercentage — every non-completed,
-          // non-dropped task. Counted for ALL tasks (before the maxTasks cap)
-          // so the percentage is accurate even when overdue recording is capped.
+          // OMN-187: denominator for overduePercentage — every active (non-completed,
+          // non-dropped) task, counted uncapped. NOTE: the numerator (totalOverdue) is
+          // the recorded-overdue count, which shares the pre-existing maxTasks cap on
+          // tasksProcessed — so for >maxTasks overdue tasks BOTH totalOverdue and
+          // overduePercentage understate by the same factor (consistent with the
+          // already-shipped totalOverdue; uncapping the count is a separate concern).
           let totalActive = 0;
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
             try {
-              // OMN-187: count active (incomplete, non-dropped) tasks. taskStatus
-              // reflects effective status (a task in a dropped/done project counts
-              // as terminal), which is the right universe for "% of active overdue".
+              // OMN-187: a single "active" predicate drives BOTH the overduePercentage
+              // denominator (totalActive) and the overdue-recording skip below, so the
+              // numerator is a subset of the denominator by construction (percentage
+              // can never exceed 100%). taskStatus is the effective status — a task in
+              // a dropped/completed project counts as terminal, which is the right
+              // universe for "% of active tasks overdue". (Using task.completed for the
+              // skip and taskStatus for the count would let a dropped-project task land
+              // in the numerator but not the denominator → >100%.)
               const activeStatus = task.taskStatus;
-              if (activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped) {
+              const isActive =
+                activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped;
+              if (isActive) {
                 totalActive++;
               }
 
               // Limit processing for performance
               if (tasksProcessed >= maxTasks) return;
 
-              // Check if task is effectively completed
-              const isCompleted = task.completed || false;
-              if (isCompleted) return;
+              // Only active tasks can be overdue (keeps numerator ⊆ denominator).
+              if (!isActive) return;
 
               // Check if task has a due date
               const dueDate = task.dueDate;
