@@ -21,6 +21,48 @@ import type { TaskFilter } from '../../../../src/contracts/filters.js';
 import { normalizeFilter } from '../../../../src/contracts/filters.js';
 import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
+describe('OMN-190: honesty surface reflects the effective filter', () => {
+  // For an empty/default query the generated script silently excludes completed,
+  // dropped, and project-root rows. filter_description (all builders) and
+  // filters_applied (count path) must reflect those auto-injected defaults, or
+  // an LLM consumer reasoning "this is the full population" is wrong by 3 silent
+  // exclusions. See the describe<->filters_applied invariant (OMN-172/177).
+
+  it('list path describes the effective defaults for an empty filter', () => {
+    expect(buildFilteredTasksScript({}).filterDescription).toBe('active AND not dropped AND exclude project roots');
+  });
+
+  it('inbox path describes inbox plus the effective defaults', () => {
+    // BOOLEAN_FILTER_DESCRIPTORS order: completed, dropped, ..., inInbox, includeProjectRoot
+    expect(buildInboxScript({}).filterDescription).toBe('active AND not dropped AND inbox AND exclude project roots');
+  });
+
+  it('count path describes AND echoes the effective defaults', () => {
+    const inner = recoverInnerProgram(buildTaskCountScript({}).script);
+    expect(inner).toContain('filter_description: "active AND not dropped AND exclude project roots"');
+    // filters_applied echoes the effective filter, not the raw (empty) user filter
+    expect(inner).toContain('"completed":false');
+    expect(inner).toContain('"dropped":false');
+    expect(inner).toContain('"includeProjectRoot":false');
+    // and never leaks the normalized brand key (OMN-177)
+    expect(inner).not.toContain('__normalized__');
+  });
+
+  it('includeCompleted lifts the completed/dropped defaults from the description', () => {
+    // root exclusion still applies (only includeProjectRoot controls it)
+    expect(buildFilteredTasksScript({}, { includeCompleted: true }).filterDescription).toBe('exclude project roots');
+  });
+
+  it('an explicit includeProjectRoot:true is reflected honestly', () => {
+    expect(buildFilteredTasksScript(normalizeFilter({ includeProjectRoot: true })).filterDescription).toBe(
+      'active AND not dropped AND include project roots',
+    );
+    const inner = recoverInnerProgram(buildTaskCountScript({ includeProjectRoot: true }).script);
+    expect(inner).toContain('"includeProjectRoot":true');
+    expect(inner).toContain('include project roots');
+  });
+});
+
 describe('buildFilteredTasksScript', () => {
   describe('basic script generation', () => {
     it('generates valid OmniJS script for empty filter', () => {
@@ -32,7 +74,11 @@ describe('buildFilteredTasksScript', () => {
       // exclusion into the predicate (dropped is synthetic — AST-only)
       expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
       expect(result.isEmptyFilter).toBe(true);
-      expect(result.filterDescription).toBe('all tasks');
+      // OMN-190: filter_description now reflects the EFFECTIVE filter (the
+      // auto-injected completed/dropped/project-root exclusions actually
+      // applied), not the user's empty filter. "all tasks" was a lie — the
+      // query silently excludes three populations.
+      expect(result.filterDescription).toBe('active AND not dropped AND exclude project roots');
     });
 
     it('generates script with AST filter predicate', () => {
