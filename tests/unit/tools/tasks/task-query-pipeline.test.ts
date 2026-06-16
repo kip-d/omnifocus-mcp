@@ -254,6 +254,16 @@ describe('augmentFilterForMode', () => {
       });
     }
 
+    // OMN-133: forecast_past is intentionally NOT a MODE_DEFINITIONS entry — it is a
+    // two-query union handled directly by OmniFocusReadTool.executeForecastPast, which
+    // dispatches BEFORE augmentFilterForMode. If it ever reached augmentFilterForMode it
+    // would pass through unchanged (returning all active tasks) — the dedicated dispatch
+    // is what makes the mode correct. This test locks that contract.
+    it('mode "forecast_past" is not augmented here (handled by the dedicated tool dispatch)', () => {
+      const filter: TaskFilter = { flagged: true, tags: ['work'] };
+      expect(augmentFilterForMode('forecast_past', filter)).toEqual(filter);
+    });
+
     it('handles unknown mode gracefully (no crash, filter unchanged)', () => {
       const filter: TaskFilter = { flagged: true };
       const result = augmentFilterForMode('nonexistent_mode' as TaskQueryMode, filter);

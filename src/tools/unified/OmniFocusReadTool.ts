@@ -582,11 +582,16 @@ PERFORMANCE:
     const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
     const scriptFields = resolveEffectiveTaskFields(userExplicitFields, compiled.details);
     const noteTruncateLength = compiled.details ? undefined : NOTE_TRUNCATE_LENGTH;
+    const offset = compiled.offset || 0;
     const limit = compiled.limit || 25;
+    // Each branch must fetch enough rows to cover the requested page AFTER the
+    // merge+sort — otherwise offset>0 pages into a set that was capped at `limit`
+    // from rank 0 and comes up short/empty.
+    const fetchLimit = offset + limit;
 
     const runBranch = (filter: TaskFilter) =>
       this.execJson(
-        buildListTasksScriptV4({ filter, fields: scriptFields, limit, noteTruncateLength }),
+        buildListTasksScriptV4({ filter, fields: scriptFields, limit: fetchLimit, noteTruncateLength }),
         TASK_LIST_SCHEMA,
       );
 
@@ -626,27 +631,53 @@ PERFORMANCE:
     ]) as import('../tasks/filter-types.js').SortOption[];
     merged = sortTasks(merged, sortOptions);
 
-    // A branch that hit its own limit means the true union exceeds what we merged.
+    // A branch that hit its own fetch limit means the true union exceeds what we
+    // merged — total_count is then a lower bound.
     const branchTruncated =
       (overdue.totalMatched !== undefined && overdue.totalMatched > overdue.tasks.length) ||
       (planned.totalMatched !== undefined && planned.totalMatched > planned.tasks.length);
+    const lowerBoundWarning =
+      'forecast_past: at least one underlying set (overdue or past-planned) exceeded the limit; total_count is a lower bound. Raise limit for an exact count.';
 
-    const offset = compiled.offset || 0;
     const population = merged.length; // deduped union of fetched rows
-    const page = projectFields(merged.slice(offset, offset + limit), compiled.fields);
 
+    // OMN-174 interaction: countOnly returns the union count without rows. Dispatched
+    // here (not the generic count path) so the count reflects the deduped union, not
+    // a single un-augmented filter. Same lower-bound caveat when a branch truncates.
+    if (compiled.countOnly) {
+      const countMeta: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'forecast_past',
+        count_only: true,
+        total_count: population,
+      };
+      if (branchTruncated) {
+        countMeta.truncated = true;
+        countMeta.warning = lowerBoundWarning;
+      }
+      const countResponse = createTaskResponseV2('tasks', [], countMeta) as unknown as {
+        summary?: Record<string, unknown>;
+      };
+      if (countResponse.summary && 'total_count' in countResponse.summary) {
+        countResponse.summary.total_count = population;
+      }
+      return countResponse;
+    }
+
+    const page = projectFields(merged.slice(offset, offset + limit), compiled.fields);
     const metadata: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'forecast_past',
       offset,
       sort_applied: true,
+      fields_mode: resolveFieldsMode(userExplicitFields, compiled.details),
     };
     if (branchTruncated) {
       // applyCountHonesty only sees the fetched union; flag the deeper truncation.
       metadata.truncated = true;
-      metadata.warning =
-        'forecast_past: at least one underlying set (overdue or past-planned) exceeded the limit; total_count is a lower bound. Raise limit for an exact count.';
+      metadata.warning = lowerBoundWarning;
     }
 
     return createTaskResponseV2('tasks', page, metadata, { population, offset });

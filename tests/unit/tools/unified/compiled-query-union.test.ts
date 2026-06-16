@@ -67,6 +67,11 @@ describe('CompiledQuery discriminated union (OMN-161 S1)', () => {
     const compiled = c.compile({ query: { type: 'tasks', filters: { flagged: true } } } as any);
     expect((compiled as any).filters.flagged).toBe(true);
   });
+  it('OMN-133: mode:"forecast_past" threads through to compiled.mode (so the tool can dispatch it)', () => {
+    const compiled = c.compile({ query: { type: 'tasks', mode: 'forecast_past' } } as any);
+    expect(compiled.type).toBe('tasks');
+    expect((compiled as any).mode).toBe('forecast_past');
+  });
   it('export: task-vocabulary filter compiles onto filters (NormalizedTaskFilter)', () => {
     const compiled = c.compile({
       query: { type: 'export', exportType: 'tasks', filters: { completed: false } },

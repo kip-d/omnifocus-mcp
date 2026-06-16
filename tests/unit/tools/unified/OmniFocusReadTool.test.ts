@@ -1768,6 +1768,60 @@ describe('OmniFocusReadTool', () => {
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('SCRIPT_ERROR');
     });
+
+    it('countOnly returns the deduped union count with no rows', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1' }, { id: 't2' }], metadata: { total_matched: 2 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't2' }, { id: 't3' }], metadata: { total_matched: 2 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(3); // t2 deduped
+      expect(result.data.tasks).toEqual([]);
+      expect(result.summary.total_count).toBe(3);
+    });
+
+    it('offset slices into the sorted merged union', async () => {
+      const due = (n: number) => ({ id: `t${n}`, name: `T${n}`, dueDate: `2026-06-0${n}T17:00:00.000Z` });
+      // overdue branch returns t1,t2,t3 (dueDate asc); planned branch empty
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [due(1), due(2), due(3)], metadata: { total_matched: 3 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', offset: 1, limit: 1 },
+      })) as any;
+
+      // sorted dueDate asc → t1,t2,t3; slice(1,2) → [t2]
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t2']);
+    });
+
+    it('fetches offset+limit rows per branch so pagination is not short', async () => {
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'tasks', mode: 'forecast_past', offset: 20, limit: 10 } });
+
+      // each branch must fetch offset+limit = 30 (not just limit=10)
+      const scriptA = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptA).toContain('30');
+    });
   });
 
   describe('sort with date fields and null values (OMN-35 gap 3)', () => {
