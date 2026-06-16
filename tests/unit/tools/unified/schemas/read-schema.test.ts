@@ -442,6 +442,13 @@ describe('ReadSchema', () => {
       expect(ReadSchema.safeParse({ query: { type: 'export', countOnly: true } }).success).toBe(false);
     });
 
+    // OMN-174: countOnly is now valid on projects, but mode is still rejected —
+    // the combination must still reject (the mode guard, not countOnly).
+    it('should reject mode even when combined with the now-valid countOnly on projects', () => {
+      const result = ReadSchema.safeParse({ query: { type: 'projects', countOnly: true, mode: 'flagged' } });
+      expect(result.success).toBe(false);
+    });
+
     it('should accept shared params on both task and project queries', () => {
       const taskInput = {
         query: { type: 'tasks', limit: 10, offset: 5 },

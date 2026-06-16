@@ -16,7 +16,7 @@ import {
   type ExportFilter,
 } from '../../contracts/ast/script-builder.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
-import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError, type ScriptResult } from '../../omnifocus/script-result-types.js';
 import {
   listResultSchema,
   CountResultSchema,
@@ -738,25 +738,58 @@ PERFORMANCE:
     entityType: 'projects' | 'tags' | 'folders',
     population: number,
     timer: OperationTimerV2,
-    extraMeta: Partial<StandardMetadataV2> = {},
   ): unknown {
-    const response = createListResponseV2(entityType, [], entityType, {
+    const metadata: Partial<StandardMetadataV2> = {
       ...timer.toMetadata(),
       from_cache: false,
       operation: 'list',
       count_only: true,
       total_count: population,
       returned_count: 0,
-      ...extraMeta,
-    }) as unknown as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 };
+    };
+    // folders carry total_folders as their headline metric (mirrors the row path).
+    if (entityType === 'folders') metadata.total_folders = population;
 
-    // Empty rows make generateSummary compute total_*: 0; override to the population.
+    const response = createListResponseV2(entityType, [], entityType, metadata) as unknown as {
+      summary?: Record<string, unknown>;
+      metadata: StandardMetadataV2;
+    };
+
+    // projects is the only count-only entity with a summary (createListResponseV2
+    // generates none for tags/folders). Its row-derived total_* are 0 from the
+    // empty rows — override to the real population.
     const summary = response.summary;
     if (summary) {
       if ('total_count' in summary) summary.total_count = population;
       if ('total_projects' in summary) summary.total_projects = population;
     }
     return response;
+  }
+
+  /**
+   * OMN-174: shared tail for the projects/tags/folders count-only fast paths.
+   * Each entity differs only in its script + schema + where the population count
+   * lives in the result; this collapses the otherwise-triplicated SCRIPT_ERROR
+   * handling and envelope build into one place (and keeps the OmniFocus-down hint
+   * identical across entities).
+   */
+  private countOnlyFromResult(
+    entityType: 'projects' | 'tags' | 'folders',
+    result: ScriptResult,
+    extractPopulation: (data: unknown) => number,
+    timer: OperationTimerV2,
+  ): unknown {
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        entityType,
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || `Failed to count ${entityType}`,
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+    return this.buildCountOnlyResponse(entityType, extractPopulation(result.data), timer);
   }
 
   /**
@@ -774,21 +807,12 @@ PERFORMANCE:
       performanceMode: 'lite',
     });
     const result = await this.execJson(script, PROJECT_LIST_SCHEMA);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponseV2(
-        'projects',
-        'SCRIPT_ERROR',
-        (isScriptError(result) ? result.error : null) || 'Failed to count projects',
-        'Check if OmniFocus is running',
-        isScriptError(result) ? result.details : undefined,
-        timer.toMetadata(),
-      );
-    }
-
-    const data = result.data as { metadata?: { total_matched?: number } };
-    const count = data.metadata?.total_matched ?? 0;
-    return this.buildCountOnlyResponse('projects', count, timer);
+    return this.countOnlyFromResult(
+      'projects',
+      result,
+      (data) => (data as { metadata?: { total_matched?: number } }).metadata?.total_matched ?? 0,
+      timer,
+    );
   }
 
   private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
@@ -953,22 +977,15 @@ PERFORMANCE:
   private async executeTagCountOnly(filter: TagFilter, timer: OperationTimerV2): Promise<unknown> {
     const { script } = buildTagsScript(this.tagQueryOptions(filter));
     const result = await this.execJson(script, TAG_LIST_SCHEMA);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponseV2(
-        'tags',
-        'SCRIPT_ERROR',
-        (isScriptError(result) ? result.error : null) || 'Failed to count tags',
-        'Check OmniFocus is running',
-        isScriptError(result) ? result.details : undefined,
-        timer.toMetadata(),
-      );
-    }
-
-    const envelope = result.data as { items?: unknown[]; summary?: { total?: number; total_matched?: number } };
-    const items = envelope.items || [];
-    const population = envelope.summary?.total_matched ?? envelope.summary?.total ?? items.length;
-    return this.buildCountOnlyResponse('tags', population, timer);
+    return this.countOnlyFromResult(
+      'tags',
+      result,
+      (data) => {
+        const env = data as { items?: unknown[]; summary?: { total?: number; total_matched?: number } };
+        return env.summary?.total_matched ?? env.summary?.total ?? (env.items ?? []).length;
+      },
+      timer,
+    );
   }
 
   private async handleTagQuery(compiled: CompiledQuery): Promise<unknown> {
@@ -1098,22 +1115,15 @@ PERFORMANCE:
   private async executeFolderCountOnly(filter: FolderFilter, timer: OperationTimerV2): Promise<unknown> {
     const { script } = buildFilteredFoldersScript({ filter, limit: 0 });
     const result = await this.execJson(script, FolderListSchema);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponseV2(
-        'folders',
-        'SCRIPT_ERROR',
-        (isScriptError(result) ? result.error : null) || 'Failed to count folders',
-        'Check if OmniFocus is running',
-        isScriptError(result) ? result.details : undefined,
-        timer.toMetadata(),
-      );
-    }
-
-    const data = result.data as { folders?: unknown[]; items?: unknown[]; metadata?: { total_available?: number } };
-    const population = data.metadata?.total_available ?? (data.folders || data.items || []).length;
-    // total_folders mirrors the normal folder response's headline metric.
-    return this.buildCountOnlyResponse('folders', population, timer, { total_folders: population });
+    return this.countOnlyFromResult(
+      'folders',
+      result,
+      (data) => {
+        const d = data as { folders?: unknown[]; items?: unknown[]; metadata?: { total_available?: number } };
+        return d.metadata?.total_available ?? (d.folders || d.items || []).length;
+      },
+      timer,
+    );
   }
 
   private async handleFolderQuery(compiled: CompiledQuery): Promise<unknown> {
