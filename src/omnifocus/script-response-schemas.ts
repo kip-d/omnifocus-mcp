@@ -593,10 +593,12 @@ const ProjectBottleneckRowSchema = z
  *
  * summary.blockedPercentage: parseFloat(toFixed(1)) → number.
  * summary.avgDaysOverdue: parseFloat(toFixed(1)) → number.
+ * summary.overduePercentage: OMN-187 — totalOverdue/totalActive*100, parseFloat(toFixed(1)) → number.
+ * summary.totalActive: OMN-187 — non-completed, non-dropped task count (the overduePercentage denominator).
  * groupedByUrgency: fixed keys (critical/high/medium/low) all always emitted → NOT z.record.
  * metadata.note is present in the outer emitter.
  */
-const OverdueAnalysisDataSchema = z
+export const OverdueAnalysisDataSchema = z
   .object({
     summary: z
       .object({
@@ -605,6 +607,8 @@ const OverdueAnalysisDataSchema = z
         unblockedCount: z.number(),
         blockedPercentage: z.number(),
         avgDaysOverdue: z.number(),
+        overduePercentage: z.number(),
+        totalActive: z.number(),
         mostOverdue: OverdueTaskRowSchema.nullable(),
       })
       .strict(),
@@ -634,6 +638,14 @@ const OverdueAnalysisDataSchema = z
 
 /** Module-scope overdue_analysis envelope. */
 export const OVERDUE_ANALYSIS_V3_SCHEMA = v3EnvelopeSchema(OverdueAnalysisDataSchema);
+
+/**
+ * OMN-187: the v3 overdue payload's real shape, inferred from the schema above.
+ * Consumers MUST type their reads against this (not a hand-maintained parallel
+ * interface) so the compiler forbids reading a field the script never emits —
+ * exactly the drift that produced the always-0/empty overdue_analysis bug.
+ */
+export type OverdueAnalysisV3Data = z.infer<typeof OverdueAnalysisDataSchema>;
 
 /**
  * Workflow analysis insight row.

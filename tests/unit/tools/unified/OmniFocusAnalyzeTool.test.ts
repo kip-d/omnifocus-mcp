@@ -363,40 +363,92 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.error?.code).toBe('ANALYSIS_ERROR');
     });
 
-    it('returns overdue analysis with patterns', async () => {
+    it('maps the real v3 envelope shape into the response (OMN-187)', async () => {
+      // OMN-187: the v3 script emits summary.{blockedPercentage, avgDaysOverdue,
+      // overduePercentage, mostOverdue} + groupedByUrgency + projectBottlenecks +
+      // insights — NOT the legacy {overdueTasks, patterns, recommendations,
+      // summary.averageDaysOverdue} shape the tool used to read. This mock is the
+      // REAL emitted shape; the previous mock encoded the stale contract and so
+      // passed vacuously while production returned all-zero/empty.
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      mockOmni.executeJson.mockResolvedValue({
-        data: {
-          summary: {
-            totalOverdue: 15,
-            overduePercentage: 25.5,
-            averageDaysOverdue: 7.2,
-            oldestOverdueDate: '2025-10-01',
-          },
-          overdueTasks: [
-            {
-              id: 'task1',
-              name: 'Overdue task',
-              dueDate: '2025-10-01',
-              daysOverdue: 45,
-              tags: ['urgent'],
-              projectId: 'proj1',
+
+      const oldest = {
+        id: 't1',
+        name: 'Old task',
+        dueDate: '2025-10-01T17:00:00.000Z',
+        daysOverdue: 45,
+        project: 'Work',
+        tags: ['urgent'],
+        blocked: false,
+        isNext: true,
+      };
+      const newer = {
+        id: 't2',
+        name: 'Newer task',
+        dueDate: '2025-11-20T17:00:00.000Z',
+        daysOverdue: 8,
+        project: 'Work',
+        tags: [],
+        blocked: false,
+        isNext: true,
+      };
+
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            summary: {
+              totalOverdue: 2,
+              blockedCount: 0,
+              unblockedCount: 2,
+              blockedPercentage: 0,
+              avgDaysOverdue: 26.5,
+              overduePercentage: 40,
+              totalActive: 5,
+              mostOverdue: oldest,
             },
-          ],
-          patterns: [{ type: 'project', value: 'Work', count: 8, percentage: 53.3 }],
-          recommendations: ['Focus on urgent tasks'],
-        },
-      });
+            insights: ['2 overdue tasks found'],
+            groupedByUrgency: { critical: [oldest], high: [newer], medium: [], low: [] },
+            projectBottlenecks: [
+              { name: 'Work', overdueCount: 2, blockedCount: 0, avgDaysOverdue: '26.5', blockageRate: '0.0' },
+            ],
+            blockedTasks: [],
+            metadata: {
+              generated_at: '2026-06-16T10:00:00.000Z',
+              method: 'omnijs_v3_single_bridge',
+              optimization: 'omnijs_v3',
+              query_time_ms: 800,
+              tasksAnalyzed: 2,
+              note: 'All analysis calculated in single OmniJS bridge call',
+            },
+          },
+        }),
+      );
 
       const res: any = await tool.execute({
         analysis: { type: 'overdue_analysis' },
       });
 
       expect(res.success).toBe(true);
-      expect(res.data.stats.summary.totalOverdue).toBe(15);
-      expect(res.data.stats.overdueTasks.length).toBe(1);
+      // Summary: real values, not the always-0 the bug produced.
+      expect(res.data.stats.summary.totalOverdue).toBe(2);
+      expect(res.data.stats.summary.overduePercentage).toBe(40);
+      expect(res.data.stats.summary.averageDaysOverdue).toBe(26.5);
+      expect(res.data.stats.summary.oldestOverdueDate).toBe('2025-10-01T17:00:00.000Z');
+      // overdueTasks: flattened from groupedByUrgency, sorted most-overdue first.
+      expect(res.data.stats.overdueTasks.length).toBe(2);
+      expect(res.data.stats.overdueTasks[0].id).toBe('t1');
+      expect(res.data.stats.overdueTasks[0].daysOverdue).toBe(45);
+      expect(res.data.stats.overdueTasks[0].dueDate).toBe('2025-10-01T17:00:00.000Z');
+      // patterns: derived from projectBottlenecks.
       expect(res.data.stats.patterns.length).toBe(1);
+      expect(res.data.stats.patterns[0].value).toBe('Work');
+      expect(res.data.stats.patterns[0].count).toBe(2);
+      // groupedAnalysis: urgency buckets with counts.
+      expect(res.data.groupedAnalysis.critical.count).toBe(1);
+      expect(res.data.groupedAnalysis.high.count).toBe(1);
     });
   });
 

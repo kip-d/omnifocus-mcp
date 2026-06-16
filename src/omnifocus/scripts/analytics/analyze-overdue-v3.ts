@@ -53,10 +53,22 @@ export const ANALYZE_OVERDUE_V3 = `
           const tagBottlenecks = {};
 
           let tasksProcessed = 0;
+          // OMN-187: denominator for overduePercentage — every non-completed,
+          // non-dropped task. Counted for ALL tasks (before the maxTasks cap)
+          // so the percentage is accurate even when overdue recording is capped.
+          let totalActive = 0;
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
             try {
+              // OMN-187: count active (incomplete, non-dropped) tasks. taskStatus
+              // reflects effective status (a task in a dropped/done project counts
+              // as terminal), which is the right universe for "% of active overdue".
+              const activeStatus = task.taskStatus;
+              if (activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped) {
+                totalActive++;
+              }
+
               // Limit processing for performance
               if (tasksProcessed >= maxTasks) return;
 
@@ -190,6 +202,10 @@ export const ANALYZE_OVERDUE_V3 = `
           const avgDaysOverdue = totalOverdue > 0 ?
             (totalDaysOverdue / totalOverdue).toFixed(1) : '0.0';
 
+          // OMN-187: share of active tasks that are overdue.
+          const overduePercentage = totalActive > 0 ?
+            (totalOverdue / totalActive * 100).toFixed(1) : '0.0';
+
           // Find most problematic projects
           const projectList = [];
           for (const projectName in projectBottlenecks) {
@@ -253,10 +269,12 @@ export const ANALYZE_OVERDUE_V3 = `
 
           return JSON.stringify({
             totalOverdue: totalOverdue,
+            totalActive: totalActive,
             blockedCount: blockedCount,
             unblockedCount: unblockedCount,
             blockedPercentage: parseFloat(blockedPercentage),
             avgDaysOverdue: parseFloat(avgDaysOverdue),
+            overduePercentage: parseFloat(overduePercentage),
             mostOverdue: overdueTasks[0] || null,
             insights: insights,
             groupedByUrgency: groupedByUrgency,
@@ -284,6 +302,8 @@ export const ANALYZE_OVERDUE_V3 = `
             unblockedCount: analysis.unblockedCount,
             blockedPercentage: analysis.blockedPercentage,
             avgDaysOverdue: analysis.avgDaysOverdue,
+            overduePercentage: analysis.overduePercentage,
+            totalActive: analysis.totalActive,
             mostOverdue: analysis.mostOverdue
           },
           insights: analysis.insights,

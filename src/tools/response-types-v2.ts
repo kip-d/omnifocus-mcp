@@ -79,6 +79,7 @@ export interface OverdueAnalysisDataV2 {
     overdueTasks: Array<{
       id: string;
       name: string;
+      dueDate: string | null;
       daysOverdue: number;
       project?: string;
       tags?: string[];

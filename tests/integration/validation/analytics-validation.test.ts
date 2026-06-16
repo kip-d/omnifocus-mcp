@@ -193,13 +193,25 @@ describe('Analytics Validation - Actual Calculations', () => {
       // `>= 1` genuinely verifies the seeded task is counted.
       expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(1);
 
-      // If there are overdue tasks, validate they have proper structure
-      if (result.data.stats.overdueTasks && result.data.stats.overdueTasks.length > 0) {
-        const task = result.data.stats.overdueTasks[0];
-        expect(task.id).toBeDefined();
-        expect(task.name).toBeDefined();
-        expect(task.dueDate).toBeDefined();
-      }
+      // OMN-187: these were always-0/empty before the read-path fix — the tool
+      // read v3 field names the script never emitted. With ≥1 real overdue task
+      // seeded, the honest values must now be non-zero/non-empty. The previous
+      // `if (overdueTasks.length > 0)` guard was dead code (the list was always
+      // empty), so the per-task structure assertions never ran — the exact
+      // "passes but validates nothing" class this file exists to catch.
+      expect(result.data.stats.summary.overduePercentage).toBeGreaterThan(0);
+      expect(result.data.stats.summary.averageDaysOverdue).toBeGreaterThan(0);
+
+      const overdueTasks = result.data.stats.overdueTasks;
+      expect(Array.isArray(overdueTasks)).toBe(true);
+      expect(overdueTasks.length).toBeGreaterThanOrEqual(1);
+
+      // Structure of the most-overdue row — now unconditional.
+      const task = overdueTasks[0];
+      expect(task.id).toBeDefined();
+      expect(task.name).toBeDefined();
+      expect(task.dueDate).toBeDefined();
+      expect(typeof task.daysOverdue).toBe('number');
     }, 120000);
   });
 
