@@ -197,6 +197,7 @@ export default [
       'node_modules/**',
       'coverage/**',
       '.claude/worktrees/**',
+      '.archive/**', // Archived dead code — preserved for reference, not in any tsconfig
       // Generated or vendor TypeScript definitions and API shims
       'src/omnifocus/api/**',
       '*.js', // Since this is a TypeScript project
