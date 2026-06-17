@@ -1740,6 +1740,17 @@ describe('OmniFocusReadTool', () => {
       expect(result.error.code).toBe('SCRIPT_ERROR');
     });
 
+    it('rejects a top-level OR filter (the mode owns the dueDate/plannedDate OR) instead of silently dropping it', async () => {
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', filters: { OR: [{ flagged: true }, { flagged: false }] } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      // no OmniFocus query runs — the conflict is caught before execution
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
     it('countOnly returns the exact union count with no rows', async () => {
       // Single count script over the OR predicate → exact union (no rows).
       execJsonSpy.mockResolvedValueOnce({

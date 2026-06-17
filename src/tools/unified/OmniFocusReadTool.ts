@@ -570,17 +570,33 @@ PERFORMANCE:
   private async executeForecastPast(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tasks') throw new Error('executeForecastPast: wrong type');
 
+    // The mode OWNS the OR dimension (dueDate/plannedDate). A caller-supplied
+    // top-level OR compiles onto compiled.filters.orBranches and would be silently
+    // clobbered by the graft below (P2/P3: never drop a filter silently). Reject it.
+    if (compiled.filters.orBranches && compiled.filters.orBranches.length > 0) {
+      return createErrorResponseV2(
+        'tasks',
+        'VALIDATION_ERROR',
+        "mode:'forecast_past' defines its own OR across dueDate/plannedDate and cannot be combined with a top-level OR filter.",
+        'Drop the OR filter, or express the additional constraints as AND filters (they compose with forecast_past).',
+        undefined,
+        new OperationTimerV2().toMetadata(),
+      );
+    }
+
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const cutoff = startOfToday.toISOString();
 
-    // Build the date-OR via the tested compiler so orBranches has the exact internal
-    // shape, then graft it onto the caller's (normalized) base + active/not-blocked
-    // scope. Caller-supplied filters (project/tags/…) are preserved and AND-compose.
-    const orPart = this.compiler.compile({
-      query: { type: 'tasks', filters: { OR: [{ dueDate: { before: cutoff } }, { plannedDate: { before: cutoff } }] } },
-    });
-    const orBranches = orPart.type === 'tasks' ? orPart.filters.orBranches : undefined;
+    // Hand-construct the date-OR in the exact shape the `overdue` mode emits
+    // ({dueBefore, dueDateOperator:'<'}) — buildAST ANDs the base keys with this OR
+    // (base ∧ (br1 ∨ br2)). `<` (not the `before` default `<=`) matches the OF "Past"
+    // semantic: a task due AT start-of-today is "today", not "past". Caller filters
+    // (project/tags/…) are spread first and AND-compose.
+    const orBranches: TaskFilter[] = [
+      { dueBefore: cutoff, dueDateOperator: '<' },
+      { plannedBefore: cutoff, plannedDateOperator: '<' },
+    ];
 
     const forecastFilter = {
       ...compiled.filters,
