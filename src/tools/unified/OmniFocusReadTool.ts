@@ -16,7 +16,7 @@ import {
   type ExportFilter,
 } from '../../contracts/ast/script-builder.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
-import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError, type ScriptResult } from '../../omnifocus/script-result-types.js';
 import {
   listResultSchema,
   CountResultSchema,
@@ -44,7 +44,7 @@ import {
   type StandardMetadataV2,
 } from '../../utils/response-format.js';
 import type { ExportDataV2 } from '../response-types-v2.js';
-import type { TaskFilter, ProjectFilter } from '../../contracts/filters.js';
+import type { TaskFilter, ProjectFilter, TagFilter, FolderFilter } from '../../contracts/filters.js';
 import { stripNormalizedBrand } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
@@ -303,7 +303,7 @@ RESPONSE CONTROL:
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
-- countOnly: true returns only count (33x faster for "how many" questions) — tasks only
+- countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives/export). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row
 - includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
 - fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Auto-included when includeProjectRoot: true; also requestable explicitly or via details: true.
 
@@ -723,11 +723,103 @@ PERFORMANCE:
     return projectFieldsOnResult(listResult, fields);
   }
 
+  /**
+   * OMN-174: build a uniform count-only envelope for projects/tags/folders.
+   *
+   * Mirrors the tasks countOnly path (executeCountOnly): an intentionally
+   * row-less result that reports the matching population in metadata.total_count.
+   * We deliberately do NOT route the population through createListResponseV2's
+   * `counts` arg / applyCountHonesty — with returned_count:0 that would compute
+   * `0 < population → truncated` and emit a false "Showing 0 of N (truncated)"
+   * notice. A count-only result is row-less by design, not a truncated row set.
+   *
+   * The summary block is dropped: createListResponseV2 builds a projects summary
+   * from the (empty) rows, so its breakdown (active/on_hold/completed/…) would all
+   * be 0 and contradict total_count (e.g. active:0 alongside total_count:183). A
+   * count is a single number, not a dashboard — metadata.total_count is the answer.
+   * Mirrors the narrow-lookup summary suppression in handleProjectQuery.
+   */
+  private buildCountOnlyResponse(
+    entityType: 'projects' | 'tags' | 'folders',
+    population: number,
+    timer: OperationTimerV2,
+  ): unknown {
+    const metadata: Partial<StandardMetadataV2> = {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'list',
+      count_only: true,
+      total_count: population,
+      returned_count: 0,
+    };
+    // folders carry total_folders as their headline metric (mirrors the row path).
+    if (entityType === 'folders') metadata.total_folders = population;
+
+    const response = createListResponseV2(entityType, [], entityType, metadata) as unknown as Record<string, unknown>;
+    delete response.summary;
+    return response;
+  }
+
+  /**
+   * OMN-174: shared tail for the projects/tags/folders count-only fast paths.
+   * Each entity differs only in its script + schema + where the population count
+   * lives in the result; this collapses the otherwise-triplicated SCRIPT_ERROR
+   * handling and envelope build into one place (and keeps the OmniFocus-down hint
+   * identical across entities).
+   */
+  private countOnlyFromResult(
+    entityType: 'projects' | 'tags' | 'folders',
+    result: ScriptResult,
+    extractPopulation: (data: unknown) => number,
+    timer: OperationTimerV2,
+  ): unknown {
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        entityType,
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || `Failed to count ${entityType}`,
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+    return this.buildCountOnlyResponse(entityType, extractPopulation(result.data), timer);
+  }
+
+  /**
+   * OMN-174: count-only fast path for projects. `total_matched` is computed over
+   * the full population regardless of `limit` (OMN-154), and `limit: 0` makes the
+   * OmniJS loop `return` before the field-projection block — so it counts every
+   * match but builds zero rows and skips the per-project taskCounts/nextTask
+   * enrichment. `performanceMode: 'lite'` also drops the task-count block. This is
+   * a genuine fast path, not new counting.
+   */
+  private async executeProjectCountOnly(projectFilter: ProjectFilter, timer: OperationTimerV2): Promise<unknown> {
+    const { script } = buildFilteredProjectsScript(projectFilter, {
+      limit: 0,
+      includeStats: false,
+      performanceMode: 'lite',
+    });
+    const result = await this.execJson(script, PROJECT_LIST_SCHEMA);
+    return this.countOnlyFromResult(
+      'projects',
+      result,
+      (data) => (data as { metadata?: { total_matched?: number } }).metadata?.total_matched ?? 0,
+      timer,
+    );
+  }
+
   private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'projects') throw new Error('handleProjectQuery: wrong type');
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
     const includeStats = compiled.includeStats ?? false;
+
+    // OMN-174: count-only fast path (checked before id-lookup/row paths, mirroring
+    // the tasks handler). compiled.filters is the typed ProjectFilter.
+    if (compiled.countOnly) {
+      return this.executeProjectCountOnly(compiled.filters, timer);
+    }
 
     // Resolve effective project fields
     const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
@@ -859,6 +951,37 @@ PERFORMANCE:
     });
   }
 
+  // Shared so the count-only path and the row path build byte-identical tag
+  // scripts — a divergence would make a count disagree with the row population.
+  private tagQueryOptions(filter: TagFilter): TagQueryOptions {
+    return {
+      mode: 'basic' as TagQueryMode,
+      includeEmpty: true,
+      sortBy: 'name' as TagSortBy,
+      name: filter.name,
+      nameOperator: filter.nameOperator,
+    };
+  }
+
+  /**
+   * OMN-174: count-only path for tags. Unlike projects, the tag script always
+   * enumerates every tag, so this is a response-shape/token win (drop the rows),
+   * not a script-level speedup. Population = the matching count the script reports.
+   */
+  private async executeTagCountOnly(filter: TagFilter, timer: OperationTimerV2): Promise<unknown> {
+    const { script } = buildTagsScript(this.tagQueryOptions(filter));
+    const result = await this.execJson(script, TAG_LIST_SCHEMA);
+    return this.countOnlyFromResult(
+      'tags',
+      result,
+      (data) => {
+        const env = data as { items?: unknown[]; summary?: { total?: number; total_matched?: number } };
+        return env.summary?.total_matched ?? env.summary?.total ?? (env.items ?? []).length;
+      },
+      timer,
+    );
+  }
+
   private async handleTagQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tags') throw new Error('handleTagQuery: wrong type');
     const timer = new OperationTimerV2();
@@ -866,6 +989,12 @@ PERFORMANCE:
     // cache key (byte-identical, no regression); a name filter gets its own key so
     // a filtered query is never served the unfiltered slice (C17/R11 cache honesty).
     const filter = compiled.filters;
+
+    // OMN-174: count-only fast path (checked before the row cache/script).
+    if (compiled.countOnly) {
+      return this.executeTagCountOnly(filter, timer);
+    }
+
     const hasFilter = filter.name !== undefined;
     const cacheKey = hasFilter
       ? `list:name:true:false:false:true:false_${JSON.stringify(filter)}`
@@ -876,14 +1005,7 @@ PERFORMANCE:
     }
 
     // Build and execute AST-powered tag list script (basic mode; name filter S2).
-    const tagOptions: TagQueryOptions = {
-      mode: 'basic' as TagQueryMode,
-      includeEmpty: true,
-      sortBy: 'name' as TagSortBy,
-      name: filter.name,
-      nameOperator: filter.nameOperator,
-    };
-    const generatedScript = buildTagsScript(tagOptions);
+    const generatedScript = buildTagsScript(this.tagQueryOptions(filter));
     const result = await this.execJson(generatedScript.script, TAG_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
@@ -979,6 +1101,25 @@ PERFORMANCE:
     }
   }
 
+  /**
+   * OMN-174: count-only path for folders. `total_available` is the full matching
+   * population regardless of limit (OMN-170 S2), and `limit: 0` makes the OmniJS
+   * loop count matches but skip the per-folder path/depth/children projection.
+   */
+  private async executeFolderCountOnly(filter: FolderFilter, timer: OperationTimerV2): Promise<unknown> {
+    const { script } = buildFilteredFoldersScript({ filter, limit: 0 });
+    const result = await this.execJson(script, FolderListSchema);
+    return this.countOnlyFromResult(
+      'folders',
+      result,
+      (data) => {
+        const d = data as { folders?: unknown[]; items?: unknown[]; metadata?: { total_available?: number } };
+        return d.metadata?.total_available ?? (d.folders || d.items || []).length;
+      },
+      timer,
+    );
+  }
+
   private async handleFolderQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'folders') throw new Error('handleFolderQuery: wrong type');
     const timer = new OperationTimerV2();
@@ -986,6 +1127,12 @@ PERFORMANCE:
     // the original browse cache key (byte-identical); a filter gets its own key so a
     // filtered query is never served the unfiltered slice (C17/R11 cache honesty).
     const filter = compiled.filters;
+
+    // OMN-174: count-only fast path (checked before the row cache/script).
+    if (compiled.countOnly) {
+      return this.executeFolderCountOnly(filter, timer);
+    }
+
     const isEmpty = isEmptyFolderFilter(filter);
 
     // Helper: build the folders response with honest counts on both paths

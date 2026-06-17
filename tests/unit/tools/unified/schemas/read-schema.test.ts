@@ -416,15 +416,36 @@ describe('ReadSchema', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject task-only params on project queries', () => {
+    it('should reject mode (a task-only view selector) on project queries', () => {
       const input = {
         query: {
           type: 'projects',
-          countOnly: true,
           mode: 'flagged',
         },
       };
       const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    // OMN-174: countOnly was scoped tasks-only by design; it is now a shared
+    // fast-path on projects/tags/folders too (the population count those queries
+    // already compute, returned without row projection/enrichment).
+    it('should accept countOnly on projects/tags/folders queries (OMN-174)', () => {
+      for (const type of ['projects', 'tags', 'folders'] as const) {
+        const result = ReadSchema.safeParse({ query: { type, countOnly: true } });
+        expect(result.success, `${type} countOnly should be accepted`).toBe(true);
+      }
+    });
+
+    it('should still reject countOnly on perspectives/export queries (out of scope, OMN-174)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'perspectives', countOnly: true } }).success).toBe(false);
+      expect(ReadSchema.safeParse({ query: { type: 'export', countOnly: true } }).success).toBe(false);
+    });
+
+    // OMN-174: countOnly is now valid on projects, but mode is still rejected —
+    // the combination must still reject (the mode guard, not countOnly).
+    it('should reject mode even when combined with the now-valid countOnly on projects', () => {
+      const result = ReadSchema.safeParse({ query: { type: 'projects', countOnly: true, mode: 'flagged' } });
       expect(result.success).toBe(false);
     });
 

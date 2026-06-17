@@ -50,6 +50,19 @@ describe('CompiledQuery discriminated union (OMN-161 S1)', () => {
     const compiled = c.compile({ query: { type: 'projects', filters: { NOT: { status: 'completed' } } } } as any);
     expect((compiled as any).filters).toEqual({ status: ['active', 'onHold', 'dropped'] });
   });
+  it('OMN-174: countOnly threads onto compiled.countOnly for projects/tags/folders', () => {
+    for (const type of ['projects', 'tags', 'folders'] as const) {
+      const compiled = c.compile({ query: { type, countOnly: true } } as any);
+      expect(compiled.type).toBe(type);
+      expect((compiled as any).countOnly).toBe(true);
+    }
+  });
+  it('OMN-174: countOnly is undefined on projects/tags/folders when omitted', () => {
+    for (const type of ['projects', 'tags', 'folders'] as const) {
+      const compiled = c.compile({ query: { type } } as any);
+      expect((compiled as any).countOnly).toBeUndefined();
+    }
+  });
   it('tasks: unchanged — full task filter compiles onto filters', () => {
     const compiled = c.compile({ query: { type: 'tasks', filters: { flagged: true } } } as any);
     expect((compiled as any).filters.flagged).toBe(true);

@@ -1588,6 +1588,120 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-174: countOnly on projects/tags/folders', () => {
+    it('projects: total_count from total_matched, no rows, count_only, not truncated', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_matched: 203, total_available: 250 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(203);
+      expect(result.data.projects).toEqual([]);
+      // No dashboard summary on a count-only result — its breakdown would be computed
+      // from the empty rows (active:0…) and contradict total_count.
+      expect(result.summary).toBeUndefined();
+      // count-only is row-less by design, NOT a truncated row set (no false notice)
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    it('projects: runs a limit:0 lite count script (no row projection / no enrichment)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_matched: 5 } },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'projects', countOnly: true } });
+
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('const limit = 0');
+      // lite mode → the expensive per-project enrichment must not be emitted
+      expect(script).not.toContain('proj.taskCounts');
+      expect(script).not.toContain('proj.nextTask');
+    });
+
+    it('projects: countOnly agrees with a full query total_count for the same filter', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p1', name: 'P', status: 'active' }],
+          metadata: { total_matched: 42, total_available: 50 },
+        },
+      } satisfies ScriptResult);
+      const full = (await tool.execute({ query: { type: 'projects', filters: { status: 'active' } } })) as any;
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_matched: 42, total_available: 50 } },
+      } satisfies ScriptResult);
+      const count = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' }, countOnly: true },
+      })) as any;
+
+      expect(count.metadata.total_count).toBe(full.metadata.total_count);
+      expect(count.metadata.total_count).toBe(42);
+    });
+
+    it('projects: countOnly surfaces SCRIPT_ERROR on failure', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'projects', countOnly: true } })) as any;
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('tags: total_count from population, no rows, count_only', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { ok: true, v: 'ast', items: [], summary: { total: 17, total_matched: 17 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tags', countOnly: true } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(17);
+      expect(result.data.tags).toEqual([]);
+    });
+
+    it('folders: total_count from total_available, no rows, total_folders, count_only', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { folders: [], metadata: { total_available: 9 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'folders', countOnly: true } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(9);
+      expect(result.metadata.total_folders).toBe(9);
+      expect(result.data.folders).toEqual([]);
+      expect('truncated' in result.metadata).toBe(false);
+    });
+
+    // The shared countOnlyFromResult tail dispatches per-entity error labels; lock
+    // the tags/folders error paths too (not just projects).
+    it('tags: countOnly surfaces SCRIPT_ERROR on failure', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'tags', countOnly: true } })) as any;
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('folders: countOnly surfaces SCRIPT_ERROR on failure', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'folders', countOnly: true } })) as any;
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+  });
+
   describe('sort with date fields and null values (OMN-35 gap 3)', () => {
     // Inbox path exercises post-hoc sortTasks (non-inbox sorts are embedded in
     // OmniJS — sortedInScript:true — and skip post-hoc). Mirrors existing
