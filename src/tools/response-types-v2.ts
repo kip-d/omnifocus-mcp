@@ -3,8 +3,6 @@
  * These interfaces define the data structures returned by V2 tools
  */
 
-import type { StandardResponseV2 } from '../utils/response-format.js';
-
 // Task-related types
 export interface TaskV2 {
   id: string;
@@ -29,8 +27,6 @@ export interface TaskV2 {
 export interface TasksDataV2 {
   tasks: TaskV2[];
 }
-
-export type TasksResponseV2 = StandardResponseV2<TasksDataV2>;
 
 // Project-related types
 export interface ProjectV2 {
@@ -63,9 +59,6 @@ export interface ProjectOperationDataV2 {
   operation: string;
   changes?: Record<string, unknown>;
 }
-
-export type ProjectsResponseV2 = StandardResponseV2<ProjectsDataV2>;
-export type ProjectOperationResponseV2 = StandardResponseV2<ProjectOperationDataV2>;
 
 // Analytics-related types
 export interface OverdueAnalysisDataV2 {
@@ -129,8 +122,6 @@ export interface TaskOperationDataV2 {
   [key: string]: unknown; // Allow additional fields for flexibility
 }
 
-export type TaskOperationResponseV2 = StandardResponseV2<TaskOperationDataV2>;
-
 // Tag-related types
 export interface TagV2 {
   id: string;
@@ -161,9 +152,6 @@ export interface TagOperationDataV2 {
   targetTag?: string;
 }
 
-export type TagsResponseV2 = StandardResponseV2<TagsDataV2>;
-export type TagOperationResponseV2 = StandardResponseV2<TagOperationDataV2>;
-
 // Folder-related types
 export interface FolderV2 {
   id: string;
@@ -192,8 +180,6 @@ export interface PatternFinding {
 // Pattern analysis returns a record of pattern findings keyed by pattern name
 export type PatternAnalysisDataV2 = Record<string, PatternFinding>;
 
-export type PatternAnalysisResponseV2 = StandardResponseV2<PatternAnalysisDataV2>;
-
 // Export types
 export interface ExportDataV2 {
   format: 'json' | 'csv' | 'markdown';
@@ -203,8 +189,6 @@ export interface ExportDataV2 {
   summary?: Record<string, unknown>;
   outputPath?: string;
 }
-
-export type ExportResponseV2 = StandardResponseV2<ExportDataV2>;
 
 // Recurring task types
 export interface RecurringTaskV2 {
@@ -227,8 +211,6 @@ export interface RecurringTasksDataV2 {
   };
 }
 
-export type RecurringTasksResponseV2 = StandardResponseV2<RecurringTasksDataV2>;
-
 // System types
 // Review types
 export interface ReviewV2 {
@@ -249,5 +231,3 @@ export interface ReviewsDataV2 {
     upcoming: number;
   };
 }
-
-export type ReviewsResponseV2 = StandardResponseV2<ReviewsDataV2>;
