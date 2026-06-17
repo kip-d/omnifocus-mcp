@@ -279,6 +279,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
 - inbox, available, blocked, search, all
+- forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the exact matching population (limit-independent); truncated:true marks a partial page (raise limit or paginate with offset).
 - smart_suggest: surfaces available next actions (NOT urgency-ranked — scored by deadline proximity/flagged/quick-win, but this is a convenience shortlist, not a definitive priority ranking). Includes overdue, due-soon, and next tasks (all actionable statuses).
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
@@ -364,6 +365,7 @@ PERFORMANCE:
                 'blocked',
                 'flagged',
                 'smart_suggest',
+                'forecast_past',
               ],
             },
             filters: { type: 'object' },
@@ -462,6 +464,13 @@ PERFORMANCE:
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tasks') throw new Error('handleTaskQuery: wrong type');
     const timer = new OperationTimerV2();
+
+    // OMN-133: forecast_past rewrites to a single OR query and re-enters the standard
+    // pipeline — dispatch before buildTaskQuery (it is not a MODE_DEFINITIONS mode).
+    if (compiled.mode === 'forecast_past') {
+      return this.executeForecastPast(compiled);
+    }
+
     const { script, filter, mode, limit, sortedInScript, fieldsMode } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
@@ -536,6 +545,80 @@ PERFORMANCE:
       population: totalMatched,
       offset: compiled.offset || 0,
     });
+  }
+
+  /**
+   * OMN-133: forecast_past mode. The OmniFocus Forecast "Past" bucket is
+   *   active ∧ ¬blocked ∧ (dueDate < startOfToday ∨ plannedDate < startOfToday)
+   * — an OR across two date fields. Implemented as a SINGLE query via the shipped
+   * orBranches OR path (OMN-151/171): the script's total_matched is the exact,
+   * limit-independent union count, and the whole tested task pipeline (countOnly,
+   * sort, offset/limit, truncation honesty) applies unchanged — no merge/dedup/
+   * intersection-count code. A task matching both predicates appears once naturally.
+   *
+   * DECISION (Kip, 2026-06-16): switched from the ticket's original two-query-merge
+   * design to single-OR. The original "NOT a single OR-filter" rationale ("avoid
+   * OMN-131 NOT/OR dependency") aged out — OR-of-date-fields is OMN-151/171 (shipped);
+   * OMN-131 (NOT-filters) is untouched. Live-verified the two-query merge under-counted
+   * (limit-dependent total_count 9/37 vs the true union 67); single-OR returns 67 at
+   * any limit. See [[project_selection_honesty_cluster]] / the OMN-133 PR.
+   *
+   * OF-UI parity note: a dueDate-overdue task buckets under "Today" (not "Past") in
+   * the Forecast UI, so this union is intentionally broader than the literal Past
+   * section — it answers "everything overdue or past-planned".
+   */
+  private async executeForecastPast(compiled: CompiledQuery): Promise<unknown> {
+    if (compiled.type !== 'tasks') throw new Error('executeForecastPast: wrong type');
+
+    // The mode OWNS the OR dimension (dueDate/plannedDate). A caller-supplied
+    // top-level OR compiles onto compiled.filters.orBranches and would be silently
+    // clobbered by the graft below (P2/P3: never drop a filter silently). Reject it.
+    if (compiled.filters.orBranches && compiled.filters.orBranches.length > 0) {
+      return createErrorResponseV2(
+        'tasks',
+        'VALIDATION_ERROR',
+        "mode:'forecast_past' defines its own OR across dueDate/plannedDate and cannot be combined with a top-level OR filter.",
+        'Drop the OR filter, or express the additional constraints as AND filters (they compose with forecast_past).',
+        undefined,
+        new OperationTimerV2().toMetadata(),
+      );
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const cutoff = startOfToday.toISOString();
+
+    // Hand-construct the date-OR in the exact shape the `overdue` mode emits
+    // ({dueBefore, dueDateOperator:'<'}) — buildAST ANDs the base keys with this OR
+    // (base ∧ (br1 ∨ br2)). `<` (not the `before` default `<=`) matches the OF "Past"
+    // semantic: a task due AT start-of-today is "today", not "past". Caller filters
+    // (project/tags/…) are spread first and AND-compose.
+    const orBranches: TaskFilter[] = [
+      { dueBefore: cutoff, dueDateOperator: '<' },
+      { plannedBefore: cutoff, plannedDateOperator: '<' },
+    ];
+
+    const forecastFilter = {
+      ...compiled.filters,
+      completed: false,
+      dropped: false,
+      blocked: false,
+      orBranches,
+    };
+
+    // Run as an ordinary single task query (mode cleared to avoid re-dispatch). The
+    // standard pipeline handles countOnly, sort, offset/limit and truncation honesty;
+    // the OR script's total_matched is the exact, limit-independent union population.
+    const rewritten: CompiledQuery = { ...compiled, mode: undefined, filters: forecastFilter };
+    const response = await this.handleTaskQuery(rewritten);
+
+    // Restore the mode label so the response honestly reports what the caller asked for
+    // (the rewritten query ran as a plain task query).
+    if (response && typeof response === 'object' && 'metadata' in response) {
+      const meta = (response as { metadata?: Record<string, unknown> }).metadata;
+      if (meta) meta.mode = 'forecast_past';
+    }
+    return response;
   }
 
   private async executeCountOnly(

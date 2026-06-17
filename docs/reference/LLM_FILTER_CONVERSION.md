@@ -303,7 +303,9 @@ filters. Use this as a reference when implementing natural language → filter t
 Use modes for common queries instead of filters:
 
 - **"today"** - Tasks due within 3 days OR flagged
-- **"overdue"** - Tasks past their due date
+- **"overdue"** - Tasks past their due date (dueDate only)
+- **"forecast_past"** - Past their dueDate OR plannedDate (the OmniFocus Forecast "Past" union), excluding blocked —
+  broader than `overdue`
 - **"upcoming"** - Tasks due in next N days
 - **"available"** - Tasks ready to work on (not blocked/deferred)
 - **"blocked"** - Tasks waiting on others

@@ -61,7 +61,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
     offset?: number,    // For pagination
     // Query modes
     mode?: "all" | "inbox" | "search" | "overdue" | "today" | "upcoming" |
-           "available" | "blocked" | "flagged" | "smart_suggest",
+           "available" | "blocked" | "flagged" | "smart_suggest" | "forecast_past",
     // Response control
     details?: boolean,      // Include full details vs minimal
     fastSearch?: boolean,   // Search names only (performance)

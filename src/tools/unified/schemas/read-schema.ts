@@ -285,6 +285,7 @@ const TaskModeEnum = z.enum([
   'blocked',
   'flagged',
   'smart_suggest',
+  'forecast_past', // OMN-133: union of dueDate-overdue and plannedDate-past, excluding blocked
 ]);
 
 const TaskQuerySchema = BaseQuerySchema.merge(

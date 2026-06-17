@@ -54,7 +54,8 @@ type TaskMode =
   | 'available'
   | 'blocked'
   | 'flagged'
-  | 'smart_suggest';
+  | 'smart_suggest'
+  | 'forecast_past'; // OMN-133
 
 /**
  * OMN-161 S1: CompiledQuery is a discriminated union keyed by `type`.

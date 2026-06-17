@@ -25,7 +25,8 @@ export type TaskQueryMode =
   | 'available'
   | 'blocked'
   | 'flagged'
-  | 'smart_suggest';
+  | 'smart_suggest'
+  | 'forecast_past'; // OMN-133: rewritten to a single OR query in OmniFocusReadTool.executeForecastPast, not a MODE_DEFINITIONS entry
 
 interface ModeOptions {
   daysAhead?: number;

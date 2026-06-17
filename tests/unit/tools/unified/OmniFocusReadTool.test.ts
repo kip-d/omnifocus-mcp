@@ -1702,6 +1702,75 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-133: forecast_past mode (single OR query: dueDate-past ∨ plannedDate-past, exclude blocked)', () => {
+    it('runs ONE query whose OR script covers both dueDate-past and plannedDate-past, excluding blocked', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Overdue A', dueDate: '2026-06-10T17:00:00.000Z' },
+            { id: 't2', name: 'Both', dueDate: '2026-06-11T17:00:00.000Z' },
+            { id: 't3', name: 'Planned past', plannedDate: '2026-06-08T08:00:00.000Z' },
+          ],
+          metadata: { total_matched: 3 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
+
+      expect(result.success).toBe(true);
+      // Single OR query — the script does the union+dedup, not a merge in the tool.
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('task.dueDate');
+      expect(script).toContain('task.plannedDate');
+      expect(script).toContain('Task.Status.Blocked'); // blocked:false → not-Blocked predicate
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t1', 't2', 't3']);
+      expect(result.metadata.mode).toBe('forecast_past');
+      // total_count is the script's exact, limit-independent union population.
+      expect(result.metadata.total_count).toBe(3);
+    });
+
+    it('surfaces SCRIPT_ERROR when the query fails', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: false, error: 'OF not running' } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'forecast_past' } })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('rejects a top-level OR filter (the mode owns the dueDate/plannedDate OR) instead of silently dropping it', async () => {
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', filters: { OR: [{ flagged: true }, { flagged: false }] } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      // no OmniFocus query runs — the conflict is caught before execution
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('countOnly returns the exact union count with no rows', async () => {
+      // Single count script over the OR predicate → exact union (no rows).
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 67 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(67);
+      expect(result.data.tasks).toEqual([]);
+      expect(result.metadata.mode).toBe('forecast_past');
+    });
+  });
+
   describe('sort with date fields and null values (OMN-35 gap 3)', () => {
     // Inbox path exercises post-hoc sortTasks (non-inbox sorts are embedded in
     // OmniJS — sortedInScript:true — and skip post-hoc). Mirrors existing
