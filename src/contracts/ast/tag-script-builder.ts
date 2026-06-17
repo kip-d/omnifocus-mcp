@@ -58,6 +58,31 @@ interface TagScriptOptions {
   nameOperator?: TextOperator;
 }
 
+// =============================================================================
+// SHARED OMNIS SOURCE FRAGMENTS
+// =============================================================================
+
+/**
+ * OmniJS source fragment: reads `tag.parent` once and derives `parentId`.
+ *
+ * Both `buildBasicTagsScript` and `buildFullTagsScript` interpolate these two
+ * constants so the parent-accessor logic lives in exactly one place. If OmniJS
+ * ever renames `tag.parent` or `id.primaryKey`, update here — not in two
+ * separate template strings.
+ *
+ * Cross-reference: `tests/integration/tools/unified/tag-paths.test.ts`
+ * `probeTagByName` uses the equivalent `p ? p.id.primaryKey : null` idiom as
+ * its independent test oracle for parent linkage. Keep the two in sync.
+ */
+/** OmniJS `const parent = tag.parent;` declaration (inside a forEach callback). */
+const TAG_PARENT_DECL = 'const parent = tag.parent;';
+/** OmniJS expression evaluating to the parent's primary key, or null. */
+const TAG_PARENT_ID_EXPR = 'parent ? parent.id.primaryKey : null';
+
+// =============================================================================
+// OMNIS NAME PREDICATE
+// =============================================================================
+
 /**
  * OMN-170 S2: emit a safe case-insensitive tag-name match predicate (OMN-149
  * pattern — term injected via JSON.stringify only). Returns 'true' (match all)
@@ -192,11 +217,11 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
           // an opt-in flag an LLM client won't know to set defeats "make hierarchy
           // reachable"; additive parentId is lower-friction and lower-API-surface.
           // Cost: one O(n) property access on an already-O(n) scan — negligible.
-          const parent = tag.parent;
+          ${TAG_PARENT_DECL}
           tags.push({
             id: tag.id.primaryKey,
             name: tag.name,
-            parentId: parent ? parent.id.primaryKey : null
+            parentId: ${TAG_PARENT_ID_EXPR}
           });
           count++;
         });
@@ -288,12 +313,12 @@ function buildFullTagsScript(options: FullTagScriptOptions = {}): GeneratedScrip
 
           if (!tagName || !tagId) return;
 
-          const parent = tag.parent;
+          ${TAG_PARENT_DECL}
 
           tagDataMap[tagName] = {
             id: tagId,
             name: tagName,
-            parentId: parent ? parent.id.primaryKey : null,
+            parentId: ${TAG_PARENT_ID_EXPR},
             parentName: parent ? parent.name : null,
             childrenAreMutuallyExclusive: tag.childrenAreMutuallyExclusive || false,
             allowsNextAction: tag.allowsNextAction !== false,
