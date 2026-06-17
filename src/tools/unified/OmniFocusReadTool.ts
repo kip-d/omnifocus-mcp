@@ -679,11 +679,12 @@ PERFORMANCE:
       warning: data.warning,
     });
 
-    // Override summary total_count with actual count from JXA
-    // (generateTaskSummary receives [] for countOnly, producing total_count: 0)
-    if (response.summary && 'total_count' in response.summary) {
-      (response.summary as { total_count: number }).total_count = count;
-    }
+    // OMN-195: drop summary entirely (matching the OMN-174 convention for
+    // projects/tags/folders). generateTaskSummary([]) produces a breakdown
+    // where every field is 0, which contradicts total_count and actively
+    // misleads LLMs ("breakdown.overdue:0" alongside "total_count:67").
+    // metadata.total_count is the single authoritative answer.
+    delete response.summary;
 
     return response;
   }

@@ -1493,7 +1493,12 @@ describe('OmniFocusReadTool', () => {
   });
 
   describe('countOnly through execute() (OMN-35 gap 2)', () => {
-    it('returns count + metadata flags + overrides summary.total_count from JXA', async () => {
+    // OMN-195: tasks countOnly must drop the summary block entirely (matching the
+    // OMN-174 convention for projects/tags/folders). The breakdown fields are all
+    // 0 (derived from the empty tasks[] passed to generateTaskSummary), which
+    // contradicts total_count — an LLM reading breakdown.overdue:0 next to
+    // total_count:67 is actively misled. metadata.total_count is the answer.
+    it('drops summary entirely; metadata.total_count carries the count (OMN-195)', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: { count: 42, optimization: 'omnijs_count_no_tags', filter_description: 'flagged' },
@@ -1506,9 +1511,26 @@ describe('OmniFocusReadTool', () => {
       expect(result.success).toBe(true);
       expect(result.metadata.count_only).toBe(true);
       expect(result.metadata.total_count).toBe(42);
-      // Summary total_count must reflect the JXA count, not the 0 from the empty tasks[] array
-      expect(result.summary.total_count).toBe(42);
+      // OMN-195: summary must be absent — all-0 breakdown contradicts total_count
+      expect(result.summary).toBeUndefined();
       expect(result.metadata.optimization).toBe('omnijs_count_no_tags');
+    });
+
+    it('mode:"forecast_past" + countOnly: summary absent, metadata.total_count authoritative (OMN-195)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 67 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'forecast_past', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(67);
+      // forecast_past routes through executeCountOnly — same fix applies
+      expect(result.summary).toBeUndefined();
     });
 
     it('mode:"inbox" + countOnly auto-injects inInbox into the count filter', async () => {
