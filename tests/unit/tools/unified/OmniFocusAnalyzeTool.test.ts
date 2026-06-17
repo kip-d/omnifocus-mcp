@@ -415,7 +415,6 @@ describe('OmniFocusAnalyzeTool', () => {
             projectBottlenecks: [
               { name: 'Work', overdueCount: 2, blockedCount: 0, avgDaysOverdue: '26.5', blockageRate: '0.0' },
             ],
-            blockedTasks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',
               method: 'omnijs_v3_single_bridge',
@@ -476,7 +475,6 @@ describe('OmniFocusAnalyzeTool', () => {
             insights: ['No overdue tasks found - excellent!'],
             groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
             projectBottlenecks: [],
-            blockedTasks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',
               method: 'omnijs_v3_single_bridge',
