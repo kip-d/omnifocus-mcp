@@ -1,7 +1,5 @@
 import { vi } from 'vitest';
-import {
-  createListResponseV2,
-} from '../../src/utils/response-format.js';
+import { createListResponseV2 } from '../../src/utils/response-format.js';
 import { SchemaTestHelper } from './schema-helpers.js';
 
 /**
@@ -324,6 +322,23 @@ export class ResponseBuilder {
     };
   }
 
+  /**
+   * Wraps a single entity in a **list-response envelope** (`data.items: [entity]`).
+   *
+   * Despite its name, this method does NOT return a singular-entity shape. It delegates to
+   * `createListResponseV2` with `itemType: 'other'`, which produces:
+   *
+   * ```json
+   * { "success": true, "data": { "items": [entity] }, "metadata": { ... } }
+   * ```
+   *
+   * This was intentionally rewritten during OMN-176 cleanup to use the v2 list envelope.
+   * If you need a true single-entity response shape, build it directly — do not add a new
+   * helper here (risk of divergence with the list path).
+   *
+   * Zero callers in the test tree as of OMN-179 (confirmed via grep). This method is latent
+   * infrastructure; this doc comment exists so the first caller understands the actual shape.
+   */
   static entity(operation: string, entity: any, metadata: any = {}) {
     return createListResponseV2(operation, [entity], 'other', metadata);
   }
