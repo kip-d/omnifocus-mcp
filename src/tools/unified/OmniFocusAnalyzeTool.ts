@@ -284,7 +284,9 @@ ANALYSIS TYPES:
   The tool does a read-only pre-flight (resolves project names, dedupes against
   existing tasks, classifies tags existing-vs-new) and returns a batchPayload you
   send to omnifocus_write { batch } (try dryRun:true first). Set
-  validateAgainstExisting:false to skip the DB reads.
+  validateAgainstExisting:false to skip the DB reads. If a pre-flight read fails,
+  it is reported in warnings[] (validation may be incomplete) rather than silently
+  degrading to "nothing exists".
   FALLBACK: pass params.text (raw prose) and the heuristic extractor runs;
   un-parsed lines are surfaced in unparsed[]. Provide exactly one of items|text.
 - manage_reviews: Project review operations
@@ -2387,14 +2389,18 @@ SCOPE FILTERING:
 
       this.logger.info('Parsing structured meeting items', { count: items.length, validate });
 
+      // OMN-204: collect pre-flight read failures here instead of swallowing them.
+      // A failed read silently degrades to "nothing exists" (no projects/tags/dups),
+      // which looks like correct output — the OMN-125 silent-dedupe bug. Surface it.
+      const warnings: string[] = [];
       let existingProjects: string[] = [];
       let existingTags = new Set<string>();
       let existingTasks: Array<{ name: string; project: string | null }> = [];
       if (validate) {
         [existingProjects, existingTags, existingTasks] = await Promise.all([
-          this.fetchExistingProjectNames(),
-          this.fetchExistingTagNames(),
-          this.fetchExistingIncompleteTasks(),
+          this.fetchExistingProjectNames(warnings),
+          this.fetchExistingTagNames(warnings),
+          this.fetchExistingIncompleteTasks(warnings),
         ]);
       }
 
@@ -2442,11 +2448,19 @@ SCOPE FILTERING:
       ];
       const newTags = [...new Set(previewItems.flatMap((p) => p.tags.new))];
 
+      const baseNextSteps =
+        operations.length > 0
+          ? 'Review the preview (duplicateOf, project.match==="none", tags.new), then send batchPayload to omnifocus_write { mutation: { operation: "batch", operations } } — try dryRun:true first.'
+          : 'No items ready to create (all were duplicates). Review duplicateOf entries.';
+
       const result = {
         mode: 'structured' as const,
         // Strip the internal combinedTags helper from the surfaced shape.
         items: previewItems.map(({ combinedTags: _omit, ...rest }) => rest),
         unparsed: [] as string[],
+        // OMN-204: pre-flight read failures, surfaced rather than swallowed. Empty
+        // when validation is skipped or every read succeeded.
+        warnings,
         summary: {
           total: previewItems.length,
           readyToCreate: operations.length,
@@ -2457,12 +2471,13 @@ SCOPE FILTERING:
           newProjects: validate ? newProjects.length : null,
           newTags: validate ? newTags.length : null,
           unparsedCount: 0,
+          warnings: warnings.length,
         },
         batchPayload: { operations },
         nextSteps:
-          operations.length > 0
-            ? 'Review the preview (duplicateOf, project.match==="none", tags.new), then send batchPayload to omnifocus_write { mutation: { operation: "batch", operations } } — try dryRun:true first.'
-            : 'No items ready to create (all were duplicates). Review duplicateOf entries.',
+          warnings.length > 0
+            ? `⚠️ ${warnings.length} pre-flight read(s) failed (see warnings[]) — project/tag/dedupe validation may be incomplete; treat readyToCreate with caution. ${baseNextSteps}`
+            : baseNextSteps,
       };
 
       return createSuccessResponseV2('parse_meeting_notes', result, undefined, timer.toMetadata());
@@ -2555,20 +2570,26 @@ SCOPE FILTERING:
   }
 
   /** Read existing project names (lite, no stats). Returns [] on script error. */
-  private async fetchExistingProjectNames(): Promise<string[]> {
+  private async fetchExistingProjectNames(warnings: string[]): Promise<string[]> {
     const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
     const result = await this.execJson(gen.script, PROJECTS_LIST_SCHEMA);
-    if (!isScriptSuccess(result)) return [];
+    if (!isScriptSuccess(result)) {
+      warnings.push('project resolution unavailable: existing-projects read failed');
+      return [];
+    }
     return this.unwrapList(result.data, ['projects', 'items'])
       .map((p) => (p as { name?: unknown }).name)
       .filter((n): n is string => typeof n === 'string');
   }
 
-  /** Read existing tag names (basic mode). Returns empty set on script error. */
-  private async fetchExistingTagNames(): Promise<Set<string>> {
+  /** Read existing tag names (basic mode). Warns + returns empty set on script error. */
+  private async fetchExistingTagNames(warnings: string[]): Promise<Set<string>> {
     const gen = buildTagsScript({ mode: 'basic', includeEmpty: true, sortBy: 'name' });
     const result = await this.execJson(gen.script, TAG_ITEMS_SCHEMA);
-    if (!isScriptSuccess(result)) return new Set();
+    if (!isScriptSuccess(result)) {
+      warnings.push('tag classification unavailable: existing-tags read failed');
+      return new Set();
+    }
     const names = this.unwrapList(result.data, ['tags', 'items'])
       .map((t) => (typeof t === 'string' ? t : (t as { name?: unknown }).name))
       .filter((n): n is string => typeof n === 'string');
@@ -2576,7 +2597,9 @@ SCOPE FILTERING:
   }
 
   /** Read incomplete (not completed/dropped) tasks with their project name. */
-  private async fetchExistingIncompleteTasks(): Promise<Array<{ name: string; project: string | null }>> {
+  private async fetchExistingIncompleteTasks(
+    warnings: string[],
+  ): Promise<Array<{ name: string; project: string | null }>> {
     // Both terminal states excluded: a dropped task has completed===false, so
     // without dropped:false an abandoned task would false-positive as a duplicate.
     //
@@ -2598,7 +2621,10 @@ SCOPE FILTERING:
       limit: 2000,
     });
     const result = await this.execJson(script, TASKS_LIST_SCHEMA);
-    if (!isScriptSuccess(result)) return [];
+    if (!isScriptSuccess(result)) {
+      warnings.push('dedupe unavailable: incomplete-tasks read failed');
+      return [];
+    }
     return this.unwrapList(result.data, ['tasks', 'items'])
       .map((t) => {
         const rec = t as { name?: unknown; project?: unknown };
