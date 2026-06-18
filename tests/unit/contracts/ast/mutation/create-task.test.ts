@@ -24,6 +24,7 @@ const FULL_FIELD_DATA: TaskCreateData = {
   deferDate: '2026-06-10 08:00',
   plannedDate: '2026-06-11 12:00',
   flagged: true,
+  sequential: true,
   estimatedMinutes: 30,
   repetitionRule: { frequency: 'weekly', interval: 1 },
 };
@@ -183,6 +184,7 @@ describe('buildCreateTaskProgram', () => {
       'constructTask', // name + container
       'setProp', // note
       'setProp', // flagged
+      'setProp', // sequential (OMN-198)
       'setProp', // dueDate
       'setProp', // deferDate
       'setProp', // plannedDate
@@ -195,12 +197,27 @@ describe('buildCreateTaskProgram', () => {
     expect(props).toEqual([
       'note',
       'flagged',
+      'sequential',
       'dueDate',
       'deferDate',
       'plannedDate',
       'estimatedMinutes',
       'repetitionRule',
     ]);
+  });
+
+  // OMN-198: sequential lowers to a setProp on CREATE (was silently dropped — the
+  // field reached the tool bridge but TaskCreateData/lowerTaskCreate never emitted it).
+  it('sequential lowers to a setProp on create', () => {
+    const p = buildCreateTaskProgram({ name: 'Group', sequential: true });
+    const seq = p.statements.find((s) => s.type === 'setProp' && (s as any).prop === 'sequential') as any;
+    expect(seq).toBeDefined();
+    expect(emitProgram(p)).toContain('sequential = true');
+  });
+
+  it('omits the sequential setProp when not provided', () => {
+    const p = buildCreateTaskProgram({ name: 'Leaf' });
+    expect(p.statements.some((s) => s.type === 'setProp' && (s as any).prop === 'sequential')).toBe(false);
   });
 });
 

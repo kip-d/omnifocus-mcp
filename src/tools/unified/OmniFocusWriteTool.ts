@@ -226,7 +226,7 @@ SAFETY:
       estimatedMinutes: { type: 'number', description: 'minutes (not "estimate")' },
       repetitionRule: { type: 'object' },
       folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
-      sequential: { type: 'boolean', description: 'project-only' },
+      sequential: { type: 'boolean', description: 'projects + task action groups' },
       status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
       reviewInterval: { description: 'project-only: days or {steps,unit}' },
     };

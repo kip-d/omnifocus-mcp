@@ -300,6 +300,7 @@ export function lowerTaskCreate(
     deferDate: true,
     plannedDate: true,
     flagged: true,
+    sequential: true,
     estimatedMinutes: true,
     repetitionRule: true,
   };
@@ -345,6 +346,13 @@ export function lowerTaskCreate(
 
   statements.push(setProp(ref(names.taskVar), 'note', json(data.note || '')));
   statements.push(setProp(ref(names.taskVar), 'flagged', json(data.flagged || false)));
+
+  // OMN-198: action-group ordering. Only emitted when provided (no-op on leaf tasks
+  // in OmniFocus, so a childless create with sequential:true is harmless). Matches
+  // the update path (lowerUpdateScalars) and project-create's sequential setter.
+  if (data.sequential !== undefined) {
+    statements.push(setProp(ref(names.taskVar), 'sequential', json(data.sequential)));
+  }
 
   for (const field of ['dueDate', 'deferDate', 'plannedDate'] as const) {
     const value = data[field];
