@@ -30,6 +30,9 @@ import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
  * Every wrapper: distinct op-key (proven via the op-specific envelope action in
  * the recovered inner program), the JXA launcher shape, and the { operation,
  * target } return. `data` uses the success path; nest REQUIRES a parent.
+ *
+ * `name` is the `describe.each('$name')` block label (untyped interpolation) —
+ * keep it in sync with `run` if a builder is renamed.
  */
 const WRAPPERS = [
   {
@@ -120,9 +123,11 @@ describe('tag-lifecycle wrapper branches', () => {
     const inner = recoverInnerProgram(result.script);
     expect(inner).toContain('action: "unparented"');
     // Backs the "moves to root, no parent resolution" claim: the root-move op
-    // is emitted and no parent is ever resolved (no _parent binding).
+    // is emitted and no parent binding is ever resolved. Asserts the absence of
+    // the binding (`const _parent`), not the bare token, so a future error
+    // message that happened to mention "_parent" can't false-fail this.
     expect(inner).toContain('moveTags([_tag], tags.ending)');
-    expect(inner).not.toContain('_parent');
+    expect(inner).not.toContain('const _parent');
   });
 
   it('create with a parent walks the find-or-create path', async () => {
