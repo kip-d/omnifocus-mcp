@@ -204,6 +204,7 @@ export default [
       '*.mjs',
       '*.cjs',
       'vitest.config.ts', // Not in any tsconfig project
+      'vitest.stryker.config.ts', // Stryker runner config — not in any tsconfig project
       'tests/**/*.js', // Except test files that are specifically JS
     ],
   },
