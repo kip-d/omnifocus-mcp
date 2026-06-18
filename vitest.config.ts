@@ -42,7 +42,11 @@ export default defineConfig({
     // OmniFocus tests MUST run sequentially to prevent resource contention
     // Multiple concurrent osascript processes cause timeouts and failures
     ...(useSafeMode ? { pool: 'forks' as const, poolOptions: { forks: { singleFork: true } } } : {}),
-    exclude: ['.claude/worktrees/**'],
+    // .stryker-tmp holds Stryker's sandbox COPIES of the project (incl. mutated
+    // sources + duplicated tests). A killed mutation run can orphan one; without
+    // this exclude `vitest tests/unit` recurses into it, double-counting tests
+    // and surfacing injected mutations as spurious failures.
+    exclude: ['.claude/worktrees/**', '.stryker-tmp/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],

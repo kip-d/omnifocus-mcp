@@ -30,7 +30,7 @@
     "test:real-llm": "ENABLE_REAL_LLM_TESTS=true vitest tests/integration/real-llm-integration.test.ts --run",
     "test:performance": "vitest tests/performance --run",
     "test:mutation": "stryker run",
-    "test:mutation:tags": "stryker run --mutate 'src/contracts/ast/tag-script-builder.ts' --mutate 'src/contracts/ast/tag-mutation-script-builder.ts'",
+    "test:mutation:tags": "stryker run --mutate 'src/contracts/ast/tag*.ts'",
     "test:coverage": "vitest tests/unit --coverage --run",
     "test:all": "npm run test:unit && npm run test:integration",
     "test:quick:safe": "VITEST_SAFE=1 vitest tests/unit --run --reporter=verbose",
