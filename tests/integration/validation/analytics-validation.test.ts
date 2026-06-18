@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { runScopedTag } from '../helpers/run-id.js';
-import { expectOk } from '../helpers/expect-ok.js';
+import { expectOk, expectOkData } from '../helpers/expect-ok.js';
 
 describe('Analytics Validation - Actual Calculations', () => {
   let client: MCPTestClient;
@@ -111,28 +111,29 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
-      // ✅ Validate calculation is reasonable
-      expectOk(result, 'productivity_stats');
-      expect(result.data).toBeDefined();
+      // ✅ Validate calculation is reasonable — expectOkData asserts success AND
+      // returns the narrowed payload, replacing the two-step expectOk+toBeDefined
+      // that gave no TS narrowing on .data (OMN-188).
+      const statsData = expectOkData(result, 'productivity_stats');
 
       // Can't validate exact counts (other tasks may exist) but validate structure
-      expect(result.data.stats).toBeDefined();
-      expect(result.data.stats.overview).toBeDefined();
-      expect(typeof result.data.stats.overview.totalTasks).toBe('number');
-      expect(typeof result.data.stats.overview.completedTasks).toBe('number');
-      expect(typeof result.data.stats.overview.completionRate).toBe('number');
+      expect(statsData.stats).toBeDefined();
+      expect(statsData.stats.overview).toBeDefined();
+      expect(typeof statsData.stats.overview.totalTasks).toBe('number');
+      expect(typeof statsData.stats.overview.completedTasks).toBe('number');
+      expect(typeof statsData.stats.overview.completionRate).toBe('number');
 
       // Validate completionRate is a valid percentage (0-100 format)
-      expect(result.data.stats.overview.completionRate).toBeGreaterThanOrEqual(0);
-      expect(result.data.stats.overview.completionRate).toBeLessThanOrEqual(100);
+      expect(statsData.stats.overview.completionRate).toBeGreaterThanOrEqual(0);
+      expect(statsData.stats.overview.completionRate).toBeLessThanOrEqual(100);
 
       // Validate healthScore is calculated
-      expect(typeof result.data.healthScore).toBe('number');
-      expect(result.data.healthScore).toBeGreaterThanOrEqual(0);
-      expect(result.data.healthScore).toBeLessThanOrEqual(100);
+      expect(typeof statsData.healthScore).toBe('number');
+      expect(statsData.healthScore).toBeGreaterThanOrEqual(0);
+      expect(statsData.healthScore).toBeLessThanOrEqual(100);
 
       // Also validate non-zero stats (regression test for bug where all stats were 0)
-      expect(result.data.stats.overview.totalTasks).toBeGreaterThan(0);
+      expect(statsData.stats.overview.totalTasks).toBeGreaterThan(0);
     }, 150000); // 150s timeout: 5 creates + 3 completes + 1 query + 1 analytics = 10+ operations
   });
 
@@ -174,15 +175,15 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
-      // ✅ Validate analysis structure
-      expectOk(result, 'overdue_analysis');
-      expect(result.data).toBeDefined();
-      expect(result.data.stats).toBeDefined();
-      expect(result.data.stats.summary).toBeDefined();
+      // ✅ Validate analysis structure — expectOkData asserts success AND returns
+      // the narrowed payload (OMN-188).
+      const overdueData = expectOkData(result, 'overdue_analysis');
+      expect(overdueData.stats).toBeDefined();
+      expect(overdueData.stats.summary).toBeDefined();
 
       // Validate summary contains required fields
-      expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
-      expect(typeof result.data.stats.summary.overduePercentage).toBe('number');
+      expect(typeof overdueData.stats.summary.totalOverdue).toBe('number');
+      expect(typeof overdueData.stats.summary.overduePercentage).toBe('number');
       // OMN-184: we seeded a 7-days-overdue task and expectOk above proves the
       // create succeeded. A successful create invalidates the analytics cache
       // (omnifocus_write create → CacheManager.invalidateForTaskChange, which
@@ -191,7 +192,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       // the world that now contains our seed. The old `>= 0` accepted the empty
       // world a silent seed failure would have produced — the vacuous pass;
       // `>= 1` genuinely verifies the seeded task is counted.
-      expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(1);
+      expect(overdueData.stats.summary.totalOverdue).toBeGreaterThanOrEqual(1);
 
       // OMN-187: these were always-0/empty before the read-path fix — the tool
       // read v3 field names the script never emitted. With ≥1 real overdue task
@@ -199,10 +200,10 @@ describe('Analytics Validation - Actual Calculations', () => {
       // `if (overdueTasks.length > 0)` guard was dead code (the list was always
       // empty), so the per-task structure assertions never ran — the exact
       // "passes but validates nothing" class this file exists to catch.
-      expect(result.data.stats.summary.overduePercentage).toBeGreaterThan(0);
-      expect(result.data.stats.summary.averageDaysOverdue).toBeGreaterThan(0);
+      expect(overdueData.stats.summary.overduePercentage).toBeGreaterThan(0);
+      expect(overdueData.stats.summary.averageDaysOverdue).toBeGreaterThan(0);
 
-      const overdueTasks = result.data.stats.overdueTasks;
+      const overdueTasks = overdueData.stats.overdueTasks;
       expect(Array.isArray(overdueTasks)).toBe(true);
       expect(overdueTasks.length).toBeGreaterThanOrEqual(1);
 
@@ -245,16 +246,16 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
-      // ✅ Validate velocity structure
-      expectOk(velocityResult, 'task_velocity');
-      expect(velocityResult.data).toBeDefined();
-      expect(velocityResult.data.velocity).toBeDefined();
+      // ✅ Validate velocity structure — expectOkData asserts success AND returns
+      // the narrowed payload (OMN-188).
+      const velData = expectOkData(velocityResult, 'task_velocity');
+      expect(velData.velocity).toBeDefined();
 
       // Validate velocity contains required metrics
-      expect(typeof velocityResult.data.velocity.tasksCompleted).toBe('number');
-      expect(typeof velocityResult.data.velocity.averagePerDay).toBe('number');
-      expect(velocityResult.data.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
-      expect(velocityResult.data.velocity.averagePerDay).toBeGreaterThanOrEqual(0);
+      expect(typeof velData.velocity.tasksCompleted).toBe('number');
+      expect(typeof velData.velocity.averagePerDay).toBe('number');
+      expect(velData.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
+      expect(velData.velocity.averagePerDay).toBeGreaterThanOrEqual(0);
     }, 120000);
   });
 
@@ -280,23 +281,15 @@ describe('Analytics Validation - Actual Calculations', () => {
         },
       });
 
-      // OMN-140: assert tool success BEFORE touching nested data so a failed
-      // call surfaces its real error (expectOk reports result.error) instead of
-      // crashing with "Cannot read properties of undefined (reading 'stats')".
-      expectOk(productivityResult, 'cross-tool productivity_stats');
-      expectOk(velocityResult, 'cross-tool task_velocity');
-
-      // OMN-184: mirror the `.data` guard the other three blocks already have,
-      // so a success-but-empty envelope fails here rather than at the nested
-      // `.data.stats` / `.data.velocity` access. Normalizes the pattern by
-      // adding the assertion, not by dropping it elsewhere — diagnostic-rich
-      // failures are the cluster's intent (OMN-56/140).
-      expect(productivityResult.data).toBeDefined();
-      expect(velocityResult.data).toBeDefined();
+      // OMN-140/188: expectOkData is diagnostic-rich (OMN-56/140 intent) AND
+      // returns the narrowed payload, replacing the two-step expectOk+toBeDefined
+      // that gave no TS narrowing on .data.
+      const prodData = expectOkData(productivityResult, 'cross-tool productivity_stats');
+      const crossVelData = expectOkData(velocityResult, 'cross-tool task_velocity');
 
       // ✅ Both should report > 0 tasks (our test tasks + possibly others)
-      expect(productivityResult.data.stats.overview.totalTasks).toBeGreaterThan(0);
-      expect(velocityResult.data.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
+      expect(prodData.stats.overview.totalTasks).toBeGreaterThan(0);
+      expect(crossVelData.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
     }, 90000);
   });
 });
