@@ -510,7 +510,7 @@ const ThroughputIntervalSchema = z
  * Source: task-velocity-v3.ts OmniJS return JSON.stringify({ok:true, v:'3', data:{…}}).
  * All velocity fields are toFixed() → strings.
  */
-const TaskVelocityDataSchema = z
+export const TaskVelocityDataSchema = z
   .object({
     velocity: z
       .object({
@@ -555,6 +555,14 @@ const TaskVelocityDataSchema = z
 export const TASK_VELOCITY_V3_SCHEMA = v3EnvelopeSchema(TaskVelocityDataSchema);
 
 /**
+ * OMN-194: the v3 task-velocity payload's inner `data` block, inferred from
+ * `TaskVelocityDataSchema`. Consumers MUST type reads against this (not a
+ * hand-maintained parallel interface) so the compiler forbids reading a field
+ * the script never emits — the same drift class that produced the OMN-187 bug.
+ */
+export type TaskVelocityV3Data = z.infer<typeof TaskVelocityDataSchema>;
+
+/**
  * Overdue task row — emitted inside the OmniJS bridge per-task object.
  * Source: analyze-overdue-v3.ts overdueTask object.
  */
@@ -589,14 +597,15 @@ const ProjectBottleneckRowSchema = z
 /**
  * Overdue analysis data payload — emitted by ANALYZE_OVERDUE_V3 data block.
  * Source: analyze-overdue-v3.ts return JSON.stringify({ok:true, v:'3', data:{summary, insights, groupedByUrgency,
- *   projectBottlenecks, blockedTasks, metadata}}).
+ *   projectBottlenecks, metadata}}).
  *
- * summary.blockedPercentage: parseFloat(toFixed(1)) → number.
- * summary.avgDaysOverdue: parseFloat(toFixed(1)) → number.
- * summary.overduePercentage: OMN-187 — totalOverdue/totalActive*100, parseFloat(toFixed(1)) → number.
+ * summary.blockedPercentage: round1(n) → number.
+ * summary.avgDaysOverdue: round1(n) → number.
+ * summary.overduePercentage: OMN-187 — totalOverdue/totalActive*100, round1(n) → number.
  * summary.totalActive: OMN-187 — non-completed, non-dropped task count (the overduePercentage denominator).
  * groupedByUrgency: fixed keys (critical/high/medium/low) all always emitted → NOT z.record.
  * metadata.note is present in the outer emitter.
+ * blockedTasks: OMN-194 — dropped (was emitted but never consumed by the tool).
  */
 export const OverdueAnalysisDataSchema = z
   .object({
@@ -625,7 +634,6 @@ export const OverdueAnalysisDataSchema = z
       })
       .strict(),
     projectBottlenecks: z.array(ProjectBottleneckRowSchema),
-    blockedTasks: z.array(OverdueTaskRowSchema),
     metadata: z
       .object({
         generated_at: isoDate,
@@ -680,7 +688,7 @@ const WorkflowRecommendationSchema = z
  *
  * metadata.note: present from the outer spread. metadata.focusAreas: string[] (from options).
  */
-const WorkflowAnalysisDataSchema = z
+export const WorkflowAnalysisDataSchema = z
   .object({
     insights: z.array(WorkflowInsightSchema),
     patterns: z
@@ -713,6 +721,14 @@ const WorkflowAnalysisDataSchema = z
 
 /** Module-scope workflow_analysis envelope. */
 export const WORKFLOW_ANALYSIS_V3_SCHEMA = v3EnvelopeSchema(WorkflowAnalysisDataSchema);
+
+/**
+ * OMN-194: the v3 workflow-analysis payload's inner `data` block, inferred from
+ * `WorkflowAnalysisDataSchema`. Consumers MUST type reads against this (not a
+ * hand-maintained parallel interface) so the compiler forbids reading a field
+ * the script never emits — the same drift class that produced the OMN-187 bug.
+ */
+export type WorkflowAnalysisV3Data = z.infer<typeof WorkflowAnalysisDataSchema>;
 
 /**
  * AST envelope (tags, recurring): {ok: true, v: 'ast', <items key>, summary?, metadata?}.

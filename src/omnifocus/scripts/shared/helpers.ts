@@ -164,7 +164,28 @@ export const SAFE_UTILITIES = `
       return 'active';
     }
   }
+
+  function round1(n) { return parseFloat(n.toFixed(1)); }
 `;
+
+/**
+ * Injectable JS snippet for self-contained OmniJS scripts that do not include
+ * SAFE_UTILITIES. Inject at the top of the inner OmniJS block via a TypeScript
+ * template-literal interpolation: `...${ROUND1_HELPER}...`
+ *
+ * Defines `round1(n)` — rounds a float to 1 decimal place and returns a number
+ * (parseFloat(n.toFixed(1))). This is the same body as `round1` in SAFE_UTILITIES.
+ * Having a single definition here means a precision-convention change is one edit.
+ */
+export const ROUND1_HELPER = 'function round1(n) { return parseFloat(n.toFixed(1)); }';
+
+/**
+ * TypeScript equivalent of the `round1` script helper — use in tool-side (non-script)
+ * code wherever parseFloat(x.toFixed(1)) appears.
+ */
+export function round1(n: number): number {
+  return parseFloat(n.toFixed(1));
+}
 
 /**
  * Helper to extract project validation

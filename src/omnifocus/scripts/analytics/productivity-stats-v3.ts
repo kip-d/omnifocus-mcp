@@ -18,8 +18,11 @@
  * Pattern based on: task-velocity.ts, list-tags.ts
  */
 
+import { ROUND1_HELPER } from '../shared/helpers.js';
+
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
+    ${ROUND1_HELPER}
     const app = Application('OmniFocus');
     const options = {{options}};
 
@@ -230,7 +233,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
         (counts.totalCompleted / counts.totalTasks).toFixed(4) : '0.0000';
 
       const daysInPeriod = Math.ceil((nowTime - periodStartTime) / (1000 * 60 * 60 * 24));
-      const dailyAverage = (counts.completedInPeriod / daysInPeriod).toFixed(1);
+      const dailyAverage = round1(counts.completedInPeriod / daysInPeriod);
 
       // Generate insights
       const insights = [];
@@ -270,7 +273,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             completedInPeriod: counts.completedInPeriod,
             availableTasks: counts.totalAvailable,
             completionRate: parseFloat(completionRate),
-            dailyAverage: parseFloat(dailyAverage),
+            dailyAverage: dailyAverage,
             daysInPeriod: daysInPeriod,
             overdueCount: counts.overdueCount || 0
           },

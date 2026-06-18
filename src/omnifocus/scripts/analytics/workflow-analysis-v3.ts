@@ -24,6 +24,8 @@
  * - Accurate project counts using OmniFocus API
  */
 
+import { ROUND1_HELPER } from '../shared/helpers.js';
+
 export const WORKFLOW_ANALYSIS_V3 = `
   (() => {
     const app = Application('OmniFocus');
@@ -45,6 +47,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
       // Build comprehensive OmniJS script for ALL workflow analysis in one bridge call
       const analysisScript = \`
         (() => {
+          ${ROUND1_HELPER}
           const nowTime = \${nowTime};
           const analysisDepth = "\${analysisDepth}";
           const focusAreas = \${JSON.stringify(focusAreas)};
@@ -379,17 +382,17 @@ export const WORKFLOW_ANALYSIS_V3 = `
             let availableRate;
             if (stats.omniFocusAvailable > 0 && stats.omniFocusTotal > 0) {
               // Use OmniFocus's accurate count - this fixes the "Pending Purchase Orders" issue
-              availableRate = (stats.omniFocusAvailable / stats.omniFocusTotal * 100).toFixed(1);
+              availableRate = round1(stats.omniFocusAvailable / stats.omniFocusTotal * 100);
             } else {
               // Fall back to our manual calculation for projects without OmniFocus counts
-              availableRate = stats.total > 0 ? (stats.available / stats.total * 100).toFixed(1) : 0;
+              availableRate = stats.total > 0 ? round1(stats.available / stats.total * 100) : 0;
             }
 
-            const overdueRate = stats.total > 0 ? (stats.overdue / stats.total * 100).toFixed(1) : 0;
+            const overdueRate = stats.total > 0 ? round1(stats.overdue / stats.total * 100) : 0;
 
             stats.avgAge = avgAge;
-            stats.availableRate = parseFloat(availableRate);
-            stats.overdueRate = parseFloat(overdueRate);
+            stats.availableRate = availableRate;
+            stats.overdueRate = overdueRate;
 
             // Project workflow health scoring - focus on system efficiency
             let healthScore = 100;
@@ -421,13 +424,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
             stats.healthScore = Math.max(0, healthScore);
 
             // Calculate momentum (how much forward progress is possible)
-            const momentumScore = Math.max(0, 100 - (parseFloat(overdueRate) * 0.5) - (parseFloat(availableRate) * 0.3));
+            const momentumScore = Math.max(0, 100 - (overdueRate * 0.5) - (availableRate * 0.3));
             stats.momentumScore = momentumScore;
           });
 
           // PHASE 5: Generate insights based on focus areas
           if (focusAreas.includes('productivity')) {
-            const availableRate = totalTasks > 0 ? (availableTasks / totalTasks * 100).toFixed(1) : 0;
+            const availableRate = totalTasks > 0 ? round1(availableTasks / totalTasks * 100) : 0;
             insights.push({
               category: 'productivity',
               insight: availableRate + '% of tasks are ready to work on (' + availableTasks + ' of ' + totalTasks + ' tasks)',
@@ -444,9 +447,9 @@ export const WORKFLOW_ANALYSIS_V3 = `
             }
 
             if (totalDeferredTasks > 0) {
-              const deferredRate = totalTasks > 0 ? (totalDeferredTasks / totalTasks * 100).toFixed(1) : 0;
-              const strategicRate = totalTasks > 0 ? (strategicDeferrals / totalTasks * 100).toFixed(1) : 0;
-              const problematicRate = totalTasks > 0 ? (problematicDeferrals / totalTasks * 100).toFixed(1) : 0;
+              const deferredRate = totalTasks > 0 ? round1(totalDeferredTasks / totalTasks * 100) : 0;
+              const strategicRate = totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0;
+              const problematicRate = totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0;
 
               insights.push({
                 category: 'productivity',
@@ -785,14 +788,14 @@ export const WORKFLOW_ANALYSIS_V3 = `
           };
 
           patterns.workflowMetrics = {
-            availablePercentage: totalTasks > 0 ? (availableTasks / totalTasks * 100).toFixed(1) : 0,
-            overduePercentage: totalTasks > 0 ? (overdueTasks / totalTasks * 100).toFixed(1) : 0,
-            flaggedPercentage: totalTasks > 0 ? (flaggedTasks / totalTasks * 100).toFixed(1) : 0,
-            blockedPercentage: totalTasks > 0 ? (blockedTasks / totalTasks * 100).toFixed(1) : 0,
-            deferredPercentage: totalTasks > 0 ? (totalDeferredTasks / totalTasks * 100).toFixed(1) : 0,
-            strategicDeferredPercentage: totalTasks > 0 ? (strategicDeferrals / totalTasks * 100).toFixed(1) : 0,
-            problematicDeferredPercentage: totalTasks > 0 ? (problematicDeferrals / totalTasks * 100).toFixed(1) : 0,
-            inboxPercentage: totalTasks > 0 ? (totalInboxTasks / totalTasks * 100).toFixed(1) : 0
+            availablePercentage: totalTasks > 0 ? round1(availableTasks / totalTasks * 100) : 0,
+            overduePercentage: totalTasks > 0 ? round1(overdueTasks / totalTasks * 100) : 0,
+            flaggedPercentage: totalTasks > 0 ? round1(flaggedTasks / totalTasks * 100) : 0,
+            blockedPercentage: totalTasks > 0 ? round1(blockedTasks / totalTasks * 100) : 0,
+            deferredPercentage: totalTasks > 0 ? round1(totalDeferredTasks / totalTasks * 100) : 0,
+            strategicDeferredPercentage: totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0,
+            problematicDeferredPercentage: totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0,
+            inboxPercentage: totalTasks > 0 ? round1(totalInboxTasks / totalTasks * 100) : 0
           };
 
           // Add deferral pattern analysis
@@ -800,8 +803,8 @@ export const WORKFLOW_ANALYSIS_V3 = `
             totalDeferred: totalDeferredTasks,
             strategicDeferrals: strategicDeferrals,
             problematicDeferrals: problematicDeferrals,
-            strategicRate: totalTasks > 0 ? (strategicDeferrals / totalTasks * 100).toFixed(1) : 0,
-            problematicRate: totalTasks > 0 ? (problematicDeferrals / totalTasks * 100).toFixed(1) : 0,
+            strategicRate: totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0,
+            problematicRate: totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0,
             deferralDetails: deferredTaskDetails.slice(0, 10) // Top 10 for analysis
           };
 

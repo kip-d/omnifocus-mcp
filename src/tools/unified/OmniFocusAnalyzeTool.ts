@@ -61,9 +61,13 @@ import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
 // Response types
 import type { ReviewListData } from '../../omnifocus/script-response-types.js';
-// OMN-187: read the overdue payload against the schema-inferred type so the
-// compiler forbids reading a field the v3 script never emits.
-import type { OverdueAnalysisV3Data } from '../../omnifocus/script-response-schemas.js';
+// OMN-187/194: read analytics payloads against schema-inferred types so the
+// compiler forbids reading a field the v3 scripts never emit.
+import type {
+  OverdueAnalysisV3Data,
+  TaskVelocityV3Data,
+  WorkflowAnalysisV3Data,
+} from '../../omnifocus/script-response-schemas.js';
 import type { OverdueAnalysisDataV2, RecurringTaskV2 } from '../response-types-v2.js';
 import type { ProjectId } from '../../utils/branded-types.js';
 
@@ -97,38 +101,6 @@ function classifyAnalyticsError(errorMessage: string): { errorCode: string; sugg
     return { errorCode: 'NO_DATA', suggestion: 'Add some tasks to OmniFocus before running productivity analysis' };
   }
   return { errorCode: 'STATS_ERROR', suggestion: 'Ensure OmniFocus is running and has data to analyze' };
-}
-
-// V3 script response structure for task velocity
-interface TaskVelocityV3Data {
-  velocity: {
-    period: string;
-    averageCompleted: string;
-    averageCreated: string;
-    dailyVelocity: string;
-    backlogGrowthRate: string;
-  };
-  throughput: {
-    intervals: Array<{
-      start: Date;
-      end: Date;
-      created: number;
-      completed: number;
-      label: string;
-    }>;
-    totalCompleted: number;
-    totalCreated: number;
-  };
-  breakdown: {
-    medianCompletionHours: string;
-    tasksAnalyzed: number;
-  };
-  projections: {
-    tasksPerDay: string;
-    tasksPerWeek: string;
-    tasksPerMonth: string;
-  };
-  optimization: string;
 }
 
 // Pattern analysis types
@@ -725,9 +697,8 @@ SCOPE FILTERING:
         );
       }
 
-      // V3 envelope unwrapping
-      const rawData = isScriptSuccess(result) ? result.data : null;
-      const scriptData = (rawData as { data?: TaskVelocityV3Data } | null)?.data ?? null;
+      // OMN-194: typed unwrap — execJson validates the full envelope; .data is the payload.
+      const scriptData: TaskVelocityV3Data | null = isScriptSuccess(result) ? result.data.data : null;
 
       const tasksCompleted = scriptData?.throughput?.totalCompleted || 0;
       const averagePerDay = parseFloat(scriptData?.velocity?.dailyVelocity || '0');
@@ -1981,54 +1952,19 @@ SCOPE FILTERING:
         );
       }
 
-      // V3 envelope unwrapping
-      const envelope = result.data as unknown;
-      let scriptData: unknown = envelope;
+      // OMN-194: typed unwrap — execJson validates the full envelope; .data is the payload.
+      const v3Data: WorkflowAnalysisV3Data | null = isScriptSuccess(result) ? result.data.data : null;
 
-      if (envelope && typeof envelope === 'object' && 'ok' in envelope && 'v' in envelope && envelope.v === '3') {
-        const v3Envelope = envelope as { ok: boolean; v: string; data?: unknown };
-        if (v3Envelope.ok && v3Envelope.data) {
-          scriptData = v3Envelope.data;
-          wfLogger.debug('Unwrapped v3 envelope');
-        }
-      }
-
-      if (!scriptData || typeof scriptData !== 'object') {
+      if (!v3Data) {
         return createErrorResponseV2(
           'workflow_analysis',
           'NO_DATA',
           'No workflow analysis data returned from OmniFocus',
           'Ensure OmniFocus has tasks and projects to analyze',
-          { scriptData },
+          { scriptData: null },
           timer.toMetadata(),
         );
       }
-
-      interface WorkflowV3Data {
-        insights: Array<{ category: string; insight: string; priority: string }>;
-        patterns: {
-          workloadDistribution?: unknown;
-          workflowMetrics?: unknown;
-          deferralAnalysis?: unknown;
-        };
-        recommendations: Array<{ category: string; recommendation: string; priority: string }>;
-        data?: unknown;
-        totalTasks: number;
-        totalProjects: number;
-        analysisTime: number;
-        dataPoints: number;
-        metadata: {
-          analysisDepth: string;
-          focusAreas: string[];
-          maxInsights: number;
-          method?: string;
-          optimization?: string;
-          query_time_ms?: number;
-          note?: string;
-        };
-      }
-
-      const v3Data = scriptData as WorkflowV3Data;
 
       const responseData = {
         analysis: {

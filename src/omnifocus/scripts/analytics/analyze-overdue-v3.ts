@@ -21,6 +21,8 @@
  * - Pattern insights and recommendations
  */
 
+import { ROUND1_HELPER } from '../shared/helpers.js';
+
 export const ANALYZE_OVERDUE_V3 = `
   (() => {
     const app = Application('OmniFocus');
@@ -41,6 +43,7 @@ export const ANALYZE_OVERDUE_V3 = `
       // Build comprehensive OmniJS script for ALL overdue analysis in one bridge call
       const analysisScript = \`
         (() => {
+          ${ROUND1_HELPER}
           const nowTime = \${nowTime};
           const maxTasks = \${maxTasks};
           const includeRecentlyCompleted = \${includeRecentlyCompleted};
@@ -48,7 +51,6 @@ export const ANALYZE_OVERDUE_V3 = `
 
           const now = new Date(nowTime);
           const overdueTasks = [];
-          const blockedOverdue = [];
           const projectBottlenecks = {};
           const tagBottlenecks = {};
 
@@ -144,8 +146,6 @@ export const ANALYZE_OVERDUE_V3 = `
 
               // Track blocked overdue tasks
               if (isBlocked) {
-                blockedOverdue.push(overdueTask);
-
                 // Track project bottlenecks
                 if (projectName !== 'Inbox') {
                   if (!projectBottlenecks[projectName]) {
@@ -206,15 +206,15 @@ export const ANALYZE_OVERDUE_V3 = `
           const blockedCount = blockedOverdueCount;
           const unblockedCount = totalOverdue - blockedCount;
           const blockedPercentage = totalOverdue > 0 ?
-            (blockedCount / totalOverdue * 100).toFixed(1) : '0.0';
+            round1(blockedCount / totalOverdue * 100) : 0;
 
           const avgDaysOverdue = totalOverdue > 0 ?
-            (totalDaysOverdueAll / totalOverdue).toFixed(1) : '0.0';
+            round1(totalDaysOverdueAll / totalOverdue) : 0;
 
           // OMN-187: share of active tasks that are overdue (numerator ⊆ denominator,
           // both full-population → always 0–100%).
           const overduePercentage = totalActive > 0 ?
-            (totalOverdue / totalActive * 100).toFixed(1) : '0.0';
+            round1(totalOverdue / totalActive * 100) : 0;
 
           // Find most problematic projects
           const projectList = [];
@@ -239,15 +239,15 @@ export const ANALYZE_OVERDUE_V3 = `
           } else {
             insights.push(totalOverdue + " overdue tasks found");
 
-            if (parseFloat(blockedPercentage) > 50) {
+            if (blockedPercentage > 50) {
               insights.push("High blockage rate (" + blockedPercentage + "%) - review dependencies");
-            } else if (parseFloat(blockedPercentage) > 25) {
+            } else if (blockedPercentage > 25) {
               insights.push("Moderate blockage (" + blockedPercentage + "%) - some tasks waiting on others");
             }
 
-            if (parseFloat(avgDaysOverdue) > 30) {
+            if (avgDaysOverdue > 30) {
               insights.push("Tasks significantly overdue (avg " + avgDaysOverdue + " days)");
-            } else if (parseFloat(avgDaysOverdue) > 7) {
+            } else if (avgDaysOverdue > 7) {
               insights.push("Tasks moderately overdue (avg " + avgDaysOverdue + " days)");
             }
 
@@ -282,15 +282,14 @@ export const ANALYZE_OVERDUE_V3 = `
             totalActive: totalActive,
             blockedCount: blockedCount,
             unblockedCount: unblockedCount,
-            blockedPercentage: parseFloat(blockedPercentage),
-            avgDaysOverdue: parseFloat(avgDaysOverdue),
-            overduePercentage: parseFloat(overduePercentage),
+            blockedPercentage: blockedPercentage,
+            avgDaysOverdue: avgDaysOverdue,
+            overduePercentage: overduePercentage,
             oldestOverdueDate: oldestDueISO,
             mostOverdue: overdueTasks[0] || null,
             insights: insights,
             groupedByUrgency: groupedByUrgency,
             projectBottlenecks: projectList.slice(0, 5),
-            blockedTasks: blockedOverdue.slice(0, 10),
             tasksAnalyzed: tasksProcessed
           });
         })()
@@ -321,7 +320,6 @@ export const ANALYZE_OVERDUE_V3 = `
           insights: analysis.insights,
           groupedByUrgency: analysis.groupedByUrgency,
           projectBottlenecks: analysis.projectBottlenecks,
-          blockedTasks: analysis.blockedTasks,
           metadata: {
             generated_at: new Date().toISOString(),
             method: 'omnijs_v3_single_bridge',

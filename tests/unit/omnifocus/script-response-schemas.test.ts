@@ -2481,7 +2481,6 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
       projectBottlenecks: [
         { name: 'Work', overdueCount: 1, blockedCount: 0, avgDaysOverdue: '11.0', blockageRate: '0.0' },
       ],
-      blockedTasks: [],
       metadata: {
         generated_at: '2026-06-12T10:00:00.000Z',
         method: 'omnijs_v3_single_bridge',
@@ -2518,7 +2517,6 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
         insights: ['No overdue tasks found - excellent!'],
         groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
         projectBottlenecks: [],
-        blockedTasks: [],
       },
     });
     expect(result.error?.issues ?? []).toEqual([]);
