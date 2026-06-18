@@ -49,3 +49,8 @@ logs/
 
 # Timing baseline data (machine-specific)
 docs/dev/integration-test-timing-baseline.json
+
+# Stryker mutation testing artifacts
+reports/mutation/
+.stryker-tmp/
+stryker.log
