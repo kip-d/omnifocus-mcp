@@ -658,4 +658,66 @@ describe('ReadSchema', () => {
       expect(ReadSchema.safeParse({ query: { type: 'projects', mode: 'forecast_past' } }).success).toBe(false);
     });
   });
+
+  // OMN-150: schema-level regex validation for { matches } patterns.
+  // An invalid regex is an input-validation problem, not a runtime OF error.
+  // TextFilterSchema.matches should reject at the schema boundary with a message
+  // naming the pattern and the regex error — before the script reaches OmniFocus.
+  describe('regex validation for { matches } (OMN-150)', () => {
+    it('rejects an invalid regex on filters.text with a message naming the pattern', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { text: { matches: '(unclosed' } } },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toContain('(unclosed');
+      }
+    });
+
+    it('rejects an invalid regex on filters.name with a message naming the pattern', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { name: { matches: '[bad' } } },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        expect(msg).toContain('[bad');
+      }
+    });
+
+    it('accepts a valid regex pattern on filters.text', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { text: { matches: '\\d{4}-\\d{2}-\\d{2}' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a plain string (valid as a regex literal) on filters.text', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { text: { matches: 'quarterly review' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a valid regex on filters.name', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'projects', filters: { name: { matches: '^Weekly' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('error message for invalid regex names the pattern and indicates a regex error', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { text: { matches: '(unclosed' } } },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = JSON.stringify(result.error.issues);
+        // Message must name the bad pattern AND include some indication of the error
+        expect(msg).toContain('(unclosed');
+        expect(msg.toLowerCase()).toMatch(/invalid|regex|pattern/);
+      }
+    });
+  });
 });

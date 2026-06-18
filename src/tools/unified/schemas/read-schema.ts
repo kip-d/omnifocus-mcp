@@ -16,10 +16,25 @@ const DateFilterSchema = z.union([
   z.object({ between: z.tuple([z.string(), z.string()]) }).strict(),
 ]);
 
+// Validates that a string is a syntactically valid regex pattern (OMN-150).
+// Catches input errors at the schema boundary before a round-trip to OmniFocus.
+// Cross-engine note: Node validates here, JavaScriptCore executes later —
+// grammar divergence is negligible for the patterns the MCP surface receives.
+const regexPatternString = z.string().superRefine((pattern, ctx) => {
+  try {
+    new RegExp(pattern);
+  } catch (e) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Invalid regex pattern "${pattern}": ${e instanceof Error ? e.message : String(e)}`,
+    });
+  }
+});
+
 // Text filter as discriminated union - only ONE operator allowed
 const TextFilterSchema = z.union([
   z.object({ contains: z.string() }).strict(),
-  z.object({ matches: z.string() }).strict(),
+  z.object({ matches: regexPatternString }).strict(),
 ]);
 
 // Number filter as discriminated union - only ONE operator allowed
