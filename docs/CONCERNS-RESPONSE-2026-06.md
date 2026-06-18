@@ -11,6 +11,12 @@ disposition; where our verification itself was static-only, we say so and have s
 `OMN-xxx` identifiers refer to the project's private issue tracker — they are provenance, not required reading. Each row
 carries its rationale inline.
 
+> **Merge-time status note (2026-06-18).** This letter is preserved as written on 2026-06-09. In the nine days since,
+> **every** open, in-flight, filed, and "remains open" item below has shipped to `main` — see
+> [**Progress since the response date**](#progress-since-the-response-date) at the end. One correction for anyone acting
+> on this now: the "For fork maintainers" advice to avoid complex `NOT` payloads is **obsolete** — OMN-131 shipped
+> (#87), so unsupported `NOT` shapes now reject with a validation error instead of matching everything.
+
 ## Disposition legend
 
 | Disposition            | Meaning                                                                        |
@@ -118,3 +124,30 @@ week between audit and response), a quarter were already tracked, and half produ
 tracked issues, one lint rule submitted (PR #75, pending merge), and two scope additions to in-flight work. Two findings
 our own triage initially missed were recovered only because the audit enumerated them. By audit standards, that is an
 excellent hit rate, and the silent-success error-shape find alone justified the exercise.
+
+## Progress since the response date
+
+_Added 2026-06-18 on merge. The response above is unchanged from 2026-06-09; this section records what shipped in the
+interval so the dispositions are not read as current state._
+
+In the nine days between the response (2026-06-09) and this merge (2026-06-18), **every** actionable finding in the
+audit was resolved on `main`. The forward-looking dispositions above now stand as follows:
+
+| Disposition above              | Item                                                     | Now on `main`                                                                                                                               |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Filed (high priority)          | Complex `NOT` silently simplified (OMN-131)              | **Fixed** — unsupported `NOT` shapes reject with a validation error instead of matching everything (#87)                                    |
+| Filed                          | Single-query `forecast_past` mode (OMN-133)              | **Shipped** (#127) — see clarification below                                                                                                |
+| in-flight / first slice merged | Write-side AST migration (OMN-128)                       | **Complete** — all slices merged (#83); this resolves the nonce (OMN-134), JXA `plannedDate` (OMN-136), and `reviewInterval` residual folds |
+| submitted, pending merge       | ESLint ban on `.whose()` / `.where()` (OMN-132)          | **Merged** (#75)                                                                                                                            |
+| in flight                      | OmniJS-injection boundary, read side (OMN-129 / OMN-180) | **Closed** (#108, #120)                                                                                                                     |
+| Filed (sharpest find)          | `evaluateJavascript` error surface (OMN-139)             | **Shipped** — detection inverted from an error deny-list to a success allow-list, exactly as proposed (#92)                                 |
+| "one sibling gap remains open" | bulk-delete-task guard bypass (OMN-120)                  | **Closed** structurally by OMN-128 slice 5 (#82)                                                                                            |
+
+**`forecast_past` clarification.** The rows above describe a planned two-query design (due-overdue + planned-past,
+merged by ID, blocked excluded). What shipped is simpler: a single OR query over `plannedDate` — the OmniFocus Forecast
+"Past" union. A `dueDate`-overdue task buckets under "Today" in the Forecast UI, so the shipped union is intentionally
+broader than the literal Past section; query `plannedDate: { before: now }` for strict parity.
+
+Net: of the audit's actionable findings, all are now resolved on `main`, and the "For fork maintainers" `NOT` workaround
+above is no longer needed. The audit's value stands exactly as scored — this section only updates _status_, not the
+assessment.
