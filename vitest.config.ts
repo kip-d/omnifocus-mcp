@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 // Detect if running only unit tests (explicit path or TEST_UNIT_ONLY env var)
 const isUnitTestOnly = process.argv.some((arg) => arg.includes('tests/unit')) || process.env.TEST_UNIT_ONLY === '1';
@@ -42,11 +42,15 @@ export default defineConfig({
     // OmniFocus tests MUST run sequentially to prevent resource contention
     // Multiple concurrent osascript processes cause timeouts and failures
     ...(useSafeMode ? { pool: 'forks' as const, poolOptions: { forks: { singleFork: true } } } : {}),
-    // .stryker-tmp holds Stryker's sandbox COPIES of the project (incl. mutated
-    // sources + duplicated tests). A killed mutation run can orphan one; without
-    // this exclude `vitest tests/unit` recurses into it, double-counting tests
-    // and surfacing injected mutations as spurious failures.
-    exclude: ['.claude/worktrees/**', '.stryker-tmp/**'],
+    // Spread configDefaults.exclude FIRST: vitest replaces (not merges) its
+    // default exclude when `exclude` is set, so omitting it silently drops
+    // node_modules/**, dist/**, **.config.* etc. CLI positionals (`vitest
+    // tests/unit`) are path FILTERS, not dir roots, so a project COPY whose
+    // path contains `tests/unit` would otherwise be matched and run.
+    // .stryker-tmp holds Stryker's sandbox copies (mutated sources + duplicated
+    // tests); a killed mutation run can orphan one. .claude/worktrees holds
+    // worktree copies. Both must be excluded for the same reason.
+    exclude: [...configDefaults.exclude, '.claude/worktrees/**', '.stryker-tmp/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],

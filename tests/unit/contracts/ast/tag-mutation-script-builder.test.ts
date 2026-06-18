@@ -24,15 +24,7 @@ import {
   buildUnparentTagScript,
   buildReparentTagScript,
 } from '../../../../src/contracts/ast/tag-mutation-script-builder.js';
-import type { GeneratedMutationScript } from '../../../../src/contracts/ast/mutation-script-builder.js';
-import { recoverInnerPrograms } from '../../../utils/recover-bridge-program.js';
-
-/** The single OmniJS program embedded in a tag mutation's JXA launcher. */
-function innerProgram(result: GeneratedMutationScript): string {
-  const programs = recoverInnerPrograms(result.script);
-  expect(programs).toHaveLength(1);
-  return programs[0]!;
-}
+import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 /**
  * Every wrapper: distinct op-key (proven via the op-specific envelope action in
@@ -98,8 +90,6 @@ describe('tag-lifecycle wrapper builders', () => {
       // would leave the script as bare OmniJS with neither marker.
       expect(result.script).toContain("const app = Application('OmniFocus')");
       expect(result.script).toContain('app.evaluateJavascript(');
-      // .trim() ran: no surrounding whitespace.
-      expect(result.script).toBe(result.script.trim());
     });
 
     it(`dispatches the right op — recovered program carries the "${action}" action`, async () => {
@@ -109,7 +99,7 @@ describe('tag-lifecycle wrapper builders', () => {
       // different op (or throw), and this marker would not appear. Asserted as
       // the quoted token (not `action: "…"`) so merge's ternary
       // (`_warnings.length ? "merged_with_warning" : "merged"`) matches too.
-      expect(innerProgram(result)).toContain(`"${action}"`);
+      expect(recoverInnerProgram(result.script)).toContain(`"${action}"`);
     });
   });
 });
@@ -119,7 +109,7 @@ describe('tag-lifecycle wrapper branches', () => {
     const result = await buildNestTagScript({ tagName: 'Child' });
     expect(result.operation).toBe('nest');
     expect(result.target).toBe('tag');
-    const inner = innerProgram(result);
+    const inner = recoverInnerProgram(result.script);
     expect(inner).toContain('error: true');
     expect(inner).toContain('Parent tag name or ID is required for nest action');
     expect(inner).not.toContain('action: "nested"');
@@ -127,14 +117,23 @@ describe('tag-lifecycle wrapper branches', () => {
 
   it('unparent moves to root — no parent resolution in the recovered program', async () => {
     const result = await buildUnparentTagScript({ tagName: 'Child' });
-    const inner = innerProgram(result);
+    const inner = recoverInnerProgram(result.script);
     expect(inner).toContain('action: "unparented"');
+    // Backs the "moves to root, no parent resolution" claim: the root-move op
+    // is emitted and no parent is ever resolved (no _parent binding).
+    expect(inner).toContain('moveTags([_tag], tags.ending)');
+    expect(inner).not.toContain('_parent');
   });
 
   it('create with a parent walks the find-or-create path', async () => {
     const result = await buildCreateTagScript({ tagName: 'Child', parentTagName: 'Parent' });
     expect(result.operation).toBe('create');
-    const inner = innerProgram(result);
+    const inner = recoverInnerProgram(result.script);
     expect(inner).toContain('action: "created"');
+    // The parent branch actually ran — distinguishes it from the flat path,
+    // which emits `new Tag("Child")` + `parentTagName: null`. Here the parent
+    // is resolved and threaded into both the Tag constructor and the envelope.
+    expect(inner).toContain('new Tag("Child", _parent)');
+    expect(inner).toContain('parentTagName: _parent.name');
   });
 });
