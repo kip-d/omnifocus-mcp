@@ -106,6 +106,10 @@ interface TagProbe {
  * duplicate names (an ambiguous oracle would make every assertion vacuous).
  */
 async function probeTagByName(tagName: string): Promise<TagProbe | null> {
+  // Independent live-DB oracle — does NOT import tag-script-builder.ts.
+  // The `p ? p.id.primaryKey : null` idiom below mirrors TAG_PARENT_ID_EXPR in
+  // src/contracts/ast/tag-script-builder.ts. Keep the two in sync when the
+  // OmniJS parent accessor changes.
   const omniJs = [
     '(() => {',
     `  const wanted = ${JSON.stringify(tagName)};`,
