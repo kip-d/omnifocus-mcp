@@ -166,6 +166,22 @@ const TaskUpdateResult = z
 export const TaskWriteResultSchema = z.union([TaskCreateResult, TaskUpdateResult]);
 
 /**
+ * Task-or-project entity result (OMN-205): a strict union where exactly one of
+ * taskId/projectId identifies the entity, alongside a shared `name` and the
+ * caller-supplied per-operation fields. Backs CompleteResultSchema and
+ * DeleteResultSchema, which previously hand-rolled the same two-variant shape.
+ *
+ * Note: there is NO error branch — these are success-only payloads (the error
+ * dialect lives in the tool layer, see BulkDeleteResultSchema), so this is a
+ * task/project identity union, not a success+error envelope.
+ */
+const entityResult = <T extends z.ZodRawShape>(extra: T) =>
+  z.union([
+    z.object({ taskId: z.string(), name: z.string(), ...extra }).strict(),
+    z.object({ projectId: z.string(), name: z.string(), ...extra }).strict(),
+  ]);
+
+/**
  * Complete result — task or project variant.
  *
  * Source-verified against src/contracts/ast/mutation/defs.ts (lowerComplete):
@@ -174,24 +190,10 @@ export const TaskWriteResultSchema = z.union([TaskCreateResult, TaskUpdateResult
  *
  * Union: one of taskId OR projectId required (each variant strict).
  */
-export const CompleteResultSchema = z.union([
-  z
-    .object({
-      taskId: z.string(),
-      name: z.string(),
-      completed: z.literal(true),
-      completionDate: isoDateOrNull,
-    })
-    .strict(),
-  z
-    .object({
-      projectId: z.string(),
-      name: z.string(),
-      completed: z.literal(true),
-      completionDate: isoDateOrNull,
-    })
-    .strict(),
-]);
+export const CompleteResultSchema = entityResult({
+  completed: z.literal(true),
+  completionDate: isoDateOrNull,
+});
 
 /**
  * Delete result — task or project variant.
@@ -200,22 +202,9 @@ export const CompleteResultSchema = z.union([
  *  - task variant:    {taskId,    name, deleted: true}
  *  - project variant: {projectId, name, deleted: true}
  */
-export const DeleteResultSchema = z.union([
-  z
-    .object({
-      taskId: z.string(),
-      name: z.string(),
-      deleted: z.literal(true),
-    })
-    .strict(),
-  z
-    .object({
-      projectId: z.string(),
-      name: z.string(),
-      deleted: z.literal(true),
-    })
-    .strict(),
-]);
+export const DeleteResultSchema = entityResult({
+  deleted: z.literal(true),
+});
 
 /**
  * Bulk task delete result.
