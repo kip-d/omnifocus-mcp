@@ -469,6 +469,7 @@ function toTaskCreateData(spec: BatchTaskSpec): TaskCreateData {
     deferDate: true,
     plannedDate: true,
     estimatedMinutes: true,
+    sequential: true,
     parentTempId: true,
     parentTaskId: true,
     projectId: true,
@@ -483,6 +484,9 @@ function toTaskCreateData(spec: BatchTaskSpec): TaskCreateData {
   if (spec.deferDate !== undefined) data.deferDate = spec.deferDate;
   if (spec.plannedDate !== undefined) data.plannedDate = spec.plannedDate;
   if (spec.estimatedMinutes !== undefined) data.estimatedMinutes = spec.estimatedMinutes;
+  // OMN-206: parity with the OMN-198 single-create fix — preserve an explicit
+  // false (!== undefined), so lowerTaskCreate emits the setProp.
+  if (spec.sequential !== undefined) data.sequential = spec.sequential;
   if (spec.parentTaskId !== undefined) data.parentTaskId = spec.parentTaskId;
   if (spec.projectId !== undefined) data.project = spec.projectId;
   return data;

@@ -138,6 +138,37 @@ describe('buildBatchCreateTasksProgram', () => {
     expect(out).not.toContain('byTempId');
   });
 
+  // OMN-206: sequential (action-group ordering) carries through the batch fast
+  // path (buildBatchCreateTasksProgram → toTaskCreateData → lowerTaskCreate),
+  // parity with the OMN-198 single-create fix. Was silently dropped because
+  // BatchTaskSpec had no sequential field and toTaskCreateData never mapped it.
+  it('sequential:true on a batch spec lowers to a setProp inside the item', () => {
+    const p = build([{ tempId: 'g', name: 'Group', sequential: true }]);
+    const item = p.statements[1] as { type: string; statements: Array<{ type: string; prop?: string }> };
+    expect(item.type).toBe('batchItem');
+    const seq = item.statements.find((s) => s.type === 'setProp' && s.prop === 'sequential');
+    expect(seq).toBeDefined();
+    expect(emitProgram(p)).toContain('sequential = true');
+  });
+
+  it('omits the sequential setProp on a batch spec when not provided', () => {
+    const p = build([{ tempId: 'leaf', name: 'Leaf' }]);
+    const item = p.statements[1] as { type: string; statements: Array<{ type: string; prop?: string }> };
+    expect(item.statements.some((s) => s.type === 'setProp' && s.prop === 'sequential')).toBe(false);
+  });
+
+  // OMN-206: an EXPLICIT false must still emit the setProp (sequential = false),
+  // NOT be coerced to "absent". This is the load-bearing reason toTaskCreateData
+  // uses `!== undefined` rather than a truthy check — making an action group
+  // parallel is a real user intent, distinct from "didn't say".
+  it('emits sequential = false on a batch spec when explicitly false', () => {
+    const p = build([{ tempId: 'g', name: 'Group', sequential: false }]);
+    const item = p.statements[1] as { type: string; statements: Array<{ type: string; prop?: string }> };
+    const seq = item.statements.find((s) => s.type === 'setProp' && s.prop === 'sequential');
+    expect(seq).toBeDefined();
+    expect(emitProgram(p)).toContain('sequential = false');
+  });
+
   it('duplicate tempId throws at build time', () => {
     expect(() =>
       build([

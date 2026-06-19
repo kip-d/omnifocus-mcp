@@ -69,6 +69,132 @@ describe('Batch create project field', () => {
     spy.mockRestore();
   });
 
+  // OMN-206: sequential (action-group ordering) must reach the fast-path spec,
+  // parity with the OMN-198 single-create fix. Was silently dropped — the
+  // fast-path item→spec map omitted it and BatchTaskSpec had no field for it.
+  it('should pass sequential to the batch-create fast path when provided (OMN-206)', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+      script: 'mock script',
+      operation: 'create',
+      target: 'task',
+      description: 'mock',
+    });
+
+    vi.spyOn(tool as any, 'execJson').mockResolvedValue({
+      success: true,
+      data: { results: [{ tempId: 'grp', taskId: 'new-group-id', success: true }] },
+    });
+
+    await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'grp', name: 'Sequential group', sequential: true },
+          },
+        ],
+      },
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    const specs = spy.mock.calls[0][0];
+    expect(specs[0]).toHaveProperty('sequential', true);
+
+    spy.mockRestore();
+  });
+
+  // OMN-206: an EXPLICIT false must survive to the fast-path spec (parallel
+  // action group is a real intent), NOT be coerced away. Guards the fast path's
+  // `!== undefined` check against a regression to a truthy `if (item.sequential)`,
+  // which would silently drop false and make toHaveProperty fail.
+  it('should pass sequential:false (not drop it) to the batch-create fast path (OMN-206)', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    const spy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+      script: 'mock script',
+      operation: 'create',
+      target: 'task',
+      description: 'mock',
+    });
+
+    vi.spyOn(tool as any, 'execJson').mockResolvedValue({
+      success: true,
+      data: { results: [{ tempId: 'grp', taskId: 'new-group-id', success: true }] },
+    });
+
+    await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'grp', name: 'Parallel group', sequential: false },
+          },
+        ],
+      },
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    const specs = spy.mock.calls[0][0];
+    expect(specs[0]).toHaveProperty('sequential', false);
+
+    spy.mockRestore();
+  });
+
+  // OMN-206: a repetitionRule makes the batch fast-path-ineligible, so the item
+  // takes the per-item path (createBatchTask → buildCreateTaskScript). sequential
+  // must survive that route too.
+  it('should pass sequential to the per-item path (repetitionRule forces it) (OMN-206)', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+      script: 'mock script',
+      operation: 'create',
+      target: 'task',
+      description: 'mock',
+    });
+
+    vi.spyOn(tool as any, 'execJson').mockResolvedValue({
+      success: true,
+      data: { results: [{ tempId: 'grp', taskId: 'new-group-id', success: true }] },
+    });
+
+    await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'grp',
+              name: 'Sequential repeating group',
+              sequential: true,
+              repetitionRule: { frequency: 'weekly', interval: 1 },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(taskSpy).toHaveBeenCalledOnce();
+    const taskData = taskSpy.mock.calls[0][0];
+    expect(taskData).toHaveProperty('sequential', true);
+
+    taskSpy.mockRestore();
+  });
+
   it('should prefer parentTempId over project field when both present', async () => {
     const cache = new StubCache();
     const tool = new OmniFocusWriteTool(cache as any);
