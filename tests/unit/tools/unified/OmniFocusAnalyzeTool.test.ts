@@ -957,6 +957,8 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(Array.isArray(res.data.warnings)).toBe(true);
         // names which pre-flight read failed; dedupe degradation is no longer silent
         expect(res.data.warnings.join(' ')).toMatch(/dedup|incomplete-tasks/i);
+        // summary.warnings count stays in lockstep with the surfaced array
+        expect(res.data.summary.warnings).toBe(res.data.warnings.length);
       });
 
       it('OMN-204: warnings[] is empty when every pre-flight read succeeds', async () => {

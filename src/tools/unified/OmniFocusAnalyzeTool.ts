@@ -2569,7 +2569,7 @@ SCOPE FILTERING:
     return data;
   }
 
-  /** Read existing project names (lite, no stats). Returns [] on script error. */
+  /** Read existing project names (lite, no stats). Warns + returns [] on script error (OMN-204). */
   private async fetchExistingProjectNames(warnings: string[]): Promise<string[]> {
     const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
     const result = await this.execJson(gen.script, PROJECTS_LIST_SCHEMA);
@@ -2596,7 +2596,7 @@ SCOPE FILTERING:
     return new Set(names);
   }
 
-  /** Read incomplete (not completed/dropped) tasks with their project name. */
+  /** Read incomplete (not completed/dropped) tasks with their project name. Warns + returns [] on script error (OMN-204). */
   private async fetchExistingIncompleteTasks(
     warnings: string[],
   ): Promise<Array<{ name: string; project: string | null }>> {
