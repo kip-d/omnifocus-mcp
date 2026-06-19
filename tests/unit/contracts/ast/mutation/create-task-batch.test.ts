@@ -157,6 +157,18 @@ describe('buildBatchCreateTasksProgram', () => {
     expect(item.statements.some((s) => s.type === 'setProp' && s.prop === 'sequential')).toBe(false);
   });
 
+  // OMN-206: an EXPLICIT false must still emit the setProp (sequential = false),
+  // NOT be coerced to "absent". This is the load-bearing reason toTaskCreateData
+  // uses `!== undefined` rather than a truthy check — making an action group
+  // parallel is a real user intent, distinct from "didn't say".
+  it('emits sequential = false on a batch spec when explicitly false', () => {
+    const p = build([{ tempId: 'g', name: 'Group', sequential: false }]);
+    const item = p.statements[1] as { type: string; statements: Array<{ type: string; prop?: string }> };
+    const seq = item.statements.find((s) => s.type === 'setProp' && s.prop === 'sequential');
+    expect(seq).toBeDefined();
+    expect(emitProgram(p)).toContain('sequential = false');
+  });
+
   it('duplicate tempId throws at build time', () => {
     expect(() =>
       build([
