@@ -1868,6 +1868,9 @@ SAFETY:
       if (item.deferDate) spec.deferDate = localToUTC(item.deferDate, 'defer');
       if (item.plannedDate) spec.plannedDate = localToUTC(item.plannedDate, 'planned');
       if (item.estimatedMinutes !== undefined) spec.estimatedMinutes = item.estimatedMinutes;
+      // OMN-206: action-group ordering — parity with single-create. !== undefined
+      // preserves an explicit false (lowerTaskCreate emits the setProp only then).
+      if (item.sequential !== undefined) spec.sequential = item.sequential;
       // Container priority mirrors resolveBatchTaskParent, but parentTempId is
       // passed through verbatim — it is resolved inside the script, not here
       // (the parent has no real id yet at build time).
@@ -2088,6 +2091,10 @@ SAFETY:
       deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
       plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
       estimatedMinutes: item.estimatedMinutes,
+      // OMN-206: action-group ordering. Direct passthrough (undefined when
+      // absent) — lowerTaskCreate emits the setProp only when !== undefined, so
+      // a leaf task stays a no-op. Parity with single-create + the fast path.
+      sequential: item.sequential,
       // OMN-128: lowered in-program by the AST builder (no post-create second
       // script); a repetition failure surfaces as an OMN-137 warning instead of
       // a silent log line. No date conversion — endDate stays YYYY-MM-DD.

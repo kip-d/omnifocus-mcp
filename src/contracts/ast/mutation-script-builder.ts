@@ -507,6 +507,7 @@ export interface BatchTaskSpec {
   deferDate?: string;
   plannedDate?: string;
   estimatedMinutes?: number;
+  sequential?: boolean; // Action-group ordering: meaningful on parent tasks; no-op on leaves (OMN-206, parity with OMN-198)
   parentTempId?: string;
   parentTaskId?: string;
   projectId?: string;
