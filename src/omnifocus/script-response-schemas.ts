@@ -3,10 +3,13 @@
  * All definitions live in src/omnifocus/response-schemas/{common,read,analyze,write}.ts.
  * Import sites continue to import from this file — the public surface is unchanged.
  *
- * Rule: re-export ONLY the original 47 public names (44 value schemas + 3 inferred
- * types). The 3 newly-exported helpers
- * in common.ts (isoDate, isoDateOrNull, warningsArray) are NOT re-exported here;
- * they were private before and are consumed only by the domain modules.
+ * Rule: re-export ONLY names that were public before the OMN-169 split. The
+ * three helpers added to common.ts during that split (isoDate, isoDateOrNull,
+ * warningsArray) are NOT re-exported here — they were private before and are
+ * consumed only by the domain modules. (No hardcoded export count: it rotted
+ * silently once already — read "43" while the true total was 47 — because
+ * nothing guards the number. The boundary rule above is the invariant; the
+ * count is not.)
  */
 
 // ---------------------------------------------------------------------------
