@@ -3,7 +3,7 @@ import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAna
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
-import { createScriptSuccess } from '../../../../src/omnifocus/script-result-types.js';
+import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
 
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
@@ -932,6 +932,53 @@ describe('OmniFocusAnalyzeTool', () => {
         // Only the non-duplicate item is in the batch payload.
         expect(res.data.batchPayload.operations).toHaveLength(1);
         expect(res.data.batchPayload.operations[0].data.name).toBe('Buy lock');
+      });
+
+      it('OMN-204: surfaces a warnings[] when a pre-flight read fails (no silent degrade)', async () => {
+        // projects + tags succeed; the incomplete-tasks read FAILS. Pre-fix, the
+        // failure was swallowed (return []) → "no existing tasks → no duplicates",
+        // a silent false-negative. Post-fix: a warning is surfaced loudly.
+        const dbResponses = [
+          createScriptSuccess({ projects: [{ name: 'Hardware' }] }),
+          createScriptSuccess({ ok: true, v: 'ast', items: [] }),
+          createScriptError("Can't find variable: flattenedTasks", 'list_tasks'),
+        ];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Order scanners', project: 'Hardware' }] },
+          },
+        });
+
+        expect(res.success).toBe(true);
+        expect(Array.isArray(res.data.warnings)).toBe(true);
+        // names which pre-flight read failed; dedupe degradation is no longer silent
+        expect(res.data.warnings.join(' ')).toMatch(/dedup|incomplete-tasks/i);
+        // summary.warnings count stays in lockstep with the surfaced array
+        expect(res.data.summary.warnings).toBe(res.data.warnings.length);
+      });
+
+      it('OMN-204: warnings[] is empty when every pre-flight read succeeds', async () => {
+        const dbResponses = [
+          createScriptSuccess({ projects: [{ name: 'Hardware' }] }),
+          createScriptSuccess({ ok: true, v: 'ast', items: [] }),
+          createScriptSuccess({ tasks: [] }),
+        ];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Buy lock', project: 'Hardware' }] },
+          },
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.data.warnings).toEqual([]);
       });
 
       it('on a partial project match, dedupes against the create target (requested), not the partial match', async () => {
