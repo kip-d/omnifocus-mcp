@@ -295,7 +295,7 @@ ANALYSIS TYPES:
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
-- workflow_analysis: ~3-5 seconds for comprehensive
+- workflow_analysis: ~20-45s — scans the ENTIRE task database (no cap); scales with DB size
 - Most others: <1 second with caching
 
 SCOPE FILTERING:
@@ -1906,7 +1906,10 @@ SCOPE FILTERING:
     const wfLogger = createLogger('workflow_analysis');
 
     try {
-      const analysisDepth = 'standard';
+      // OMN-200: 'full' — workflow_analysis always scans the entire task DB (the
+      // 1000-task cap and its unreachable 'deep' branch were removed). The label is
+      // informational only; it no longer gates any behavior.
+      const analysisDepth = 'full';
       const focusAreas = ['productivity', 'workload', 'bottlenecks'];
       const maxInsights = 15;
       const includeRawData = false;
@@ -2002,12 +2005,16 @@ SCOPE FILTERING:
       wfLogger.error('Workflow analysis failed', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      let suggestion = 'Try reducing analysis depth or focus areas';
+      // OMN-200: suggestions are actionable. analysisDepth and focusAreas are not
+      // user-configurable (both hardcoded; the old 'quick'/'standard'/'deep' knob
+      // never existed on this tool), so don't tell users to tune them.
+      let suggestion = 'Retry; if it persists, your task database may be very large or OmniFocus may be busy';
       let errorCode = 'EXECUTION_ERROR';
 
       if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
         errorCode = 'SCRIPT_TIMEOUT';
-        suggestion = 'Try using "quick" analysis depth or reduce the focus areas for faster results';
+        suggestion =
+          'workflow_analysis scans the entire task database and exceeded the 120s script timeout — your DB may be unusually large. Retry, and report it if it recurs so the per-task loop can be profiled';
       } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
         errorCode = 'OMNIFOCUS_NOT_RUNNING';
         suggestion = 'Start OmniFocus and ensure it is running';
