@@ -1906,7 +1906,10 @@ SCOPE FILTERING:
     const wfLogger = createLogger('workflow_analysis');
 
     try {
-      const analysisDepth = 'standard';
+      // OMN-200: 'full' — workflow_analysis always scans the entire task DB (the
+      // 1000-task cap and its unreachable 'deep' branch were removed). The label is
+      // informational only; it no longer gates any behavior.
+      const analysisDepth = 'full';
       const focusAreas = ['productivity', 'workload', 'bottlenecks'];
       const maxInsights = 15;
       const includeRawData = false;

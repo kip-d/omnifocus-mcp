@@ -39,7 +39,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const nowTime = now.getTime();
 
       // Extract options in JXA context to pass to OmniJS
-      const analysisDepth = options.analysisDepth || 'standard';
+      const analysisDepth = options.analysisDepth || 'full'; // OMN-200: full-DB is the only mode now
       const focusAreas = options.focusAreas || ['productivity', 'workload', 'bottlenecks'];
       const maxInsights = options.maxInsights || 15;
       const includeRawData = options.includeRawData || false;
@@ -135,7 +135,14 @@ export const WORKFLOW_ANALYSIS_V3 = `
           const totalTasks = allTasks.length;
           const totalProjects = allProjects.length;
 
-          const maxTasksToProcess = analysisDepth === 'deep' ? totalTasks : Math.min(1000, totalTasks);
+          // OMN-200: always iterate the full task DB. The old cap processed only
+          // the first 1000 tasks (a biased DB-order prefix) while totalTasks stayed
+          // full, so every workflowMetrics.*Percentage divided a capped numerator by
+          // the full denominator — a systematic ~2.5x understatement. With the loop
+          // full-population, numerator and denominator agree and the percentages are
+          // correct with no separate math change. The 'deep' escape hatch was dead
+          // code (analysisDepth was hardcoded 'standard', never 'deep').
+          const maxTasksToProcess = totalTasks;
 
           for (let i = 0; i < maxTasksToProcess; i++) {
             const task = allTasks[i];

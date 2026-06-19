@@ -550,7 +550,9 @@ describe('OmniFocusAnalyzeTool', () => {
         analysis: { type: 'workflow_analysis' },
       });
       expect(res.success).toBe(true);
-      expect(res.data.analysis.depth).toBe('standard');
+      // OMN-200: depth is now reported as 'full' — the analysis always scans the
+      // entire task DB (the 1000-cap + its dead 'deep' escape hatch were removed).
+      expect(res.data.analysis.depth).toBe('full');
       expect(Array.isArray(res.summary.key_findings)).toBe(true);
     });
 
@@ -593,6 +595,17 @@ describe('OmniFocusAnalyzeTool', () => {
       // Completed inbox tasks (2-minute rule) should not inflate inboxPercentage
       expect(source).toMatch(/if \(inInbox && !completed\) totalInboxTasks/);
       expect(source).not.toMatch(/if \(inInbox\) totalInboxTasks/);
+    });
+
+    it('OMN-200: processes the full task DB — no 1000-cap, no dead deep ternary', async () => {
+      const fs = await import('fs');
+      const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
+      // The per-task loop must iterate every task: a capped numerator over a full
+      // `totalTasks` denominator was a ~2.5x understatement of every *Percentage.
+      expect(source).toMatch(/const maxTasksToProcess = totalTasks;/);
+      // The cap and its unreachable 'deep' escape hatch are gone.
+      expect(source).not.toMatch(/Math\.min\(1000/);
+      expect(source).not.toMatch(/analysisDepth === 'deep'/);
     });
   });
 

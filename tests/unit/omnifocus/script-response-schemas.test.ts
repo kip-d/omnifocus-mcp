@@ -2581,7 +2581,7 @@ describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
       analysisTime: 1200,
       dataPoints: 200,
       metadata: {
-        analysisDepth: 'standard',
+        analysisDepth: 'full', // OMN-200: full-DB scan is the only mode now
         focusAreas: ['productivity', 'workload'],
         maxInsights: 15,
         method: 'omnijs_v3_single_bridge',
