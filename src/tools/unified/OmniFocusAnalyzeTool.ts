@@ -295,7 +295,7 @@ ANALYSIS TYPES:
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
-- workflow_analysis: ~3-5 seconds for comprehensive
+- workflow_analysis: ~20-45s — scans the ENTIRE task database (no cap); scales with DB size
 - Most others: <1 second with caching
 
 SCOPE FILTERING:
@@ -2005,12 +2005,16 @@ SCOPE FILTERING:
       wfLogger.error('Workflow analysis failed', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      let suggestion = 'Try reducing analysis depth or focus areas';
+      // OMN-200: suggestions are actionable. analysisDepth and focusAreas are not
+      // user-configurable (both hardcoded; the old 'quick'/'standard'/'deep' knob
+      // never existed on this tool), so don't tell users to tune them.
+      let suggestion = 'Retry; if it persists, your task database may be very large or OmniFocus may be busy';
       let errorCode = 'EXECUTION_ERROR';
 
       if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
         errorCode = 'SCRIPT_TIMEOUT';
-        suggestion = 'Try using "quick" analysis depth or reduce the focus areas for faster results';
+        suggestion =
+          'workflow_analysis scans the entire task database and exceeded the 120s script timeout — your DB may be unusually large. Retry, and report it if it recurs so the per-task loop can be profiled';
       } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
         errorCode = 'OMNIFOCUS_NOT_RUNNING';
         suggestion = 'Start OmniFocus and ensure it is running';
