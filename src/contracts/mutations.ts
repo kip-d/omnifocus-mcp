@@ -149,6 +149,7 @@ export interface TaskCreateData {
   deferDate?: string;
   plannedDate?: string;
   flagged?: boolean;
+  sequential?: boolean; // Action-group ordering: meaningful on parent tasks; no-op on leaves (OMN-198)
   estimatedMinutes?: number;
   repetitionRule?: RepetitionRule;
 }
