@@ -2044,25 +2044,60 @@ describe('RecurringTasksMetadataSchema', () => {
 // PerspectiveItemSchema and PerspectiveSummarySchema
 // ---------------------------------------------------------------------------
 
-describe('PerspectiveItemSchema', () => {
-  it('(a) accepts built-in perspective item', () => {
+describe('PerspectiveItemSchema (OMN-155: filterRuleCount + filterAggregation + array filterRules)', () => {
+  it('(a) accepts built-in perspective item — rule fields all null', () => {
     const result = PerspectiveItemSchema.safeParse({
       name: 'Inbox',
       type: 'builtin',
       isBuiltIn: true,
       identifier: null,
       filterRules: null,
+      filterRuleCount: null,
+      filterAggregation: null,
     });
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts custom perspective item with identifier', () => {
+  it('(a) accepts custom perspective — counts-only default (rules null, count present)', () => {
     const result = PerspectiveItemSchema.safeParse({
       name: 'My Custom View',
       type: 'custom',
       isBuiltIn: false,
       identifier: 'custom-id-123',
       filterRules: null,
+      filterRuleCount: 3,
+      filterAggregation: 'all',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts custom perspective — details mode (rules array present)', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Today',
+      type: 'custom',
+      isBuiltIn: false,
+      identifier: 'i4kJc8VpOmj',
+      filterRules: [
+        { aggregateType: 'any', aggregateRules: [{ actionStatus: 'due' }, { actionStatus: 'flagged' }] },
+        { actionAvailability: 'remaining' },
+      ],
+      filterRuleCount: 2,
+      filterAggregation: 'all',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('(a) accepts a custom perspective whose rules read threw "not found" (count + rules both null)', () => {
+    // OMN-155 Step-0 finding: archivedFilterRules throws on 14/22 perspectives →
+    // the script emits filterRuleCount:null, filterRules:null for those.
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Dormant',
+      type: 'custom',
+      isBuiltIn: false,
+      identifier: 'd8FZImGrp7N',
+      filterRules: null,
+      filterRuleCount: null,
+      filterAggregation: null,
     });
     expect(result.success).toBe(true);
   });
@@ -2073,6 +2108,20 @@ describe('PerspectiveItemSchema', () => {
       type: 'builtin',
       identifier: null,
       filterRules: null,
+      filterRuleCount: null,
+      filterAggregation: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects perspective missing required filterRuleCount field (REQUIRED + nullable)', () => {
+    const result = PerspectiveItemSchema.safeParse({
+      name: 'Inbox',
+      type: 'builtin',
+      isBuiltIn: true,
+      identifier: null,
+      filterRules: null,
+      filterAggregation: null,
     });
     expect(result.success).toBe(false);
   });
@@ -2084,6 +2133,8 @@ describe('PerspectiveItemSchema', () => {
       isBuiltIn: true,
       identifier: null,
       filterRules: null,
+      filterRuleCount: null,
+      filterAggregation: null,
       rogue: true,
     });
     expect(result.success).toBe(false);

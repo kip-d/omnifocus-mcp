@@ -364,7 +364,9 @@ export class CacheWarmer {
 
       await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
         const omni = new OmniAutomation();
-        const script = omni.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
+        // OMN-155: warm the compact (counts-only) shape — the {{includeFull}}
+        // placeholder MUST be substituted or the OmniJS program is malformed.
+        const script = omni.buildScript(LIST_PERSPECTIVES_SCRIPT, { includeFull: false });
         const result = await omni.execute<{
           items?: unknown[];
           perspectives?: unknown[];

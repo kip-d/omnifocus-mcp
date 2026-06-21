@@ -319,6 +319,11 @@ FOLDERS (type: "folders"):
 TAGS (type: "tags"):
 - Returns a flat {id, name, parentId} list; parentId is null for top-level tags, a string ID for nested tags. Filtering (OMN-170): filters: { name: { contains: "..." } } or { name: { matches: "regex" } } to filter tags by name. Other filter keys reject with a steering error.
 
+PERSPECTIVES (type: "perspectives"):
+- Returns built-in + custom perspectives, each with {name, type, isBuiltIn, identifier, filterRules, filterRuleCount, filterAggregation}. Built-ins have no archived filter rules → filterRules/filterRuleCount/filterAggregation are null.
+- Default (compact) returns filterRuleCount (number of archived filter rules) + filterAggregation ("all" | null) per custom perspective, with filterRules: null. Pass details: true to include the full filterRules ARRAY — use it to answer "which perspectives reference tag/status X". Rule objects are OmniFocus-owned data (pass-through; vocabulary varies by OF version).
+- Some custom perspectives expose no readable archived rules (filterRuleCount + filterRules both null even with details: true) — they are still listed, never dropped.
+
 EXPORT TO DISK:
 - outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
 - A response-path export (no outputDirectory) caps at 1000 by default and emits summary.truncated when the cap fires; override with limit
@@ -1134,11 +1139,16 @@ PERFORMANCE:
     return response;
   }
 
-  private async handlePerspectiveQuery(_compiled: CompiledQuery): Promise<unknown> {
+  private async handlePerspectiveQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     try {
-      const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
+      // OMN-155: details:true rides the full archived filterRules array along with
+      // the always-present rule count + aggregation. Default (counts-only) keeps the
+      // response compact. includeFull is baked into the OmniJS program by buildScript.
+      const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {
+        includeFull: compiled.details === true,
+      });
       const result = await this.execJson(script, PERSPECTIVE_LIST_SCHEMA);
 
       if (!isScriptSuccess(result)) {
