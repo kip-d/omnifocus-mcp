@@ -2,31 +2,17 @@
  * Unit tests for OmniFocusReadTool routing logic.
  *
  * Tests task ID lookup, project query routing (inline AST execution),
- * export routing (inlined from ExportTool), and error handling.
+ * and error handling.
  * Uses execJson spy to control script results without OmniAutomation dependency.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { OmniFocusReadTool } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import type { ScriptResult } from '../../../../src/omnifocus/script-result-types.js';
 
-// Unique per-process temp subpath for export tests. fs is mocked below, so
-// nothing is actually written — but use os.tmpdir() (plus pid) anyway so
-// the string isn't a hardcoded world-writable path and the pattern stays
-// correct if fs mocking is ever removed.
-const TEST_EXPORT_DIR = join(tmpdir(), `omnifocus-mcp-export-test-${process.pid}`);
-
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
-
-// Mock fs for bulk export tests
-vi.mock('fs', () => ({
-  mkdirSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
 
 describe('OmniFocusReadTool', () => {
   let tool: OmniFocusReadTool;
@@ -714,375 +700,6 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
-  // ─── Export (inlined from ExportTool) ─────────────────────────────
-
-  describe('export routing', () => {
-    describe('task export', () => {
-      it('returns exported tasks with AST-generated script', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [{ id: 't1', name: 'Test Task' }], count: 1 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks', format: 'json' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.format).toBe('json');
-        expect(result.data.exportType).toBe('tasks');
-        expect(result.data.count).toBe(1);
-        // Verify execJson was called with a generated script string
-        expect(execJsonSpy).toHaveBeenCalledTimes(1);
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        expect(typeof scriptArg).toBe('string');
-      });
-
-      it('passes filters through to export script', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'csv', data: 'id,name\nt1,Task1', count: 1 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: {
-            type: 'export',
-            exportType: 'tasks',
-            format: 'csv',
-            filters: { flagged: true },
-          },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.format).toBe('csv');
-        // The generated script should embed the flagged filter
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        expect(scriptArg).toContain('flagged');
-      });
-
-      it('returns error when task export script fails', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: false,
-          error: 'Export failed',
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks' },
-        })) as any;
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('TASK_EXPORT_FAILED');
-      });
-    });
-
-    describe('project export', () => {
-      it('returns exported projects via buildScript + execJson', async () => {
-        // Mock buildScript on the omniAutomation instance
-        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-project-export-script');
-
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [{ id: 'p1', name: 'Project 1' }], count: 1 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'projects', format: 'json', includeStats: true },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.format).toBe('json');
-        expect(result.data.exportType).toBe('projects');
-        expect(result.data.count).toBe(1);
-        expect(result.data.includeStats).toBe(true);
-        expect((tool as any).omniAutomation.buildScript).toHaveBeenCalledWith(expect.any(String), {
-          format: 'json',
-          includeStats: true,
-        });
-      });
-
-      it('returns error when project export script fails', async () => {
-        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-script');
-
-        execJsonSpy.mockResolvedValueOnce({
-          success: false,
-          error: 'Projects export failed',
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'projects' },
-        })) as any;
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('SCRIPT_ERROR');
-      });
-    });
-
-    describe('bulk export', () => {
-      it('requires outputDirectory for bulk export', async () => {
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'all' },
-        })) as any;
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('MISSING_PARAMETER');
-        expect(result.error.message).toContain('outputDirectory is required');
-      });
-
-      it('exports tasks, projects, and tags to directory', async () => {
-        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-project-export-script');
-
-        // First call: task export, second call: project export, third call: tag export (AST)
-        execJsonSpy
-          .mockResolvedValueOnce({
-            success: true,
-            data: { format: 'json', data: [{ id: 't1' }], count: 1 },
-          } satisfies ScriptResult)
-          .mockResolvedValueOnce({
-            success: true,
-            data: { format: 'json', data: [{ id: 'p1' }], count: 1 },
-          } satisfies ScriptResult)
-          .mockResolvedValueOnce({
-            success: true,
-            data: {
-              ok: true,
-              v: 'ast',
-              items: [{ id: 'tag1', name: 'Work' }],
-              summary: { total: 1 },
-            },
-          } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: {
-            type: 'export',
-            exportType: 'all',
-            format: 'json',
-            outputDirectory: TEST_EXPORT_DIR,
-            includeCompleted: true,
-            includeStats: true,
-          },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.exports).toBeDefined();
-        expect(result.data.exports.tasks).toBeDefined();
-        expect(result.data.exports.tasks.exported).toBe(true);
-        expect(result.data.exports.projects).toBeDefined();
-        expect(result.data.exports.projects.exported).toBe(true);
-        expect(result.data.exports.tags).toBeDefined();
-        expect(result.data.exports.tags.exported).toBe(true);
-        expect(result.data.summary.totalExported).toBeGreaterThan(0);
-      });
-    });
-
-    describe('defaults', () => {
-      it('defaults to task export when exportType is not specified', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [], count: 0 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.exportType).toBe('tasks');
-      });
-
-      it('defaults to json format when format is not specified', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [], count: 0 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.format).toBe('json');
-      });
-    });
-
-    // OMN-177: countOnly tasks queries echoed metadata.filters_applied built from
-    // the branded (normalized) filter, leaking the internal __normalized__ marker
-    // onto the wire. The echo must be brand-free.
-    describe('OMN-177: countOnly does not leak the __normalized__ brand', () => {
-      it('strips __normalized__ from metadata.filters_applied', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: {
-            count: 5,
-            filter_description: 'defer before 2026-12-31',
-            optimization: 'omnijs_count_no_tags',
-          },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'tasks', filters: { deferDate: { before: '2026-12-31' } }, countOnly: true },
-        })) as any;
-
-        expect(result.metadata.filters_applied).toBeDefined();
-        expect(Object.keys(result.metadata.filters_applied)).not.toContain('__normalized__');
-      });
-    });
-
-    // OMN-44: tasks export silently dropped records and ignored includeCompleted.
-    // Two distinct bugs in handleTaskExport: outputDirectory was never read
-    // (only handleBulkExport consumed it), and includeCompleted was never
-    // mapped onto the export filter. Sibling-handler drift.
-    describe('OMN-44 tasks export honors outputDirectory + includeCompleted', () => {
-      it('writes tasks to disk and raises the cap when outputDirectory is set', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [{ id: 't1' }], count: 1 },
-        } satisfies ScriptResult);
-
-        const fsModule = await import('fs');
-        const writeSpy = vi.mocked(fsModule.writeFileSync);
-        writeSpy.mockClear();
-        const mkdirSpy = vi.mocked(fsModule.mkdirSync);
-        mkdirSpy.mockClear();
-
-        const result = (await tool.execute({
-          query: {
-            type: 'export',
-            exportType: 'tasks',
-            format: 'json',
-            outputDirectory: TEST_EXPORT_DIR,
-          },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        // File was written
-        expect(writeSpy).toHaveBeenCalledTimes(1);
-        const [writtenPath] = writeSpy.mock.calls[0];
-        expect(String(writtenPath)).toContain(TEST_EXPORT_DIR);
-        expect(String(writtenPath)).toMatch(/tasks\.json$/);
-        // outputPath is reported back to the caller
-        expect(result.data.outputPath).toBe(writtenPath);
-        // The implicit cap is no longer 1000 when writing to disk; the script
-        // is generated with a substantially higher maxTasks ceiling.
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        const match = scriptArg.match(/const maxTasks = (\d+);/);
-        expect(match).not.toBeNull();
-        const maxTasks = Number(match![1]);
-        expect(maxTasks).toBeGreaterThanOrEqual(5000);
-      });
-
-      it('keeps the 1000 default cap when outputDirectory is NOT set', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [], count: 0 },
-        } satisfies ScriptResult);
-
-        const fsModule = await import('fs');
-        const writeSpy = vi.mocked(fsModule.writeFileSync);
-        writeSpy.mockClear();
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks', format: 'json' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        // No file written when outputDirectory is absent
-        expect(writeSpy).not.toHaveBeenCalled();
-        // The cap is the historical 1000 default
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        const match = scriptArg.match(/const maxTasks = (\d+);/);
-        expect(match).not.toBeNull();
-        expect(Number(match![1])).toBe(1000);
-      });
-
-      it('honors includeCompleted=false for tasks export', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [], count: 0 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: {
-            type: 'export',
-            exportType: 'tasks',
-            format: 'json',
-            includeCompleted: false,
-          },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        // The script must filter out completed tasks. The OmniJS predicate
-        // emitted by the AST builder references task.completed in the filter.
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        expect(scriptArg).toContain('completed');
-        expect(scriptArg).toMatch(/!\s*task\.completed|task\.completed\s*===\s*false|completed:\s*false/);
-      });
-
-      it('treats includeCompleted=true (default) as no completed-filter', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [], count: 0 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: {
-            type: 'export',
-            exportType: 'tasks',
-            format: 'json',
-            includeCompleted: true,
-          },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        // No completed predicate emitted into the AST filter.
-        // OMN-153: export now defaults-exclude project roots (task.project === null),
-        // so the matchesFilter predicate is task.project === null (not `return true;`).
-        // The predicate must still NOT constrain task.completed when includeCompleted:true.
-        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-        // Extract the matchesFilter body to test only the predicate
-        const matchesFn = scriptArg.match(/function matchesFilter\(task\)\s*\{[^}]+\}/)?.[0] ?? '';
-        expect(matchesFn).not.toContain('completed');
-        // The project-root exclusion predicate IS present (OMN-153 export fix)
-        expect(matchesFn).toContain('task.project === null');
-      });
-
-      it('flags truncation in summary when the script reports limited=true', async () => {
-        // Script already detects truncation via `tasksAdded >= maxTasks` and
-        // emits `limited: true` (script-builder.ts). Handler must surface it.
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: {
-            format: 'json',
-            data: new Array(1000).fill({ id: 'x' }),
-            count: 1000,
-            limited: true,
-          },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks', format: 'json' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.summary?.truncated).toBe(true);
-        expect(result.data.summary?.cap).toBe(1000);
-      });
-
-      it('does NOT flag truncation when count is below the cap', async () => {
-        execJsonSpy.mockResolvedValueOnce({
-          success: true,
-          data: { format: 'json', data: [{ id: 't1' }], count: 1 },
-        } satisfies ScriptResult);
-
-        const result = (await tool.execute({
-          query: { type: 'export', exportType: 'tasks', format: 'json' },
-        })) as any;
-
-        expect(result.success).toBe(true);
-        expect(result.data.summary?.truncated).not.toBe(true);
-      });
-    });
-  });
-
   // ─── Thin-by-default field resolution ─────────────────────────
 
   describe('thin-by-default field resolution', () => {
@@ -1637,6 +1254,30 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+  });
+
+  // OMN-177: countOnly tasks queries echoed metadata.filters_applied built from
+  // the branded (normalized) filter, leaking the internal __normalized__ marker
+  // onto the wire. The echo must be brand-free. (Relocated out of the removed
+  // export-routing block in OMN-193 — this exercises a tasks countOnly query.)
+  describe('OMN-177: countOnly does not leak the __normalized__ brand', () => {
+    it('strips __normalized__ from metadata.filters_applied', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          count: 5,
+          filter_description: 'defer before 2026-12-31',
+          optimization: 'omnijs_count_no_tags',
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { deferDate: { before: '2026-12-31' } }, countOnly: true },
+      })) as any;
+
+      expect(result.metadata.filters_applied).toBeDefined();
+      expect(Object.keys(result.metadata.filters_applied)).not.toContain('__normalized__');
     });
   });
 

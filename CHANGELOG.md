@@ -7,6 +7,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: `omnifocus_read type:"export"` removed entirely** (OMN-193) — the export query type and all its
+  parameters (`exportType`, `format`, `exportFields`, `outputDirectory`, `includeCompleted`) are gone, along with the
+  parallel export pipeline behind them (`buildExportTasksScript`, `normalizeExportFilter`, the hand-rolled
+  `EXPORT_PROJECTS_SCRIPT`, `EXPORT_FIELD_MAP`, and the export response schemas). A `type:"export"` query now rejects as
+  an unknown query type. **Rationale:** export was a token-wasteful parallel pipeline. The response path returned the
+  full payload into the model's context — a capped tasks query in disguise, redundant with a normal `type:"tasks"`
+  query. The disk-write path's only niche (a filtered/projected file) is better served by the OmniFocus app's native
+  backup/export, or — for a genuine ad-hoc file — by running a *targeted* query and writing just those rows. Removing
+  the pipeline also structurally eliminates the divergence bug class where export silently missed main-pipeline fixes
+  (e.g. the OMN-153 project-root leak). To export, use the OmniFocus app (**File ▸ Back Up Database**, or a
+  perspective + copy/paste); see the omnifocus-assistant skill's "Exports" note.
+
 ### Changed
 
 - **BREAKING: canonical script-error `context` vocabulary** (OMN-159) — the wire-observable `context` strings on

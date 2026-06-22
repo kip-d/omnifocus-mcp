@@ -29,7 +29,7 @@ d('OMN-162/OMN-166: tasks-side folder/on_hold rejection; projects regression', (
           limit: 10,
         },
       }),
-    ).rejects.toThrow(/not supported on tasks or export/i);
+    ).rejects.toThrow(/not supported on tasks queries/i);
 
     // Steering must mention projectId as the alternative
     await expect(
@@ -52,7 +52,7 @@ d('OMN-162/OMN-166: tasks-side folder/on_hold rejection; projects regression', (
           limit: 10,
         },
       }),
-    ).rejects.toThrow(/not supported on tasks or export/i);
+    ).rejects.toThrow(/not supported on tasks queries/i);
   }, 30000);
 
   it('on_hold: tasks filters.status on_hold rejects with steering', async () => {

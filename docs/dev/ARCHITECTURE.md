@@ -181,7 +181,6 @@ npm run test:integration  # requires OmniFocus; ~4 min against a ~2500-task data
 | Task queries (2000+ tasks) | <1s   |
 | Task creation              | <0.5s |
 | Tag operations via bridge  | <1s   |
-| Bulk exports               | 2-5s  |
 | Using `whose()`            | 25+s  |
 
 ---

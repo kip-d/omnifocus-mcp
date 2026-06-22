@@ -24,7 +24,7 @@ export {
 } from './response-schemas/common.js';
 
 // ---------------------------------------------------------------------------
-// read — row schemas, metadata, tags, perspectives, recurring, count, export,
+// read — row schemas, metadata, tags, perspectives, recurring, count,
 //         slim, patterns, project-by-id, folder
 // ---------------------------------------------------------------------------
 export {
@@ -40,11 +40,6 @@ export {
   RecurringTasksSummarySchema,
   RecurringTasksMetadataSchema,
   CountResultSchema,
-  ExportTaskRowSchema,
-  ExportTasksResultSchema,
-  ExportProjectRowSchema,
-  ExportProjectsResultSchema,
-  ExportResultSchema,
   SlimmedDataSchema,
   RecurringPatternsSchema,
   ProjectByIdSchema,

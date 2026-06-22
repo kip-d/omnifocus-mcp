@@ -60,20 +60,6 @@ describe('Completed Project Task Handling', () => {
       expect(script).toContain('Task.Status.Dropped');
     });
 
-    it('should use AST filter generator for completion filtering in export', async () => {
-      // Export now uses AST-based buildExportTasksScript() which generates
-      // OmniJS filter predicates via generateFilterCode()
-      const { buildExportTasksScript } = await import('../../src/contracts/ast/script-builder.js');
-
-      // Generate an export script that excludes completed tasks
-      const { script } = buildExportTasksScript({ completed: false });
-
-      // Verify the AST-generated script includes completion filtering
-      // The filter predicate should exclude completed tasks
-      expect(script).toContain('evaluateJavascript');
-      expect(script).toContain('completed');
-      expect(script).toBeDefined();
-    });
   });
 
   describe('Integration Scenario Tests', () => {

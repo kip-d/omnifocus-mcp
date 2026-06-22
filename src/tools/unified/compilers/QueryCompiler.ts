@@ -75,18 +75,7 @@ export type CompiledQuery =
   | (CompiledQueryBase & { type: 'projects'; filters: ProjectFilter; includeStats?: boolean; countOnly?: boolean })
   | (CompiledQueryBase & { type: 'tags'; filters: TagFilter; countOnly?: boolean })
   | (CompiledQueryBase & { type: 'folders'; filters: FolderFilter; countOnly?: boolean })
-  | (CompiledQueryBase & { type: 'perspectives'; filters: PerspectiveFilter })
-  | (CompiledQueryBase & {
-      type: 'export';
-      filters: NormalizedTaskFilter;
-      exportType?: 'tasks' | 'projects' | 'all';
-      format?: 'json' | 'csv' | 'markdown';
-      exportFields?: string[];
-      outputDirectory?: string;
-      includeStats?: boolean;
-      includeCompleted?: boolean;
-      fastSearch?: boolean;
-    });
+  | (CompiledQueryBase & { type: 'perspectives'; filters: PerspectiveFilter });
 
 /**
  * OMN-162: Returns true if the given TaskFilter compiles to a literal(true) AST node —
@@ -139,48 +128,32 @@ export class QueryCompiler {
         };
       case 'perspectives':
         return { ...base, type: 'perspectives', filters: transformPerspectiveFilters(query.filters ?? {}) };
-      case 'tasks':
-      case 'export': {
+      case 'tasks': {
         // OMN-115: fastSearch is a query-level param, but the AST search builder only
         // sees the filter object. Thread it onto the filter so `fastSearch: true`
         // emits a name-only predicate (skips the note body) per the documented
         // "Name search" fast path.
         const raw: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
-        if ('fastSearch' in query && query.fastSearch !== undefined) {
+        if (query.fastSearch !== undefined) {
           raw.fastSearch = query.fastSearch;
         }
         // OMN-153: includeProjectRoot is a query-level param. Thread it onto the filter
         // so the script builders can apply the default exclusion or opt-in projection.
         // NOT processed through transformFilters (not a filters:{} input key).
-        if ('includeProjectRoot' in query && query.includeProjectRoot !== undefined) {
+        if (query.includeProjectRoot !== undefined) {
           raw.includeProjectRoot = query.includeProjectRoot;
         }
         const filters = normalizeFilter(raw);
-        if (query.type === 'tasks') {
-          this.assertSatisfiableTerminalBranches(filters); // OMN-172 S4
-          return {
-            ...base,
-            type: 'tasks',
-            filters,
-            mode: ('mode' in query && query.mode ? query.mode : 'all') as TaskMode,
-            fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
-            daysAhead: 'daysAhead' in query ? query.daysAhead : undefined,
-            countOnly: 'countOnly' in query ? query.countOnly : undefined,
-            includeProjectRoot: 'includeProjectRoot' in query ? query.includeProjectRoot : undefined,
-          };
-        }
+        this.assertSatisfiableTerminalBranches(filters); // OMN-172 S4
         return {
           ...base,
-          type: 'export',
+          type: 'tasks',
           filters,
-          exportType: 'exportType' in query ? query.exportType : undefined,
-          format: 'format' in query ? query.format : undefined,
-          exportFields: 'exportFields' in query ? query.exportFields : undefined,
-          outputDirectory: 'outputDirectory' in query ? query.outputDirectory : undefined,
-          includeStats: 'includeStats' in query ? query.includeStats : undefined,
-          includeCompleted: 'includeCompleted' in query ? query.includeCompleted : undefined,
-          // cast required: fastSearch narrows to unknown in this union position
-          fastSearch: 'fastSearch' in query ? (query.fastSearch as boolean | undefined) : undefined,
+          mode: (query.mode ?? 'all') as TaskMode,
+          fastSearch: query.fastSearch,
+          daysAhead: query.daysAhead,
+          countOnly: query.countOnly,
+          includeProjectRoot: query.includeProjectRoot,
         };
       }
       default: {
@@ -192,10 +165,10 @@ export class QueryCompiler {
 
   /**
    * OMN-172 (S4): reject an OR branch that requests a terminal state (dropped/completed)
-   * the base will exclude, making the branch silently unsatisfiable. `includeCompleted`
-   * is export-only, so for tasks the base excludes a terminal state iff the top-level
-   * filter does not pin it to `true` (undefined → default-exclude; explicit `false` →
-   * same effect; only top-level `true` lifts the exclusion). See the S4 design §3.
+   * the base will exclude, making the branch silently unsatisfiable. For tasks the base
+   * excludes a terminal state iff the top-level filter does not pin it to `true`
+   * (undefined → default-exclude; explicit `false` → same effect; only top-level `true`
+   * lifts the exclusion). See the S4 design §3.
    */
   private assertSatisfiableTerminalBranches(filters: NormalizedTaskFilter): void {
     const branches = filters.orBranches;

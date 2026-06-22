@@ -180,16 +180,6 @@ export interface PatternFinding {
 // Pattern analysis returns a record of pattern findings keyed by pattern name
 export type PatternAnalysisDataV2 = Record<string, PatternFinding>;
 
-// Export types
-export interface ExportDataV2 {
-  format: 'json' | 'csv' | 'markdown';
-  exportType: 'tasks' | 'projects' | 'bulk';
-  data: string | object;
-  count: number;
-  summary?: Record<string, unknown>;
-  outputPath?: string;
-}
-
 // Recurring task types
 export interface RecurringTaskV2 {
   id: string;

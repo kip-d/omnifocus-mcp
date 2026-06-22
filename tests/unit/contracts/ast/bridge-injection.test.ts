@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildFilteredProjectsScript,
   buildProjectByIdScript,
-  buildExportTasksScript,
   buildFilteredFoldersScript,
   buildTaskCountScript,
 } from '../../../../src/contracts/ast/script-builder.js';
@@ -58,8 +57,6 @@ describe('OMN-65/OMN-129: bridge builders survive hostile filter strings', () =>
     // comment-channel + predicate-channel builders (free text via `text`):
     it(`buildTaskCountScript text=${tag}`, () => assertSafe(buildTaskCountScript({ text: v }).script));
     it(`buildFilteredProjectsScript text=${tag}`, () => assertSafe(buildFilteredProjectsScript({ text: v }).script));
-    // ExportFilter exposes free text as `search` (NOT `text` — TS2353 otherwise):
-    it(`buildExportTasksScript search=${tag}`, () => assertSafe(buildExportTasksScript({ search: v }).script));
     // predicate-only builders (no in-body comment channel):
     // OMN-170 S2: folders filter free text via `filter.name` (the old `search`
     // string option was removed; the name predicate routes through the same

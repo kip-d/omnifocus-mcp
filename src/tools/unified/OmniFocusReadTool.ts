@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
@@ -8,20 +7,15 @@ import {
   buildTaskCountScript,
   buildFilteredProjectsScript,
   buildFilteredFoldersScript,
-  buildExportTasksScript,
   buildProjectByIdScript,
   NOTE_TRUNCATE_LENGTH,
   resolveEffectiveTaskFields,
   resolveEffectiveProjectFields,
-  type ExportFilter,
 } from '../../contracts/ast/script-builder.js';
-import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
 import { isScriptSuccess, isScriptError, type ScriptResult } from '../../omnifocus/script-result-types.js';
 import {
   listResultSchema,
   CountResultSchema,
-  ExportTasksResultSchema,
-  ExportProjectsResultSchema,
   astEnvelopeSchema,
   ProjectByIdSchema,
   FolderListSchema,
@@ -43,7 +37,6 @@ import {
   OperationTimerV2,
   type StandardMetadataV2,
 } from '../../utils/response-format.js';
-import type { ExportDataV2 } from '../response-types-v2.js';
 import type { TaskFilter, ProjectFilter, TagFilter, FolderFilter } from '../../contracts/filters.js';
 import { stripNormalizedBrand } from '../../contracts/filters.js';
 import {
@@ -156,8 +149,6 @@ export function projectFieldsOnResult(
 // TASK QUERY BUILDER
 // =============================================================================
 
-type ExportFormat = 'json' | 'csv' | 'markdown';
-
 interface TaskQueryPlan {
   script: string;
   filter: TaskFilter;
@@ -258,7 +249,7 @@ const PROJECT_DATE_FIELDS = ['dueDate', 'completionDate', 'nextReviewDate', 'las
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
-  description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, folders, or exports.
+  description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, or folders.
 
 COMMON QUERIES:
 - Inbox: { query: { type: "tasks", filters: { project: null } } }
@@ -271,7 +262,6 @@ COMMON QUERIES:
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
 - Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
 - metadata.total_count always reports the FULL matching population; truncated: true marks a partial result (raise limit or paginate with offset)
-- Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
 
 MODES (tasks queries ONLY — not valid on type:"projects"):
 - today: Due soon (≤3 days) OR flagged, matching OmniFocus Today perspective
@@ -289,7 +279,7 @@ FILTER OPERATORS:
 - text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
-- folder (projects queries ONLY): "<name>" matches folder-name substring; null = top-level projects only. On tasks/export queries folder and status: "on_hold" are rejected with guidance (query projects first, then tasks by projectId)
+- folder (projects queries ONLY): "<name>" matches folder-name substring; null = top-level projects only. On tasks queries folder and status: "on_hold" are rejected with guidance (query projects first, then tasks by projectId)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false. A terminal status: "dropped"/"completed" inside an OR branch is rejected (tasks exclude those by default, so the branch would never match) — put it at the top level instead
 - Projects filters: status, completed, flagged, name, text, folder, id. AND merges; OR: [...] returns the union of its branches; NOT: { status: "active"|"on_hold"|"completed"|"dropped" } matches the complement of that status over the four project states (broader than the tasks NOT, which is completed/active only).
 
@@ -304,13 +294,12 @@ RESPONSE CONTROL:
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
-- countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives/export). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row
+- countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row
 - includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
 - fields: isProjectRoot — boolean, true when the task is a project's root task (task.project !== null in OmniJS). Auto-included when includeProjectRoot: true; also requestable explicitly or via details: true.
 
 COMPLETED TASKS:
 - Use filters: { completed: true } or filters: { status: "completed" } to query completed tasks
-- includeCompleted is for export operations only (type: "export"); honored by exportType: "tasks" and exportType: "all"
 
 FOLDERS (type: "folders"):
 - Returns a FLAT list; each folder appears once as a full entry (id, name, status, depth, path, parentId). Folders with subfolders additionally carry a children array of lightweight {id,name} refs plus childCount for navigation — those nested refs are adjacency hints, NOT duplicate rows.
@@ -323,10 +312,6 @@ PERSPECTIVES (type: "perspectives"):
 - Returns built-in + custom perspectives, each with {name, type, isBuiltIn, identifier, filterRules, filterRuleCount, filterAggregation}. Built-ins have no archived filter rules → filterRules/filterRuleCount/filterAggregation are null.
 - Default (compact) returns filterRuleCount (number of archived filter rules) + filterAggregation ("all" | null) per custom perspective, with filterRules: null. Pass details: true to include the full filterRules ARRAY — use it to answer "which perspectives reference tag/status X". Rule objects are OmniFocus-owned data (pass-through; vocabulary varies by OF version).
 - Some custom perspectives expose no readable archived rules (filterRuleCount + filterRules both null even with details: true) — they are still listed, never dropped.
-
-EXPORT TO DISK:
-- outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
-- A response-path export (no outputDirectory) caps at 1000 by default and emits summary.truncated when the cap fires; override with limit
 
 PERFORMANCE:
 - Use countOnly for counting questions
@@ -355,7 +340,7 @@ PERFORMANCE:
           properties: {
             type: {
               type: 'string',
-              enum: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export'],
+              enum: ['tasks', 'projects', 'tags', 'perspectives', 'folders'],
             },
             mode: {
               type: 'string',
@@ -397,19 +382,6 @@ PERFORMANCE:
             },
             details: { type: 'boolean' },
             includeStats: { type: 'boolean' },
-            exportType: { type: 'string', enum: ['tasks', 'projects', 'all'] },
-            format: { type: 'string', enum: ['json', 'csv', 'markdown'] },
-            exportFields: { type: 'array', items: { type: 'string' } },
-            outputDirectory: {
-              type: 'string',
-              description:
-                'Export only: directory to write the export file to. With exportType:"tasks" writes tasks.<format> and raises the cap; required for exportType:"all".',
-            },
-            includeCompleted: {
-              type: 'boolean',
-              description:
-                'Export only: include completed tasks (default true). Honored by exportType:"tasks" and exportType:"all".',
-            },
           },
           required: ['type'],
         },
@@ -422,8 +394,8 @@ PERFORMANCE:
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
-    tags: ['unified', 'read', 'query', 'export'],
-    capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest', 'export'],
+    tags: ['unified', 'read', 'query'],
+    capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest'],
   };
 
   annotations = {
@@ -456,8 +428,6 @@ PERFORMANCE:
         return this.handlePerspectiveQuery(compiled);
       case 'folders':
         return this.handleFolderQuery(compiled);
-      case 'export':
-        return this.handleExport(compiled);
       default: {
         // Exhaustiveness check — compiled is `never` here (all union variants handled)
         const _exhaustive: never = compiled as never;
@@ -1285,335 +1255,4 @@ PERFORMANCE:
     return buildFoldersResponse(folders, totalAvailable, {});
   }
 
-  // =============================================================================
-  // EXPORT (inlined from ExportTool)
-  // =============================================================================
-
-  private async handleExport(compiled: CompiledQuery): Promise<unknown> {
-    if (compiled.type !== 'export') throw new Error('handleExport: wrong type');
-    const exportType = compiled.exportType || 'tasks';
-    const format = (compiled.format || 'json') as ExportFormat;
-    const timer = new OperationTimerV2();
-
-    try {
-      switch (exportType) {
-        case 'tasks':
-          return await this.handleTaskExport(compiled, format, timer);
-        case 'projects':
-          return await this.handleProjectExport(format, compiled.includeStats ?? false, timer);
-        case 'all':
-          return await this.handleBulkExport(compiled, format, timer);
-        default:
-          return createErrorResponseV2(
-            'export',
-            'INVALID_TYPE',
-            `Invalid export type: ${String(exportType)}`,
-            undefined,
-            { type: exportType },
-            timer.toMetadata(),
-          );
-      }
-    } catch (error) {
-      return this.handleErrorV2<ExportDataV2>(error);
-    }
-  }
-
-  private async handleTaskExport(
-    compiled: CompiledQuery,
-    format: ExportFormat,
-    timer: OperationTimerV2,
-  ): Promise<unknown> {
-    if (compiled.type !== 'export') throw new Error('handleTaskExport: wrong type');
-    const outputDirectory = compiled.outputDirectory;
-
-    // OMN-44: `filters.completed` (if set) takes precedence; `includeCompleted`
-    // is the higher-level convenience that the schema doc-comment promises.
-    const completedFromFlag = compiled.includeCompleted === false ? false : undefined;
-    const exportFilter: ExportFilter = {
-      available: compiled.filters.available,
-      completed: compiled.filters.completed ?? completedFromFlag,
-      flagged: compiled.filters.flagged,
-      project: undefined, // export filter uses project name, not in compiled.filters
-      projectId: compiled.filters.projectId,
-      tags: compiled.filters.tags,
-      tagsOperator: compiled.filters.tagsOperator as ExportFilter['tagsOperator'],
-      // F9 (OMN-161 S1): compiled.filters.search was always undefined here — the
-      // compile path never populated it (search is a legacy TaskFilter field not
-      // mapped from the public API). Deleted the dead line; ExportFilter.search
-      // stays in the type for the script builder side.
-      // OMN-142: name is name-scoped (never matches notes).
-      name: compiled.filters.name,
-      nameOperator: compiled.filters.nameOperator,
-    };
-    // OMN-44: response-size pressure does not apply when writing to disk, so
-    // raise the implicit cap; a user-supplied `limit` always wins.
-    const defaultCap = outputDirectory ? 5000 : 1000;
-    const limit = compiled.limit || defaultCap;
-
-    const { script } = buildExportTasksScript(exportFilter, {
-      limit,
-      fields: compiled.exportFields,
-      format,
-    });
-
-    const result = await this.execJson(script, ExportTasksResultSchema);
-
-    if (isScriptError(result)) {
-      return createErrorResponseV2(
-        'export',
-        'TASK_EXPORT_FAILED',
-        result.error || 'Failed to export tasks',
-        undefined,
-        { format, filter: exportFilter },
-        timer.toMetadata(),
-      );
-    }
-
-    if (isScriptSuccess(result)) {
-      const data = result.data as {
-        format: string;
-        data: unknown;
-        count: number;
-        limited?: boolean;
-      };
-      const summary: Record<string, unknown> = {};
-      if (data.limited === true) {
-        summary.truncated = true;
-        summary.cap = limit;
-      }
-
-      // OMN-44: honor outputDirectory for tasks export. Write the payload to
-      // disk and return the path; skip embedding the full payload to keep the
-      // response small.
-      if (outputDirectory) {
-        try {
-          const fsSync = await import('fs');
-          fsSync.mkdirSync(outputDirectory, { recursive: true });
-          const outputPath = path.join(outputDirectory, `tasks.${format}`);
-          const payload = data.data;
-          const toWrite = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-          fsSync.writeFileSync(outputPath, toWrite, 'utf-8');
-          return createSuccessResponseV2(
-            'export',
-            {
-              format: data.format as ExportFormat,
-              exportType: 'tasks' as const,
-              data: { written_to: outputPath, count: data.count },
-              count: data.count,
-              outputPath,
-              ...(Object.keys(summary).length ? { summary } : {}),
-            },
-            undefined,
-            { ...timer.toMetadata(), operation: 'tasks' },
-          );
-        } catch (writeError) {
-          return createErrorResponseV2(
-            'export',
-            'WRITE_FAILED',
-            `Failed to write export file: ${String(writeError)}`,
-            undefined,
-            { outputDirectory, error: String(writeError) },
-            timer.toMetadata(),
-          );
-        }
-      }
-
-      return createSuccessResponseV2(
-        'export',
-        {
-          format: data.format as ExportFormat,
-          exportType: 'tasks' as const,
-          data: data.data as string | object,
-          count: data.count,
-          ...(Object.keys(summary).length ? { summary } : {}),
-        },
-        undefined,
-        { ...timer.toMetadata(), operation: 'tasks' },
-      );
-    }
-
-    return createErrorResponseV2(
-      'export',
-      'UNEXPECTED_RESULT',
-      'Unexpected script result format',
-      undefined,
-      { result },
-      timer.toMetadata(),
-    );
-  }
-
-  private async handleProjectExport(
-    format: ExportFormat,
-    includeStats: boolean,
-    timer: OperationTimerV2,
-  ): Promise<unknown> {
-    const script = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
-      format,
-      includeStats,
-    });
-    const result = await this.execJson(script, ExportProjectsResultSchema);
-
-    if (isScriptError(result)) {
-      return createErrorResponseV2(
-        'export',
-        'SCRIPT_ERROR',
-        result.error || 'Script error during project export',
-        'Check error details',
-        result.details,
-        timer.toMetadata(),
-      );
-    }
-
-    if (isScriptSuccess(result)) {
-      const data = result.data as { format: string; data: unknown; count: number };
-      return createSuccessResponseV2(
-        'export',
-        {
-          format: data.format as ExportFormat,
-          exportType: 'projects' as const,
-          data: data.data as string | object,
-          count: data.count,
-          includeStats,
-        },
-        undefined,
-        { ...timer.toMetadata(), operation: 'projects' },
-      );
-    }
-
-    return createErrorResponseV2(
-      'export',
-      'UNEXPECTED_RESULT',
-      'Unexpected script result format',
-      undefined,
-      { result },
-      timer.toMetadata(),
-    );
-  }
-
-  private async handleBulkExport(
-    compiled: CompiledQuery,
-    format: ExportFormat,
-    timer: OperationTimerV2,
-  ): Promise<unknown> {
-    if (compiled.type !== 'export') throw new Error('handleBulkExport: wrong type');
-    const outputDirectory = compiled.outputDirectory;
-    if (!outputDirectory) {
-      return createErrorResponseV2(
-        'export',
-        'MISSING_PARAMETER',
-        'outputDirectory is required for type="all"',
-        undefined,
-        { type: 'all' },
-        timer.toMetadata(),
-      );
-    }
-
-    const includeCompleted = compiled.includeCompleted ?? true;
-    const includeProjectStats = compiled.includeStats ?? true;
-
-    // Ensure directory exists
-    try {
-      const fsSync = await import('fs');
-      fsSync.mkdirSync(outputDirectory, { recursive: true });
-    } catch (mkdirError) {
-      return createErrorResponseV2(
-        'export',
-        'MKDIR_FAILED',
-        `Failed to create directory: ${String(mkdirError)}`,
-        undefined,
-        { outputDirectory, error: String(mkdirError) },
-        timer.toMetadata(),
-      );
-    }
-
-    const exports: Record<
-      string,
-      {
-        format: string;
-        task_count?: number;
-        project_count?: number;
-        tag_count?: number;
-        exported: boolean;
-      }
-    > = {};
-    let totalExported = 0;
-
-    // Export tasks using AST-powered script
-    const taskExportFilter: ExportFilter = includeCompleted ? {} : { completed: false };
-    const { script: taskScript } = buildExportTasksScript(taskExportFilter, {
-      format,
-      limit: 5000,
-    });
-    const taskResult = await this.execJson(taskScript, ExportTasksResultSchema);
-
-    if (isScriptSuccess(taskResult)) {
-      const taskData = taskResult.data as { data?: unknown; count?: number };
-      const taskFile = path.join(outputDirectory, `tasks.${format}`);
-      const taskCount = taskData.count || 0;
-
-      const payload = taskData.data;
-      const toWrite = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      const fsSync = await import('fs');
-      fsSync.writeFileSync(taskFile, toWrite, 'utf-8');
-
-      exports.tasks = { format, task_count: taskCount, exported: true };
-      totalExported += taskCount;
-    }
-
-    // Export projects
-    const projectScript = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
-      format,
-      includeStats: includeProjectStats,
-    });
-    const projectResult = await this.execJson(projectScript, ExportProjectsResultSchema);
-
-    if (isScriptSuccess(projectResult)) {
-      const projData = projectResult.data as { data?: unknown; count?: number };
-      const projectFile = path.join(outputDirectory, `projects.${format}`);
-      const projectCount = projData.count || 0;
-
-      const ppayload = projData.data;
-      const pwrite = typeof ppayload === 'string' ? ppayload : JSON.stringify(ppayload, null, 2);
-      const fsSync = await import('fs');
-      fsSync.writeFileSync(projectFile, pwrite, 'utf-8');
-
-      exports.projects = { format, project_count: projectCount, exported: true };
-      totalExported += projectCount;
-    }
-
-    // Export tags (JSON only) via AST builder
-    const tagGeneratedScript = buildTagsScript({
-      mode: 'basic' as TagQueryMode,
-      includeEmpty: true,
-      sortBy: 'name' as TagSortBy,
-    });
-    const tagResult = await this.execJson(tagGeneratedScript.script, TAG_LIST_SCHEMA);
-
-    if (isScriptSuccess(tagResult)) {
-      const tagEnvelope = tagResult.data as { items?: unknown[]; summary?: { total?: number } };
-      const tagItems = tagEnvelope.items || [];
-      const tagCount = tagEnvelope.summary?.total ?? tagItems.length;
-      const tagFile = path.join(outputDirectory, 'tags.json');
-
-      const fsSync = await import('fs');
-      fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
-
-      exports.tags = { format: 'json', tag_count: tagCount, exported: true };
-      totalExported += tagCount;
-    }
-
-    return createSuccessResponseV2(
-      'export',
-      {
-        format,
-        exportType: 'bulk' as const,
-        data: exports,
-        count: totalExported,
-        exports,
-        summary: { totalExported, export_date: new Date().toISOString() },
-      },
-      undefined,
-      { ...timer.toMetadata(), operation: 'all' },
-    );
-  }
 }

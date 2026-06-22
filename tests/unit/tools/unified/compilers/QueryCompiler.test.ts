@@ -6,7 +6,6 @@ import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-sc
 
 type CompiledTasks = Extract<CompiledQuery, { type: 'tasks' }>;
 type CompiledProjects = Extract<CompiledQuery, { type: 'projects' }>;
-type CompiledExport = Extract<CompiledQuery, { type: 'export' }>;
 type CompiledTags = Extract<CompiledQuery, { type: 'tags' }>;
 
 describe('QueryCompiler', () => {
@@ -512,16 +511,6 @@ describe('QueryCompiler', () => {
       expect((compiled as unknown as Record<string, unknown>).countOnly).toBeUndefined();
     });
 
-    it('should compile export query with export params', () => {
-      const input: ReadInput = {
-        query: { type: 'export', exportType: 'tasks', format: 'json' },
-      };
-      const compiled = compiler.compile(input) as CompiledExport;
-      expect(compiled.type).toBe('export');
-      expect(compiled.exportType).toBe('tasks');
-      expect(compiled.format).toBe('json');
-    });
-
     it('should compile tag query with only shared params', () => {
       const input: ReadInput = {
         query: { type: 'tags' },
@@ -693,7 +682,7 @@ describe('QueryCompiler', () => {
 
     describe("status: 'on_hold'", () => {
       it('OMN-166: throws ZodError (was silently mapping to projectStatus only — now rejected with steering)', () => {
-        // on_hold is a project status; tasks/export path must reject it, not silently match-all
+        // on_hold is a project status; tasks path must reject it, not silently match-all
         expect(() => compiler.transformFilters({ status: 'on_hold' })).toThrow(z.ZodError);
       });
     });
@@ -934,45 +923,10 @@ describe('QueryCompiler', () => {
         expect(() => compiler.transformFilters({})).not.toThrow();
       });
     });
-
-    describe('compile() export passthrough', () => {
-      it('echoes exportType / format / outputDirectory / includeCompleted; mode is undefined for non-tasks', () => {
-        const compiled = compiler.compile({
-          query: {
-            type: 'export',
-            exportType: 'tasks',
-            format: 'csv',
-            outputDirectory: './test-export-out',
-            includeCompleted: false,
-          },
-        }) as CompiledExport;
-        expect(compiled.type).toBe('export');
-        expect(compiled.exportType).toBe('tasks');
-        expect(compiled.format).toBe('csv');
-        expect(compiled.outputDirectory).toBe('./test-export-out');
-        expect(compiled.includeCompleted).toBe(false);
-        // mode is task-only (OMN-74); export queries get undefined
-        expect((compiled as unknown as Record<string, unknown>).mode).toBeUndefined();
-      });
-
-      it('echoes exportFields array', () => {
-        const compiled = compiler.compile({
-          query: { type: 'export', exportType: 'tasks', exportFields: ['id', 'name', 'dueDate'] },
-        }) as CompiledExport;
-        expect(compiled.exportFields).toEqual(['id', 'name', 'dueDate']);
-      });
-
-      it('echoes includeStats for project export', () => {
-        const compiled = compiler.compile({
-          query: { type: 'export', exportType: 'projects', includeStats: true },
-        }) as CompiledExport;
-        expect(compiled.includeStats).toBe(true);
-      });
-    });
   });
 
-  // OMN-162: filters.folder must reject on tasks/export queries (was silently inert — returned ALL tasks)
-  describe('OMN-162: folder rejects on tasks/export queries', () => {
+  // OMN-162: filters.folder must reject on tasks queries (was silently inert — returned ALL tasks)
+  describe('OMN-162: folder rejects on tasks queries', () => {
     it('base: tasks query with filters {folder:"Work"} throws ZodError with full steering message', () => {
       try {
         compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
@@ -980,7 +934,7 @@ describe('QueryCompiler', () => {
       } catch (e) {
         expect(e).toBeInstanceOf(z.ZodError);
         const message = (e as z.ZodError).issues[0].message;
-        expect(message).toMatch(/not supported on tasks or export/);
+        expect(message).toMatch(/not supported on tasks queries/);
         expect(message).toMatch(/filters\.folder/);
         expect(message).toMatch(/projectId/);
       }
@@ -992,7 +946,7 @@ describe('QueryCompiler', () => {
         expect.unreachable('should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(z.ZodError);
-        expect((e as z.ZodError).issues[0].message).toMatch(/not supported on tasks or export/);
+        expect((e as z.ZodError).issues[0].message).toMatch(/not supported on tasks queries/);
       }
     });
 
@@ -1018,12 +972,6 @@ describe('QueryCompiler', () => {
         const issue = (e as z.ZodError).issues[0];
         expect(issue.path).toEqual(['query', 'filters', 'OR', 0]);
       }
-    });
-
-    it('export type: {type:"export", filters:{folder:"Work"}} throws (shared path)', () => {
-      expect(() =>
-        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { folder: 'Work' } } } as never),
-      ).toThrow(z.ZodError);
     });
 
     it('control: filters {flagged: true} does NOT throw', () => {
@@ -1177,8 +1125,8 @@ describe('QueryCompiler', () => {
     });
   });
 
-  // OMN-166: status:'on_hold' must reject on tasks/export queries (was silently inert — returned ALL tasks)
-  describe('OMN-166: status on_hold rejects on tasks/export queries', () => {
+  // OMN-166: status:'on_hold' must reject on tasks queries (was silently inert — returned ALL tasks)
+  describe('OMN-166: status on_hold rejects on tasks queries', () => {
     it('base: tasks query with filters {status:"on_hold"} throws ZodError with full steering message', () => {
       try {
         compiler.compile({ query: { type: 'tasks', filters: { status: 'on_hold' } } } as never);
@@ -1186,7 +1134,7 @@ describe('QueryCompiler', () => {
       } catch (e) {
         expect(e).toBeInstanceOf(z.ZodError);
         const issue = (e as z.ZodError).issues[0];
-        expect(issue.message).toMatch(/not supported on tasks or export/);
+        expect(issue.message).toMatch(/not supported on tasks queries/);
         expect(issue.message).toMatch(/on-hold is a project status/);
         expect(issue.message).toMatch(/projectId/);
         expect(issue.path).toEqual(['query', 'filters', 'status']);
@@ -1198,12 +1146,6 @@ describe('QueryCompiler', () => {
         compiler.compile({
           query: { type: 'tasks', filters: { OR: [{ status: 'on_hold' }, { flagged: true }] } },
         } as never),
-      ).toThrow(z.ZodError);
-    });
-
-    it('export type: {type:"export", filters:{status:"on_hold"}} throws', () => {
-      expect(() =>
-        compiler.compile({ query: { type: 'export', exportType: 'tasks', filters: { status: 'on_hold' } } } as never),
       ).toThrow(z.ZodError);
     });
 

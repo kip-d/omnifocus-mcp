@@ -10,7 +10,10 @@ import { canonicalizeInputSchema, canonicalizeZodSchema, diffSchemas } from '../
 // silent shrink a HARD FAIL (the OMN-65 vacuous-green lesson, applied to the gate itself).
 const EXPECTED_MIN_FIELDS: Record<string, number> = {
   system: 4,
-  omnifocus_read: 17,
+  // OMN-193: export removed → 5 export-only params dropped (exportType/format/
+  // exportFields/outputDirectory/includeCompleted), leaving 13 canonicalized read
+  // fields. Floor set to the exact current count (was a conservative 17).
+  omnifocus_read: 13,
   omnifocus_write: 19,
   omnifocus_analyze: 3,
 };

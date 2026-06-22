@@ -41,9 +41,6 @@ focuses on developer implementation details.
 
 // Create task
 { mutation: { operation: "create", target: "task", data: { name: "Example", flagged: true } } }
-
-// Export
-{ query: { type: "export", exportType: "tasks", format: "json" } }
 ```
 
 **Files:** `src/tools/unified/` (schemas, compilers, tools)
