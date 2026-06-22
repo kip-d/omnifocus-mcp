@@ -346,10 +346,14 @@ const TagQuerySchema = BaseQuerySchema.merge(
   }),
 ).strict();
 
-// Perspective queries: base only
+// Perspective queries: base + details
+// OMN-155: details:true rides the full archived filterRules array along with the
+// always-present rule count + aggregation. countOnly stays rejected (perspectives
+// have no population-count fast path).
 const PerspectiveQuerySchema = BaseQuerySchema.merge(
   z.object({
     type: z.literal('perspectives'),
+    details: z.boolean().optional(),
   }),
 ).strict();
 

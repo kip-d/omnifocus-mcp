@@ -1313,6 +1313,36 @@ describe('OmniFocusReadTool', () => {
       expect(result.data.perspectives).toHaveLength(2);
     });
 
+    it('OMN-155: default query builds the script with includeFull:false (counts-only)', async () => {
+      const buildScriptSpy = vi.fn().mockReturnValue('mock-perspectives-script');
+      (tool as any).omniAutomation.buildScript = buildScriptSpy;
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { items: [] },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'perspectives' } });
+
+      expect(buildScriptSpy).toHaveBeenCalledTimes(1);
+      expect(buildScriptSpy.mock.calls[0][1]).toEqual({ includeFull: false });
+    });
+
+    it('OMN-155: details:true builds the script with includeFull:true (full rules)', async () => {
+      const buildScriptSpy = vi.fn().mockReturnValue('mock-perspectives-script');
+      (tool as any).omniAutomation.buildScript = buildScriptSpy;
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { items: [] },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'perspectives', details: true } });
+
+      expect(buildScriptSpy).toHaveBeenCalledTimes(1);
+      expect(buildScriptSpy.mock.calls[0][1]).toEqual({ includeFull: true });
+    });
+
     it('returns empty array when no perspectives found', async () => {
       (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
 

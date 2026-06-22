@@ -284,8 +284,20 @@ export const TagSummarySchema = z
 
 /**
  * Perspective item — emitted by LIST_PERSPECTIVES_SCRIPT.
- * Source: src/omnifocus/scripts/perspectives/list-perspectives.ts:
- *   {name, type, isBuiltIn, identifier, filterRules: null}.
+ * Source: src/omnifocus/scripts/perspectives/list-perspectives.ts.
+ *
+ * OMN-155: the enumeration migrated to OmniJS to read `archivedFilterRules`
+ * (OmniJS-only). All three rule fields are REQUIRED + nullable — the script
+ * literal always emits every key:
+ * - filterRuleCount: number of archived filter rules. null for built-ins (no
+ *   archived rules) AND for the 14/22 custom perspectives whose
+ *   archivedFilterRules access throws "not found" (Step-0 probe finding).
+ * - filterAggregation: archivedTopLevelFilterAggregation ("all" | null observed);
+ *   null for built-ins and rule-less customs.
+ * - filterRules: the full rules array, present ONLY when the query passes
+ *   details:true on a custom perspective that has rules; null otherwise.
+ *   Pass-through (z.unknown() items) by design — rules are OF-owned data whose
+ *   vocabulary drifts across OmniFocus versions (spec §6 Q1).
  */
 export const PerspectiveItemSchema = z
   .object({
@@ -293,7 +305,9 @@ export const PerspectiveItemSchema = z
     type: z.string(),
     isBuiltIn: z.boolean(),
     identifier: z.string().nullable(),
-    filterRules: z.null(),
+    filterRules: z.array(z.unknown()).nullable(),
+    filterRuleCount: z.number().nullable(),
+    filterAggregation: z.string().nullable(),
   })
   .strict();
 

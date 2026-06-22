@@ -442,6 +442,21 @@ describe('ReadSchema', () => {
       expect(ReadSchema.safeParse({ query: { type: 'export', countOnly: true } }).success).toBe(false);
     });
 
+    // OMN-155: details:true gates the full filterRules payload on a perspectives
+    // query (default returns counts + aggregation only).
+    it('should accept details on perspectives queries (OMN-155)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'perspectives', details: true } }).success).toBe(true);
+      expect(ReadSchema.safeParse({ query: { type: 'perspectives', details: false } }).success).toBe(true);
+      // Bare perspectives query (no details) still valid — counts-only default.
+      expect(ReadSchema.safeParse({ query: { type: 'perspectives' } }).success).toBe(true);
+    });
+
+    it('should still reject countOnly on perspectives even when details is set (OMN-155)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'perspectives', details: true, countOnly: true } }).success).toBe(
+        false,
+      );
+    });
+
     // OMN-174: countOnly is now valid on projects, but mode is still rejected —
     // the combination must still reject (the mode guard, not countOnly).
     it('should reject mode even when combined with the now-valid countOnly on projects', () => {
