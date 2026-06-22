@@ -72,12 +72,6 @@ describe('CompiledQuery discriminated union (OMN-161 S1)', () => {
     expect(compiled.type).toBe('tasks');
     expect((compiled as any).mode).toBe('forecast_past');
   });
-  it('export: task-vocabulary filter compiles onto filters (NormalizedTaskFilter)', () => {
-    const compiled = c.compile({
-      query: { type: 'export', exportType: 'tasks', filters: { completed: false } },
-    } as any);
-    expect((compiled as any).filters.completed).toBe(false);
-  });
   it('type-level: projects filter is not task-shaped (compile guard)', () => {
     const compiled = c.compile({ query: { type: 'projects', filters: {} } } as any);
     if (compiled.type === 'projects') {

@@ -437,9 +437,8 @@ describe('ReadSchema', () => {
       }
     });
 
-    it('should still reject countOnly on perspectives/export queries (out of scope, OMN-174)', () => {
+    it('should still reject countOnly on perspectives queries (out of scope, OMN-174)', () => {
       expect(ReadSchema.safeParse({ query: { type: 'perspectives', countOnly: true } }).success).toBe(false);
-      expect(ReadSchema.safeParse({ query: { type: 'export', countOnly: true } }).success).toBe(false);
     });
 
     // OMN-155: details:true gates the full filterRules payload on a perspectives
@@ -475,22 +474,19 @@ describe('ReadSchema', () => {
       expect(ReadSchema.safeParse(projectInput).success).toBe(true);
     });
 
-    it('should accept export params only on export queries', () => {
-      const exportInput = {
-        query: {
-          type: 'export',
-          exportType: 'tasks',
-          format: 'json',
-        },
-      };
-      const taskInput = {
-        query: {
-          type: 'tasks',
-          exportType: 'tasks',
-        },
-      };
-      expect(ReadSchema.safeParse(exportInput).success).toBe(true);
-      expect(ReadSchema.safeParse(taskInput).success).toBe(false);
+    // OMN-193: export removed entirely (token-wasteful parallel pipeline; users
+    // are steered to the OmniFocus app for exports). `type:"export"` is no longer
+    // a valid query type, and the export-specific params are gone from every type.
+    it('should reject export queries entirely (OMN-193: export removed)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'export' } }).success).toBe(false);
+      expect(
+        ReadSchema.safeParse({ query: { type: 'export', exportType: 'tasks', format: 'json' } }).success,
+      ).toBe(false);
+    });
+
+    it('should reject export-specific params on a tasks query (OMN-193)', () => {
+      expect(ReadSchema.safeParse({ query: { type: 'tasks', exportType: 'tasks' } }).success).toBe(false);
+      expect(ReadSchema.safeParse({ query: { type: 'tasks', outputDirectory: 'out-dir' } }).success).toBe(false);
     });
 
     it('should accept all 16 project fields from script-builder', () => {

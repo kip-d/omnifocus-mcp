@@ -238,7 +238,6 @@ See **[HTTP Transport Guide](./HTTP-TRANSPORT.md)** for authentication, VPN setu
 ### Advanced Features
 
 - **Batch operations**: Create multiple tasks at once
-- **Export**: CSV, JSON, or Markdown
 - **Analytics**: "Show my productivity stats this week"
 - **Perspectives**: "Show my 'Evening Review' perspective"
 

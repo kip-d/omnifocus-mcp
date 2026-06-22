@@ -40,12 +40,12 @@ export const TASK_KEY_DISPOSITION = {
 } as const satisfies Record<TaskInputKey, Disposition>;
 
 export const FOLDER_TASKS_REJECTION =
-  'filters.folder is not supported on tasks or export queries — it previously matched nothing and silently returned all tasks. ' +
+  'filters.folder is not supported on tasks queries — it previously matched nothing and silently returned all tasks. ' +
   'To get tasks in a folder: query projects with filters.folder first, then query tasks by projectId. ' +
   'folder remains supported on projects queries.';
 
 export const ON_HOLD_TASKS_REJECTION =
-  "status:'on_hold' is not supported on tasks or export queries — on-hold is a project status. " +
+  "status:'on_hold' is not supported on tasks queries — on-hold is a project status. " +
   "Query projects with status:'on_hold' first, then tasks by projectId. " +
   '(Tasks whose project is on hold also match available:false.)';
 

@@ -27,7 +27,6 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskCountScript,
-  buildExportTasksScript,
   buildTaskByIdScript,
   resolveEffectiveTaskFields,
 } from '../../../../src/contracts/ast/script-builder.js';
@@ -259,24 +258,6 @@ describe('OMN-153: VM behavioral — project-root exclusion and isProjectRoot ma
     // Only FlaggedRegular qualifies (flagged=true AND project===null)
     expect(result.tasks).toHaveLength(1);
     expect((result.tasks[0] as { name: string }).name).toBe('FlaggedRegular');
-  });
-});
-
-// =============================================================================
-// Export path test (#1): buildExportTasksScript must exclude project roots
-// =============================================================================
-
-describe('OMN-153: buildExportTasksScript — project-root exclusion', () => {
-  it('default export script contains task.project === null predicate', () => {
-    const result = buildExportTasksScript({});
-    expect(result.script).toContain('task.project === null');
-  });
-
-  it('export uses applyProjectRootDefault — no opt-in param today (follow-up deferred)', () => {
-    // The export path has no includeProjectRoot opt-in in ExportFilter yet.
-    // Default exclusion is the safe baseline. This test documents the current state.
-    const result = buildExportTasksScript({});
-    expect(result.script).toContain('task.project === null');
   });
 });
 

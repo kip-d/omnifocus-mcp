@@ -598,7 +598,7 @@ describe('BaseTool', () => {
 
       // query.type should be an enum with all 6 query types
       const queryProps = querySchema.properties as Record<string, Record<string, unknown>>;
-      expect(queryProps.type.enum).toEqual(['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export']);
+      expect(queryProps.type.enum).toEqual(['tasks', 'projects', 'tags', 'perspectives', 'folders']);
 
       // filters should be a loose { type: "object" } — no recursive AND/OR/NOT expansion
       expect(queryProps.filters).toEqual({ type: 'object' });

@@ -39,7 +39,7 @@ User wants GTD guidance → Provide advice (no tool call needed)
 | "Delete/remove..."                           | Delete                 | `omnifocus_write` operation: `"delete"`                                                  |
 | "Move task to..."                            | Update                 | `omnifocus_write` operation: `"update"`                                                  |
 | "Search for..."                              | Text search            | `omnifocus_read` mode: `"search"`, filters: `{ text: { contains: "..." } }`              |
-| "Export my tasks"                            | Bulk export            | `omnifocus_read` type: `"export"`, exportType: `"tasks"`, format: `"markdown"`           |
+| "Export my tasks"                            | Use the OmniFocus app  | Not an MCP capability — see **Exports** below                                            |
 | "What did I plan for today?"                 | Planned date           | `omnifocus_read` filters: `{ plannedDate: { between: [today, today] } }`                 |
 | "Create a tag..."                            | Tag management         | `omnifocus_write` operation: `"tag_manage"`, action: `"create"`                          |
 | "Rename/merge/nest tag..."                   | Tag management         | `omnifocus_write` operation: `"tag_manage"`, action: `"rename"/"merge"/"nest"`           |
@@ -564,23 +564,16 @@ Planned dates are distinct from due/defer — they represent when you **intend**
 { query: { type: "tasks", mode: "search", filters: { text: { contains: "budget" } }, fastSearch: true } }
 ```
 
-### Export
+### Exports
 
-Bulk export for backup or reporting:
+There is **no export tool** — exporting/backing up the database is a job for the OmniFocus app, not the MCP server. Direct the user there:
 
-```javascript
-// Export all tasks as markdown
-{ query: { type: "export", exportType: "tasks", format: "markdown" } }
+| Goal | Do this in OmniFocus |
+| ---- | -------------------- |
+| Full backup / snapshot | Automatic backups run already; for an on-demand copy use **File ▸ Back Up Database** (`.ofocus-archive`). |
+| Spreadsheet / filtered data | Build a perspective, select the rows, and copy-paste, or use the app's built-in export. |
 
-// Export projects with stats as JSON
-{ query: { type: "export", exportType: "projects", format: "json", includeStats: true } }
-
-// Export specific fields as CSV
-{ query: { type: "export", exportType: "tasks", format: "csv",
-  exportFields: ["name", "project", "dueDate", "tags", "completed"] } }
-```
-
-**Formats:** `json`, `csv`, `markdown` | **Types:** `tasks`, `projects`, `all`
+Why no server-side export: a full export either dumps the whole database into the model's context (token-prohibitive on a large library) or just repeats a query you can already run. If a user genuinely needs an ad-hoc file, run a *targeted* query for exactly the rows they want and write that small result to a file — don't reach for a bulk dump.
 
 ### Project Queries
 

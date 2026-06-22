@@ -7,7 +7,6 @@ import {
   buildRecurringTasksScript,
   buildTaskCountScript,
   buildFilteredProjectsScript,
-  buildExportTasksScript,
   MINIMAL_FIELDS,
   DETAIL_FIELDS,
   DEFAULT_FIELDS,
@@ -1364,19 +1363,3 @@ describe('OMN-154: projects script counts the full population', () => {
   });
 });
 
-// OMN-142: the export path threads `name` through ExportFilter as a
-// name-scoped predicate; only `search` (the documented full-text param)
-// may read task.note.
-describe('buildExportTasksScript name filter (OMN-142)', () => {
-  it('name filter emits a name-only predicate (no note comparison)', () => {
-    const { script } = buildExportTasksScript({ name: 'XYZPROBE', nameOperator: 'CONTAINS' });
-    expect(script).toMatch(/task\.name[^\n]*XYZPROBE/);
-    expect(script).not.toMatch(/task\.note[^\n]*XYZPROBE/);
-  });
-
-  it('search filter still matches both name and note', () => {
-    const { script } = buildExportTasksScript({ search: 'XYZPROBE' });
-    expect(script).toMatch(/task\.name[^\n]*XYZPROBE/);
-    expect(script).toMatch(/task\.note[^\n]*XYZPROBE/);
-  });
-});

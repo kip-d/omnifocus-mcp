@@ -21,7 +21,7 @@ The server exposes four tools that cover the full OmniFocus API:
 
 | Tool                | Purpose     | Operations                                                 |
 | ------------------- | ----------- | ---------------------------------------------------------- |
-| `omnifocus_read`    | Query data  | Tasks, projects, tags, perspectives, folders, export       |
+| `omnifocus_read`    | Query data  | Tasks, projects, tags, perspectives, folders               |
 | `omnifocus_write`   | Modify data | Create, update, complete, delete, batch, tag management    |
 | `omnifocus_analyze` | Analytics   | Productivity stats, velocity, patterns, workflows, reviews |
 | `system`            | Diagnostics | Version info, performance metrics, cache stats             |

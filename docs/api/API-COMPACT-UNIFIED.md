@@ -69,18 +69,6 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
     countOnly?: boolean     // Return count only (33x faster for "how many" queries)
   }
 }
-
-// Export query
-{
-  query: {
-    type: "export",
-    exportType: "tasks" | "projects" | "all",
-    format: "json" | "csv" | "markdown",
-    limit?: number,
-    includeStats?: boolean,
-    outputDirectory?: string  // Required for "all" exportType
-  }
-}
 ```
 
 **Examples:**
@@ -130,15 +118,9 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 // Count-only query (33x faster - for "how many" questions)
 {query: {type: "tasks", filters: {status: "active"}, countOnly: true}}
 // Returns: {metadata: {total_count: 2089, count_only: true}}
-
-// Export tasks as CSV
-{query: {type: "export", exportType: "tasks", format: "csv", limit: 100}}
-
-// Export projects with stats
-{query: {type: "export", exportType: "projects", format: "json", includeStats: true}}
 ```
 
-**Internal routing:** QueryTasksTool, ProjectsTool, TagsTool, PerspectivesTool, FoldersTool, ExportTool
+**Internal routing:** QueryTasksTool, ProjectsTool, TagsTool, PerspectivesTool, FoldersTool
 
 ---
 

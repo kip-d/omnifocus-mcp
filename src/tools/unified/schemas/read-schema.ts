@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { coerceNumber, coerceObject } from '../../schemas/coercion-helpers.js';
-import { EXPORT_FIELD_MAP } from '../../../contracts/ast/script-builder.js';
 
 // Filter operators for flexible queries
 const TagFilterSchema = z.object({
@@ -120,7 +119,7 @@ const filterFields = {
   // (TaskFilter) → `topLevelOnly` (ProjectFilter); null never reaches the
   // emitter as a folder *name*. See QueryCompiler.transformFilters and
   // generateProjectFilterCode.
-  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96). folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders. tasks/export queries REJECT this key with a steering error (OMN-162); enforcement in QueryCompiler via TASK_KEY_DISPOSITION.
+  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96). folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders. tasks queries REJECT this key with a steering error (OMN-162); enforcement in QueryCompiler via TASK_KEY_DISPOSITION.
 };
 
 // Flat filter: base fields only, no logical operators.
@@ -261,16 +260,6 @@ const SortSchema = z.object({
   direction: z.enum(['asc', 'desc']),
 });
 
-// Export format enum
-const ExportFormatEnum = z.enum(['json', 'csv', 'markdown']);
-
-// Export type enum (what to export)
-const ExportTypeEnum = z.enum(['tasks', 'projects', 'all']);
-
-// Export field selection — derived from EXPORT_FIELD_MAP (single source of truth)
-const exportFieldNames = Object.keys(EXPORT_FIELD_MAP) as [string, ...string[]];
-const ExportFieldEnum = z.enum(exportFieldNames);
-
 // =============================================================================
 // SHARED BASE + PER-TYPE QUERY SCHEMAS
 // =============================================================================
@@ -365,29 +354,6 @@ const FolderQuerySchema = BaseQuerySchema.merge(
   }),
 ).strict();
 
-// Export queries: export-specific params
-const ExportQuerySchema = BaseQuerySchema.merge(
-  z.object({
-    type: z.literal('export'),
-    exportType: ExportTypeEnum.optional().describe('What to export: tasks, projects, or all'),
-    format: ExportFormatEnum.optional().describe('Export format: json, csv, or markdown'),
-    exportFields: z.array(ExportFieldEnum).optional().describe('Fields to include in export'),
-    outputDirectory: z
-      .string()
-      .optional()
-      .describe(
-        'Directory to write the export. With exportType="tasks" writes tasks.<format> and raises the cap; required for exportType="all".',
-      ),
-    includeStats: z.boolean().optional().describe('Include statistics in project export'),
-    includeCompleted: z
-      .boolean()
-      .optional()
-      .describe(
-        'Include completed tasks in export (default true). Honored by exportType="tasks" and exportType="all".',
-      ),
-  }),
-).strict();
-
 // Discriminated union on query.type
 const QuerySchema = z.discriminatedUnion('type', [
   TaskQuerySchema,
@@ -395,7 +361,6 @@ const QuerySchema = z.discriminatedUnion('type', [
   TagQuerySchema,
   PerspectiveQuerySchema,
   FolderQuerySchema,
-  ExportQuerySchema,
 ]);
 
 // Main read schema

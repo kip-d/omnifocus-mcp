@@ -279,12 +279,6 @@ class GherkinTestRunner {
       return;
     }
 
-    if (type === 'When' && text.includes('export tasks')) {
-      const params = this.parseDataTable(data!);
-      this.context.response = await this.callTool('export_tasks', params);
-      return;
-    }
-
     if (type === 'When' && text.includes('request all tags')) {
       const sortMatch = text.match(/sorted by "(.+)"/);
       const params = sortMatch ? { sortBy: sortMatch[1] } : {};
@@ -346,13 +340,6 @@ class GherkinTestRunner {
     if (type === 'Then' && text.includes('should receive a list of tags')) {
       if (!this.context.response?.tags || !Array.isArray(this.context.response.tags)) {
         throw new Error('Expected response.tags to be an array');
-      }
-      return;
-    }
-
-    if (type === 'Then' && text.includes('should receive export data')) {
-      if (!this.context.response?.data) {
-        throw new Error('Expected response to have data property');
       }
       return;
     }
@@ -522,22 +509,6 @@ const scenarios: GherkinScenario[] = [
     steps: [
       { type: 'When', text: 'I request all tags sorted by "name"' },
       { type: 'Then', text: 'I should receive a list of tags' },
-    ],
-  },
-  {
-    name: 'Export tasks as JSON',
-    steps: [
-      {
-        type: 'When',
-        text: 'I export tasks with:',
-        data: {
-          rows: [
-            ['format', 'json'],
-            ['filter', '{"flagged": true}'],
-          ],
-        },
-      },
-      { type: 'Then', text: 'I should receive export data' },
     ],
   },
 ];
