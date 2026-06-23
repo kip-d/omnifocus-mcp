@@ -54,6 +54,12 @@ describe('task.folderMatch synthetic field', () => {
     expect(p(taskTopLevel)).toBe(true);
   });
 
+  it('!= still EXCLUDES inbox tasks (no containing project) — invariant holds under negation', () => {
+    // Review finding: a bare `!match` would let inbox tasks (match===false) pass a
+    // `folder != X` filter. Inbox tasks must never match a folder filter, == or !=.
+    expect(evalFor('task.folderMatch', '!=', 'Development')(inboxTask)).toBeFalsy();
+  });
+
   it('throws on an unsupported operator', () => {
     const def = SYNTHETIC_FIELD_MAP.get('task.folderMatch')!;
     expect(() => def.omnijs('<', 'Development')).toThrow();

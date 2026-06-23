@@ -5,7 +5,7 @@
  * BOTH codegen layers (tasks-side synthetic emitter + projects-side string emitter).
  *
  * Two surfaces under test:
- *   1. `parseFolderPath` — path string → lowercased, trimmed segments (leaf last);
+ *   1. `parseFolderFilterPath` — path string → lowercased, trimmed segments (leaf last);
  *      throws on an empty segment.
  *   2. `emitFolderPathMatch` — emits an OmniJS boolean expression (subtree semantics).
  *      We validate not just its shape but its RUNTIME behavior by instantiating the
@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseFolderPath, emitFolderPathMatch } from '../../../../src/contracts/ast/folder-path-match.js';
+import { parseFolderFilterPath, emitFolderPathMatch } from '../../../../src/contracts/ast/folder-path-match.js';
 
 // ---- Synthetic folder tree (plain objects mirroring OmniJS Folder { name, parent }) ----
 type FakeFolder = { name: string; parent: FakeFolder | null };
@@ -30,30 +30,30 @@ function predicate(path: string): (leaf: FakeFolder | null) => boolean {
   return new Function('LEAF', `return (${expr});`) as (leaf: FakeFolder | null) => boolean;
 }
 
-describe('parseFolderPath', () => {
+describe('parseFolderFilterPath', () => {
   it('parses a single bare name to one lowercased, trimmed segment', () => {
-    expect(parseFolderPath('Development')).toEqual(['development']);
+    expect(parseFolderFilterPath('Development')).toEqual(['development']);
   });
 
   it('parses a Parent : Child path to ordered segments (leaf last)', () => {
-    expect(parseFolderPath('Development : Web')).toEqual(['development', 'web']);
+    expect(parseFolderFilterPath('Development : Web')).toEqual(['development', 'web']);
   });
 
   it('trims surrounding whitespace per segment regardless of spacing around the separator', () => {
-    expect(parseFolderPath('Development:Web')).toEqual(['development', 'web']);
-    expect(parseFolderPath('  Development :Web  ')).toEqual(['development', 'web']);
+    expect(parseFolderFilterPath('Development:Web')).toEqual(['development', 'web']);
+    expect(parseFolderFilterPath('  Development :Web  ')).toEqual(['development', 'web']);
   });
 
   it('throws on an empty segment (leading separator)', () => {
-    expect(() => parseFolderPath(' : Web')).toThrow();
+    expect(() => parseFolderFilterPath(' : Web')).toThrow();
   });
 
   it('throws on an empty segment (trailing separator)', () => {
-    expect(() => parseFolderPath('Development : ')).toThrow();
+    expect(() => parseFolderFilterPath('Development : ')).toThrow();
   });
 
   it('throws on an empty interior segment', () => {
-    expect(() => parseFolderPath('A : : B')).toThrow();
+    expect(() => parseFolderFilterPath('A : : B')).toThrow();
   });
 });
 

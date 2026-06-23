@@ -28,8 +28,13 @@ const FOLDER_PATH_SEPARATOR = ':';
  * Limitation: a literal `:` in a folder name is not escapable — a folder named
  * `"A:B"` parses as two segments. Documented, acceptable (no existing escape
  * mechanism; rare).
+ *
+ * NOTE: distinct from the WRITE-side `parseFolderPath` in `mutation/snippets.ts` —
+ * that is an OmniJS-string snippet with a different contract (accepts `/` separators,
+ * returns null for a bare name). The names were deliberately disambiguated (OMN-167
+ * review) so a future "align these" refactor doesn't merge two divergent contracts.
  */
-export function parseFolderPath(path: string): string[] {
+export function parseFolderFilterPath(path: string): string[] {
   const segments = path.split(FOLDER_PATH_SEPARATOR).map((s) => s.trim().toLowerCase());
   if (segments.some((s) => s.length === 0)) {
     throw new Error(
@@ -54,7 +59,7 @@ export function parseFolderPath(path: string): string[] {
  * full path.
  */
 export function emitFolderPathMatch(leafFolderExpr: string, path: string): string {
-  const segs = parseFolderPath(path);
+  const segs = parseFolderFilterPath(path);
   const segsLiteral = JSON.stringify(segs);
   // One template literal (not concatenated parts) so the embedded OmniJS `''`
   // empty-string literals don't fight the lint quote rule. Whitespace in the

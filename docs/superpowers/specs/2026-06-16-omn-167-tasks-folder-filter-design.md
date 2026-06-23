@@ -30,9 +30,9 @@ since OMN-162. Re-derived the surfaces against today's code, NOT the ticket text
 | Synthetic-field precedent `task.tagStatusValid`                                        | Confirmed: `SYNTHETIC_FIELD_DEFS` in `types.ts`; emitter `(operator, value) => string`; registered in `KNOWN_FIELDS`.                                                                                                                                                    | Mirror this exact pattern for `task.folderMatch`.                                                                          |
 | `folder:null` → `folderTopLevel`                                                       | Confirmed: mapping exists (`filter-merge.ts`, `filters.ts` `folderTopLevel?: boolean`, in `KNOWN_FIELDS`) but **no `FILTER_DEFS` consumer**.                                                                                                                             | Add the consumer.                                                                                                          |
 
-API confirmed (`OmniFocus-4.8.11-d.ts`): `Project.parentFolder: Folder | null` (1182) and `Folder.parent: Folder | null`
-(576) are both readable in OmniJS — the ancestor walk is feasible. Parent relationships work ONLY in OmniJS (bridge
-required), which both codegen paths already satisfy.
+API confirmed (`OmniFocus.d.ts`): `Project.parentFolder: Folder | null` and `Folder.parent: Folder | null` are both
+readable in OmniJS — the ancestor walk is feasible. Parent relationships work ONLY in OmniJS (bridge required), which
+both codegen paths already satisfy.
 
 ## 1. Decisions (confirmed with Kip, 2026-06-16)
 
@@ -155,7 +155,7 @@ relied on direct-parent-only scoping now also returns descendants.
   `folder:"<parent>"` now returns subtree projects, and that tasks `folder:"<parent>"` returns the union of those
   projects' tasks (recipe parity — the OMN-162 steering recipe still holds, now at subtree scope).
 - **Test audit:** `transform-project-filters.test.ts` and `ast-phase3-builders.test.ts` may assert direct-parent-only
-  matching; update those to subtree expectations (~104 folder-touching assertions across the suite — most are unrelated;
+  matching; update those to subtree expectations (the folder-touching assertions across the suite — most are unrelated;
   enumerate the projects-folder ones during implementation).
 
 ## 5. Tests

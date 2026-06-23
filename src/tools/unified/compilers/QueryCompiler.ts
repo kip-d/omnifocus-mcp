@@ -22,6 +22,7 @@ import {
 import { transformProjectFilters } from './transform-project-filters.js';
 import { transformTagFilters, transformFolderFilters, transformPerspectiveFilters } from './reject-filters.js';
 import { TASK_KEY_DISPOSITION, ON_HOLD_TASKS_REJECTION, terminalBranchRejection } from './task-key-disposition.js';
+import { assertValidFolderPath } from './folder-path-validation.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -240,6 +241,24 @@ export class QueryCompiler {
 
     const merged = mergeConflictChecked(sources);
 
+    // OMN-167: folder and folder:null map to DIFFERENT internal keys (folder vs
+    // folderTopLevel), so mergeConflictChecked (same-key only) can't catch their
+    // contradiction. ANDing "in folder X" with "top-level (no folder)" is unsatisfiable
+    // and would silently compile to an always-false predicate → 0 results, no error.
+    // Reject loudly instead (no-silent-failures).
+    if (merged.folder !== undefined && merged.folderTopLevel) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters'],
+          message:
+            `Contradictory folder filters: folder ${JSON.stringify(merged.folder)} requires a containing folder, ` +
+            'but folder:null requires a top-level project (no folder). AND-composed they match nothing. ' +
+            'Use one or the other, or express alternatives with OR.',
+        },
+      ]);
+    }
+
     // OMN-162 BASE SITE: if the input had ≥1 defined non-operator top-level key but
     // those keys all compiled away to literal(true), reject. This is the live bug path:
     // {tags:{any:[]}} passes schema validation, transformTags skips empty arrays,
@@ -374,7 +393,10 @@ export class QueryCompiler {
     // (TaskFilter.folder → builder's task.folderMatch). `folder: null` → top-level
     // project tasks (folderTopLevel), mirroring the projects-side null handling and
     // the OMN-96 `folder: null` semantics. Inbox tasks are excluded by both emitters.
+    // Validate the path here (ZodError + origin path) so an invalid path is a
+    // VALIDATION_ERROR, not a late EXECUTION_ERROR from the OmniJS emitter.
     if (typeof input.folder === 'string') {
+      assertValidFolderPath(input.folder, this.originToPath(origin));
       result.folder = input.folder;
     } else if (input.folder === null) {
       result.folderTopLevel = true;

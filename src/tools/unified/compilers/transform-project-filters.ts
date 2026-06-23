@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FilterValue, FlatFilterValue, ReadStatus } from '../schemas/read-schema.js';
 import type { ProjectFilter, ProjectStatus } from '../../../contracts/filters.js';
 import { STATUS_TO_PROJECT, extractTextCondition, filterDeepEqual, emptyOperatorError } from './filter-merge.js';
+import { assertValidFolderPath } from './folder-path-validation.js';
 
 type ProjectInputKey = keyof FlatFilterValue | 'AND' | 'OR' | 'NOT';
 // 'compose' = handled by a dedicated operator path (AND-merge / OR-branch /
@@ -151,6 +152,10 @@ function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array
   if (merged.folder === null) {
     result.topLevelOnly = true;
   } else if (typeof merged.folder === 'string') {
+    // OMN-167: validate the path here so an empty string / empty segment rejects as a
+    // VALIDATION_ERROR. Previously `if (filter.folderName)` treated "" as falsy and
+    // silently skipped the filter, returning ALL projects.
+    assertValidFolderPath(merged.folder, ['query', 'filters', 'folder']);
     result.folderName = merged.folder;
   }
 

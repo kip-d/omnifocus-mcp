@@ -239,7 +239,11 @@ function emitOmniJSFolderMatch(operator: ComparisonOperator, value: unknown): st
   }
   const path = value as string;
   const match = emitFolderPathMatch('(task.containingProject ? task.containingProject.parentFolder : null)', path);
-  return operator === '==' ? match : `!${match}`;
+  if (operator === '==') return match;
+  // `!=` must STILL exclude inbox tasks (Decision 3): a bare `!match` would let an
+  // inbox task (match===false → no containing project) pass `folder != X`. Require a
+  // containing project, then negate the subtree match.
+  return `(task.containingProject && !${match})`;
 }
 
 /**
