@@ -264,15 +264,12 @@ const PROJECT_STATUS_MAP: Record<ProjectStatus, string> = {
 
 /**
  * Emit one case-insensitive match condition against a project string field.
- * CONTAINS lowercases both sides; MATCHES compiles to a RegExp test. The
- * term is injected via JSON.stringify only — never raw interpolation.
+ * Thin wrapper over the shared {@link folderTextCondition} emitter (single
+ * source of truth for the CONTAINS-lowercase / MATCHES-regexp strategy) — it
+ * only supplies the null-guarded `project.<field>` accessor (OMN-213).
  */
 function projectTextCondition(field: 'name' | 'note', term: string, operator?: TextOperator): string {
-  const accessor = `(project.${field} || '')`;
-  if (operator === 'MATCHES') {
-    return `new RegExp(${JSON.stringify(term)}, 'i').test(${accessor})`;
-  }
-  return `${accessor}.toLowerCase().includes(${JSON.stringify(term.toLowerCase())})`;
+  return folderTextCondition(`(project.${field} || '')`, term, operator);
 }
 
 /**
@@ -424,10 +421,11 @@ export function describeProjectFilter(filter: ProjectFilter): string {
 // =============================================================================
 
 /**
- * Emit one case-insensitive match condition against a folder string field.
- * CONTAINS lowercases both sides; MATCHES compiles to a RegExp test. The term
- * is injected via JSON.stringify only — never raw interpolation (OMN-149-safe,
- * mirror of projectTextCondition).
+ * Emit one case-insensitive match condition against an arbitrary OmniJS string
+ * accessor. CONTAINS lowercases both sides; MATCHES compiles to a RegExp test.
+ * The term is injected via JSON.stringify only — never raw interpolation
+ * (OMN-149-safe). Single source of truth for folder- AND project-side text
+ * conditions: {@link projectTextCondition} delegates here (OMN-213).
  */
 function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
   if (operator === 'MATCHES') {
