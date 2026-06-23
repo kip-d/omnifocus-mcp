@@ -261,7 +261,7 @@ server provides only the former:
   Wi-Fi, a compromised router — can read the token and your task data off the wire, and replay the token to impersonate
   you.
 
-**A token alone is not transport security.** Treat it as a lock on the door, not as walls around the room.
+**A token alone is not transport security.**
 
 ### Safe deployment: wrap HTTP in an encrypted tunnel
 
@@ -276,6 +276,12 @@ this server does not:
 
 **Do not** expose the HTTP port directly to the public internet or to an untrusted LAN, even with `MCP_AUTH_TOKEN` set.
 Without a VPN there is no transport encryption, so the token and your data are exposed regardless.
+
+**Mind the defaults — they are not safe out of the box.** `--host` defaults to `0.0.0.0` (every network interface, not
+just localhost), and authentication is **off unless you set `MCP_AUTH_TOKEN`**. So a bare `node dist/index.js --http`
+already listens on your LAN with no token required. A safe setup is an active choice: bind `--host 127.0.0.1` for
+same-machine use, or keep the port reachable only inside your tailnet/firewall, and always set a token for remote
+access.
 
 ### Checklist
 
