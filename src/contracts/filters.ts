@@ -194,9 +194,13 @@ export interface TaskFilter {
   // --- Project Status (preserved for project queries) ---
   projectStatus?: ProjectStatus[];
 
-  // --- Folder (for project filtering) ---
-  folder?: string; // Filter projects by folder name
-  // OMN-96: `folder: null` (top-level projects only) compiles to this flag.
+  // --- Folder (OMN-167: tasks-side folder filter) ---
+  // `folder` is a `Parent : Child` path matched against the SUBTREE of the task's
+  // containing project's folder ancestry (builder → synthetic task.folderMatch).
+  folder?: string;
+  // `folder: null` (tasks with a top-level project — no containing folder) compiles
+  // to this flag → synthetic task.folderTopLevel. (Projects-side uses ProjectFilter's
+  // folderName / topLevelOnly; OMN-96 was that projects-side feature.)
   folderTopLevel?: boolean;
 
   // --- Pagination ---

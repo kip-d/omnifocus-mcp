@@ -13,6 +13,7 @@ import {
   isEmptyProjectFilter,
   describeProjectFilter,
 } from '../../src/contracts/ast/filter-generator.js';
+import { emitFolderPathMatch } from '../../src/contracts/ast/folder-path-match.js';
 import { buildFilteredProjectsScript, buildProjectByIdScript } from '../../src/contracts/ast/script-builder.js';
 import { buildTagsScript, buildActiveTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import type { ProjectFilter } from '../../src/contracts/filters.js';
@@ -83,6 +84,19 @@ describe('Phase 3 AST Builders', () => {
       const code = generateProjectFilterCode(filter);
       expect(code).toContain('project.parentFolder');
       expect(code).toContain('toLowerCase()');
+    });
+
+    // OMN-167: projects-side folderName now delegates to the SHARED subtree emitter
+    // (was direct-parent substring). Byte-identical delegation proves tasks↔projects
+    // can never silently diverge (DRY guarantee).
+    it('OMN-167: folderName uses the shared subtree emitter (delegates to emitFolderPathMatch)', () => {
+      const code = generateProjectFilterCode({ folderName: 'Work' });
+      expect(code).toContain(emitFolderPathMatch('project.parentFolder', 'Work'));
+    });
+
+    it('OMN-167: folderName supports a Parent : Child path on the projects side', () => {
+      const code = generateProjectFilterCode({ folderName: 'Development : Web' });
+      expect(code).toContain(emitFolderPathMatch('project.parentFolder', 'Development : Web'));
     });
 
     // OMN-96: top-level-only means "no containing folder" → !project.parentFolder

@@ -9,6 +9,8 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
+import { emitFolderPathMatch } from './folder-path-match.js';
+
 // =============================================================================
 // COMPARISON OPERATORS
 // =============================================================================
@@ -225,6 +227,43 @@ function emitOmniJSParentTaskId(operator: ComparisonOperator, value: unknown): s
 }
 
 /**
+ * OMN-167: tasks-side folder-path subtree match. `value` is the `Parent : Child`
+ * path string; delegates to the shared emitFolderPathMatch over the task's containing
+ * project's folder ancestry. The `containingProject ? … : null` guard means inbox
+ * tasks (no project) evaluate the leaf expression to null → the walk never runs → no
+ * match (Decision 3 — inbox excluded; reached via inInbox instead).
+ */
+function emitOmniJSFolderMatch(operator: ComparisonOperator, value: unknown): string {
+  if (operator !== '==' && operator !== '!=') {
+    throw new Error(`Unsupported folderMatch operator: ${operator}`);
+  }
+  const path = value as string;
+  const match = emitFolderPathMatch('(task.containingProject ? task.containingProject.parentFolder : null)', path);
+  if (operator === '==') return match;
+  // `!=` must STILL exclude inbox tasks (Decision 3): a bare `!match` would let an
+  // inbox task (match===false → no containing project) pass `folder != X`. Require a
+  // containing project, then negate the subtree match.
+  return `(task.containingProject && !${match})`;
+}
+
+/**
+ * OMN-167: `folder: null` → tasks whose containing project has no parent folder
+ * (top-level projects). The `containingProject &&` guard excludes inbox tasks
+ * (Decision 1 — folder filtering is purely about the project→folder hierarchy).
+ */
+function emitOmniJSFolderTopLevel(operator: ComparisonOperator, value: unknown): string {
+  if (operator !== '==' && operator !== '!=') {
+    throw new Error(`Unsupported folderTopLevel operator: ${operator}`);
+  }
+  const wantTopLevel = (operator === '==') === (value as boolean);
+  const expr = '(task.containingProject && !task.containingProject.parentFolder)';
+  if (wantTopLevel) return expr;
+  // Negation must STILL exclude inbox (Decision 3): a bare `!expr` would let inbox tasks
+  // (expr===false → no containing project) pass. Require a containing project, then negate.
+  return '(task.containingProject && !!task.containingProject.parentFolder)';
+}
+
+/**
  * Registry of synthetic fields and their emitter functions.
  * Adding a new synthetic field requires one entry here.
  */
@@ -236,6 +275,9 @@ export const SYNTHETIC_FIELD_DEFS: readonly SyntheticFieldDef[] = [
   { field: 'task.available', omnijs: emitOmniJSAvailable },
   { field: 'task.blocked', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Blocked') },
   { field: 'task.tagStatusValid', omnijs: emitOmniJSTagStatusValid },
+  // OMN-167: folder-path subtree match + top-level (folder:null) on tasks.
+  { field: 'task.folderMatch', omnijs: emitOmniJSFolderMatch },
+  { field: 'task.folderTopLevel', omnijs: emitOmniJSFolderTopLevel },
 ];
 
 /** Lookup map for fast field-to-def resolution in emitters. */
@@ -264,6 +306,8 @@ export const KNOWN_FIELDS = [
   'task.dropped', // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
   'task.tagStatusValid', // Synthetic: has active/on-hold tag or untagged (computed in emitter)
   'task.parentTaskId', // OMN-114 synthetic: task.parent.id.primaryKey === <id> (null-guarded, computed in emitter)
+  'task.folderMatch', // OMN-167 synthetic: containing project's folder ancestry ⊇ path (subtree, computed in emitter)
+  'task.folderTopLevel', // OMN-167 synthetic: folder:null → containing project has no parent folder (computed in emitter)
 
   // Date properties
   'task.dueDate',

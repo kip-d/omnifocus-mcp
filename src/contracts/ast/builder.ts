@@ -217,6 +217,20 @@ export const FILTER_DEFS: readonly FilterDef[] = [
     build: (f) => (f.parentTaskId !== undefined ? comparison('task.parentTaskId', '==', f.parentTaskId) : null),
   },
 
+  // --- Folder filter (OMN-167) ---
+  // `folder: "<Parent : Child path>"` → subtree match on the task's containing
+  // project's folder ancestry (synthetic task.folderMatch). `folder: null` arrives
+  // as folderTopLevel:true (mapped in QueryCompiler) → containing project has no
+  // parent folder. Both exclude inbox tasks (no containing project).
+  {
+    fields: ['task.folderMatch'],
+    build: (f) => (f.folder !== undefined ? comparison('task.folderMatch', '==', f.folder) : null),
+  },
+  {
+    fields: ['task.folderTopLevel'],
+    build: (f) => (f.folderTopLevel ? comparison('task.folderTopLevel', '==', true) : null),
+  },
+
   // --- Estimated minutes (numeric) filter (OMN-49) ---
   {
     fields: ['task.estimatedMinutes'],

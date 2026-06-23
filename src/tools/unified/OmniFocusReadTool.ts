@@ -279,7 +279,7 @@ FILTER OPERATORS:
 - text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
-- folder (projects queries ONLY): "<name>" matches folder-name substring; null = top-level projects only. On tasks queries folder and status: "on_hold" are rejected with guidance (query projects first, then tasks by projectId)
+- folder (tasks AND projects queries): "<Parent : Child path>" matches the folder SUBTREE (a bare name is a single-segment path; case-insensitive substring per segment); null = top-level only (no containing folder). On tasks queries it matches the folder ancestry of the task's containing project (inbox tasks excluded). status: "on_hold" is still rejected on tasks queries with guidance (query projects first, then tasks by projectId)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false. A terminal status: "dropped"/"completed" inside an OR branch is rejected (tasks exclude those by default, so the branch would never match) — put it at the top level instead
 - Projects filters: status, completed, flagged, name, text, folder, id. AND merges; OR: [...] returns the union of its branches; NOT: { status: "active"|"on_hold"|"completed"|"dropped" } matches the complement of that status over the four project states (broader than the tasks NOT, which is completed/active only).
 
@@ -1254,5 +1254,4 @@ PERFORMANCE:
 
     return buildFoldersResponse(folders, totalAvailable, {});
   }
-
 }

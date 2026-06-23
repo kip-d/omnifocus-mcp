@@ -13,46 +13,39 @@ import { MCPTestClient } from './helpers/mcp-test-client.js';
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
-d('OMN-162/OMN-166: tasks-side folder/on_hold rejection; projects regression', () => {
+d('OMN-167: tasks-side folder implemented; on_hold rejection; projects regression', () => {
   let client: MCPTestClient;
 
   beforeAll(async () => {
     client = await getSharedClient();
   });
 
-  it('folder base: tasks filters.folder rejects with steering', async () => {
-    await expect(
-      client.callTool('omnifocus_read', {
-        query: {
-          type: 'tasks',
-          filters: { folder: 'Bills' },
-          limit: 10,
-        },
-      }),
-    ).rejects.toThrow(/not supported on tasks queries/i);
+  it('folder base: tasks filters.folder now resolves (OMN-167 — was OMN-162 reject)', async () => {
+    const result = (await client.callTool('omnifocus_read', {
+      query: {
+        type: 'tasks',
+        filters: { folder: 'Bills' },
+        limit: 10,
+      },
+    })) as { success: boolean; data?: { tasks?: unknown[] } };
 
-    // Steering must mention projectId as the alternative
-    await expect(
-      client.callTool('omnifocus_read', {
-        query: {
-          type: 'tasks',
-          filters: { folder: 'Bills' },
-          limit: 10,
-        },
-      }),
-    ).rejects.toThrow(/projectId/);
+    // The flip from reject → working query: must succeed and return a tasks array
+    // (0 rows is fine if no project sits under a "Bills" folder).
+    expect(result.success).toBe(true);
+    expect(result.data?.tasks, 'envelope missing data.tasks').toBeDefined();
   }, 30000);
 
-  it('folder OR variant: OR containing folder rejects (was live match-all)', async () => {
-    await expect(
-      client.callTool('omnifocus_read', {
-        query: {
-          type: 'tasks',
-          filters: { OR: [{ folder: 'Bills' }, { flagged: true }] },
-          limit: 10,
-        },
-      }),
-    ).rejects.toThrow(/not supported on tasks queries/i);
+  it('folder OR variant: OR containing folder now resolves (OMN-167)', async () => {
+    const result = (await client.callTool('omnifocus_read', {
+      query: {
+        type: 'tasks',
+        filters: { OR: [{ folder: 'Bills' }, { flagged: true }] },
+        limit: 10,
+      },
+    })) as { success: boolean; data?: { tasks?: unknown[] } };
+
+    expect(result.success).toBe(true);
+    expect(result.data?.tasks, 'envelope missing data.tasks').toBeDefined();
   }, 30000);
 
   it('on_hold: tasks filters.status on_hold rejects with steering', async () => {

@@ -3,6 +3,9 @@ import type { FlatFilterValue } from '../schemas/read-schema.js';
 type TaskInputKey = keyof FlatFilterValue | 'AND' | 'OR' | 'NOT';
 // Tasks-local union — the projects one is 'map' | 'merge' | 'reject' (transform-project-filters.ts);
 // deliberately NOT shared (design spec §3.1).
+// 'reject' is retained as a valid disposition (structural guard in QueryCompiler's
+// key-enforcement loop) even though OMN-167 left zero reject keys — a future
+// unsupported tasks key sets 'reject' here and the loop rejects it generically.
 type Disposition = 'map' | 'compose' | 'reject';
 
 /**
@@ -33,16 +36,13 @@ export const TASK_KEY_DISPOSITION = {
   text: 'map',
   estimatedMinutes: 'map',
   name: 'map',
-  folder: 'reject', // OMN-162: inert on tasks — was silent match-all. Capability work: OMN-167.
+  // OMN-167: tasks-side folder filter implemented (was OMN-162 'reject'). `folder: "<path>"`
+  // → subtree path match; `folder: null` → top-level-project tasks (folderTopLevel).
+  folder: 'map',
   AND: 'compose',
   OR: 'compose',
   NOT: 'compose',
 } as const satisfies Record<TaskInputKey, Disposition>;
-
-export const FOLDER_TASKS_REJECTION =
-  'filters.folder is not supported on tasks queries — it previously matched nothing and silently returned all tasks. ' +
-  'To get tasks in a folder: query projects with filters.folder first, then query tasks by projectId. ' +
-  'folder remains supported on projects queries.';
 
 export const ON_HOLD_TASKS_REJECTION =
   "status:'on_hold' is not supported on tasks queries — on-hold is a project status. " +
