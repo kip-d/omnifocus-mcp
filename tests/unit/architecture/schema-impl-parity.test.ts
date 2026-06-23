@@ -12,7 +12,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL as NodeURL } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
 
 import {
   TaskFieldEnum,
@@ -112,13 +111,9 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
       const value = FILTER_SAMPLES[fieldName];
       const input = { [fieldName]: value };
 
-      // OMN-162: 'folder' is explicitly rejected on the tasks path with a
-      // steering message — that IS recognition (not silent drop). Assert
-      // the new contract without weakening unrelated assertions.
-      if (fieldName === 'folder') {
-        expect(() => compiler.transformFilters(input as any)).toThrow(z.ZodError);
-        return;
-      }
+      // OMN-167: 'folder' is now implemented on tasks (maps to result.folder /
+      // result.folderTopLevel) — it flows through the normal recognition path
+      // below like every other field (was an OMN-162 reject special-case).
 
       // Spy on console.warn — the QueryCompiler emits this on unknown
       // properties. A field the compiler doesn't recognize would slip

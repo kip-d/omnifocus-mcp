@@ -7,16 +7,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Folder filter on `type:"tasks"` queries** (OMN-167) — `filters.folder` now works on tasks (was rejected with
+  steering since OMN-162). A string is a `Parent : Child` **path** matched against the folder **subtree** of the task's
+  containing project (a bare name is a single-segment path; case-insensitive substring per segment; status-agnostic — no
+  folder-status check). `folder: null` matches tasks in top-level projects (no containing folder). **Inbox tasks are
+  excluded** — they have no containing project; reach them via `inInbox` / `project: null`. Tasks-side and projects-side
+  share one OmniJS emitter (`src/contracts/ast/folder-path-match.ts`), so the two can never silently diverge.
+
+### Changed
+
+- **Projects folder filter widened to subtree path** (OMN-167) — `type:"projects"` `filters.folder: "<name>"` changed
+  from a **direct-parent** substring match to a **subtree** `Parent : Child` path match (shared with the new tasks-side
+  filter). This is a pure **superset**: subtree includes the direct-parent case, so no previously-matching query loses
+  results — but a query that relied on direct-parent-only scoping now also returns projects in descendant folders.
+  Supersedes OMN-203 (which tracked widening projects separately).
+
 ### Removed
 
-- **BREAKING: `omnifocus_read type:"export"` removed entirely** (OMN-193) — the export query type and all its
-  parameters (`exportType`, `format`, `exportFields`, `outputDirectory`, `includeCompleted`) are gone, along with the
-  parallel export pipeline behind them (`buildExportTasksScript`, `normalizeExportFilter`, the hand-rolled
+- **BREAKING: `omnifocus_read type:"export"` removed entirely** (OMN-193) — the export query type and all its parameters
+  (`exportType`, `format`, `exportFields`, `outputDirectory`, `includeCompleted`) are gone, along with the parallel
+  export pipeline behind them (`buildExportTasksScript`, `normalizeExportFilter`, the hand-rolled
   `EXPORT_PROJECTS_SCRIPT`, `EXPORT_FIELD_MAP`, and the export response schemas). A `type:"export"` query now rejects as
   an unknown query type. **Rationale:** export was a token-wasteful parallel pipeline. The response path returned the
   full payload into the model's context — a capped tasks query in disguise, redundant with a normal `type:"tasks"`
   query. The disk-write path's only niche (a filtered/projected file) is better served by the OmniFocus app's native
-  backup/export, or — for a genuine ad-hoc file — by running a *targeted* query and writing just those rows. Removing
+  backup/export, or — for a genuine ad-hoc file — by running a _targeted_ query and writing just those rows. Removing
   the pipeline also structurally eliminates the divergence bug class where export silently missed main-pipeline fixes
   (e.g. the OMN-153 project-root leak). To export, use the OmniFocus app (**File ▸ Back Up Database**, or a
   perspective + copy/paste); see the omnifocus-assistant skill's "Exports" note.

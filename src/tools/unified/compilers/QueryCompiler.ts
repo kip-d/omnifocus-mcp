@@ -21,12 +21,7 @@ import {
 } from './filter-merge.js';
 import { transformProjectFilters } from './transform-project-filters.js';
 import { transformTagFilters, transformFolderFilters, transformPerspectiveFilters } from './reject-filters.js';
-import {
-  TASK_KEY_DISPOSITION,
-  FOLDER_TASKS_REJECTION,
-  ON_HOLD_TASKS_REJECTION,
-  terminalBranchRejection,
-} from './task-key-disposition.js';
+import { TASK_KEY_DISPOSITION, ON_HOLD_TASKS_REJECTION, terminalBranchRejection } from './task-key-disposition.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -320,8 +315,9 @@ export class QueryCompiler {
     // OMN-162: tasks-side key dispositions. Reject on disposition === 'reject' ONLY —
     // the base call passes the full input (AND/OR/NOT included), so a !== 'map'
     // check would reject every operator-using query.
-    // NOTE: folder is currently the only 'reject' key; a second reject key would
-    // need a per-key message map rather than the single constant.
+    // OMN-167: zero keys are 'reject' now (folder became 'map'). The loop stays as a
+    // structural guard: a future unsupported tasks key set to 'reject' is rejected
+    // here generically (a per-key steering message replaces the old folder constant).
     for (const key of Object.keys(input)) {
       if ((input as Record<string, unknown>)[key] === undefined) continue;
       if ((TASK_KEY_DISPOSITION as Record<string, string>)[key] === 'reject') {
@@ -329,7 +325,7 @@ export class QueryCompiler {
           {
             code: z.ZodIssueCode.custom,
             path: this.originToPath(origin),
-            message: FOLDER_TASKS_REJECTION,
+            message: `filters.${key} is not supported on tasks queries.`,
           },
         ]);
       }
@@ -373,8 +369,16 @@ export class QueryCompiler {
 
     // ID passthrough
     if (input.id) result.id = input.id;
-    // folder is rejected above (OMN-162) — no tasks-side mapping here.
-    // The projects path maps folder in transform-project-filters.ts.
+
+    // OMN-167: folder filter on tasks. `folder: "<path>"` → subtree path match
+    // (TaskFilter.folder → builder's task.folderMatch). `folder: null` → top-level
+    // project tasks (folderTopLevel), mirroring the projects-side null handling and
+    // the OMN-96 `folder: null` semantics. Inbox tasks are excluded by both emitters.
+    if (typeof input.folder === 'string') {
+      result.folder = input.folder;
+    } else if (input.folder === null) {
+      result.folderTopLevel = true;
+    }
 
     // Safety net: warn on unknown properties that survived schema validation
     const unknownProps = validateFilterProperties(result as Record<string, unknown>);

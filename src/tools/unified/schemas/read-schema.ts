@@ -119,7 +119,12 @@ const filterFields = {
   // (TaskFilter) → `topLevelOnly` (ProjectFilter); null never reaches the
   // emitter as a folder *name*. See QueryCompiler.transformFilters and
   // generateProjectFilterCode.
-  folder: z.union([z.string(), z.null()]).optional(), // Project filters; null = top-level only (OMN-96). folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders. tasks queries REJECT this key with a steering error (OMN-162); enforcement in QueryCompiler via TASK_KEY_DISPOSITION.
+  //
+  // OMN-167 UPDATE: a string is now a `Parent : Child` PATH matched against the
+  // folder SUBTREE (shared emitter, src/contracts/ast/folder-path-match.ts), and
+  // tasks queries SUPPORT folder (was OMN-162 reject) — the task's containing
+  // project's folder ancestry, inbox excluded. Bare name = single-segment path.
+  folder: z.union([z.string(), z.null()]).optional(), // "<Parent : Child path>" = subtree match (OMN-167); null = top-level only (OMN-96). tasks queries (OMN-167): folder of the task's containing project, subtree, inbox excluded. projects queries: subtree path match. folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders.
 };
 
 // Flat filter: base fields only, no logical operators.

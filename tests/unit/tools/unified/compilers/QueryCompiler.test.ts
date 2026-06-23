@@ -792,15 +792,15 @@ describe('QueryCompiler', () => {
         expect(result.id).toBe('task-xyz');
       });
 
-      // OMN-162: folder is now rejected on tasks queries — was previously silently
-      // mapping to result.folder or result.folderTopLevel (both inert on tasks,
-      // returning all tasks). The old tests are updated to assert the new contract.
-      it('input.folder throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
-        expect(() => compiler.transformFilters({ folder: 'Work' })).toThrow(z.ZodError);
+      // OMN-167: folder is implemented on tasks (was OMN-162 reject). A folder path
+      // string maps to result.folder (subtree match); folder:null maps to
+      // result.folderTopLevel (top-level-project tasks). Pure widening of OMN-162.
+      it('input.folder maps to result.folder on tasks path (OMN-167)', () => {
+        expect(compiler.transformFilters({ folder: 'Work' }).folder).toBe('Work');
       });
 
-      it('input.folder: null throws ZodError on tasks path (OMN-162 — was silently inert)', () => {
-        expect(() => compiler.transformFilters({ folder: null } as never)).toThrow(z.ZodError);
+      it('input.folder: null maps to result.folderTopLevel on tasks path (OMN-167)', () => {
+        expect(compiler.transformFilters({ folder: null } as never).folderTopLevel).toBe(true);
       });
     });
 
@@ -925,53 +925,32 @@ describe('QueryCompiler', () => {
     });
   });
 
-  // OMN-162: filters.folder must reject on tasks queries (was silently inert — returned ALL tasks)
-  describe('OMN-162: folder rejects on tasks queries', () => {
-    it('base: tasks query with filters {folder:"Work"} throws ZodError with full steering message', () => {
-      try {
-        compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
-        expect.unreachable('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(z.ZodError);
-        const message = (e as z.ZodError).issues[0].message;
-        expect(message).toMatch(/not supported on tasks queries/);
-        expect(message).toMatch(/filters\.folder/);
-        expect(message).toMatch(/projectId/);
-      }
+  // OMN-167: filters.folder is now implemented on tasks queries (was OMN-162 reject).
+  // The flip is a pure widening: every case that used to throw now compiles.
+  describe('OMN-167: folder is implemented on tasks queries', () => {
+    it('base: tasks query with filters {folder:"Work"} compiles and maps the folder path', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { folder: 'Work' } } });
+      expect(compiled.type).toBe('tasks');
+      expect((compiled.filters as Record<string, unknown>).folder).toBe('Work');
     });
 
-    it('base null shape: filters {folder: null} rejects with same message', () => {
-      try {
-        compiler.compile({ query: { type: 'tasks', filters: { folder: null } } } as never);
-        expect.unreachable('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(z.ZodError);
-        expect((e as z.ZodError).issues[0].message).toMatch(/not supported on tasks queries/);
-      }
+    it('base null shape: filters {folder: null} maps to folderTopLevel', () => {
+      const compiled = compiler.compile({ query: { type: 'tasks', filters: { folder: null } } } as never);
+      expect((compiled.filters as Record<string, unknown>).folderTopLevel).toBe(true);
     });
 
-    it('AND item: filters {AND: [{folder: "Work"}]} throws; path includes AND,0', () => {
-      try {
-        compiler.compile({ query: { type: 'tasks', filters: { AND: [{ folder: 'Work' }] } } } as never);
-        expect.unreachable('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(z.ZodError);
-        const issue = (e as z.ZodError).issues[0];
-        expect(issue.path).toEqual(['query', 'filters', 'AND', 0]);
-      }
+    it('AND item: filters {AND: [{folder: "Work"}]} compiles (no longer throws)', () => {
+      expect(() =>
+        compiler.compile({ query: { type: 'tasks', filters: { AND: [{ folder: 'Work' }] } } } as never),
+      ).not.toThrow();
     });
 
-    it('OR branch: filters {OR: [{folder: "Work"}, {flagged: true}]} throws; path includes OR,0', () => {
-      try {
+    it('OR branch: filters {OR: [{folder: "Work"}, {flagged: true}]} compiles (no longer throws)', () => {
+      expect(() =>
         compiler.compile({
           query: { type: 'tasks', filters: { OR: [{ folder: 'Work' }, { flagged: true }] } },
-        } as never);
-        expect.unreachable('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(z.ZodError);
-        const issue = (e as z.ZodError).issues[0];
-        expect(issue.path).toEqual(['query', 'filters', 'OR', 0]);
-      }
+        } as never),
+      ).not.toThrow();
     });
 
     it('control: filters {flagged: true} does NOT throw', () => {
@@ -1029,11 +1008,12 @@ describe('QueryCompiler', () => {
   // OMN-162: match-all compile guard — filters that compile to literal(true) reject
   describe('OMN-162: match-all compile guard (literal(true) hazard)', () => {
     // Import the exported helper directly for unit-level assertions
-    it('compilesToMatchAll({folder:"X"}) === true — synthetic inert key (TaskFilter type still has folder even though input-level rejection precedes this path)', async () => {
+    it('compilesToMatchAll({folder:"X"}) === false — OMN-167 folder now produces a real condition', async () => {
       const { compilesToMatchAll } = await import('../../../../../src/tools/unified/compilers/QueryCompiler.js');
-      // folder is in the TaskFilter type but has no AST builder entry → literal(true)
+      // OMN-167: folder has an AST builder entry (task.folderMatch) → real condition,
+      // no longer a match-all hazard. (Was true pre-OMN-167 when folder was inert.)
       expect(compilesToMatchAll({ folder: 'X' } as import('../../../../../src/contracts/filters.js').TaskFilter)).toBe(
-        true,
+        false,
       );
     });
 

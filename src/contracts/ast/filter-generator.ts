@@ -26,6 +26,7 @@ import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
+import { emitFolderPathMatch } from './folder-path-match.js';
 
 // =============================================================================
 // TYPES
@@ -328,12 +329,12 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
     conditions.push(`(project.parentFolder && project.parentFolder.id.primaryKey === ${escapedId})`);
   }
 
-  // Folder filter by name (case-insensitive)
+  // Folder filter by name/path (OMN-167: subtree match via the shared emitter).
+  // Upgraded from direct-parent substring → `Parent : Child` path, subtree scope —
+  // a deliberate widening (subtree ⊇ direct-parent, so no prior match is lost), kept
+  // byte-identical with the tasks-side task.folderMatch emitter (DRY).
   if (filter.folderName) {
-    const escapedName = JSON.stringify(filter.folderName.toLowerCase());
-    conditions.push(
-      `(project.parentFolder && (project.parentFolder.name || '').toLowerCase().includes(${escapedName}))`,
-    );
+    conditions.push(emitFolderPathMatch('project.parentFolder', filter.folderName));
   }
 
   // OMN-96: top-level projects only — no containing folder.
@@ -400,7 +401,8 @@ export function describeProjectFilter(filter: ProjectFilter): string {
     conditions.push(`folder ID = ${filter.folderId}`);
   }
   if (filter.folderName) {
-    conditions.push(`folder name contains "${filter.folderName}"`);
+    // OMN-167: subtree path match (Parent : Child), not direct-parent substring.
+    conditions.push(`folder path ⊇ "${filter.folderName}" (subtree)`);
   }
   if (filter.topLevelOnly) {
     conditions.push('top-level only (no folder)'); // OMN-96
