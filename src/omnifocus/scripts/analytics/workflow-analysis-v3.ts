@@ -812,7 +812,8 @@ export const WORKFLOW_ANALYSIS_V3 = `
             problematicDeferrals: problematicDeferrals,
             strategicRate: totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0,
             problematicRate: totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0,
-            deferralDetails: deferredTaskDetails.slice(0, 10) // Top 10 for analysis
+            // True "Top 10": rank by deferral magnitude (longest defer first), not DB iteration order
+            deferralDetails: deferredTaskDetails.slice().sort(function(a, b) { return b.deferDays - a.deferDays; }).slice(0, 10)
           };
 
           return JSON.stringify({
