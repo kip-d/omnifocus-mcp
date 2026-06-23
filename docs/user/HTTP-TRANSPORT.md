@@ -252,10 +252,43 @@ Normal. HTTP creates sessions per connection; they auto-cleanup after 30 minutes
 
 ## Security
 
-1. **Use authentication** (`MCP_AUTH_TOKEN`) for remote access
-2. **Use Tailscale/VPN** instead of public internet exposure
-3. **Bind to localhost** for same-machine only: `--host 127.0.0.1`
-4. **Strong tokens:** `openssl rand -hex 32`
+HTTP transport sends requests over **plain HTTP — there is no built-in TLS/encryption.** Both the bearer token and your
+OmniFocus data travel across the network in cleartext. Authentication and encryption are separate concerns, and this
+server provides only the former:
+
+- The `MCP_AUTH_TOKEN` bearer token **authenticates** requests (proves the caller knows the secret).
+- It does **not encrypt** them. Anyone who can observe the network path — another host on an untrusted LAN, public
+  Wi-Fi, a compromised router — can read the token and your task data off the wire, and replay the token to impersonate
+  you.
+
+**A token alone is not transport security.**
+
+### Safe deployment: wrap HTTP in an encrypted tunnel
+
+Run the HTTP transport only over a network you fully trust, or wrap it in a VPN that supplies the transport encryption
+this server does not:
+
+- **Recommended — Tailscale (WireGuard):** the [Tailscale setup above](#secure-setup-with-tailscale) encrypts the entire
+  tunnel end-to-end, so the cleartext HTTP inside it is protected. Bearer token + plain HTTP **inside** a Tailscale
+  tunnel is the supported secure configuration.
+- **Local-only:** bind to localhost (`--host 127.0.0.1`) when the client runs on the same machine — nothing leaves the
+  host.
+
+**Do not** expose the HTTP port directly to the public internet or to an untrusted LAN, even with `MCP_AUTH_TOKEN` set.
+Without a VPN there is no transport encryption, so the token and your data are exposed regardless.
+
+**Mind the defaults — they are not safe out of the box.** `--host` defaults to `0.0.0.0` (every network interface, not
+just localhost), and authentication is **off unless you set `MCP_AUTH_TOKEN`**. So a bare `node dist/index.js --http`
+already listens on your LAN with no token required. A safe setup is an active choice: bind `--host 127.0.0.1` for
+same-machine use, or keep the port reachable only inside your tailnet/firewall, and always set a token for remote
+access.
+
+### Checklist
+
+1. **Use a VPN/Tailscale** (or a fully trusted LAN) — never raw HTTP over an untrusted network.
+2. **Always set `MCP_AUTH_TOKEN`** for any remote access.
+3. **Bind to localhost** (`--host 127.0.0.1`) for same-machine-only use.
+4. **Use strong tokens:** `openssl rand -hex 32`.
 
 ## stdio vs HTTP
 
