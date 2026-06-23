@@ -151,16 +151,21 @@ describe('Phase 3 AST Builders', () => {
     // CONTAINS-lowercasing / MATCHES-regexp-flag strategy from silently drifting
     // between the two surfaces — the duplication the delegation removes.
     describe('OMN-213: project/folder text-condition parity (shared emitter)', () => {
+      // Normalize only the exact accessor LITERAL, not a bare 'folder.name'
+      // substring — otherwise a search term that happened to contain the accessor
+      // text would be rewritten too, producing a false parity failure.
+      const stripAccessor = (code: string, field: string): string => code.replace(`(${field} || '')`, '<ACC>');
+
       it('CONTAINS strategy is byte-identical across project and folder name filters', () => {
         const proj = generateProjectFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });
         const fold = generateFolderFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });
-        expect(proj).toBe(fold.split('folder.name').join('project.name'));
+        expect(stripAccessor(proj, 'project.name')).toBe(stripAccessor(fold, 'folder.name'));
       });
 
       it('MATCHES strategy is byte-identical across project and folder name filters', () => {
         const proj = generateProjectFilterCode({ name: 'Wo.k', nameOperator: 'MATCHES' });
         const fold = generateFolderFilterCode({ name: 'Wo.k', nameOperator: 'MATCHES' });
-        expect(proj).toBe(fold.split('folder.name').join('project.name'));
+        expect(stripAccessor(proj, 'project.name')).toBe(stripAccessor(fold, 'folder.name'));
       });
     });
   });

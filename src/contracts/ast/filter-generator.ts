@@ -449,10 +449,10 @@ export function generateFolderFilterCode(filter: FolderFilter): string {
     conditions.push(`(${folderTextCondition("(folder.name || '')", filter.name, filter.nameOperator)})`);
   }
 
-  // Parent folder name (case-insensitive substring), null-guarded.
+  // Parent folder name (case-insensitive substring), null-guarded. CONTAINS-only
+  // (no parentName operator), so the shared emitter's default branch applies (OMN-213).
   if (filter.parentName) {
-    const escaped = JSON.stringify(filter.parentName.toLowerCase());
-    conditions.push(`(folder.parent && (folder.parent.name || '').toLowerCase().includes(${escaped}))`);
+    conditions.push(`(folder.parent && ${folderTextCondition("(folder.parent.name || '')", filter.parentName)})`);
   }
 
   // Top-level only — no containing parent folder.
