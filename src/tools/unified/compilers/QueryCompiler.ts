@@ -241,24 +241,6 @@ export class QueryCompiler {
 
     const merged = mergeConflictChecked(sources);
 
-    // OMN-167: folder and folder:null map to DIFFERENT internal keys (folder vs
-    // folderTopLevel), so mergeConflictChecked (same-key only) can't catch their
-    // contradiction. ANDing "in folder X" with "top-level (no folder)" is unsatisfiable
-    // and would silently compile to an always-false predicate → 0 results, no error.
-    // Reject loudly instead (no-silent-failures).
-    if (merged.folder !== undefined && merged.folderTopLevel) {
-      throw new z.ZodError([
-        {
-          code: z.ZodIssueCode.custom,
-          path: ['query', 'filters'],
-          message:
-            `Contradictory folder filters: folder ${JSON.stringify(merged.folder)} requires a containing folder, ` +
-            'but folder:null requires a top-level project (no folder). AND-composed they match nothing. ' +
-            'Use one or the other, or express alternatives with OR.',
-        },
-      ]);
-    }
-
     // OMN-162 BASE SITE: if the input had ≥1 defined non-operator top-level key but
     // those keys all compiled away to literal(true), reject. This is the live bug path:
     // {tags:{any:[]}} passes schema validation, transformTags skips empty arrays,
@@ -319,7 +301,38 @@ export class QueryCompiler {
       });
     }
 
+    this.rejectFolderContradiction(merged);
     return merged;
+  }
+
+  /**
+   * OMN-167: `folder:"X"` and `folder:null` map to DIFFERENT internal keys (folder vs
+   * folderTopLevel), so mergeConflictChecked (same-key only) never sees the contradiction.
+   * ANDing "in folder X" with "top-level (no folder)" is unsatisfiable — it compiles to an
+   * always-false predicate → 0 results with no error (a no-silent-failures violation).
+   *
+   * The conjunction is `base AND (orBranch_1 OR orBranch_2 OR …)`. So folderMatch is FORCED
+   * iff base sets folder OR every OR branch sets folder; folderTopLevel is FORCED iff base
+   * sets it OR every OR branch sets it. Both forced ⇒ unsatisfiable. (`{OR:[{folder:"X"},
+   * {folder:null}]}` is satisfiable — "in X OR top-level" — and is correctly NOT rejected.)
+   */
+  private rejectFolderContradiction(merged: TaskFilter): void {
+    const branches = merged.orBranches;
+    const everyBranch = (pred: (b: TaskFilter) => boolean): boolean =>
+      Array.isArray(branches) && branches.length > 0 && branches.every(pred);
+    const forcedFolder = merged.folder !== undefined || everyBranch((b) => b.folder !== undefined);
+    const forcedTopLevel = merged.folderTopLevel === true || everyBranch((b) => b.folderTopLevel === true);
+    if (forcedFolder && forcedTopLevel) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['query', 'filters'],
+          message:
+            'Contradictory folder filters: a folder path requires a containing folder, but folder:null requires a ' +
+            'top-level project (no folder). AND-composed they match nothing. Use one or the other, or OR for alternatives.',
+        },
+      ]);
+    }
   }
 
   /**
@@ -396,7 +409,7 @@ export class QueryCompiler {
     // Validate the path here (ZodError + origin path) so an invalid path is a
     // VALIDATION_ERROR, not a late EXECUTION_ERROR from the OmniJS emitter.
     if (typeof input.folder === 'string') {
-      assertValidFolderPath(input.folder, this.originToPath(origin));
+      assertValidFolderPath(input.folder, [...this.originToPath(origin), 'folder']);
       result.folder = input.folder;
     } else if (input.folder === null) {
       result.folderTopLevel = true;

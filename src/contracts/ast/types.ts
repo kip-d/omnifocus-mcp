@@ -257,7 +257,10 @@ function emitOmniJSFolderTopLevel(operator: ComparisonOperator, value: unknown):
   }
   const wantTopLevel = (operator === '==') === (value as boolean);
   const expr = '(task.containingProject && !task.containingProject.parentFolder)';
-  return wantTopLevel ? expr : `!${expr}`;
+  if (wantTopLevel) return expr;
+  // Negation must STILL exclude inbox (Decision 3): a bare `!expr` would let inbox tasks
+  // (expr===false → no containing project) pass. Require a containing project, then negate.
+  return '(task.containingProject && !!task.containingProject.parentFolder)';
 }
 
 /**

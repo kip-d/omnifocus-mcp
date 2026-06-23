@@ -13,14 +13,14 @@ import { parseFolderFilterPath } from '../../../contracts/ast/folder-path-match.
 export function assertValidFolderPath(path: string, zodPath: (string | number)[]): void {
   try {
     parseFolderFilterPath(path);
-  } catch {
+  } catch (e) {
+    // Re-surface parseFolderFilterPath's own message as a ZodError (single source of
+    // truth for the wording) at the supplied path → VALIDATION_ERROR with steering.
     throw new z.ZodError([
       {
         code: z.ZodIssueCode.custom,
         path: zodPath,
-        message:
-          `Invalid folder path ${JSON.stringify(path)}: segments cannot be empty. ` +
-          'Use "Parent : Child" with non-empty folder names (a bare name is a single segment).',
+        message: e instanceof Error ? e.message : `Invalid folder path ${JSON.stringify(path)}.`,
       },
     ]);
   }

@@ -154,8 +154,9 @@ function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array
   } else if (typeof merged.folder === 'string') {
     // OMN-167: validate the path here so an empty string / empty segment rejects as a
     // VALIDATION_ERROR. Previously `if (filter.folderName)` treated "" as falsy and
-    // silently skipped the filter, returning ALL projects.
-    assertValidFolderPath(merged.folder, ['query', 'filters', 'folder']);
+    // silently skipped the filter, returning ALL projects. Honor pathPrefix so an OR-branch
+    // error reports ['query','filters','OR',i,'folder'], like the sibling projectsError calls.
+    assertValidFolderPath(merged.folder, ['query', 'filters', ...pathPrefix, 'folder']);
     result.folderName = merged.folder;
   }
 

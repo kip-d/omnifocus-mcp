@@ -16,12 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseFolderFilterPath, emitFolderPathMatch } from '../../../../src/contracts/ast/folder-path-match.js';
-
-// ---- Synthetic folder tree (plain objects mirroring OmniJS Folder { name, parent }) ----
-type FakeFolder = { name: string; parent: FakeFolder | null };
-const development: FakeFolder = { name: 'Development', parent: null };
-const web: FakeFolder = { name: 'Web', parent: development };
-const frontend: FakeFolder = { name: 'Frontend', parent: web };
+import { type FakeFolder, development, web, frontend } from './fake-folder-tree.js';
 
 /** Instantiate the emitted expression as a real predicate over a leaf folder. */
 function predicate(path: string): (leaf: FakeFolder | null) => boolean {

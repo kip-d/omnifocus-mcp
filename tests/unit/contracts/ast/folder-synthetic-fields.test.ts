@@ -12,13 +12,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { SYNTHETIC_FIELD_MAP, KNOWN_FIELDS } from '../../../../src/contracts/ast/types.js';
+import { type FakeFolder, web } from './fake-folder-tree.js';
 
-type FakeFolder = { name: string; parent: FakeFolder | null };
 type FakeProject = { parentFolder: FakeFolder | null };
 type FakeTask = { containingProject: FakeProject | null };
-
-const development: FakeFolder = { name: 'Development', parent: null };
-const web: FakeFolder = { name: 'Web', parent: development };
 
 const taskInWeb: FakeTask = { containingProject: { parentFolder: web } };
 const taskTopLevel: FakeTask = { containingProject: { parentFolder: null } };
@@ -83,5 +80,11 @@ describe('task.folderTopLevel synthetic field', () => {
     // for inbox tasks — falsy in the predicate's boolean context, matching the
     // existing synthetic-emitter convention (cf. task.parentTaskId's null guard).
     expect(evalFor('task.folderTopLevel', '==', true)(inboxTask)).toBeFalsy();
+  });
+
+  it('the NEGATED form (!= true) STILL excludes inbox tasks — guard survives negation', () => {
+    // Symmetric to the folderMatch != fix: a bare `!(guard)` would let inbox tasks
+    // (guard===false) pass `folderTopLevel != true`. Inbox must never match, either way.
+    expect(evalFor('task.folderTopLevel', '!=', true)(inboxTask)).toBeFalsy();
   });
 });
