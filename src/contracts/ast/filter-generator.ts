@@ -27,7 +27,7 @@ import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 import { emitFolderPathMatch } from './folder-path-match.js';
-import { emitTextCondition } from './text-condition.js';
+import { emitTextCondition, matchVerb } from './text-condition.js';
 
 // =============================================================================
 // TYPES
@@ -368,12 +368,6 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
     !filter.topLevelOnly && // OMN-96
     (!filter.orBranches || filter.orBranches.length === 0) // OMN-171
   );
-}
-
-/** "matches" for the MATCHES operator, else "contains" (the default CONTAINS semantics).
- *  Shared across the filter/tag description builders so the operator vocabulary lives in one place. */
-export function matchVerb(operator?: string): string {
-  return operator === 'MATCHES' ? 'matches' : 'contains';
 }
 
 /**

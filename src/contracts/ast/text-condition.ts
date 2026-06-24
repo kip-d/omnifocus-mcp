@@ -26,3 +26,12 @@ export function emitTextCondition(accessor: string, term: string, operator?: Tex
   }
   return `${accessor}.toLowerCase().includes(${JSON.stringify(term.toLowerCase())})`;
 }
+
+/**
+ * Human-readable verb for a TextOperator: "matches" for MATCHES, else "contains"
+ * (the default CONTAINS semantics). Lives here — the leaf TextOperator module — so the
+ * filter and tag description builders share one definition without cross-peer imports.
+ */
+export function matchVerb(operator?: TextOperator): string {
+  return operator === 'MATCHES' ? 'matches' : 'contains';
+}

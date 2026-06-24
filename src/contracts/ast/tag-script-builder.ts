@@ -15,8 +15,7 @@
 
 import type { TagQueryOptions, TagSortBy } from '../tag-options.js';
 import type { TextOperator } from '../filters.js';
-import { emitTextCondition } from './text-condition.js';
-import { matchVerb } from './filter-generator.js';
+import { emitTextCondition, matchVerb } from './text-condition.js';
 import type { GeneratedScript } from './script-builder.js';
 
 // =============================================================================
