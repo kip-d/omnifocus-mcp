@@ -66,24 +66,15 @@ jobs:
           # this step those `satisfies`/`@ts-expect-error` guards never fail CI.
           npm run typecheck:test
 
-      - name: Lint check (errors only)
+      - name: Lint check (zero warnings ceiling)
         run: |
-          echo "📋 Running lint check..."
-          # Count lint errors (not warnings) and fail if > threshold
-          LINT_OUTPUT=$(npm run lint 2>&1 || true)
-          ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 || echo "0")
-          TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 || 0)
-          
-          echo "Lint errors: $ERROR_COUNT"
-          echo "Total problems: $TOTAL_PROBLEMS"
-          
-          # Fail if more than 50 errors (significantly improved from 250 after lint cleanup)
-          if [ "$ERROR_COUNT" -gt 50 ]; then
-            echo "❌ Too many lint errors ($ERROR_COUNT > 50). Please fix critical issues."
-            exit 1
-          else
-            echo "✅ Lint error count acceptable ($ERROR_COUNT <= 50)"
-          fi
+          echo "📋 Running lint (eslint --max-warnings=0)..."
+          # OMN-212: hard ceiling — `npm run lint` carries --max-warnings=0, so ANY
+          # warning or error fails this step via its exit code. This replaces the
+          # prior error-only ">50" tolerance, which gated nothing on warnings and
+          # let 16 accumulate silently. Keep the baseline at zero: fix warnings or
+          # add a justified inline eslint-disable rather than relaxing this gate.
+          npm run lint
 
   # Comprehensive testing (Note: macOS runners not available on free GitHub)
   # This job simulates macOS testing but runs on Ubuntu with appropriate limitations
