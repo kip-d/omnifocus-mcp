@@ -8,12 +8,20 @@ export function normalizeErrorMessage(errorMessage: string): string {
     .substring(0, 100);
 }
 
+// Locale-independent code-point comparator. This sorts a PERSISTED fingerprint, so the
+// ordering must NOT depend on locale (localeCompare would let the same key set fingerprint
+// differently across locales, splitting dedup groups). Preserves the original bare-.sort()
+// semantics while satisfying sonarjs/no-alphabetical-sort.
+function byCodePoint(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 /** Structural fingerprint of the input: sorted top-level key names only (never values — values are PII-redacted but still volatile). */
 export function normalizeInputShape(inputArgs: unknown): string {
   if (inputArgs === null || typeof inputArgs !== 'object' || Array.isArray(inputArgs)) {
     return '<non-object>';
   }
-  return Object.keys(inputArgs as Record<string, unknown>)
-    .sort((a, b) => a.localeCompare(b))
-    .join(',');
+  return Object.keys(inputArgs as Record<string, unknown>).sort(byCodePoint).join(',');
 }

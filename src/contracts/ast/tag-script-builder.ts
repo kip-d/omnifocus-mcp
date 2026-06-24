@@ -16,6 +16,7 @@
 import type { TagQueryOptions, TagSortBy } from '../tag-options.js';
 import type { TextOperator } from '../filters.js';
 import { emitTextCondition } from './text-condition.js';
+import { matchVerb } from './filter-generator.js';
 import type { GeneratedScript } from './script-builder.js';
 
 // =============================================================================
@@ -279,10 +280,11 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
 })()
 `;
 
-  const matchVerb = nameOperator === 'MATCHES' ? 'matches' : 'contains';
   return {
     script: script.trim(),
-    filterDescription: hasFilter ? `name ${matchVerb} "${name}"` : 'all tags (basic: id + name + parentId)',
+    filterDescription: hasFilter
+      ? `name ${matchVerb(nameOperator)} "${name}"`
+      : 'all tags (basic: id + name + parentId)',
     isEmptyFilter: !hasFilter,
   };
 }

@@ -370,8 +370,9 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
   );
 }
 
-/** "matches" for the MATCHES operator, else "contains" (the default CONTAINS semantics). */
-function matchVerb(operator?: string): string {
+/** "matches" for the MATCHES operator, else "contains" (the default CONTAINS semantics).
+ *  Shared across the filter/tag description builders so the operator vocabulary lives in one place. */
+export function matchVerb(operator?: string): string {
   return operator === 'MATCHES' ? 'matches' : 'contains';
 }
 
@@ -468,7 +469,7 @@ export function isEmptyFolderFilter(filter: FolderFilter): boolean {
 export function describeFolderFilter(filter: FolderFilter): string {
   const conditions: string[] = [];
   if (filter.name) {
-    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
+    conditions.push(`name ${matchVerb(filter.nameOperator)} "${filter.name}"`);
   }
   if (filter.parentName) {
     conditions.push(`parent folder name contains "${filter.parentName}"`);
