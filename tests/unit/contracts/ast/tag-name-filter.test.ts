@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { buildTagsScript } from '../../../../src/contracts/ast/tag-script-builder.js';
-import { folderTextCondition } from '../../../../src/contracts/ast/filter-generator.js';
 import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 /**
@@ -46,20 +45,14 @@ describe('buildTagsScript basic mode — name filter (OMN-170 S2)', () => {
     expect(inner).toContain('includes("a`b")');
   });
 
-  // OMN-214: the tags-side name predicate must emit byte-identical OmniJS to the
-  // canonical folderTextCondition (the single source of truth OMN-213 established),
-  // supplying the `(tag.name || '')` accessor. Pinning the exact emitter output —
-  // not a partial substring — stops the tag CONTAINS/MATCHES strategy from silently
-  // drifting from project/folder filters.
-  it('OMN-214: tag name CONTAINS emits the canonical folderTextCondition form', () => {
-    const { script } = buildTagsScript({ mode: 'basic', name: 'Home', nameOperator: 'CONTAINS' });
-    expect(recoverInnerProgram(script)).toContain(folderTextCondition("(tag.name || '')", 'Home', 'CONTAINS'));
-  });
-
-  it('OMN-214: tag name MATCHES emits the canonical folderTextCondition form', () => {
-    const { script } = buildTagsScript({ mode: 'basic', name: '^Home$', nameOperator: 'MATCHES' });
-    expect(recoverInnerProgram(script)).toContain(folderTextCondition("(tag.name || '')", '^Home$', 'MATCHES'));
-  });
+  // OMN-214: tagNamePredicate now delegates to the canonical folderTextCondition.
+  // The exact-output pins above (CONTAINS line ~23 / MATCHES line ~28) already
+  // characterize the tag emitter byte-for-byte, and the sibling folder/project
+  // pins do the same on their surfaces — so a strategy change applied to the
+  // shared emitter without updating a surface fails that surface's pin. No
+  // separate "delegates to folderTextCondition" assertion is added: once tag
+  // routes through the shared emitter, any tag-output == emitter-output check is
+  // tautological, and a source-structure test is not how we verify behavior.
 
   it('filterDescription reflects the name filter', () => {
     const gen = buildTagsScript({ mode: 'basic', name: 'Home', nameOperator: 'CONTAINS' });
