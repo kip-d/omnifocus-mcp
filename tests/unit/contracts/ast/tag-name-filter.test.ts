@@ -45,6 +45,15 @@ describe('buildTagsScript basic mode — name filter (OMN-170 S2)', () => {
     expect(inner).toContain('includes("a`b")');
   });
 
+  // OMN-214: the tag-name predicate now delegates to the shared canonical text
+  // emitter. The exact-output pins above (CONTAINS / MATCHES) already characterize
+  // the tag emitter byte-for-byte, and the sibling folder/project pins do the same
+  // on their surfaces — so a strategy change applied to the shared emitter without
+  // updating a surface fails that surface's pin. No separate "delegates to the
+  // shared emitter" assertion is added: once the tag surface routes through it, any
+  // tag-output == emitter-output check is tautological, and a source-structure test
+  // is not how we verify behavior.
+
   it('filterDescription reflects the name filter', () => {
     const gen = buildTagsScript({ mode: 'basic', name: 'Home', nameOperator: 'CONTAINS' });
     expect(gen.filterDescription).toContain('Home');

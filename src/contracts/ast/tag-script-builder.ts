@@ -15,6 +15,7 @@
 
 import type { TagQueryOptions, TagSortBy } from '../tag-options.js';
 import type { TextOperator } from '../filters.js';
+import { folderTextCondition } from './filter-generator.js';
 import type { GeneratedScript } from './script-builder.js';
 
 // =============================================================================
@@ -86,14 +87,13 @@ const TAG_PARENT_ID_EXPR = 'parent ? parent.id.primaryKey : null';
 /**
  * OMN-170 S2: emit a safe case-insensitive tag-name match predicate (OMN-149
  * pattern — term injected via JSON.stringify only). Returns 'true' (match all)
- * when no name filter is present.
+ * when no name filter is present. Delegates the CONTAINS/MATCHES strategy to the
+ * canonical folderTextCondition emitter — single source of truth shared with
+ * project- and folder-name filters (OMN-214).
  */
 function tagNamePredicate(name?: string, operator?: TextOperator): string {
   if (!name) return 'true';
-  if (operator === 'MATCHES') {
-    return `new RegExp(${JSON.stringify(name)}, 'i').test((tag.name || ''))`;
-  }
-  return `(tag.name || '').toLowerCase().includes(${JSON.stringify(name.toLowerCase())})`;
+  return folderTextCondition("(tag.name || '')", name, operator);
 }
 
 /**
