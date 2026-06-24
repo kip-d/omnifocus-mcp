@@ -19,7 +19,11 @@ describe('emitTextCondition — CONTAINS (default operator)', () => {
   });
 
   it('treats an explicit CONTAINS operator the same as the default', () => {
-    expect(emitTextCondition('acc', 'Work', 'CONTAINS')).toBe(emitTextCondition('acc', 'Work'));
+    const explicit = emitTextCondition('acc', 'Work', 'CONTAINS');
+    // Pin the concrete output (not just symmetry with the default — a bug that made
+    // both return the same wrong string would otherwise pass).
+    expect(explicit).toBe('acc.toLowerCase().includes("work")');
+    expect(explicit).toBe(emitTextCondition('acc', 'Work'));
   });
 
   it('lowercases a mixed-case term to a single codegen-time literal', () => {
@@ -37,7 +41,7 @@ describe('emitTextCondition — CONTAINS (default operator)', () => {
 describe('emitTextCondition — MATCHES', () => {
   it('compiles to a case-insensitive RegExp test against the accessor', () => {
     expect(emitTextCondition("(x.name || '')", '^Home$', 'MATCHES')).toBe(
-      'new RegExp("^Home$", \'i\').test((x.name || \'\'))',
+      "new RegExp(\"^Home$\", 'i').test((x.name || ''))",
     );
   });
 
