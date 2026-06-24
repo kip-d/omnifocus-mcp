@@ -4,7 +4,6 @@
  * Single source of truth for:
  * - Filter property names and types
  * - Response structures
- * - OmniJS code generation
  *
  * See DESIGN.md for architecture overview.
  */
