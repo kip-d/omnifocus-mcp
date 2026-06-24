@@ -279,11 +279,10 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
 })()
 `;
 
+  const matchVerb = nameOperator === 'MATCHES' ? 'matches' : 'contains';
   return {
     script: script.trim(),
-    filterDescription: hasFilter
-      ? `name ${nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${name}"`
-      : 'all tags (basic: id + name + parentId)',
+    filterDescription: hasFilter ? `name ${matchVerb} "${name}"` : 'all tags (basic: id + name + parentId)',
     isEmptyFilter: !hasFilter,
   };
 }

@@ -76,22 +76,15 @@ print_step "TypeScript type checking"
 npm run typecheck
 print_success "TypeScript type checking passed"
 
-# Step 3: Lint check (with reasonable threshold)
-print_step "Lint check (error count threshold)"
-LINT_OUTPUT=$(npm run lint 2>&1 || true)
-ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 2>/dev/null || echo "0")
-# Ensure ERROR_COUNT is a number
-ERROR_COUNT=${ERROR_COUNT:-0}
-TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 2>/dev/null || echo "0")
-
-echo "Lint errors: $ERROR_COUNT"
-echo "Total problems: $TOTAL_PROBLEMS"
-
-if [ "$ERROR_COUNT" -gt 50 ]; then
-    print_error "Too many lint errors ($ERROR_COUNT > 50)"
-    exit 1
+# Step 3: Lint check (zero-warnings ceiling — mirrors CI, OMN-212)
+print_step "Lint check (eslint --max-warnings=0)"
+# `npm run lint` carries --max-warnings=0, so any warning or error fails here via
+# exit code — same gate as CI. No error-count tolerance.
+if npm run lint; then
+    print_success "Lint clean (0 warnings, 0 errors)"
 else
-    print_success "Lint error count acceptable ($ERROR_COUNT <= 50)"
+    print_error "Lint failed — fix the warning/error or add a justified inline eslint-disable"
+    exit 1
 fi
 
 # Step 4: Unit tests

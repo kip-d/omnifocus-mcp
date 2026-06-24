@@ -370,6 +370,11 @@ export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
   );
 }
 
+/** "matches" for the MATCHES operator, else "contains" (the default CONTAINS semantics). */
+function matchVerb(operator?: string): string {
+  return operator === 'MATCHES' ? 'matches' : 'contains';
+}
+
 /**
  * Get a human-readable description of the project filter
  */
@@ -389,11 +394,11 @@ export function describeProjectFilter(filter: ProjectFilter): string {
     conditions.push(filter.needsReview ? 'needs review' : 'does not need review');
   }
   if (filter.text) {
-    conditions.push(`text ${filter.textOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.text}"`);
+    conditions.push(`text ${matchVerb(filter.textOperator)} "${filter.text}"`);
   }
   if (filter.name) {
     // OMN-142
-    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
+    conditions.push(`name ${matchVerb(filter.nameOperator)} "${filter.name}"`);
   }
   if (filter.folderId) {
     conditions.push(`folder ID = ${filter.folderId}`);

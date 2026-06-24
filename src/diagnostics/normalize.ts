@@ -14,6 +14,6 @@ export function normalizeInputShape(inputArgs: unknown): string {
     return '<non-object>';
   }
   return Object.keys(inputArgs as Record<string, unknown>)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .join(',');
 }

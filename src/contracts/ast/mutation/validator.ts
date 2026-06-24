@@ -279,7 +279,10 @@ function validateConstructTaskStmt(stmt: ConstructTaskNode): void {
 function validateGuardStmt(stmt: GuardNode, ctx: ValidationContext): void {
   // Rule 6: throw-mode guard needs a message (it becomes the thrown Error
   // text). The emitter throws too — belt and suspenders at this seam.
-  if (stmt.mode === 'throw' && stmt.envelope.message === undefined) {
+  // `envelope` is `Record<string, Expr>`; without noUncheckedIndexedAccess the type says
+  // `message` is always present (so `=== undefined` reads as dead), but the key can genuinely
+  // be absent at runtime. Test key presence honestly instead of comparing to undefined.
+  if (stmt.mode === 'throw' && !('message' in stmt.envelope)) {
     throw new Error('Invalid guard: mode "throw" requires envelope.message (it becomes the thrown Error text).');
   }
   // Rule 8: a return-mode guard inside a batchItem would return from the

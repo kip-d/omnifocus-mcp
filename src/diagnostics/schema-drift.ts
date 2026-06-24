@@ -174,7 +174,14 @@ export function diffSchemas(advertised: CanonicalSchema, zod: CanonicalSchema): 
       continue;
     }
     if (!a || !zf) continue;
-    if (a.enum && zf.enum && JSON.stringify([...a.enum].sort()) !== JSON.stringify([...zf.enum].sort())) {
+    // Sort both with the same string-coercing comparator so equal sets stringify equally
+    // regardless of order (enum values are string | number); the comparison detects set mismatch.
+    const byString = (x: string | number, y: string | number): number => String(x).localeCompare(String(y));
+    if (
+      a.enum &&
+      zf.enum &&
+      JSON.stringify([...a.enum].sort(byString)) !== JSON.stringify([...zf.enum].sort(byString))
+    ) {
       findings.push({
         kind: 'ENUM_MISMATCH',
         field: f,

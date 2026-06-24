@@ -36,15 +36,9 @@ const ANCHOR_MAP: Record<NonNullable<RepetitionRule['anchorDateKey']>, string> =
   'planned-date': 'Task.AnchorDateKey.PlannedDate',
 };
 
-export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule {
-  const freq = FREQ_MAP[rule.frequency];
-  // Runtime check kept DESPITE the total Record: input can arrive as never-cast
-  // garbage from JS callers (the MCP boundary is untyped) — fail loud at build
-  // time, not as `FREQ=undefined` inside evaluateJavascript.
-  if (!freq) throw new Error(`Invalid repetition frequency: ${String(rule.frequency)}`);
-
-  // Build ICS RRULE string — order matches legacy: FREQ, INTERVAL, BYDAY, BYMONTHDAY,
-  // COUNT, UNTIL, WKST, BYSETPOS
+// Build ICS RRULE string — order matches legacy: FREQ, INTERVAL, BYDAY, BYMONTHDAY,
+// COUNT, UNTIL, WKST, BYSETPOS.
+function buildRruleString(rule: RepetitionRule, freq: string): string {
   let rrule = `FREQ=${freq}`;
   if (rule.interval && rule.interval > 1) rrule += `;INTERVAL=${rule.interval}`;
   if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
@@ -56,34 +50,52 @@ export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule
   if (rule.endDate) rrule += `;UNTIL=${rule.endDate.replace(/-/g, '')}`;
   if (rule.weekStart) rrule += `;WKST=${rule.weekStart}`;
   if (rule.setPositions && rule.setPositions.length > 0) rrule += `;BYSETPOS=${rule.setPositions.join(',')}`;
+  return rrule;
+}
 
-  // scheduleType: explicit field wins; fall back to deriving from deprecated method.
-  // method='fixed' (or absent, or 'none') → Regularly
-  // method='due-after-completion' | 'defer-after-completion' → FromCompletion
-  let scheduleTypePath: string;
+// scheduleType: explicit field wins; fall back to deriving from deprecated method.
+// method='fixed' (or absent, or 'none') → Regularly
+// method='due-after-completion' | 'defer-after-completion' → FromCompletion
+function resolveScheduleTypePath(rule: RepetitionRule): string {
   if (rule.scheduleType) {
-    scheduleTypePath = SCHEDULE_MAP[rule.scheduleType];
+    const path = SCHEDULE_MAP[rule.scheduleType];
     // Same never-cast-garbage rationale as the frequency throw: an unmapped value
     // would otherwise emit a literal `undefined` token into the OmniJS program.
-    if (!scheduleTypePath) throw new Error(`Invalid repetition scheduleType: ${String(rule.scheduleType)}`);
-  } else if (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion') {
-    scheduleTypePath = 'Task.RepetitionScheduleType.FromCompletion';
-  } else {
-    scheduleTypePath = 'Task.RepetitionScheduleType.Regularly';
+    if (!path) throw new Error(`Invalid repetition scheduleType: ${String(rule.scheduleType)}`);
+    return path;
   }
+  if (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion') {
+    return 'Task.RepetitionScheduleType.FromCompletion';
+  }
+  return 'Task.RepetitionScheduleType.Regularly';
+}
 
-  // anchorDateKey: explicit field wins; 'defer-after-completion' implies DeferDate anchor.
-  let anchorPath: string;
+// anchorDateKey: explicit field wins; 'defer-after-completion' implies DeferDate anchor.
+function resolveAnchorPath(rule: RepetitionRule): string {
   if (rule.anchorDateKey) {
-    anchorPath = ANCHOR_MAP[rule.anchorDateKey];
+    const path = ANCHOR_MAP[rule.anchorDateKey];
     // Same never-cast-garbage rationale as the frequency throw.
-    if (!anchorPath) throw new Error(`Invalid repetition anchorDateKey: ${String(rule.anchorDateKey)}`);
-  } else if (rule.method === 'defer-after-completion') {
-    anchorPath = 'Task.AnchorDateKey.DeferDate';
-  } else {
-    anchorPath = 'Task.AnchorDateKey.DueDate';
+    if (!path) throw new Error(`Invalid repetition anchorDateKey: ${String(rule.anchorDateKey)}`);
+    return path;
   }
+  if (rule.method === 'defer-after-completion') {
+    return 'Task.AnchorDateKey.DeferDate';
+  }
+  return 'Task.AnchorDateKey.DueDate';
+}
+
+export function lowerRepetitionRule(rule: RepetitionRule): LoweredRepetitionRule {
+  const freq = FREQ_MAP[rule.frequency];
+  // Runtime check kept DESPITE the total Record: input can arrive as never-cast
+  // garbage from JS callers (the MCP boundary is untyped) — fail loud at build
+  // time, not as `FREQ=undefined` inside evaluateJavascript.
+  if (!freq) throw new Error(`Invalid repetition frequency: ${String(rule.frequency)}`);
 
   // catchUpAutomatically defaults to true (legacy: `rule.catchUpAutomatically !== false`)
-  return { rrule, scheduleTypePath, anchorPath, catchUp: rule.catchUpAutomatically !== false };
+  return {
+    rrule: buildRruleString(rule, freq),
+    scheduleTypePath: resolveScheduleTypePath(rule),
+    anchorPath: resolveAnchorPath(rule),
+    catchUp: rule.catchUpAutomatically !== false,
+  };
 }

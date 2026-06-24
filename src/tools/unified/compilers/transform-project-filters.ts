@@ -78,6 +78,51 @@ function projectNotComplement(notFilter: unknown): ProjectStatus[] {
 }
 
 /**
+ * 5. Resolve the status dimension from `status` (enum) and/or `completed` (bool),
+ * returning the merged ProjectStatus set (or undefined when neither is present).
+ */
+function resolveProjectStatusSet(
+  merged: Record<string, unknown>,
+  pathPrefix: Array<string | number>,
+): ProjectStatus[] | undefined {
+  let statusSet: ProjectStatus[] | undefined;
+  if (typeof merged.status === 'string') {
+    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
+    // Defense-in-depth: schema rejects unknown status values upstream, but a
+    // future schema-enum addition without a STATUS_TO_PROJECT entry must not
+    // silently widen on the status dimension.
+    if (!mapped) {
+      throw projectsError(
+        [...pathPrefix, 'status'],
+        `Unknown status value '${String(merged.status)}' for projects queries. Supported: active, on_hold, completed, dropped.`,
+      );
+    }
+    statusSet = [mapped];
+  }
+  if (typeof merged.completed === 'boolean') {
+    // Decision record (design spec §3.3): completed:false is the GTD "still
+    // live?" question — dropped is a terminal verdict, excluded for parity with
+    // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
+    const completedSet: ProjectStatus[] = merged.completed ? ['done'] : ['active', 'onHold'];
+    if (statusSet) {
+      const intersection = statusSet.filter((s) => completedSet.includes(s));
+      if (intersection.length === 0) {
+        throw projectsError(
+          pathPrefix,
+          `'completed: ${merged.completed}' contradicts 'status: ${String(merged.status)}' on projects ` +
+            "(completed:false means active/on-hold). For dropped projects use status:'dropped' alone; " +
+            "for done projects use status:'completed' or completed:true.",
+        );
+      }
+      statusSet = intersection;
+    } else {
+      statusSet = completedSet;
+    }
+  }
+  return statusSet;
+}
+
+/**
  * Map a flat (operator-free) project filter input into a typed ProjectFilter.
  * Used for the AND-merged base AND for each OR branch. `pathPrefix` scopes
  * ZodError paths (OR branches report ['query','filters','OR',i,…]).
@@ -113,40 +158,7 @@ function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array
   if (typeof merged.id === 'string') result.id = merged.id;
   if (typeof merged.flagged === 'boolean') result.flagged = merged.flagged;
 
-  let statusSet: ProjectStatus[] | undefined;
-  if (typeof merged.status === 'string') {
-    const mapped = STATUS_TO_PROJECT[merged.status as ReadStatus];
-    // Defense-in-depth: schema rejects unknown status values upstream, but a
-    // future schema-enum addition without a STATUS_TO_PROJECT entry must not
-    // silently widen on the status dimension.
-    if (!mapped) {
-      throw projectsError(
-        [...pathPrefix, 'status'],
-        `Unknown status value '${String(merged.status)}' for projects queries. Supported: active, on_hold, completed, dropped.`,
-      );
-    }
-    statusSet = [mapped];
-  }
-  if (typeof merged.completed === 'boolean') {
-    // Decision record (design spec §3.3): completed:false is the GTD "still
-    // live?" question — dropped is a terminal verdict, excluded for parity with
-    // the tasks-side OMN-157 default. status:'dropped' is the explicit vocabulary.
-    const completedSet: ProjectStatus[] = merged.completed ? ['done'] : ['active', 'onHold'];
-    if (statusSet) {
-      const intersection = statusSet.filter((s) => completedSet.includes(s));
-      if (intersection.length === 0) {
-        throw projectsError(
-          pathPrefix,
-          `'completed: ${merged.completed}' contradicts 'status: ${String(merged.status)}' on projects ` +
-            "(completed:false means active/on-hold). For dropped projects use status:'dropped' alone; " +
-            "for done projects use status:'completed' or completed:true.",
-        );
-      }
-      statusSet = intersection;
-    } else {
-      statusSet = completedSet;
-    }
-  }
+  const statusSet = resolveProjectStatusSet(merged, pathPrefix);
   if (statusSet) result.status = statusSet;
 
   if (merged.folder === null) {
@@ -176,8 +188,8 @@ function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array
 
 export function transformProjectFilters(input: FilterValue): ProjectFilter {
   // 1. AND merges in INPUT space (then the merged input transforms below).
-  const merged: Record<string, unknown> = Object.create(null);
-  const originOf: Record<string, string> = Object.create(null);
+  const merged = Object.create(null) as Record<string, unknown>;
+  const originOf = Object.create(null) as Record<string, string>;
   const mergeFrom = (origin: string, flat: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(flat)) {
       if (value === undefined) continue;

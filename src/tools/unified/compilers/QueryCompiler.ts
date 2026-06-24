@@ -594,7 +594,7 @@ export class QueryCompiler {
    * 'OR[2]'      → ['query', 'filters', 'OR', 2]
    */
   private originToPath(origin: string): (string | number)[] {
-    const match = origin.match(/^(AND|OR)\[(\d+)\]$/);
+    const match = /^(AND|OR)\[(\d+)\]$/.exec(origin);
     if (match) {
       return ['query', 'filters', match[1], parseInt(match[2], 10)];
     }
