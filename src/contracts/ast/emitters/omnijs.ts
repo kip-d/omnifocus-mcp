@@ -9,6 +9,7 @@
 
 import type { FilterNode, ComparisonNode, ExistsNode, ComparisonOperator } from '../types.js';
 import { SYNTHETIC_FIELD_MAP } from '../types.js';
+import { emitTextCondition } from '../text-condition.js';
 
 /**
  * Result of emitting a filter node to OmniJS code.
@@ -122,18 +123,19 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
         break;
 
       case 'includes':
-        predicate = `${accessor}.toLowerCase().includes(${emitValue(value)}.toLowerCase())`;
+        // OMN-215: delegate to the shared emitter (single source of truth across
+        // the string-codegen and AST-emit layers). The term is lowercased at
+        // codegen time — `includes("home")`, not the older runtime-lowercase
+        // `includes("Home".toLowerCase())` form. Behaviourally identical.
+        predicate = emitTextCondition(accessor, String(value));
         break;
 
       case 'matches':
-        // OMN-149: the pattern crosses into generated code ONLY as a JSON
-        // string literal. A regex literal (`/${pattern}/i`) raw-interpolates
-        // user data — a pattern containing `/` breaks the script, and a
-        // crafted pattern can inject code into the predicate. This is the same
-        // injection-safe form as the canonical folderTextCondition() in
-        // filter-generator.ts, but an INDEPENDENT copy (this emitter does not
-        // delegate) — keep the two in sync by hand until unified (OMN-215).
-        predicate = `new RegExp(${JSON.stringify(String(value))}, 'i').test(${accessor})`;
+        // OMN-149: the pattern crosses into generated code ONLY as a JSON string
+        // literal (the shared emitter enforces this) — never a raw regex literal,
+        // which would let a `/` break the script or inject code. OMN-215: same
+        // canonical emitter as project/folder/tag filters.
+        predicate = emitTextCondition(accessor, String(value), 'MATCHES');
         break;
 
       case 'some':

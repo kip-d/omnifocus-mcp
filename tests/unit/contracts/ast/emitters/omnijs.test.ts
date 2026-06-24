@@ -76,7 +76,9 @@ describe('emitOmniJS', () => {
         value: 'review',
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.name.toLowerCase().includes("review".toLowerCase())');
+      // OMN-215: term lowercased at codegen time (shared emitTextCondition form),
+      // not the older runtime `"review".toLowerCase()`. Behaviourally identical.
+      expectPredicate(code, 'task.name.toLowerCase().includes("review")');
     });
 
     it('emits regex match via RegExp constructor (OMN-149: pattern is JSON-escaped, never a raw literal)', () => {
@@ -424,7 +426,8 @@ describe('emitOmniJS', () => {
         value: 'important',
       };
       const code = emitOmniJS(ast);
-      expectPredicate(code, 'task.note.toLowerCase().includes("important".toLowerCase())');
+      // OMN-215: codegen-time lowercasing (shared emitTextCondition form).
+      expectPredicate(code, 'task.note.toLowerCase().includes("important")');
     });
 
     it('emits regex match for note field via RegExp constructor (OMN-149)', () => {
