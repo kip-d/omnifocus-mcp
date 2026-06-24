@@ -47,7 +47,8 @@ hoping names match.
 
 1. ✅ `src/contracts/filters.ts` - Filter specification (single source of truth)
 2. ✅ `src/contracts/responses.ts` - Response structure contracts
-3. ✅ `src/contracts/generator.ts` - OmniJS code generator from specs
+3. ~~`src/contracts/generator.ts` - OmniJS code generator from specs~~ — removed in OMN-216; this string-template
+   generator was superseded by the AST pipeline `src/contracts/ast/filter-generator.ts`
 4. ✅ `src/contracts/index.ts` - Public exports
 5. ✅ `src/contracts/examples/migration-example.ts` - Migration patterns
 
