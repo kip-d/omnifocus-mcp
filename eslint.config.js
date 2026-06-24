@@ -13,6 +13,17 @@ export default [
   // SonarJS recommended rules (code smell & bug detection)
   sonarjs.configs.recommended,
 
+  // Make the stale-eslint-disable audit explicit (global, no `files` key) rather than
+  // relying on ESLint 9's implicit flat-config default. Combined with `--max-warnings=0`
+  // (npm run lint), an unused `eslint-disable` directive fails the gate. A bare top-level
+  // config object applies to every linted file and survives new file-pattern blocks,
+  // keeping the guarantee durable against a future ESLint default change (OMN-217).
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: 'warn',
+    },
+  },
+
   // TypeScript files configuration
   {
     files: ['**/*.ts'],
