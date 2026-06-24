@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateProjectFilterCode,
+  generateFolderFilterCode,
   isEmptyProjectFilter,
   describeProjectFilter,
 } from '../../src/contracts/ast/filter-generator.js';
@@ -142,6 +143,30 @@ describe('Phase 3 AST Builders', () => {
       const code = generateProjectFilterCode(filter);
       expect(code).toContain('project.flagged === true');
       expect(code).not.toContain('||');
+    });
+
+    // OMN-213: projects-side and folders-side text conditions share ONE emitter.
+    // A project NAME filter must be byte-identical to a folder NAME filter modulo
+    // the accessor object (`project.name` vs `folder.name`). Pinning this stops the
+    // CONTAINS-lowercasing / MATCHES-regexp-flag strategy from silently drifting
+    // between the two surfaces — the duplication the delegation removes.
+    describe('OMN-213: project/folder text-condition parity (shared emitter)', () => {
+      // Normalize only the exact accessor LITERAL, not a bare 'folder.name'
+      // substring — otherwise a search term that happened to contain the accessor
+      // text would be rewritten too, producing a false parity failure.
+      const stripAccessor = (code: string, field: string): string => code.replaceAll(`(${field} || '')`, '<ACC>');
+
+      it('CONTAINS strategy is byte-identical across project and folder name filters', () => {
+        const proj = generateProjectFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });
+        const fold = generateFolderFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });
+        expect(stripAccessor(proj, 'project.name')).toBe(stripAccessor(fold, 'folder.name'));
+      });
+
+      it('MATCHES strategy is byte-identical across project and folder name filters', () => {
+        const proj = generateProjectFilterCode({ name: 'Wo.k', nameOperator: 'MATCHES' });
+        const fold = generateFolderFilterCode({ name: 'Wo.k', nameOperator: 'MATCHES' });
+        expect(stripAccessor(proj, 'project.name')).toBe(stripAccessor(fold, 'folder.name'));
+      });
     });
   });
 
