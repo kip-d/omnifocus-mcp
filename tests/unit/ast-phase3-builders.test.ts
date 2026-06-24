@@ -154,7 +154,7 @@ describe('Phase 3 AST Builders', () => {
       // Normalize only the exact accessor LITERAL, not a bare 'folder.name'
       // substring — otherwise a search term that happened to contain the accessor
       // text would be rewritten too, producing a false parity failure.
-      const stripAccessor = (code: string, field: string): string => code.replace(`(${field} || '')`, '<ACC>');
+      const stripAccessor = (code: string, field: string): string => code.replaceAll(`(${field} || '')`, '<ACC>');
 
       it('CONTAINS strategy is byte-identical across project and folder name filters', () => {
         const proj = generateProjectFilterCode({ name: 'Work', nameOperator: 'CONTAINS' });

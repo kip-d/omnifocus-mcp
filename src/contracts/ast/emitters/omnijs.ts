@@ -129,9 +129,10 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
         // OMN-149: the pattern crosses into generated code ONLY as a JSON
         // string literal. A regex literal (`/${pattern}/i`) raw-interpolates
         // user data — a pattern containing `/` breaks the script, and a
-        // crafted pattern can inject code into the predicate. Matches the
-        // canonical folderTextCondition() form in filter-generator.ts (which
-        // projectTextCondition now delegates to — OMN-213).
+        // crafted pattern can inject code into the predicate. This is the same
+        // injection-safe form as the canonical folderTextCondition() in
+        // filter-generator.ts, but an INDEPENDENT copy (this emitter does not
+        // delegate) — keep the two in sync by hand until unified (OMN-215).
         predicate = `new RegExp(${JSON.stringify(String(value))}, 'i').test(${accessor})`;
         break;
 
