@@ -425,9 +425,10 @@ export function describeProjectFilter(filter: ProjectFilter): string {
  * accessor. CONTAINS lowercases both sides; MATCHES compiles to a RegExp test.
  * The term is injected via JSON.stringify only — never raw interpolation
  * (OMN-149-safe). Single source of truth for folder- AND project-side text
- * conditions: {@link projectTextCondition} delegates here (OMN-213).
+ * conditions: {@link projectTextCondition} and the tags-side tagNamePredicate
+ * (OMN-214) both delegate here (OMN-213).
  */
-function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
+export function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
   if (operator === 'MATCHES') {
     return `new RegExp(${JSON.stringify(term)}, 'i').test(${accessor})`;
   }

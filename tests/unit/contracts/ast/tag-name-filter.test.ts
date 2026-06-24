@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTagsScript } from '../../../../src/contracts/ast/tag-script-builder.js';
+import { folderTextCondition } from '../../../../src/contracts/ast/filter-generator.js';
 import { recoverInnerProgram } from '../../../utils/recover-bridge-program.js';
 
 /**
@@ -43,6 +44,21 @@ describe('buildTagsScript basic mode — name filter (OMN-170 S2)', () => {
     const inner = recoverInnerProgram(script);
     expect(() => new Function(inner)).not.toThrow();
     expect(inner).toContain('includes("a`b")');
+  });
+
+  // OMN-214: the tags-side name predicate must emit byte-identical OmniJS to the
+  // canonical folderTextCondition (the single source of truth OMN-213 established),
+  // supplying the `(tag.name || '')` accessor. Pinning the exact emitter output —
+  // not a partial substring — stops the tag CONTAINS/MATCHES strategy from silently
+  // drifting from project/folder filters.
+  it('OMN-214: tag name CONTAINS emits the canonical folderTextCondition form', () => {
+    const { script } = buildTagsScript({ mode: 'basic', name: 'Home', nameOperator: 'CONTAINS' });
+    expect(recoverInnerProgram(script)).toContain(folderTextCondition("(tag.name || '')", 'Home', 'CONTAINS'));
+  });
+
+  it('OMN-214: tag name MATCHES emits the canonical folderTextCondition form', () => {
+    const { script } = buildTagsScript({ mode: 'basic', name: '^Home$', nameOperator: 'MATCHES' });
+    expect(recoverInnerProgram(script)).toContain(folderTextCondition("(tag.name || '')", '^Home$', 'MATCHES'));
   });
 
   it('filterDescription reflects the name filter', () => {
