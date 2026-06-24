@@ -40,14 +40,3 @@ export {
   buildErrorResponse,
   unwrapScriptOutput,
 } from './responses.js';
-
-// Generator
-export {
-  generateTagFilterFunction,
-  generateTextFilterFunction,
-  generateDateFilterFunction,
-  generateCompletionFilterLogic,
-  generateFilterBlock,
-  generateTaskIterationScript,
-  type FilterGeneratorOptions,
-} from './generator.js';
