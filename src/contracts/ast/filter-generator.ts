@@ -27,7 +27,7 @@ import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 import { emitFolderPathMatch } from './folder-path-match.js';
-import { emitTextCondition } from './text-condition.js';
+import { emitTextCondition, matchVerb } from './text-condition.js';
 
 // =============================================================================
 // TYPES
@@ -389,11 +389,11 @@ export function describeProjectFilter(filter: ProjectFilter): string {
     conditions.push(filter.needsReview ? 'needs review' : 'does not need review');
   }
   if (filter.text) {
-    conditions.push(`text ${filter.textOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.text}"`);
+    conditions.push(`text ${matchVerb(filter.textOperator)} "${filter.text}"`);
   }
   if (filter.name) {
     // OMN-142
-    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
+    conditions.push(`name ${matchVerb(filter.nameOperator)} "${filter.name}"`);
   }
   if (filter.folderId) {
     conditions.push(`folder ID = ${filter.folderId}`);
@@ -463,7 +463,7 @@ export function isEmptyFolderFilter(filter: FolderFilter): boolean {
 export function describeFolderFilter(filter: FolderFilter): string {
   const conditions: string[] = [];
   if (filter.name) {
-    conditions.push(`name ${filter.nameOperator === 'MATCHES' ? 'matches' : 'contains'} "${filter.name}"`);
+    conditions.push(`name ${matchVerb(filter.nameOperator)} "${filter.name}"`);
   }
   if (filter.parentName) {
     conditions.push(`parent folder name contains "${filter.parentName}"`);

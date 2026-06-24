@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { byCodePoint } from './normalize.js';
 
 export interface CanonicalField {
   type: string;
@@ -174,7 +175,14 @@ export function diffSchemas(advertised: CanonicalSchema, zod: CanonicalSchema): 
       continue;
     }
     if (!a || !zf) continue;
-    if (a.enum && zf.enum && JSON.stringify([...a.enum].sort()) !== JSON.stringify([...zf.enum].sort())) {
+    // Sort both with the same locale-independent comparator so equal sets stringify equally
+    // regardless of order (enum values are string | number); the comparison detects set mismatch.
+    // byCodePoint (not localeCompare) avoids collation ties that could reorder distinct values.
+    if (
+      a.enum &&
+      zf.enum &&
+      JSON.stringify([...a.enum].sort(byCodePoint)) !== JSON.stringify([...zf.enum].sort(byCodePoint))
+    ) {
       findings.push({
         kind: 'ENUM_MISMATCH',
         field: f,

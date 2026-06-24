@@ -27,8 +27,13 @@ export function parseFailureLog(jsonl: string): FailureRecord[] {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed.tool === 'string' && typeof parsed.errorMessage === 'string') {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        typeof (parsed as Record<string, unknown>).tool === 'string' &&
+        typeof (parsed as Record<string, unknown>).errorMessage === 'string'
+      ) {
         out.push(parsed as FailureRecord);
       }
     } catch {

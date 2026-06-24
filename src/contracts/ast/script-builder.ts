@@ -1165,6 +1165,32 @@ function describeDateRange(
   return `${label} after: ${a}`;
 }
 
+// OMN-49: estimated-duration filters (explicit !== undefined — 0 is a valid estimate).
+function describeEstimateFilters(filter: TaskFilter): string[] {
+  const out: string[] = [];
+  if (filter.estimatedMinutesEquals !== undefined) out.push(`estimate = ${filter.estimatedMinutesEquals}m`);
+  if (filter.estimatedMinutesLessThan !== undefined) out.push(`estimate < ${filter.estimatedMinutesLessThan}m`);
+  if (filter.estimatedMinutesGreaterThan !== undefined) out.push(`estimate > ${filter.estimatedMinutesGreaterThan}m`);
+  return out;
+}
+
+// Scalar id-like filters described as `label: value` (truthy-gated; these ids are never empty-string-valid).
+const SCALAR_FILTER_DESCRIPTORS: ReadonlyArray<{ key: keyof TaskFilter; label: string }> = [
+  { key: 'parentTaskId', label: 'parent' },
+  { key: 'projectId', label: 'project' },
+  { key: 'id', label: 'id' },
+];
+
+function describeScalarFilters(filter: TaskFilter): string[] {
+  const out: string[] = [];
+  for (const { key, label } of SCALAR_FILTER_DESCRIPTORS) {
+    // These are all string id fields; the typeof narrows the keyof-widened union to string.
+    const value = filter[key];
+    if (typeof value === 'string' && value) out.push(`${label}: ${value}`);
+  }
+  return out;
+}
+
 // OMN-172 (F10): exported so the forcing-function coverage test can assert every
 // describable filter key produces a fragment (reconciles filter_description with
 // filters_applied). See tests/unit/contracts/ast/describe-filter-coverage.test.ts.
@@ -1193,25 +1219,13 @@ export function describeFilterForScript(filter: TaskFilter): string {
     if (range) conditions.push(range);
   }
 
-  // OMN-49: estimated-duration filters
-  if (filter.estimatedMinutesEquals !== undefined) conditions.push(`estimate = ${filter.estimatedMinutesEquals}m`);
-  if (filter.estimatedMinutesLessThan !== undefined) conditions.push(`estimate < ${filter.estimatedMinutesLessThan}m`);
-  if (filter.estimatedMinutesGreaterThan !== undefined)
-    conditions.push(`estimate > ${filter.estimatedMinutesGreaterThan}m`);
+  conditions.push(...describeEstimateFilters(filter));
 
   if (filter.tagStatusValid !== undefined) {
     conditions.push(filter.tagStatusValid ? 'tag status valid' : 'tag status invalid');
   }
-  if (filter.parentTaskId) {
-    conditions.push(`parent: ${filter.parentTaskId}`);
-  }
 
-  if (filter.projectId) {
-    conditions.push(`project: ${filter.projectId}`);
-  }
-  if (filter.id) {
-    conditions.push(`id: ${filter.id}`);
-  }
+  conditions.push(...describeScalarFilters(filter));
 
   return conditions.length > 0 ? conditions.join(' AND ') : 'all tasks';
 }

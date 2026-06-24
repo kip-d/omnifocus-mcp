@@ -2,7 +2,21 @@
 // Turns a mutation-AST Program into ONE OmniJS program string, then wraps it in a
 // JXA launcher. GENERIC: emits whatever Program it is given. The create/project
 // lowering and validator are separate (later) concerns and live elsewhere.
-import type { Envelope, Expr, Program, ProjectMovePosition, Stmt, TagMovePosition, TaskMovePosition } from './types.js';
+import type {
+  AssignTagsNode,
+  ConstructFolderNode,
+  ConstructProjectNode,
+  ConstructTagNode,
+  Envelope,
+  Expr,
+  GuardNode,
+  Program,
+  ProjectMovePosition,
+  SetPropNode,
+  Stmt,
+  TagMovePosition,
+  TaskMovePosition,
+} from './types.js';
 import { collectSnippets, SNIPPETS } from './snippets.js';
 
 export function emitExpr(node: Expr): string {
@@ -96,149 +110,185 @@ export function emitEnvelope(env: Envelope): string {
   return `{ ${entries.join(', ')} }`;
 }
 
+function emitGuard(node: GuardNode): string {
+  if (node.mode === 'throw') {
+    // Batch items fail per-item: the throw is caught by the enclosing
+    // batchItem try/capture. LOUD build-time failure when `message` is
+    // absent — emitting `throw new Error(undefined)` would silently degrade
+    // the per-item error text. (The validator enforces presence too —
+    // belt and suspenders; this keeps the emitter safe standalone.)
+    const message = node.envelope.message;
+    if (!message) {
+      throw new Error('guard with mode="throw" requires an envelope.message (it becomes the thrown Error text)');
+    }
+    return `if (${node.cond}) throw new Error(${emitExpr(message)});`;
+  }
+  return `if (${node.cond}) return JSON.stringify(${emitEnvelope(node.envelope)});`;
+}
+
+function emitConstructProject(node: ConstructProjectNode): string {
+  const name = emitExpr(node.name);
+  switch (node.folder.kind) {
+    case 'resolved':
+      return `const ${node.bind} = new Project(${name}, ${node.folder.var});`;
+    case 'none':
+      return `const ${node.bind} = new Project(${name});`;
+    case 'notFound':
+      throw new Error(
+        'constructProject with folder.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+      );
+    default: {
+      const _x: never = node.folder;
+      throw new Error(`Unknown folder resolution: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+function emitConstructFolder(node: ConstructFolderNode): string {
+  // Near-clone of constructProject at the folder altitude. `new Folder(name,
+  // parentFolder)` appends inside the parent (OmniJS position param), matching
+  // the legacy `targetParent.folders.push(folder)`; omitted position = library
+  // root. `const`, not `var`: folders have no batch path, so no cross-item
+  // hoisting concern (contrast constructTask).
+  const name = emitExpr(node.name);
+  switch (node.parent.kind) {
+    case 'resolved':
+      return `const ${node.bind} = new Folder(${name}, ${node.parent.var});`;
+    case 'none':
+      return `const ${node.bind} = new Folder(${name});`;
+    case 'notFound':
+      throw new Error(
+        'constructFolder with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+      );
+    default: {
+      const _x: never = node.parent;
+      throw new Error(`Unknown folder resolution: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+function emitSetProp(node: SetPropNode): string {
+  const target = emitExpr(node.target);
+  // `bestEffort` wraps the block in try/catch so a failure does not fail the
+  // surrounding mutation — and the catch records a labeled warning (OMN-137).
+  // The dateExpr strategy ALREADY self-wraps, so it is never double-wrapped here.
+  const wrap = (block: string): string =>
+    node.bestEffort ? `try { ${block} } ${bestEffortCatch(node.label ?? node.prop)}` : block;
+  switch (node.strategy) {
+    case 'direct':
+      return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
+    case 'dateExpr':
+      // Deliberate SWALLOW (spec §3.1), not a bestEffortCatch: an invalid date
+      // string produces Invalid Date rather than a throw, so a warning here
+      // would be theater — the catch only shields exotic host-object errors.
+      return `try { ${target}.${node.prop} = ${emitExpr(node.value as Expr)}; } catch (e) {}`;
+    case 'enum':
+      return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
+    case 'readModifyReassign': {
+      const muts = (node.mutations ?? []).map((m) => `_rmr.${m.prop} = ${emitExpr(m.value)};`).join(' ');
+      return wrap(`{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } }`);
+    }
+    default: {
+      const _x: never = node.strategy;
+      throw new Error(`Unknown setProp strategy: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
+function emitAssignTags(node: AssignTagsNode): string {
+  const target = emitExpr(node.target);
+  const tags = emitExpr(node.tags);
+  // The result binding is declared at PROGRAM scope (a `let`, OUTSIDE any bestEffort
+  // try-wrap) because later statements — e.g. the return envelope — consume it. If it
+  // were declared inside the try, a thrown best-effort block would leave the consumer
+  // referencing an undeclared variable (`ReferenceError`). Only the mutating loop is
+  // wrapped. (OMN-128: caught by live /verify. General rule: any bestEffort statement
+  // whose binding is consumed later MUST hoist that declaration out of the try.)
+  const decl = `let ${node.bind} = [];`;
+
+  // Mode dispatch (slice 4):
+  //   absent / 'add':  legacy create-or-find + addTag (original behavior)
+  //   'replace':       clearTags() first (inside the best-effort wrap), then add
+  //   'remove':        resolve WITHOUT creating, removeTag; missing names silently skipped
+  const mode = node.mode;
+
+  let loop: string;
+  if (mode === 'remove') {
+    // resolve-only: parseTagPath + resolveTagByPath for path names (shared single-source
+    // helpers — parseTagPath keeps its empty-segment validation), flattenedTags.find for
+    // leaf names. Missing tags are silently skipped (legacy update builder semantics).
+    loop = [
+      `for (const _tagName of ${tags}) {`,
+      '  var _segs = parseTagPath(_tagName);',
+      '  var _tag;',
+      '  if (_segs) { _tag = resolveTagByPath(_segs); }',
+      '  else { _tag = flattenedTags.find(t => t.name === _tagName); }',
+      `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
+      '}',
+    ].join('\n');
+  } else {
+    // 'add' or absent: original create-or-find loop
+    loop = [
+      `for (const _tagName of ${tags}) {`,
+      '  var _segs = parseTagPath(_tagName);',
+      '  var _tag;',
+      '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
+      '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
+      `  ${target}.addTag(_tag);`,
+      `  ${node.bind}.push(_tag.name);`,
+      '}',
+    ].join('\n');
+  }
+
+  // 'replace' mode: prepend clearTags() INSIDE the best-effort wrap (the whole tag block
+  // is best-effort, matching legacy update builder semantics — clearTags + add are one unit).
+  const clearLine = mode === 'replace' ? `${target}.clearTags();\n` : '';
+  const block = `${clearLine}${loop}`;
+
+  // `bestEffort` wraps only the BLOCK so a tag failure does not fail the surrounding
+  // mutation (original best-effort tag bridge semantics) — the binding survives,
+  // and the catch records a labeled warning (OMN-137).
+  const guardedBlock = node.bestEffort ? `try {\n${block}\n} ${bestEffortCatch(node.label ?? 'tags')}` : block;
+  return `${decl}\n${guardedBlock}`;
+}
+
+function emitConstructTag(node: ConstructTagNode): string {
+  // Near-clone of constructFolder at the tag altitude. `new Tag(name, parent)`
+  // nests under the parent; omitted parent = top level (matches legacy
+  // app.make at doc.tags / new Tag(name, null) in the path island).
+  const name = emitExpr(node.name);
+  switch (node.parent.kind) {
+    case 'resolved':
+      return `const ${node.bind} = new Tag(${name}, ${node.parent.var});`;
+    case 'none':
+      return `const ${node.bind} = new Tag(${name});`;
+    case 'notFound':
+      throw new Error(
+        'constructTag with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
+      );
+    default: {
+      const _x: never = node.parent;
+      throw new Error(`Unknown tag resolution: ${JSON.stringify(_x)}`);
+    }
+  }
+}
+
 export function emitStmt(node: Stmt): string {
   switch (node.type) {
     case 'bind':
       return `const ${node.name} = ${emitExpr(node.expr)};`;
     case 'resolveFolder':
       return `const ${node.bind} = resolveFolderFlexible(${JSON.stringify(node.ref)});`;
-    case 'guard': {
-      if (node.mode === 'throw') {
-        // Batch items fail per-item: the throw is caught by the enclosing
-        // batchItem try/capture. LOUD build-time failure when `message` is
-        // absent — emitting `throw new Error(undefined)` would silently degrade
-        // the per-item error text. (The validator enforces presence too —
-        // belt and suspenders; this keeps the emitter safe standalone.)
-        const message = node.envelope.message;
-        if (!message) {
-          throw new Error('guard with mode="throw" requires an envelope.message (it becomes the thrown Error text)');
-        }
-        return `if (${node.cond}) throw new Error(${emitExpr(message)});`;
-      }
-      return `if (${node.cond}) return JSON.stringify(${emitEnvelope(node.envelope)});`;
-    }
-    case 'constructProject': {
-      const name = emitExpr(node.name);
-      switch (node.folder.kind) {
-        case 'resolved':
-          return `const ${node.bind} = new Project(${name}, ${node.folder.var});`;
-        case 'none':
-          return `const ${node.bind} = new Project(${name});`;
-        case 'notFound':
-          throw new Error(
-            'constructProject with folder.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
-          );
-        default: {
-          const _x: never = node.folder;
-          throw new Error(`Unknown folder resolution: ${JSON.stringify(_x)}`);
-        }
-      }
-    }
-    case 'constructFolder': {
-      // Near-clone of constructProject at the folder altitude. `new Folder(name,
-      // parentFolder)` appends inside the parent (OmniJS position param), matching
-      // the legacy `targetParent.folders.push(folder)`; omitted position = library
-      // root. `const`, not `var`: folders have no batch path, so no cross-item
-      // hoisting concern (contrast constructTask).
-      const name = emitExpr(node.name);
-      switch (node.parent.kind) {
-        case 'resolved':
-          return `const ${node.bind} = new Folder(${name}, ${node.parent.var});`;
-        case 'none':
-          return `const ${node.bind} = new Folder(${name});`;
-        case 'notFound':
-          throw new Error(
-            'constructFolder with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
-          );
-        default: {
-          const _x: never = node.parent;
-          throw new Error(`Unknown folder resolution: ${JSON.stringify(_x)}`);
-        }
-      }
-    }
-    case 'setProp': {
-      const target = emitExpr(node.target);
-      // `bestEffort` wraps the block in try/catch so a failure does not fail the
-      // surrounding mutation — and the catch records a labeled warning (OMN-137).
-      // The dateExpr strategy ALREADY self-wraps, so it is never double-wrapped here.
-      const wrap = (block: string): string =>
-        node.bestEffort ? `try { ${block} } ${bestEffortCatch(node.label ?? node.prop)}` : block;
-      switch (node.strategy) {
-        case 'direct':
-          return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
-        case 'dateExpr':
-          // Deliberate SWALLOW (spec §3.1), not a bestEffortCatch: an invalid date
-          // string produces Invalid Date rather than a throw, so a warning here
-          // would be theater — the catch only shields exotic host-object errors.
-          return `try { ${target}.${node.prop} = ${emitExpr(node.value as Expr)}; } catch (e) {}`;
-        case 'enum':
-          return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
-        case 'readModifyReassign': {
-          const muts = (node.mutations ?? []).map((m) => `_rmr.${m.prop} = ${emitExpr(m.value)};`).join(' ');
-          return wrap(`{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } }`);
-        }
-        default: {
-          const _x: never = node.strategy;
-          throw new Error(`Unknown setProp strategy: ${JSON.stringify(_x)}`);
-        }
-      }
-    }
-    case 'assignTags': {
-      const target = emitExpr(node.target);
-      const tags = emitExpr(node.tags);
-      // The result binding is declared at PROGRAM scope (a `let`, OUTSIDE any bestEffort
-      // try-wrap) because later statements — e.g. the return envelope — consume it. If it
-      // were declared inside the try, a thrown best-effort block would leave the consumer
-      // referencing an undeclared variable (`ReferenceError`). Only the mutating loop is
-      // wrapped. (OMN-128: caught by live /verify. General rule: any bestEffort statement
-      // whose binding is consumed later MUST hoist that declaration out of the try.)
-      const decl = `let ${node.bind} = [];`;
-
-      // Mode dispatch (slice 4):
-      //   absent / 'add':  legacy create-or-find + addTag (original behavior)
-      //   'replace':       clearTags() first (inside the best-effort wrap), then add
-      //   'remove':        resolve WITHOUT creating, removeTag; missing names silently skipped
-      const mode = node.mode;
-
-      let loop: string;
-      if (mode === 'remove') {
-        // resolve-only: parseTagPath + resolveTagByPath for path names (shared single-source
-        // helpers — parseTagPath keeps its empty-segment validation), flattenedTags.find for
-        // leaf names. Missing tags are silently skipped (legacy update builder semantics).
-        loop = [
-          `for (const _tagName of ${tags}) {`,
-          '  var _segs = parseTagPath(_tagName);',
-          '  var _tag;',
-          '  if (_segs) { _tag = resolveTagByPath(_segs); }',
-          '  else { _tag = flattenedTags.find(t => t.name === _tagName); }',
-          `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
-          '}',
-        ].join('\n');
-      } else {
-        // 'add' or absent: original create-or-find loop
-        loop = [
-          `for (const _tagName of ${tags}) {`,
-          '  var _segs = parseTagPath(_tagName);',
-          '  var _tag;',
-          '  if (_segs) { _tag = resolveOrCreateTagByPath(_segs); }',
-          '  else { _tag = flattenedTags.find(t => t.name === _tagName); if (!_tag) _tag = new Tag(_tagName, null); }',
-          `  ${target}.addTag(_tag);`,
-          `  ${node.bind}.push(_tag.name);`,
-          '}',
-        ].join('\n');
-      }
-
-      // 'replace' mode: prepend clearTags() INSIDE the best-effort wrap (the whole tag block
-      // is best-effort, matching legacy update builder semantics — clearTags + add are one unit).
-      const clearLine = mode === 'replace' ? `${target}.clearTags();\n` : '';
-      const block = `${clearLine}${loop}`;
-
-      // `bestEffort` wraps only the BLOCK so a tag failure does not fail the surrounding
-      // mutation (original best-effort tag bridge semantics) — the binding survives,
-      // and the catch records a labeled warning (OMN-137).
-      const guardedBlock = node.bestEffort ? `try {\n${block}\n} ${bestEffortCatch(node.label ?? 'tags')}` : block;
-      return `${decl}\n${guardedBlock}`;
-    }
+    case 'guard':
+      return emitGuard(node);
+    case 'constructProject':
+      return emitConstructProject(node);
+    case 'constructFolder':
+      return emitConstructFolder(node);
+    case 'setProp':
+      return emitSetProp(node);
+    case 'assignTags':
+      return emitAssignTags(node);
     case 'return':
       return `return JSON.stringify(${emitEnvelope(node.envelope)});`;
     case 'moveTask': {
@@ -315,26 +365,8 @@ export function emitStmt(node: Stmt): string {
       return `const ${node.bind} = Task.byIdentifier(${JSON.stringify(node.ref)}) || null;`;
     case 'resolveTag':
       return `const ${node.bind} = flattenedTags.find(t => t.name === ${JSON.stringify(node.ref)}) || null;`;
-    case 'constructTag': {
-      // Near-clone of constructFolder at the tag altitude. `new Tag(name, parent)`
-      // nests under the parent; omitted parent = top level (matches legacy
-      // app.make at doc.tags / new Tag(name, null) in the path island).
-      const name = emitExpr(node.name);
-      switch (node.parent.kind) {
-        case 'resolved':
-          return `const ${node.bind} = new Tag(${name}, ${node.parent.var});`;
-        case 'none':
-          return `const ${node.bind} = new Tag(${name});`;
-        case 'notFound':
-          throw new Error(
-            'constructTag with parent.kind="notFound" is illegal — it must be Guarded earlier (validator enforces this).',
-          );
-        default: {
-          const _x: never = node.parent;
-          throw new Error(`Unknown tag resolution: ${JSON.stringify(_x)}`);
-        }
-      }
-    }
+    case 'constructTag':
+      return emitConstructTag(node);
     case 'constructTagPath':
       // `_tagPath` is reserved (validator rule 10) — at most one constructTagPath
       // per statement-list level (validator-enforced), so a fixed intermediate is safe.

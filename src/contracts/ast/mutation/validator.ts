@@ -278,8 +278,14 @@ function validateConstructTaskStmt(stmt: ConstructTaskNode): void {
 // Rules 6/8 for guard statements.
 function validateGuardStmt(stmt: GuardNode, ctx: ValidationContext): void {
   // Rule 6: throw-mode guard needs a message (it becomes the thrown Error
-  // text). The emitter throws too — belt and suspenders at this seam.
-  if (stmt.mode === 'throw' && stmt.envelope.message === undefined) {
+  // text). The emitter throws too — belt and suspenders at this seam, so the two
+  // layers MUST use the same absence semantics: the emitter (emitGuard) rejects a
+  // falsy `message`, so mirror it with `!stmt.envelope.message`. (A bare
+  // `=== undefined` would read as dead here: `envelope` is `Record<string, Expr>`
+  // and without noUncheckedIndexedAccess the type says `message` is always present —
+  // but the key can be absent, or explicitly undefined, at runtime. Truthiness
+  // catches both, matching the emitter.)
+  if (stmt.mode === 'throw' && !stmt.envelope.message) {
     throw new Error('Invalid guard: mode "throw" requires envelope.message (it becomes the thrown Error text).');
   }
   // Rule 8: a return-mode guard inside a batchItem would return from the
