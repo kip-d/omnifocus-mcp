@@ -27,6 +27,7 @@ import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 import { emitFolderPathMatch } from './folder-path-match.js';
+import { emitTextCondition } from './text-condition.js';
 
 // =============================================================================
 // TYPES
@@ -264,12 +265,12 @@ const PROJECT_STATUS_MAP: Record<ProjectStatus, string> = {
 
 /**
  * Emit one case-insensitive match condition against a project string field.
- * Thin wrapper over the shared {@link folderTextCondition} emitter (single
- * source of truth for the CONTAINS-lowercase / MATCHES-regexp strategy) — it
- * only supplies the null-guarded `project.<field>` accessor (OMN-213).
+ * Thin wrapper over the shared {@link emitTextCondition} emitter (single source
+ * of truth for the CONTAINS-lowercase / MATCHES-regexp strategy) — it only
+ * supplies the null-guarded `project.<field>` accessor (OMN-213).
  */
 function projectTextCondition(field: 'name' | 'note', term: string, operator?: TextOperator): string {
-  return folderTextCondition(`(project.${field} || '')`, term, operator);
+  return emitTextCondition(`(project.${field} || '')`, term, operator);
 }
 
 /**
@@ -421,22 +422,6 @@ export function describeProjectFilter(filter: ProjectFilter): string {
 // =============================================================================
 
 /**
- * Emit one case-insensitive match condition against an arbitrary OmniJS string
- * accessor. CONTAINS lowercases both sides; MATCHES compiles to a RegExp test.
- * The term is injected via JSON.stringify only — never raw interpolation
- * (OMN-149-safe). Single source of truth for project-, folder-, and tag-name
- * text filters: callers supply the accessor and delegate here —
- * {@link projectTextCondition} in this file, and the tags-side tag builder via
- * this exported symbol (OMN-213/214).
- */
-export function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
-  if (operator === 'MATCHES') {
-    return `new RegExp(${JSON.stringify(term)}, 'i').test(${accessor})`;
-  }
-  return `${accessor}.toLowerCase().includes(${JSON.stringify(term.toLowerCase())})`;
-}
-
-/**
  * Generate OmniJS filter code for a FolderFilter (OMN-170 S2). Operates on the
  * OmniJS `folder` object inside buildFilteredFoldersScript. Direct code
  * generation (no AST), mirroring generateProjectFilterCode.
@@ -448,13 +433,13 @@ export function generateFolderFilterCode(filter: FolderFilter): string {
 
   // Name search — name ONLY (folders have no note).
   if (filter.name) {
-    conditions.push(`(${folderTextCondition("(folder.name || '')", filter.name, filter.nameOperator)})`);
+    conditions.push(`(${emitTextCondition("(folder.name || '')", filter.name, filter.nameOperator)})`);
   }
 
   // Parent folder name (case-insensitive substring), null-guarded. CONTAINS-only
   // (no parentName operator), so the shared emitter's default branch applies (OMN-213).
   if (filter.parentName) {
-    conditions.push(`(folder.parent && ${folderTextCondition("(folder.parent.name || '')", filter.parentName)})`);
+    conditions.push(`(folder.parent && ${emitTextCondition("(folder.parent.name || '')", filter.parentName)})`);
   }
 
   // Top-level only — no containing parent folder.
