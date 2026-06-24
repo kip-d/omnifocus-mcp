@@ -128,7 +128,7 @@ npm run test:real-llm   # Real LLM integration (optional)
 
 ```bash
 npm run typecheck       # Type safety
-npm run lint:strict     # Code quality
+npm run lint            # Code quality (errors + zero warnings)
 ```
 
 ---

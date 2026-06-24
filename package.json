@@ -38,6 +38,7 @@
     "test:dev": "./scripts/test-quick.sh",
     "test:cleanup": "npx tsx scripts/test-cleanup.ts",
     "lint": "eslint src --ext .ts --max-warnings=0",
+    "//lint:strict": "Back-compat alias kept only so historical plan and spec docs that invoke lint:strict still run. See OMN-217.",
     "lint:strict": "npm run lint",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "npx prettier --write \"**/*.{ts,js,json,md}\"",
