@@ -424,10 +424,10 @@ export function describeProjectFilter(filter: ProjectFilter): string {
  * Emit one case-insensitive match condition against an arbitrary OmniJS string
  * accessor. CONTAINS lowercases both sides; MATCHES compiles to a RegExp test.
  * The term is injected via JSON.stringify only — never raw interpolation
- * (OMN-149-safe). Single source of truth for folder- AND project-side text
- * conditions: the single source of truth for project-, folder-, and tag-name
- * text filters. Callers supply the accessor and delegate here — {@link projectTextCondition}
- * in this file, and the tags-side tag builder via this exported symbol (OMN-213/214).
+ * (OMN-149-safe). Single source of truth for project-, folder-, and tag-name
+ * text filters: callers supply the accessor and delegate here —
+ * {@link projectTextCondition} in this file, and the tags-side tag builder via
+ * this exported symbol (OMN-213/214).
  */
 export function folderTextCondition(accessor: string, term: string, operator?: TextOperator): string {
   if (operator === 'MATCHES') {
