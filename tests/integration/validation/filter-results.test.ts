@@ -4,6 +4,23 @@ import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { expectOk } from '../helpers/expect-ok.js';
 
 /**
+ * Single source of truth for the two contracts these tests repeatedly assert,
+ * so a change lands in one place instead of silently drifting across copies:
+ *   - daysFromToday: today ± N days → YYYY-MM-DD (the date-window idiom)
+ *   - matchesText:   the server's text-filter contract (name OR note, case-insensitive)
+ */
+const daysFromToday = (delta: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().split('T')[0];
+};
+
+const matchesText = (task: any, term: string): boolean => {
+  const t = term.toLowerCase();
+  return Boolean(task.name?.toLowerCase().includes(t) || task.note?.toLowerCase().includes(t));
+};
+
+/**
  * P0 Priority: Filter Results Validation
  *
  * PURPOSE: Prevent bugs like #9 (text filter) and #10 (date range filter)
@@ -47,9 +64,7 @@ describe('Filter Results Validation', () => {
       if (data.data.tasks.length > 0) {
         // ✅ Validate EVERY result matches filter
         data.data.tasks.forEach((task: any, index: number) => {
-          const nameMatch = task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-          const noteMatch = task.note?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesFilter = nameMatch || noteMatch;
+          const matchesFilter = matchesText(task, searchTerm);
 
           expect(matchesFilter).toBe(true);
 
@@ -69,14 +84,8 @@ describe('Filter Results Validation', () => {
 
   describe('Date Range Filter (Bug #10 Prevention)', () => {
     it('should return ONLY tasks within specified date range', async () => {
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 7);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 7);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-7);
+      const endStr = daysFromToday(7);
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -119,14 +128,8 @@ describe('Filter Results Validation', () => {
     }, 60000);
 
     it('should exclude tasks before start date', async () => {
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() + 1); // Tomorrow
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 7); // Next week
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(1); // Tomorrow
+      const endStr = daysFromToday(7); // Next week
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -274,14 +277,8 @@ describe('Filter Results Validation', () => {
   describe('Combined Filters (P0-3: Complex Queries)', () => {
     it('should apply text + date filters together', async () => {
       const searchTerm = 'review'; // Common word
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 30);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 30);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-30);
+      const endStr = daysFromToday(30);
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -301,9 +298,7 @@ describe('Filter Results Validation', () => {
         // ✅ Validate EVERY result matches ALL filters
         data.data.tasks.forEach((task: any) => {
           // Text filter
-          const nameMatch = task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-          const noteMatch = task.note?.toLowerCase().includes(searchTerm.toLowerCase());
-          expect(nameMatch || noteMatch).toBe(true);
+          expect(matchesText(task, searchTerm)).toBe(true);
 
           // Date range filter
           const taskDate = task.dueDate?.split('T')[0];
@@ -322,14 +317,8 @@ describe('Filter Results Validation', () => {
       const searchTerm = 'review'; // common word, matches sibling text+date case
       const requiredTags = ['Personal', 'Work']; // common tags, matches sibling tag-any case
 
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 30);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 30);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-30);
+      const endStr = daysFromToday(30);
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -350,23 +339,19 @@ describe('Filter Results Validation', () => {
       if (data.data.tasks.length > 0) {
         // ✅ Validate EVERY result matches ALL THREE filters simultaneously
         data.data.tasks.forEach((task: any, index: number) => {
-          // Text filter (name OR note)
-          const nameMatch = task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-          const noteMatch = task.note?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesText = nameMatch || noteMatch;
+          const okText = matchesText(task, searchTerm);
 
           // Date range filter
           const taskDate = task.dueDate?.split('T')[0];
-          const matchesDate = taskDate !== undefined && taskDate >= startStr && taskDate <= endStr;
+          const okDate = taskDate !== undefined && taskDate >= startStr && taskDate <= endStr;
 
           // Tag filter (at least one required tag)
-          const matchesTag = Array.isArray(task.tags) && task.tags.some((tag: string) => requiredTags.includes(tag));
+          const okTag = Array.isArray(task.tags) && task.tags.some((tag: string) => requiredTags.includes(tag));
 
-          expect(matchesText).toBe(true);
-          expect(matchesDate).toBe(true);
-          expect(matchesTag).toBe(true);
-
-          if (!(matchesText && matchesDate && matchesTag)) {
+          // Diagnostics BEFORE the assertions: expect() throws synchronously, so a
+          // log placed after the first failing expect() would never run, leaving CI
+          // with a contextless "expected false to be true".
+          if (!(okText && okDate && okTag)) {
             console.error(`Task ${index} fails combined text+date+tag filter:`, {
               id: task.id,
               name: task.name,
@@ -374,9 +359,13 @@ describe('Filter Results Validation', () => {
               dueDate: task.dueDate,
               tags: task.tags,
               expected: { searchTerm, dateRange: `${startStr}..${endStr}`, requiredTags },
-              matched: { matchesText, matchesDate, matchesTag },
+              matched: { okText, okDate, okTag },
             });
           }
+
+          expect(okText).toBe(true);
+          expect(okDate).toBe(true);
+          expect(okTag).toBe(true);
         });
       }
     }, 90000);
@@ -389,14 +378,8 @@ describe('Filter Results Validation', () => {
     // still satisfies branch 1), so this asserts result-set MEMBERSHIP equals
     // the union computed manually from the two single-branch queries.
     it('should return the UNION of OR branches (membership equals manually-computed union)', async () => {
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 14);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 14);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-14);
+      const endStr = daysFromToday(14);
 
       // Naturally-small branches keep all three result sets under the limit, so
       // the exact union comparison stays sound (large branches like available:true
@@ -443,6 +426,21 @@ describe('Filter Results Validation', () => {
 
       if (!anyTruncated) {
         const expectedUnion = new Set<string>([...aIds, ...bIds]);
+
+        // Precondition — this test only has power to catch "OR flattens to branch1"
+        // when branch2 contributes at least one id branch1 lacks. If branch2 ⊆ branch1
+        // (or is empty), expectedUnion === aIds, and a *flattened* result (U === aIds)
+        // would satisfy every assertion below and pass VACUOUSLY. Assert the
+        // discriminating member exists so the proof can't silently degrade to a
+        // tautology. A failure here means "the data couldn't exercise the bug — widen
+        // the dueDate window or pick a branch2 with non-flagged members", NOT a product bug.
+        const branch2OnlyCount = [...bIds].filter((id) => !aIds.has(id)).length;
+        expect(
+          branch2OnlyCount,
+          'OR-union test has no discriminating power: branch2 (dueDate window) produced no id ' +
+            'absent from branch1 (flagged), so a flatten-to-first regression would pass unnoticed. ' +
+            'Widen the window or choose branches whose result sets genuinely differ.',
+        ).toBeGreaterThan(0);
 
         // U ⊇ branch1 AND U ⊇ branch2 — THIS is what catches "OR flattens to
         // the first condition" (a flattened result would omit branch2-only ids).
