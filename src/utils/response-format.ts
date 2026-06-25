@@ -479,7 +479,9 @@ export function createSuccessResponseV2<T>(
 ): StandardResponseV2<T> {
   return {
     success: true,
-    summary,
+    // OMN-199: omit the key when no summary (matches createTaskResponseV2 /
+    // createListResponseV2) rather than emitting `summary: undefined`.
+    ...(summary && { summary }),
     data,
     metadata: {
       operation,
@@ -582,8 +584,9 @@ export function createListResponseV2<T>(
   opts?: { summary?: boolean },
 ): StandardResponseV2<Record<string, T[]>> {
   // Generate summary based on item type
+  const includeSummary = opts?.summary !== false;
   let summary: TaskSummary | ProjectSummary | undefined;
-  if (opts?.summary !== false) {
+  if (includeSummary) {
     if (itemType === 'tasks') {
       summary = generateTaskSummary(items as unknown[]);
     } else if (itemType === 'projects') {
@@ -681,7 +684,8 @@ export function createTaskResponseV2<T>(
   // OMN-199: see createListResponseV2 — `summary: false` omits the summary.
   opts?: { summary?: boolean },
 ): StandardResponseV2<{ tasks: T[] }> {
-  const summary = opts?.summary === false ? undefined : generateTaskSummary(tasks as unknown[]);
+  const includeSummary = opts?.summary !== false;
+  const summary = includeSummary ? generateTaskSummary(tasks as unknown[]) : undefined;
 
   // Apply truncation
   const { data: truncatedTasks, truncation } = truncateResponse(tasks);
