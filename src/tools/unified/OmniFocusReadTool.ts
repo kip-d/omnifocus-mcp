@@ -716,12 +716,20 @@ PERFORMANCE:
     }
 
     const projectedTasks = projectFields(tasks, fields);
-    return createTaskResponseV2('tasks', projectedTasks, {
-      ...timer.toMetadata(),
-      from_cache: false,
-      mode: 'id_lookup',
-      sort_applied: false,
-    });
+    // Narrow lookup — suppress the dashboard-style summary (OMN-19 rule, OMN-199
+    // `{ summary: false }` primitive). OMN-219: aligns task id-lookup with
+    // executeProjectIdLookup, which already suppresses its summary on this path.
+    return createTaskResponseV2(
+      'tasks',
+      projectedTasks,
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'id_lookup',
+        sort_applied: false,
+      },
+      { summary: false },
+    );
   }
 
   /**
