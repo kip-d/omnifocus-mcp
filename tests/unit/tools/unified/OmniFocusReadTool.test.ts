@@ -57,6 +57,24 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.mode).toBe('id_lookup');
     });
 
+    it('suppresses the dashboard summary on task id-lookup (OMN-219, mirrors project id-lookup)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 'task-abc', name: 'Test Task', completed: false, flagged: true, blocked: false }],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { id: 'task-abc' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('id_lookup');
+      // Narrow lookup → no dashboard-style summary (OMN-19 rule, matches executeProjectIdLookup).
+      expect(result.summary).toBeUndefined();
+    });
+
     it('returns NOT_FOUND error when task does not exist', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
