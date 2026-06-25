@@ -367,7 +367,7 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
     });
 
     // OMN-131: an unsupported NOT payload used to compile to an EMPTY filter —
@@ -419,7 +419,7 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
     });
 
     it('preserves summary for broad browses (no narrow filter)', async () => {
@@ -456,7 +456,7 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.metadata.from_cache).toBe(true);
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
     });
   });
 
@@ -1161,7 +1161,7 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.count_only).toBe(true);
       expect(result.metadata.total_count).toBe(42);
       // OMN-195: summary must be absent — all-0 breakdown contradicts total_count
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
       expect(result.metadata.optimization).toBe('omnijs_count_no_tags');
     });
 
@@ -1179,7 +1179,7 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.count_only).toBe(true);
       expect(result.metadata.total_count).toBe(67);
       // forecast_past routes through executeCountOnly — same fix applies
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
     });
 
     it('mode:"inbox" + countOnly auto-injects inInbox into the count filter', async () => {
@@ -1300,7 +1300,7 @@ describe('OmniFocusReadTool', () => {
       expect(result.data.projects).toEqual([]);
       // No dashboard summary on a count-only result — its breakdown would be computed
       // from the empty rows (active:0…) and contradict total_count.
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
       // count-only is row-less by design, NOT a truncated row set (no false notice)
       expect('truncated' in result.metadata).toBe(false);
     });

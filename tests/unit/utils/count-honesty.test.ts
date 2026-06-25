@@ -109,7 +109,7 @@ describe('OMN-154 applyCountHonesty via createListResponseV2 (projects)', () => 
 // suppressed ({ summary: false }) — the metadata-honesty half (R1/R2) runs,
 // while the summary-insight half no-ops safely on the absent summary.
 describe('OMN-199 applyCountHonesty with summary omitted', () => {
-  const task = (name: string) => ({ id: `id-${name}`, name, flagged: false, completed: false });
+  // OMN-220: use the file-scope `task` factory (was a duplicate shadow here).
   const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
 
   it('tasks: metadata still gets population + truncated, no summary field', () => {
