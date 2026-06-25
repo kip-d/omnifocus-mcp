@@ -660,7 +660,6 @@ PERFORMANCE:
         filter_description: data.filter_description,
         warning: data.warning,
       },
-      undefined,
       { summary: false },
     );
   }
@@ -781,7 +780,6 @@ PERFORMANCE:
         operation: 'list',
         mode: 'id_lookup',
       },
-      undefined,
       { summary: false },
     ) as unknown as Record<string, unknown>;
 
@@ -820,7 +818,7 @@ PERFORMANCE:
     // folders carry total_folders as their headline metric (mirrors the row path).
     if (entityType === 'folders') metadata.total_folders = population;
 
-    return createListResponseV2(entityType, [], entityType, metadata, undefined, { summary: false });
+    return createListResponseV2(entityType, [], entityType, metadata, { summary: false });
   }
 
   /**
@@ -920,8 +918,7 @@ PERFORMANCE:
           from_cache: true,
           operation: 'list',
         },
-        { population: cached.totalMatched },
-        { summary: !isNarrowLookup },
+        { population: cached.totalMatched, summary: !isNarrowLookup },
       ) as unknown as Record<string, unknown>;
 
       // Post-hoc field projection (always applied for thin-by-default)
@@ -967,8 +964,7 @@ PERFORMANCE:
         from_cache: false,
         operation: 'list',
       },
-      { population: totalMatched },
-      { summary: !isNarrowLookup },
+      { population: totalMatched, summary: !isNarrowLookup },
     ) as unknown as Record<string, unknown>;
 
     // Post-hoc field projection (always applied for thin-by-default)

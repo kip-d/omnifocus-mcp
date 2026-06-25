@@ -113,7 +113,7 @@ describe('OMN-199 applyCountHonesty with summary omitted', () => {
   const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
 
   it('tasks: metadata still gets population + truncated, no summary field', () => {
-    const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48 }, { summary: false });
+    const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48, summary: false });
     expect(r.metadata.total_count).toBe(48);
     expect(r.metadata.truncated).toBe(true);
     expect(r.summary).toBeUndefined();
@@ -121,14 +121,7 @@ describe('OMN-199 applyCountHonesty with summary omitted', () => {
   });
 
   it('projects: metadata still gets population + truncated, no summary field', () => {
-    const r = createListResponseV2(
-      'projects',
-      [project('p1')],
-      'projects',
-      {},
-      { population: 160 },
-      { summary: false },
-    );
+    const r = createListResponseV2('projects', [project('p1')], 'projects', {}, { population: 160, summary: false });
     expect(r.metadata.total_count).toBe(160);
     expect(r.metadata.truncated).toBe(true);
     expect(r.summary).toBeUndefined();

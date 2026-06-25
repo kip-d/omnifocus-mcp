@@ -102,6 +102,17 @@ export interface CountHonestyInput {
 }
 
 /**
+ * OMN-199: options for the V2 list/task response builders. Combines the
+ * count-honesty inputs (population/offset) with `summary` control in a single
+ * trailing bag, so a caller wanting only summary suppression never has to pass an
+ * `undefined` tombstone for counts just to reach a separate opts parameter.
+ */
+export interface ResponseListOptions extends CountHonestyInput {
+  /** Default true. When false, suppress dashboard-summary generation at the source. */
+  summary?: boolean;
+}
+
+/**
  * OMN-154 R1/R2/R3: make headline counts report the population and truncation
  * unmistakable. Mutates the already-built response IN PLACE, after the
  * metadata spread — population is authoritative over caller metadata.
@@ -577,11 +588,13 @@ export function createListResponseV2<T>(
   items: T[],
   itemType: 'tasks' | 'projects' | 'tags' | 'folders' | 'other',
   metadata: Partial<StandardMetadataV2> = {},
-  counts?: CountHonestyInput,
-  // OMN-199: `summary: false` suppresses summary generation at the source so
-  // count-only / narrow-lookup callers no longer build-then-delete it (which
-  // risked leaking the misleading all-zero summary from an empty row set).
-  opts?: { summary?: boolean },
+  // OMN-199: count-honesty inputs (population/offset) and summary suppression
+  // share ONE options bag so callers never thread an `undefined` tombstone past
+  // counts to reach summary control. `summary: false` suppresses summary
+  // generation at the source so count-only / narrow-lookup callers no longer
+  // build-then-delete it (which risked leaking the misleading all-zero summary
+  // from an empty row set).
+  opts?: ResponseListOptions,
 ): StandardResponseV2<Record<string, T[]>> {
   // Generate summary based on item type
   const includeSummary = opts?.summary !== false;
@@ -599,6 +612,9 @@ export function createListResponseV2<T>(
 
   const response: StandardResponseV2<Record<string, T[]>> = {
     success: true,
+    // OMN-199: omit the `summary` key entirely (vs `summary: undefined`) when no
+    // summary was generated — this includes the tags/folders/'other' item types,
+    // which never produce one, so `'summary' in response` is false for them.
     ...(summary && { summary }),
     data: {
       [dataKey]: items,
@@ -619,7 +635,7 @@ export function createListResponseV2<T>(
   if (itemType === 'projects' || itemType === 'folders') {
     noun = itemType;
   }
-  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, counts, noun);
+  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, opts, noun);
   return response;
 }
 
@@ -680,9 +696,9 @@ export function createTaskResponseV2<T>(
   operation: string,
   tasks: T[],
   metadata: Partial<StandardMetadataV2> = {},
-  counts?: CountHonestyInput,
-  // OMN-199: see createListResponseV2 — `summary: false` omits the summary.
-  opts?: { summary?: boolean },
+  // OMN-199: see createListResponseV2 — one options bag carries count-honesty
+  // (population/offset) and summary suppression. `summary: false` omits the summary.
+  opts?: ResponseListOptions,
 ): StandardResponseV2<{ tasks: T[] }> {
   const includeSummary = opts?.summary !== false;
   const summary = includeSummary ? generateTaskSummary(tasks as unknown[]) : undefined;
@@ -717,7 +733,7 @@ export function createTaskResponseV2<T>(
     },
   };
 
-  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, counts, 'tasks');
+  applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, opts, 'tasks');
   return response;
 }
 

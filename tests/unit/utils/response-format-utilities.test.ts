@@ -255,7 +255,7 @@ describe('Response Format Utilities', () => {
       const timer = new OperationTimerV2();
       const tasks = [{ id: 1, name: 'Task 1', completed: false }];
 
-      const response = createListResponseV2('task-list', tasks, 'tasks', timer.toMetadata(), undefined, {
+      const response = createListResponseV2('task-list', tasks, 'tasks', timer.toMetadata(), {
         summary: false,
       });
 
@@ -268,7 +268,7 @@ describe('Response Format Utilities', () => {
       const timer = new OperationTimerV2();
       const projects = [{ id: 'p1', name: 'Project 1', status: 'active' }];
 
-      const response = createListResponseV2('project-list', projects, 'projects', timer.toMetadata(), undefined, {
+      const response = createListResponseV2('project-list', projects, 'projects', timer.toMetadata(), {
         summary: false,
       });
 
@@ -304,7 +304,7 @@ describe('Response Format Utilities', () => {
         { id: 't2', name: 'Task 2', completed: true },
       ];
 
-      const response = createTaskResponseV2('task-query', tasks, timer.toMetadata(), undefined, { summary: false });
+      const response = createTaskResponseV2('task-query', tasks, timer.toMetadata(), { summary: false });
 
       expect(response.summary).toBeUndefined();
       expect('summary' in response).toBe(false);
