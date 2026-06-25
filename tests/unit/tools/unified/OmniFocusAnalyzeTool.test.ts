@@ -892,15 +892,19 @@ describe('OmniFocusAnalyzeTool', () => {
       });
 
       it('validates against the live DB by default: resolves projects, dedupes, classifies tags', async () => {
-        // execJson reads run via Promise.all in array order: projects, tags, tasks.
-        // OMN-139: executeJson now returns ScriptResult; shapes must match per-site schemas:
+        // execJson reads run via Promise.all: projects, tags, then ONE incomplete-tasks
+        // read PER DISTINCT requested scope (OMN-126 scoped dedup). Two distinct
+        // projects here ('hardware', 'Nonexistent Project') → two task reads → 4 calls.
+        // Call order: projects, tags, hardware-scoped read, nonexistent-scoped read.
+        // OMN-139: executeJson returns ScriptResult; shapes must match per-site schemas:
         //   projects → PROJECTS_LIST_SCHEMA {projects:[...], metadata?}
         //   tags     → TAG_ITEMS_SCHEMA {ok:true, v:'ast', items:[...]}
         //   tasks    → TASKS_LIST_SCHEMA {tasks:[...], metadata?}
         const dbResponses = [
           createScriptSuccess({ projects: [{ name: 'Hardware' }] }),
           createScriptSuccess({ ok: true, v: 'ast', items: [{ name: '@errand' }] }),
-          createScriptSuccess({ tasks: [{ name: 'Order scanners', project: 'Hardware' }] }),
+          createScriptSuccess({ tasks: [{ name: 'Order scanners', project: 'Hardware' }] }), // 'hardware' scope
+          createScriptSuccess({ tasks: [] }), // 'Nonexistent Project' scope
         ];
         let call = 0;
         mockOmni.executeJson.mockImplementation(() => Promise.resolve(dbResponses[call++]));
@@ -919,7 +923,8 @@ describe('OmniFocusAnalyzeTool', () => {
         });
 
         expect(res.success).toBe(true);
-        expect(mockOmni.executeJson).toHaveBeenCalledTimes(3);
+        // projects + tags + 2 scoped task reads (one per distinct requested project)
+        expect(mockOmni.executeJson).toHaveBeenCalledTimes(4);
 
         const [a, b] = res.data.items;
         // Item A: exact (case-insensitive) project, tag split, flagged duplicate.
@@ -1068,6 +1073,64 @@ describe('OmniFocusAnalyzeTool', () => {
         // OMN-153 predicate: a project root is the only task with task.project !== null,
         // so excluding `task.project === null` rows keeps roots out of the dedup set.
         expect(tasksScript).toContain('task.project === null');
+      });
+
+      it('OMN-126: scopes the dedup read per requested scope — project read + inbox read, not whole-DB', async () => {
+        // The candidate read is scoped to the requested project(s) + inbox via one
+        // read per distinct scope (the AST rejects project=A OR project=B in a single
+        // query, so per-scope reads are used). A named project → a flattenedTasks read
+        // narrowed by task.containingProject; an inbox-bound item → a separate
+        // inbox.forEach read. The old whole-DB read had neither narrowing clause.
+        const scripts: string[] = [];
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          return Promise.resolve({ tasks: [] });
+        });
+
+        await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              items: [
+                { name: 'A', project: 'Hardware' }, // named project → project-scoped read
+                { name: 'B' }, // no project → inbox-bound → inbox-scoped read
+              ],
+            },
+          },
+        });
+
+        // Project-scoped read: flattenedTasks narrowed by the containing-project target.
+        const projectRead = scripts.find((s) => s.includes('task.containingProject ==='));
+        expect(projectRead).toBeDefined();
+        // Inbox-scoped read: a separate inbox.forEach pass for the project-less item.
+        const inboxRead = scripts.find((s) => s.includes('inbox.forEach') && s.includes('task.inInbox === true'));
+        expect(inboxRead).toBeDefined();
+      });
+
+      it('OMN-126: two distinct projects → two project-scoped reads (no contradictory-OR throw)', async () => {
+        // Regression guard: a single OR-of-two-projects query throws
+        // "Contradictory conditions on field task.containingProject" in the AST. The
+        // per-scope-read design avoids that — two distinct projects = two reads.
+        let taskReads = 0;
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          if (script.includes('flattenedTasks')) taskReads++;
+          return Promise.resolve({ tasks: [] });
+        });
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              items: [
+                { name: 'A', project: 'Hardware' },
+                { name: 'B', project: 'Software' },
+              ],
+            },
+          },
+        });
+
+        expect(res.success).toBe(true);
+        expect(taskReads).toBe(2);
       });
 
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
