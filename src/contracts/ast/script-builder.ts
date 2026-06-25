@@ -134,6 +134,10 @@ export const DETAIL_FIELDS = [
   // OMN-153: boolean marker for project-root rows (useful in detail views and
   // for agents that need to distinguish roots from regular tasks).
   'isProjectRoot',
+  // OMN-207: action-group ordering, read-side parity with the write side
+  // (OMN-198/206). Cheap boolean; reachable via details:true (DETAIL, not the
+  // thin MINIMAL default) — mirrors `sequential` in DETAIL_PROJECT_FIELDS.
+  'sequential',
 ];
 
 /**
@@ -342,6 +346,12 @@ function generateFieldProjection(
       // task.project !== null is the OmniJS definition of "this task IS a project root".
       case 'isProjectRoot':
         projections.push('isProjectRoot: task.project !== null');
+        break;
+      // OMN-207: action-group ordering, read-side parity with the write side
+      // (OMN-198/206). `|| false` returns the stored boolean — false ≠ absent.
+      // Mirrors the project projection case (`sequential: project.sequential || false`).
+      case 'sequential':
+        projections.push('sequential: task.sequential || false');
         break;
     }
   }
