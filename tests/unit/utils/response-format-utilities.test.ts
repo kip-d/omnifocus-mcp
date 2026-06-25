@@ -248,6 +248,33 @@ describe('Response Format Utilities', () => {
       expect(response.summary).toBeDefined();
       expect((response.summary as any).total_count).toBe(2);
     });
+
+    // OMN-199: { summary: false } suppresses summary generation at the source,
+    // replacing the build-then-delete workaround.
+    it('omits summary when { summary: false } (tasks)', () => {
+      const timer = new OperationTimerV2();
+      const tasks = [{ id: 1, name: 'Task 1', completed: false }];
+
+      const response = createListResponseV2('task-list', tasks, 'tasks', timer.toMetadata(), undefined, {
+        summary: false,
+      });
+
+      expect(response.summary).toBeUndefined();
+      expect('summary' in response).toBe(false);
+      expect(response.data.tasks).toEqual(tasks);
+    });
+
+    it('omits summary when { summary: false } (projects)', () => {
+      const timer = new OperationTimerV2();
+      const projects = [{ id: 'p1', name: 'Project 1', status: 'active' }];
+
+      const response = createListResponseV2('project-list', projects, 'projects', timer.toMetadata(), undefined, {
+        summary: false,
+      });
+
+      expect(response.summary).toBeUndefined();
+      expect('summary' in response).toBe(false);
+    });
   });
 
   describe('createTaskResponseV2', () => {
@@ -267,6 +294,22 @@ describe('Response Format Utilities', () => {
       expect((response.summary as any).total_count).toBe(2);
       expect((response.summary as any).returned_count).toBe(2);
       expect((response.summary as any).breakdown?.completed).toBe(1);
+    });
+
+    // OMN-199: { summary: false } suppresses summary generation at the source.
+    it('omits summary when { summary: false }', () => {
+      const timer = new OperationTimerV2();
+      const tasks = [
+        { id: 't1', name: 'Task 1', completed: false },
+        { id: 't2', name: 'Task 2', completed: true },
+      ];
+
+      const response = createTaskResponseV2('task-query', tasks, timer.toMetadata(), undefined, { summary: false });
+
+      expect(response.summary).toBeUndefined();
+      expect('summary' in response).toBe(false);
+      expect(response.data.tasks).toEqual(tasks);
+      expect(response.metadata.total_count).toBe(2);
     });
 
     it('should handle tasks with full details', () => {

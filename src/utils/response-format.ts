@@ -576,13 +576,19 @@ export function createListResponseV2<T>(
   itemType: 'tasks' | 'projects' | 'tags' | 'folders' | 'other',
   metadata: Partial<StandardMetadataV2> = {},
   counts?: CountHonestyInput,
+  // OMN-199: `summary: false` suppresses summary generation at the source so
+  // count-only / narrow-lookup callers no longer build-then-delete it (which
+  // risked leaking the misleading all-zero summary from an empty row set).
+  opts?: { summary?: boolean },
 ): StandardResponseV2<Record<string, T[]>> {
   // Generate summary based on item type
   let summary: TaskSummary | ProjectSummary | undefined;
-  if (itemType === 'tasks') {
-    summary = generateTaskSummary(items as unknown[]);
-  } else if (itemType === 'projects') {
-    summary = generateProjectSummary(items as unknown[]);
+  if (opts?.summary !== false) {
+    if (itemType === 'tasks') {
+      summary = generateTaskSummary(items as unknown[]);
+    } else if (itemType === 'projects') {
+      summary = generateProjectSummary(items as unknown[]);
+    }
   }
 
   // Use entity-specific key, fallback to 'items' for 'other'
@@ -590,7 +596,7 @@ export function createListResponseV2<T>(
 
   const response: StandardResponseV2<Record<string, T[]>> = {
     success: true,
-    summary,
+    ...(summary && { summary }),
     data: {
       [dataKey]: items,
     },
@@ -672,8 +678,10 @@ export function createTaskResponseV2<T>(
   tasks: T[],
   metadata: Partial<StandardMetadataV2> = {},
   counts?: CountHonestyInput,
+  // OMN-199: see createListResponseV2 — `summary: false` omits the summary.
+  opts?: { summary?: boolean },
 ): StandardResponseV2<{ tasks: T[] }> {
-  const summary = generateTaskSummary(tasks as unknown[]);
+  const summary = opts?.summary === false ? undefined : generateTaskSummary(tasks as unknown[]);
 
   // Apply truncation
   const { data: truncatedTasks, truncation } = truncateResponse(tasks);
@@ -681,13 +689,13 @@ export function createTaskResponseV2<T>(
   // Invariant (OMN-42): summary.returned_count must equal data.tasks.length.
   // Truncation reduces the returned set, so the summary count must follow.
   // total_count stays at the pre-truncation length to communicate the full dataset.
-  if (truncation?.truncated) {
+  if (summary && truncation?.truncated) {
     summary.returned_count = truncatedTasks.length;
   }
 
   const response: StandardResponseV2<{ tasks: T[] }> = {
     success: true,
-    summary,
+    ...(summary && { summary }),
     data: {
       tasks: truncatedTasks,
     },

@@ -104,3 +104,34 @@ describe('OMN-154 applyCountHonesty via createListResponseV2 (projects)', () => 
     expect('truncated' in r.metadata).toBe(false);
   });
 });
+
+// OMN-199: applyCountHonesty must update metadata even when the summary is
+// suppressed ({ summary: false }) — the metadata-honesty half (R1/R2) runs,
+// while the summary-insight half no-ops safely on the absent summary.
+describe('OMN-199 applyCountHonesty with summary omitted', () => {
+  const task = (name: string) => ({ id: `id-${name}`, name, flagged: false, completed: false });
+  const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
+
+  it('tasks: metadata still gets population + truncated, no summary field', () => {
+    const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48 }, { summary: false });
+    expect(r.metadata.total_count).toBe(48);
+    expect(r.metadata.truncated).toBe(true);
+    expect(r.summary).toBeUndefined();
+    expect('summary' in r).toBe(false);
+  });
+
+  it('projects: metadata still gets population + truncated, no summary field', () => {
+    const r = createListResponseV2(
+      'projects',
+      [project('p1')],
+      'projects',
+      {},
+      { population: 160 },
+      { summary: false },
+    );
+    expect(r.metadata.total_count).toBe(160);
+    expect(r.metadata.truncated).toBe(true);
+    expect(r.summary).toBeUndefined();
+    expect('summary' in r).toBe(false);
+  });
+});
