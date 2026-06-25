@@ -19,6 +19,7 @@ import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { runScopedTag } from '../helpers/run-id.js';
 import { expectOk, expectOkData } from '../helpers/expect-ok.js';
+import { daysFromToday } from '../helpers/dates.js';
 
 describe('Analytics Validation - Actual Calculations', () => {
   let client: MCPTestClient;
@@ -140,9 +141,7 @@ describe('Analytics Validation - Actual Calculations', () => {
   describe('OverdueAnalysis Calculation Validation', () => {
     it('should correctly identify overdue tasks and handle various date scenarios', async () => {
       // Create task with past due date (should be overdue)
-      const pastDate = new Date();
-      pastDate.setDate(pastDate.getDate() - 7); // 7 days ago
-      const pastDateStr = pastDate.toISOString().split('T')[0];
+      const pastDateStr = daysFromToday(-7); // 7 days ago
 
       const overdueCreate = await client.createTestTask('Overdue Task Test', {
         tags: [testSessionTag],
@@ -150,9 +149,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       });
 
       // Create task with future due date (should NOT be overdue)
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
-      const futureDateStr = futureDate.toISOString().split('T')[0];
+      const futureDateStr = daysFromToday(7); // 7 days from now
 
       const futureCreate = await client.createTestTask('Future Task Test', {
         tags: [testSessionTag],

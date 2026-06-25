@@ -1,7 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { expectOk } from '../helpers/expect-ok.js';
+import { daysFromToday } from '../helpers/dates.js';
+
+/**
+ * Single source of truth for the server's text-filter contract (name OR note,
+ * case-insensitive), so the predicate lands in one place instead of drifting
+ * across copies.
+ *
+ * NOTE: reads `task.note`, which is only populated when the query projects it
+ * (`details: true`, or `note` in an explicit `fields` list). Calling this on a
+ * task fetched without the note field would false-negative on note-only matches.
+ * Every caller below projects the note; preserve that if you reuse this.
+ */
+const matchesText = (task: any, term: string): boolean => {
+  const t = term.toLowerCase();
+  return Boolean(task.name?.toLowerCase().includes(t) || task.note?.toLowerCase().includes(t));
+};
 
 /**
  * P0 Priority: Filter Results Validation
@@ -20,6 +36,12 @@ describe('Filter Results Validation', () => {
     // Use shared server - avoids 13s startup cost per test file
     client = await getSharedClient();
   }, 30000);
+
+  afterEach(async () => {
+    // Delete any tasks seeded during a test (tracked by createTestTask). A no-op for
+    // the read-only tests; the OR-union test seeds one discriminating-member task.
+    await client.cleanup();
+  });
 
   afterAll(async () => {
     // Don't stop server - globalTeardown handles shared server cleanup
@@ -47,13 +69,10 @@ describe('Filter Results Validation', () => {
       if (data.data.tasks.length > 0) {
         // ✅ Validate EVERY result matches filter
         data.data.tasks.forEach((task: any, index: number) => {
-          const nameMatch = task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-          const noteMatch = task.note?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesFilter = nameMatch || noteMatch;
+          const matchesFilter = matchesText(task, searchTerm);
 
-          expect(matchesFilter).toBe(true);
-
-          // If this fails, show which task and why
+          // Diagnostics before the assertion — expect() throws synchronously, so a block
+          // placed after it would never run on failure (the contextless-CI-failure trap).
           if (!matchesFilter) {
             console.error(`Task ${index} doesn't match filter:`, {
               id: task.id,
@@ -62,6 +81,8 @@ describe('Filter Results Validation', () => {
               searchTerm,
             });
           }
+
+          expect(matchesFilter).toBe(true);
         });
       }
     }, 60000);
@@ -69,14 +90,8 @@ describe('Filter Results Validation', () => {
 
   describe('Date Range Filter (Bug #10 Prevention)', () => {
     it('should return ONLY tasks within specified date range', async () => {
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 7);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 7);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-7);
+      const endStr = daysFromToday(7);
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -119,14 +134,8 @@ describe('Filter Results Validation', () => {
     }, 60000);
 
     it('should exclude tasks before start date', async () => {
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() + 1); // Tomorrow
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 7); // Next week
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(1); // Tomorrow
+      const endStr = daysFromToday(7); // Next week
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -274,14 +283,8 @@ describe('Filter Results Validation', () => {
   describe('Combined Filters (P0-3: Complex Queries)', () => {
     it('should apply text + date filters together', async () => {
       const searchTerm = 'review'; // Common word
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 30);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 30);
-
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startStr = daysFromToday(-30);
+      const endStr = daysFromToday(30);
 
       const data = await client.callTool('omnifocus_read', {
         query: {
@@ -301,9 +304,7 @@ describe('Filter Results Validation', () => {
         // ✅ Validate EVERY result matches ALL filters
         data.data.tasks.forEach((task: any) => {
           // Text filter
-          const nameMatch = task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-          const noteMatch = task.note?.toLowerCase().includes(searchTerm.toLowerCase());
-          expect(nameMatch || noteMatch).toBe(true);
+          expect(matchesText(task, searchTerm)).toBe(true);
 
           // Date range filter
           const taskDate = task.dueDate?.split('T')[0];
@@ -312,5 +313,204 @@ describe('Filter Results Validation', () => {
         });
       }
     }, 60000);
+
+    // OMN-135: combined text + date + tag was never exercised simultaneously
+    // (siblings cover text+date and tag-any: separately). A regression of the
+    // v3.0.0-refactor kind — one of the three filters silently dropped — would
+    // produce a result violating the dropped condition. This per-member check
+    // is truncation-immune and catches exactly that class.
+    it('should apply text + date + tag filters together (every result matches all three)', async () => {
+      const searchTerm = 'review'; // common word, matches sibling text+date case
+      const requiredTags = ['Personal', 'Work']; // common tags, matches sibling tag-any case
+
+      const startStr = daysFromToday(-30);
+      const endStr = daysFromToday(30);
+
+      const data = await client.callTool('omnifocus_read', {
+        query: {
+          type: 'tasks',
+          filters: {
+            text: { contains: searchTerm },
+            dueDate: { between: [startStr, endStr] },
+            tags: { any: requiredTags },
+          },
+          details: true, // returns name, note, dueDate, tags (DEFAULT_FIELDS)
+          limit: 100,
+        },
+      });
+
+      expectOk(data, 'combined text + date + tag filter');
+      expect(Array.isArray(data.data?.tasks)).toBe(true);
+
+      if (data.data.tasks.length > 0) {
+        // ✅ Validate EVERY result matches ALL THREE filters simultaneously
+        data.data.tasks.forEach((task: any, index: number) => {
+          const okText = matchesText(task, searchTerm);
+
+          // Date range filter — presence is asserted separately below (toBeDefined),
+          // so okDate is the range check only; an undefined taskDate makes it false too,
+          // but the dedicated presence assertion fires first with a clearer message.
+          const taskDate = task.dueDate?.split('T')[0];
+          const okDate = taskDate >= startStr && taskDate <= endStr;
+
+          // Tag filter (at least one required tag)
+          const okTag = Array.isArray(task.tags) && task.tags.some((tag: string) => requiredTags.includes(tag));
+
+          // Diagnostics BEFORE the assertions: expect() throws synchronously, so a
+          // log placed after the first failing expect() would never run, leaving CI
+          // with a contextless "expected false to be true".
+          if (!(okText && okDate && okTag)) {
+            console.error(`Task ${index} fails combined text+date+tag filter:`, {
+              id: task.id,
+              name: task.name,
+              note: task.note?.substring(0, 50),
+              dueDate: task.dueDate,
+              tags: task.tags,
+              expected: { searchTerm, dateRange: `${startStr}..${endStr}`, requiredTags },
+              matched: { okText, okDate, okTag },
+            });
+          }
+
+          expect(okText).toBe(true);
+          // Assert dueDate presence separately from the range check so a server bug that
+          // returns an undated task surfaces as "expected undefined to be defined", matching
+          // the sibling text+date test, rather than collapsing into okDate's "false".
+          expect(taskDate, 'dueDate filter returned a task with no dueDate').toBeDefined();
+          expect(okDate).toBe(true);
+          expect(okTag).toBe(true);
+        });
+      }
+    }, 90000);
+
+    // OMN-135 (2026-06-09 scope addition): prove OR branches do NOT flatten to
+    // the first condition. The June 2026 fork audit (see
+    // docs/CONCERNS-RESPONSE-2026-06.md) claimed "OR flattens to first condition";
+    // a static code-trace refuted it but no integration test proved the refutation
+    // at runtime. Per-member validation CANNOT catch a flatten-to-first bug (every
+    // member of a flattened result still satisfies branch 1), so this asserts
+    // result-set MEMBERSHIP equals the union computed manually from the two
+    // single-branch queries.
+    it('should return the UNION of OR branches (membership equals manually-computed union)', async (ctx) => {
+      const startStr = daysFromToday(-14);
+      const endStr = daysFromToday(14);
+
+      // Seed a DETERMINISTIC discriminating member: an unflagged task due inside the
+      // window. It belongs to branch2 (dueDate) but never branch1 (flagged), so branch2
+      // is guaranteed to contribute an id branch1 lacks — the union test can never degrade
+      // to a vacuous tautology, regardless of what ambient data happens to exist. A
+      // flatten-to-first regression (U = branch1 only) drops this id from the union and
+      // fails the membership assertion below. Tracked for afterEach teardown.
+      const seed = await client.createTestTask('OR-union discriminating member', {
+        dueDate: daysFromToday(3),
+        flagged: false,
+      });
+      expectOk(seed, 'seed OR-union discriminating task');
+      const seededId: string = seed.data?.task?.taskId;
+      expect(seededId, 'seed task should return an id').toBeTruthy();
+
+      // branch1 (flagged) and branch2 (dueDate window), kept naturally small so all three
+      // result sets stay under the row limit; a truncated branch would make the manual A∪B
+      // incomplete (handled by the truncation guard below).
+      const branch1 = { flagged: true };
+      const branch2 = { dueDate: { between: [startStr, endStr] } };
+
+      const fetch = async (filters: any) => {
+        const res = await client.callTool('omnifocus_read', {
+          query: {
+            type: 'tasks',
+            filters,
+            fields: ['id', 'name', 'flagged', 'dueDate'],
+            limit: 200,
+          },
+        });
+        expectOk(res, 'OR union branch');
+        expect(Array.isArray(res.data?.tasks)).toBe(true);
+        return res;
+      };
+
+      // These three reads are NOT a single snapshot: if a task is flagged or its
+      // dueDate moves in/out of the window between calls, the hand-computed A∪B can
+      // diverge from U and the set-equality below would fail on a snapshot skew rather
+      // than a real OR bug. Acceptable here — this suite runs against a single user's
+      // DB with no concurrent mutation; the calls are back-to-back (sub-second). If this
+      // ever flakes, that's the cause, not the OR implementation.
+      const aRes = await fetch(branch1);
+      const bRes = await fetch(branch2);
+      const uRes = await fetch({ OR: [branch1, branch2] });
+
+      const idSet = (res: any): Set<string> => new Set(res.data.tasks.map((t: any) => t.id as string));
+      const aIds = idSet(aRes);
+      const bIds = idSet(bRes);
+      const uIds = idSet(uRes);
+
+      // (1) No over-matching — every union member satisfies at least one branch.
+      // Truncation-immune (checks each returned member against its own fields).
+      uRes.data.tasks.forEach((task: any) => {
+        const inBranch1 = task.flagged === true;
+        const taskDate = task.dueDate?.split('T')[0];
+        const inBranch2 = taskDate !== undefined && taskDate >= startStr && taskDate <= endStr;
+        expect(inBranch1 || inBranch2).toBe(true);
+      });
+
+      // (2) Exact union membership. Sound only when no branch truncated at the row limit (a
+      // truncated branch yields an incomplete manual A∪B). Truncation is a genuine
+      // environmental "can't run" — not the code under test — so ctx.skip() rather than
+      // false-fail. This is the ONLY remaining data precondition: the discriminating-member
+      // precondition earlier review rounds debated (skip vs assert) is now GUARANTEED by the
+      // seeded task above, so it is asserted, not skipped.
+      const anyTruncated =
+        aRes.metadata?.truncated === true || bRes.metadata?.truncated === true || uRes.metadata?.truncated === true;
+      if (anyTruncated) {
+        ctx.skip(
+          'OR-union exact set-equality skipped: a branch truncated at limit 200, so the manual ' +
+            'union is incomplete. (The per-member over-match check above still ran.) Narrow the window if persistent.',
+        );
+        return;
+      }
+
+      // The seeded unflagged due-soon task MUST appear in branch2 and in the union. Because we
+      // created it, its absence is a real defect — assert, don't skip. Missing from branch2 →
+      // the dueDate filter dropped it; present in branch2 but missing from the union → exactly
+      // the "OR flattened to the flagged branch" regression this test exists to catch.
+      const branch2OnlyCount = [...bIds].filter((id) => !aIds.has(id)).length;
+      expect(bIds.has(seededId), 'seeded due-soon task missing from branch2 — dueDate filter dropped it').toBe(true);
+      expect(
+        uIds.has(seededId),
+        'seeded unflagged due-soon task missing from OR union — OR appears to have flattened to the flagged branch',
+      ).toBe(true);
+
+      const expectedUnion = new Set<string>([...aIds, ...bIds]);
+
+      // Diagnostics BEFORE the assertions (expect() throws synchronously): on a real
+      // mismatch, print exactly which ids are missing/spurious instead of a bare
+      // "expected false to be true" with no id — the same diagnostic-first discipline
+      // the combined text+date+tag test uses.
+      const missingFromUnion = [...expectedUnion].filter((id) => !uIds.has(id));
+      const spuriousInUnion = [...uIds].filter((id) => !expectedUnion.has(id));
+      if (missingFromUnion.length > 0 || spuriousInUnion.length > 0) {
+        console.error('OR-union membership mismatch:', {
+          missingFromUnion, // in A∪B but absent from U → OR dropped a branch (the regression)
+          spuriousInUnion, // in U but not A∪B → OR over-matched
+          sizes: {
+            a: aIds.size,
+            b: bIds.size,
+            u: uIds.size,
+            expected: expectedUnion.size,
+            branch2Only: branch2OnlyCount,
+          },
+        });
+      }
+
+      // U ⊇ branch1 AND U ⊇ branch2 — THIS is what catches "OR flattens to
+      // the first condition" (a flattened result would omit branch2-only ids).
+      aIds.forEach((id) => expect(uIds.has(id)).toBe(true));
+      bIds.forEach((id) => expect(uIds.has(id)).toBe(true));
+
+      // U ⊆ A ∪ B — no spurious members.
+      uIds.forEach((id) => expect(expectedUnion.has(id)).toBe(true));
+
+      // Exact set equality (membership, not just count).
+      expect(uIds.size).toBe(expectedUnion.size);
+    }, 90000);
   });
 });
