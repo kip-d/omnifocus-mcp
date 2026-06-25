@@ -2,19 +2,18 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { expectOk } from '../helpers/expect-ok.js';
+import { daysFromToday } from '../helpers/dates.js';
 
 /**
- * Single source of truth for the two contracts these tests repeatedly assert,
- * so a change lands in one place instead of silently drifting across copies:
- *   - daysFromToday: today ± N days → YYYY-MM-DD (the date-window idiom)
- *   - matchesText:   the server's text-filter contract (name OR note, case-insensitive)
+ * Single source of truth for the server's text-filter contract (name OR note,
+ * case-insensitive), so the predicate lands in one place instead of drifting
+ * across copies.
+ *
+ * NOTE: reads `task.note`, which is only populated when the query projects it
+ * (`details: true`, or `note` in an explicit `fields` list). Calling this on a
+ * task fetched without the note field would false-negative on note-only matches.
+ * Every caller below projects the note; preserve that if you reuse this.
  */
-const daysFromToday = (delta: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + delta);
-  return d.toISOString().split('T')[0];
-};
-
 const matchesText = (task: any, term: string): boolean => {
   const t = term.toLowerCase();
   return Boolean(task.name?.toLowerCase().includes(t) || task.note?.toLowerCase().includes(t));
@@ -364,6 +363,10 @@ describe('Filter Results Validation', () => {
           }
 
           expect(okText).toBe(true);
+          // Assert dueDate presence separately from the range check so a server bug that
+          // returns an undated task surfaces as "expected undefined to be defined", matching
+          // the sibling text+date test, rather than collapsing into okDate's "false".
+          expect(taskDate, 'dueDate filter returned a task with no dueDate').toBeDefined();
           expect(okDate).toBe(true);
           expect(okTag).toBe(true);
         });
@@ -371,13 +374,14 @@ describe('Filter Results Validation', () => {
     }, 90000);
 
     // OMN-135 (2026-06-09 scope addition): prove OR branches do NOT flatten to
-    // the first condition. The audit (CONCERNS.md 2026-06-03) claimed "OR
-    // flattens to first condition"; a static code-trace refuted it but no
-    // integration test proved the refutation at runtime. Per-member validation
-    // CANNOT catch a flatten-to-first bug (every member of a flattened result
-    // still satisfies branch 1), so this asserts result-set MEMBERSHIP equals
-    // the union computed manually from the two single-branch queries.
-    it('should return the UNION of OR branches (membership equals manually-computed union)', async () => {
+    // the first condition. The June 2026 fork audit (see
+    // docs/CONCERNS-RESPONSE-2026-06.md) claimed "OR flattens to first condition";
+    // a static code-trace refuted it but no integration test proved the refutation
+    // at runtime. Per-member validation CANNOT catch a flatten-to-first bug (every
+    // member of a flattened result still satisfies branch 1), so this asserts
+    // result-set MEMBERSHIP equals the union computed manually from the two
+    // single-branch queries.
+    it('should return the UNION of OR branches (membership equals manually-computed union)', async (ctx) => {
       const startStr = daysFromToday(-14);
       const endStr = daysFromToday(14);
 
@@ -401,6 +405,12 @@ describe('Filter Results Validation', () => {
         return res;
       };
 
+      // These three reads are NOT a single snapshot: if a task is flagged or its
+      // dueDate moves in/out of the window between calls, the hand-computed A∪B can
+      // diverge from U and the set-equality below would fail on a snapshot skew rather
+      // than a real OR bug. Acceptable here — this suite runs against a single user's
+      // DB with no concurrent mutation; the calls are back-to-back (sub-second). If this
+      // ever flakes, that's the cause, not the OR implementation.
       const aRes = await fetch(branch1);
       const bRes = await fetch(branch2);
       const uRes = await fetch({ OR: [branch1, branch2] });
@@ -419,45 +429,70 @@ describe('Filter Results Validation', () => {
         expect(inBranch1 || inBranch2).toBe(true);
       });
 
-      // (2) Exact union membership — only sound when no query truncated at the
-      // limit (a truncated branch yields an incomplete manual union).
+      // (2) Exact union membership. Two preconditions must hold for the set algebra to be
+      // sound; when either fails the *data* (not the code) can't exercise the proof, so we
+      // ctx.skip() — an honest "didn't run" — rather than assert (a false red on a non-bug)
+      // or fall through (a vacuous green that proves nothing). Skip is the right instrument
+      // for a data-environment precondition; assert is for invariants the code must satisfy.
+
+      // Precondition A — no branch truncated at the row limit (a truncated branch yields an
+      // incomplete manual union, breaking A∪B).
       const anyTruncated =
         aRes.metadata?.truncated === true || bRes.metadata?.truncated === true || uRes.metadata?.truncated === true;
-
-      if (!anyTruncated) {
-        const expectedUnion = new Set<string>([...aIds, ...bIds]);
-
-        // Precondition — this test only has power to catch "OR flattens to branch1"
-        // when branch2 contributes at least one id branch1 lacks. If branch2 ⊆ branch1
-        // (or is empty), expectedUnion === aIds, and a *flattened* result (U === aIds)
-        // would satisfy every assertion below and pass VACUOUSLY. Assert the
-        // discriminating member exists so the proof can't silently degrade to a
-        // tautology. A failure here means "the data couldn't exercise the bug — widen
-        // the dueDate window or pick a branch2 with non-flagged members", NOT a product bug.
-        const branch2OnlyCount = [...bIds].filter((id) => !aIds.has(id)).length;
-        expect(
-          branch2OnlyCount,
-          'OR-union test has no discriminating power: branch2 (dueDate window) produced no id ' +
-            'absent from branch1 (flagged), so a flatten-to-first regression would pass unnoticed. ' +
-            'Widen the window or choose branches whose result sets genuinely differ.',
-        ).toBeGreaterThan(0);
-
-        // U ⊇ branch1 AND U ⊇ branch2 — THIS is what catches "OR flattens to
-        // the first condition" (a flattened result would omit branch2-only ids).
-        aIds.forEach((id) => expect(uIds.has(id)).toBe(true));
-        bIds.forEach((id) => expect(uIds.has(id)).toBe(true));
-
-        // U ⊆ A ∪ B — no spurious members.
-        uIds.forEach((id) => expect(expectedUnion.has(id)).toBe(true));
-
-        // Exact set equality (membership, not just count).
-        expect(uIds.size).toBe(expectedUnion.size);
-      } else {
-        console.warn(
-          'OR union test: a branch truncated at limit 200; skipping exact set-equality ' +
-            '(per-member over-match check still validated). Re-run with a smaller window if persistent.',
+      if (anyTruncated) {
+        ctx.skip(
+          'OR-union exact set-equality skipped: a branch truncated at limit 200, so the manual ' +
+            'union is incomplete. (The per-member over-match check above still ran.) Narrow the window if persistent.',
         );
+        return;
       }
+
+      // Precondition B — branch2 contributes at least one id branch1 lacks. Without a
+      // discriminating member, expectedUnion === aIds and a *flattened* result (U === aIds)
+      // would satisfy every assertion below: the test would prove nothing. This is a
+      // property of the data, not the code, so skip rather than fail.
+      const branch2OnlyCount = [...bIds].filter((id) => !aIds.has(id)).length;
+      if (branch2OnlyCount === 0) {
+        ctx.skip(
+          'OR-union test has no discriminating power on this data: branch2 (dueDate window) produced ' +
+            'no id absent from branch1 (flagged), so a flatten-to-first regression could not be caught. ' +
+            'Widen the window or choose branches whose result sets genuinely differ.',
+        );
+        return;
+      }
+
+      const expectedUnion = new Set<string>([...aIds, ...bIds]);
+
+      // Diagnostics BEFORE the assertions (expect() throws synchronously): on a real
+      // mismatch, print exactly which ids are missing/spurious instead of a bare
+      // "expected false to be true" with no id — the same diagnostic-first discipline
+      // the combined text+date+tag test uses.
+      const missingFromUnion = [...expectedUnion].filter((id) => !uIds.has(id));
+      const spuriousInUnion = [...uIds].filter((id) => !expectedUnion.has(id));
+      if (missingFromUnion.length > 0 || spuriousInUnion.length > 0) {
+        console.error('OR-union membership mismatch:', {
+          missingFromUnion, // in A∪B but absent from U → OR dropped a branch (the regression)
+          spuriousInUnion, // in U but not A∪B → OR over-matched
+          sizes: {
+            a: aIds.size,
+            b: bIds.size,
+            u: uIds.size,
+            expected: expectedUnion.size,
+            branch2Only: branch2OnlyCount,
+          },
+        });
+      }
+
+      // U ⊇ branch1 AND U ⊇ branch2 — THIS is what catches "OR flattens to
+      // the first condition" (a flattened result would omit branch2-only ids).
+      aIds.forEach((id) => expect(uIds.has(id)).toBe(true));
+      bIds.forEach((id) => expect(uIds.has(id)).toBe(true));
+
+      // U ⊆ A ∪ B — no spurious members.
+      uIds.forEach((id) => expect(expectedUnion.has(id)).toBe(true));
+
+      // Exact set equality (membership, not just count).
+      expect(uIds.size).toBe(expectedUnion.size);
     }, 90000);
   });
 });
