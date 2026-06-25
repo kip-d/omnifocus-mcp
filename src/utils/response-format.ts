@@ -480,6 +480,17 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
 }
 
 /**
+ * OMN-220: single source of the omit-summary-if-falsy rule shared by the three
+ * V2 builders (createSuccessResponseV2 / createListResponseV2 / createTaskResponseV2).
+ * Spreading the result omits the `summary` key entirely when there is no summary
+ * (vs emitting `summary: undefined`) — `'summary' in response` is then false.
+ * Centralizing it means a future change to the omit semantics touches one place.
+ */
+function summaryField<S>(summary: S | undefined): { summary: S } | Record<string, never> {
+  return summary ? { summary } : {};
+}
+
+/**
  * Create enhanced success response with summary
  */
 export function createSuccessResponseV2<T>(
@@ -492,7 +503,7 @@ export function createSuccessResponseV2<T>(
     success: true,
     // OMN-199: omit the key when no summary (matches createTaskResponseV2 /
     // createListResponseV2) rather than emitting `summary: undefined`.
-    ...(summary && { summary }),
+    ...summaryField(summary),
     data,
     metadata: {
       operation,
@@ -615,7 +626,7 @@ export function createListResponseV2<T>(
     // OMN-199: omit the `summary` key entirely (vs `summary: undefined`) when no
     // summary was generated — this includes the tags/folders/'other' item types,
     // which never produce one, so `'summary' in response` is false for them.
-    ...(summary && { summary }),
+    ...summaryField(summary),
     data: {
       [dataKey]: items,
     },
@@ -715,7 +726,7 @@ export function createTaskResponseV2<T>(
 
   const response: StandardResponseV2<{ tasks: T[] }> = {
     success: true,
-    ...(summary && { summary }),
+    ...summaryField(summary),
     data: {
       tasks: truncatedTasks,
     },
