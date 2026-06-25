@@ -61,6 +61,9 @@ export const TaskRowSchema = z
     isProjectRoot: z.boolean().optional(),
     // OMN-130: cheap boolean — true when the task has any non-empty note text.
     hasNote: z.boolean().optional(),
+    // OMN-207: action-group ordering, read-side parity with the write side
+    // (OMN-198/206). Emitted by the `sequential` task projection case.
+    sequential: z.boolean().optional(),
   })
   .strict();
 
