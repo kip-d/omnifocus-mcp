@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { expectOk } from '../helpers/expect-ok.js';
@@ -37,6 +37,12 @@ describe('Filter Results Validation', () => {
     client = await getSharedClient();
   }, 30000);
 
+  afterEach(async () => {
+    // Delete any tasks seeded during a test (tracked by createTestTask). A no-op for
+    // the read-only tests; the OR-union test seeds one discriminating-member task.
+    await client.cleanup();
+  });
+
   afterAll(async () => {
     // Don't stop server - globalTeardown handles shared server cleanup
   });
@@ -65,9 +71,8 @@ describe('Filter Results Validation', () => {
         data.data.tasks.forEach((task: any, index: number) => {
           const matchesFilter = matchesText(task, searchTerm);
 
-          expect(matchesFilter).toBe(true);
-
-          // If this fails, show which task and why
+          // Diagnostics before the assertion — expect() throws synchronously, so a block
+          // placed after it would never run on failure (the contextless-CI-failure trap).
           if (!matchesFilter) {
             console.error(`Task ${index} doesn't match filter:`, {
               id: task.id,
@@ -76,6 +81,8 @@ describe('Filter Results Validation', () => {
               searchTerm,
             });
           }
+
+          expect(matchesFilter).toBe(true);
         });
       }
     }, 60000);
@@ -340,9 +347,11 @@ describe('Filter Results Validation', () => {
         data.data.tasks.forEach((task: any, index: number) => {
           const okText = matchesText(task, searchTerm);
 
-          // Date range filter
+          // Date range filter — presence is asserted separately below (toBeDefined),
+          // so okDate is the range check only; an undefined taskDate makes it false too,
+          // but the dedicated presence assertion fires first with a clearer message.
           const taskDate = task.dueDate?.split('T')[0];
-          const okDate = taskDate !== undefined && taskDate >= startStr && taskDate <= endStr;
+          const okDate = taskDate >= startStr && taskDate <= endStr;
 
           // Tag filter (at least one required tag)
           const okTag = Array.isArray(task.tags) && task.tags.some((tag: string) => requiredTags.includes(tag));
@@ -385,9 +394,23 @@ describe('Filter Results Validation', () => {
       const startStr = daysFromToday(-14);
       const endStr = daysFromToday(14);
 
-      // Naturally-small branches keep all three result sets under the limit, so
-      // the exact union comparison stays sound (large branches like available:true
-      // would truncate and break set algebra).
+      // Seed a DETERMINISTIC discriminating member: an unflagged task due inside the
+      // window. It belongs to branch2 (dueDate) but never branch1 (flagged), so branch2
+      // is guaranteed to contribute an id branch1 lacks — the union test can never degrade
+      // to a vacuous tautology, regardless of what ambient data happens to exist. A
+      // flatten-to-first regression (U = branch1 only) drops this id from the union and
+      // fails the membership assertion below. Tracked for afterEach teardown.
+      const seed = await client.createTestTask('OR-union discriminating member', {
+        dueDate: daysFromToday(3),
+        flagged: false,
+      });
+      expectOk(seed, 'seed OR-union discriminating task');
+      const seededId: string = seed.data?.task?.taskId;
+      expect(seededId, 'seed task should return an id').toBeTruthy();
+
+      // branch1 (flagged) and branch2 (dueDate window), kept naturally small so all three
+      // result sets stay under the row limit; a truncated branch would make the manual A∪B
+      // incomplete (handled by the truncation guard below).
       const branch1 = { flagged: true };
       const branch2 = { dueDate: { between: [startStr, endStr] } };
 
@@ -429,14 +452,12 @@ describe('Filter Results Validation', () => {
         expect(inBranch1 || inBranch2).toBe(true);
       });
 
-      // (2) Exact union membership. Two preconditions must hold for the set algebra to be
-      // sound; when either fails the *data* (not the code) can't exercise the proof, so we
-      // ctx.skip() — an honest "didn't run" — rather than assert (a false red on a non-bug)
-      // or fall through (a vacuous green that proves nothing). Skip is the right instrument
-      // for a data-environment precondition; assert is for invariants the code must satisfy.
-
-      // Precondition A — no branch truncated at the row limit (a truncated branch yields an
-      // incomplete manual union, breaking A∪B).
+      // (2) Exact union membership. Sound only when no branch truncated at the row limit (a
+      // truncated branch yields an incomplete manual A∪B). Truncation is a genuine
+      // environmental "can't run" — not the code under test — so ctx.skip() rather than
+      // false-fail. This is the ONLY remaining data precondition: the discriminating-member
+      // precondition earlier review rounds debated (skip vs assert) is now GUARANTEED by the
+      // seeded task above, so it is asserted, not skipped.
       const anyTruncated =
         aRes.metadata?.truncated === true || bRes.metadata?.truncated === true || uRes.metadata?.truncated === true;
       if (anyTruncated) {
@@ -447,19 +468,16 @@ describe('Filter Results Validation', () => {
         return;
       }
 
-      // Precondition B — branch2 contributes at least one id branch1 lacks. Without a
-      // discriminating member, expectedUnion === aIds and a *flattened* result (U === aIds)
-      // would satisfy every assertion below: the test would prove nothing. This is a
-      // property of the data, not the code, so skip rather than fail.
+      // The seeded unflagged due-soon task MUST appear in branch2 and in the union. Because we
+      // created it, its absence is a real defect — assert, don't skip. Missing from branch2 →
+      // the dueDate filter dropped it; present in branch2 but missing from the union → exactly
+      // the "OR flattened to the flagged branch" regression this test exists to catch.
       const branch2OnlyCount = [...bIds].filter((id) => !aIds.has(id)).length;
-      if (branch2OnlyCount === 0) {
-        ctx.skip(
-          'OR-union test has no discriminating power on this data: branch2 (dueDate window) produced ' +
-            'no id absent from branch1 (flagged), so a flatten-to-first regression could not be caught. ' +
-            'Widen the window or choose branches whose result sets genuinely differ.',
-        );
-        return;
-      }
+      expect(bIds.has(seededId), 'seeded due-soon task missing from branch2 — dueDate filter dropped it').toBe(true);
+      expect(
+        uIds.has(seededId),
+        'seeded unflagged due-soon task missing from OR union — OR appears to have flattened to the flagged branch',
+      ).toBe(true);
 
       const expectedUnion = new Set<string>([...aIds, ...bIds]);
 
