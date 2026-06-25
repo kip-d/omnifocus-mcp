@@ -289,7 +289,7 @@ RESPONSE CONTROL:
 - fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true)
 - ID lookup always returns all fields with full notes
 - fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
-- fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
+- fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox, sequential
 - available: true when actionable now (OmniFocus status Available, Next, DueSoon, or Overdue); blocked: true when waiting on a predecessor, a future defer date, or an on-hold project (status Blocked). Completed/dropped tasks are neither.
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
 - sort: [{ field: "dueDate", direction: "asc" }]

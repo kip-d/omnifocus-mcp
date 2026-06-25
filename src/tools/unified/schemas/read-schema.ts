@@ -190,6 +190,7 @@ const TASK_FIELDS = [
   'inInbox',
   'isProjectRoot', // OMN-153: true when the task IS a project root (task.project !== null in OmniJS)
   'hasNote', // OMN-130: cheap boolean — true when the task has any non-empty note text
+  'sequential', // OMN-207: action-group ordering — settable (OMN-198/206) and now readable on the task side
 ] as const;
 
 const PROJECT_FIELDS = [

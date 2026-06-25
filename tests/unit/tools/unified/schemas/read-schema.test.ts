@@ -380,6 +380,20 @@ describe('ReadSchema', () => {
   });
 
   describe('type-discriminated fields', () => {
+    it('OMN-207: should accept sequential on task queries (read-side parity with the write side)', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          fields: ['id', 'name', 'sequential'],
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success && result.data.query.type === 'tasks') {
+        expect(result.data.query.fields).toContain('sequential');
+      }
+    });
+
     it('should accept project fields on project queries', () => {
       const input = {
         query: {
@@ -479,9 +493,9 @@ describe('ReadSchema', () => {
     // a valid query type, and the export-specific params are gone from every type.
     it('should reject export queries entirely (OMN-193: export removed)', () => {
       expect(ReadSchema.safeParse({ query: { type: 'export' } }).success).toBe(false);
-      expect(
-        ReadSchema.safeParse({ query: { type: 'export', exportType: 'tasks', format: 'json' } }).success,
-      ).toBe(false);
+      expect(ReadSchema.safeParse({ query: { type: 'export', exportType: 'tasks', format: 'json' } }).success).toBe(
+        false,
+      );
     });
 
     it('should reject export-specific params on a tasks query (OMN-193)', () => {
