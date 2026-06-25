@@ -633,35 +633,35 @@ PERFORMANCE:
       filters_applied?: Record<string, unknown>;
     };
     const count = data.count ?? 0;
-    const response = createTaskResponseV2('tasks', [], {
-      ...timer.toMetadata(),
-      from_cache: false,
-      mode: mode || 'count_only',
-      count_only: true,
-      total_count: count,
-      // OMN-190: surface the script's honest echo (the EFFECTIVE filter incl.
-      // auto-injected completed/dropped/project-root defaults), which the count
-      // script computes alongside filter_description. Rebuilding from countFilter
-      // here would re-introduce the very contradiction OMN-190 fixed — countFilter
-      // lacks the defaults, so filters_applied:{} would disagree with a
-      // filter_description that names three exclusions. The real count script
-      // always emits the echo; the countFilter fallback only fires for partial
-      // test mocks (CountResultSchema's z.unknown() field is optional-by-default,
-      // so a missing key parses as undefined rather than failing validation).
-      filters_applied: data.filters_applied ?? stripNormalizedBrand(countFilter),
-      optimization: data.optimization || 'ast_omnijs_bridge',
-      filter_description: data.filter_description,
-      warning: data.warning,
-    });
-
-    // OMN-195: drop summary entirely (matching the OMN-174 convention for
-    // projects/tags/folders). generateTaskSummary([]) produces a breakdown
-    // where every field is 0, which contradicts total_count and actively
-    // misleads LLMs ("breakdown.overdue:0" alongside "total_count:67").
-    // metadata.total_count is the single authoritative answer.
-    delete response.summary;
-
-    return response;
+    // OMN-195/OMN-199: suppress the summary (matching the OMN-174 convention for
+    // projects/tags/folders). generateTaskSummary([]) would produce an all-zero
+    // breakdown contradicting total_count; metadata.total_count is the single
+    // authoritative answer for a count-only result.
+    return createTaskResponseV2(
+      'tasks',
+      [],
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: mode || 'count_only',
+        count_only: true,
+        total_count: count,
+        // OMN-190: surface the script's honest echo (the EFFECTIVE filter incl.
+        // auto-injected completed/dropped/project-root defaults), which the count
+        // script computes alongside filter_description. Rebuilding from countFilter
+        // here would re-introduce the very contradiction OMN-190 fixed — countFilter
+        // lacks the defaults, so filters_applied:{} would disagree with a
+        // filter_description that names three exclusions. The real count script
+        // always emits the echo; the countFilter fallback only fires for partial
+        // test mocks (CountResultSchema's z.unknown() field is optional-by-default,
+        // so a missing key parses as undefined rather than failing validation).
+        filters_applied: data.filters_applied ?? stripNormalizedBrand(countFilter),
+        optimization: data.optimization || 'ast_omnijs_bridge',
+        filter_description: data.filter_description,
+        warning: data.warning,
+      },
+      { summary: false },
+    );
   }
 
   private async executeIdLookup(
@@ -769,15 +769,19 @@ PERFORMANCE:
       );
     }
 
-    const listResult = createListResponseV2('projects', projects, 'projects', {
-      ...timer.toMetadata(),
-      from_cache: false,
-      operation: 'list',
-      mode: 'id_lookup',
-    }) as unknown as Record<string, unknown>;
-
-    // Narrow lookup — strip the dashboard-style summary (matches OMN-19 rule).
-    delete listResult.summary;
+    // Narrow lookup — suppress the dashboard-style summary (OMN-19 rule, OMN-199).
+    const listResult = createListResponseV2(
+      'projects',
+      projects,
+      'projects',
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        operation: 'list',
+        mode: 'id_lookup',
+      },
+      { summary: false },
+    ) as unknown as Record<string, unknown>;
 
     return projectFieldsOnResult(listResult, fields);
   }
@@ -792,10 +796,10 @@ PERFORMANCE:
    * `0 < population → truncated` and emit a false "Showing 0 of N (truncated)"
    * notice. A count-only result is row-less by design, not a truncated row set.
    *
-   * The summary block is dropped: createListResponseV2 builds a projects summary
-   * from the (empty) rows, so its breakdown (active/on_hold/completed/…) would all
-   * be 0 and contradict total_count (e.g. active:0 alongside total_count:183). A
-   * count is a single number, not a dashboard — metadata.total_count is the answer.
+   * The summary block is suppressed (OMN-199 `{ summary: false }`): an all-zero
+   * breakdown built from the empty rows (active/on_hold/completed/…) would
+   * contradict total_count (e.g. active:0 alongside total_count:183). A count is a
+   * single number, not a dashboard — metadata.total_count is the answer.
    * Mirrors the narrow-lookup summary suppression in handleProjectQuery.
    */
   private buildCountOnlyResponse(
@@ -814,9 +818,7 @@ PERFORMANCE:
     // folders carry total_folders as their headline metric (mirrors the row path).
     if (entityType === 'folders') metadata.total_folders = population;
 
-    const response = createListResponseV2(entityType, [], entityType, metadata) as unknown as Record<string, unknown>;
-    delete response.summary;
-    return response;
+    return createListResponseV2(entityType, [], entityType, metadata, { summary: false });
   }
 
   /**
@@ -916,10 +918,8 @@ PERFORMANCE:
           from_cache: true,
           operation: 'list',
         },
-        { population: cached.totalMatched },
+        { population: cached.totalMatched, summary: !isNarrowLookup },
       ) as unknown as Record<string, unknown>;
-
-      if (isNarrowLookup) delete cacheResult.summary;
 
       // Post-hoc field projection (always applied for thin-by-default)
       return projectFieldsOnResult(cacheResult, effectiveFields);
@@ -964,10 +964,8 @@ PERFORMANCE:
         from_cache: false,
         operation: 'list',
       },
-      { population: totalMatched },
+      { population: totalMatched, summary: !isNarrowLookup },
     ) as unknown as Record<string, unknown>;
-
-    if (isNarrowLookup) delete listResult.summary;
 
     // Post-hoc field projection (always applied for thin-by-default)
     return projectFieldsOnResult(listResult, effectiveFields);
