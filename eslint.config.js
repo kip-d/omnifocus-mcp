@@ -3,6 +3,7 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import sonarjs from 'eslint-plugin-sonarjs';
 import importPlugin from 'eslint-plugin-import';
+import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 import localRules from './eslint-rules/index.js';
 
@@ -43,6 +44,7 @@ export default [
     plugins: {
       '@typescript-eslint': tseslint,
       import: importPlugin,
+      '@stylistic': stylistic,
     },
     rules: {
       // TypeScript recommended rules (but relaxed for MCP server)
@@ -70,13 +72,16 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
 
-      // Enforce consistency
+      // Enforce consistency. The five formatting rules below were ESLint core
+      // rules until v8.53.0 froze + deprecated all stylistic rules; they now
+      // live in @stylistic/eslint-plugin. Values are unchanged from the core
+      // rules — this is a drop-in rename, not a formatting policy change.
       'no-console': 'off', // MCP servers often use console for debugging
-      quotes: ['error', 'single', { avoidEscape: true }],
-      semi: ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'no-trailing-spaces': 'error',
-      'eol-last': ['error', 'always'],
+      '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
+      '@stylistic/semi': ['error', 'always'],
+      '@stylistic/comma-dangle': ['error', 'always-multiline'],
+      '@stylistic/no-trailing-spaces': 'error',
+      '@stylistic/eol-last': ['error', 'always'],
 
       // SonarJS overrides — relaxed for this codebase
       'sonarjs/cognitive-complexity': ['warn', 20],
