@@ -2,11 +2,15 @@
 
 ## Summary
 
-Claude Desktop's native MCP implementation only supports **stdio transport**—it expects to spawn a local subprocess. To connect to a remote MCP server over HTTP/SSE (e.g., an OmniFocus MCP server running on macOS), a bridge/proxy is required on the client side.
+Claude Desktop's native MCP implementation only supports **stdio transport**—it expects to spawn a local subprocess. To
+connect to a remote MCP server over HTTP/SSE (e.g., an OmniFocus MCP server running on macOS), a bridge/proxy is
+required on the client side.
 
 ## Problem Statement
 
-We want to run an MCP server on a macOS machine (required for OmniFocus automation) and connect to it from Claude Desktop running on Windows. The server exposes an HTTP/SSE endpoint, but Claude Desktop's `config.json` schema requires a `command` field to spawn a local process.
+We want to run an MCP server on a macOS machine (required for OmniFocus automation) and connect to it from Claude
+Desktop running on Windows. The server exposes an HTTP/SSE endpoint, but Claude Desktop's `config.json` schema requires
+a `command` field to spawn a local process.
 
 Attempting to configure an HTTP endpoint directly in `config.json` results in a Zod validation error:
 
@@ -26,7 +30,8 @@ ZodError: [
 
 ### Option 1: mcp-remote (Recommended)
 
-Anthropic provides `mcp-remote`, a lightweight bridge that lets stdio-only MCP clients connect to remote HTTP/SSE servers.
+Anthropic provides `mcp-remote`, a lightweight bridge that lets stdio-only MCP clients connect to remote HTTP/SSE
+servers.
 
 **Installation:** Available via npx (no global install required)
 
@@ -37,11 +42,7 @@ Anthropic provides `mcp-remote`, a lightweight bridge that lets stdio-only MCP c
   "mcpServers": {
     "omnifocus": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://<mac-ip>:3000/mcp"
-      ]
+      "args": ["-y", "mcp-remote", "http://<mac-ip>:3000/mcp"]
     }
   }
 }
@@ -56,6 +57,7 @@ Claude Desktop → stdio → mcp-remote → HTTP/SSE → Mac (OmniFocus MCP Serv
 ```
 
 **Notes:**
+
 - Designed for OAuth-based auth but works with authless servers
 - Described as "an experimental stop-gap until popular MCP clients natively support remote, authorized servers"
 
@@ -76,11 +78,7 @@ npm install -g supergateway
   "mcpServers": {
     "omnifocus": {
       "command": "npx",
-      "args": [
-        "supergateway",
-        "--streamablehttp",
-        "http://<mac-ip>:3000/mcp"
-      ]
+      "args": ["supergateway", "--streamablehttp", "http://<mac-ip>:3000/mcp"]
     }
   }
 }
@@ -92,18 +90,22 @@ npm install -g supergateway
 
 Claude Desktop now supports remote MCP servers through **Settings > Connectors** for Pro/Max/Team/Enterprise plans.
 
-**Important:** Claude Desktop will *not* connect to remote servers configured directly in `claude_desktop_config.json` when using this method. The Connectors UI is the intended path for remote servers.
+**Important:** Claude Desktop will _not_ connect to remote servers configured directly in `claude_desktop_config.json`
+when using this method. The Connectors UI is the intended path for remote servers.
 
 **Supported transports:**
+
 - SSE-based (may be deprecated in coming months)
 - Streamable HTTP-based
 
 **Auth support:**
+
 - Authless servers
 - OAuth-based servers (3/26 and 6/18 auth specs)
 - Dynamic Client Registration (DCR)
 
-**Limitation:** This approach seems oriented toward public/OAuth-authenticated services rather than internal servers on a local network.
+**Limitation:** This approach seems oriented toward public/OAuth-authenticated services rather than internal servers on
+a local network.
 
 ## Recommendation
 
@@ -146,5 +148,4 @@ The OmniFocus MCP server must:
 
 ---
 
-*Researched: 2024-12-23*
-*Updated: 2024-12-23 - Answered open questions, fixed endpoint paths*
+_Researched: 2024-12-23_ _Updated: 2024-12-23 - Answered open questions, fixed endpoint paths_

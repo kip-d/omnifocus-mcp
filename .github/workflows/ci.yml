@@ -1,5 +1,5 @@
 # GitHub Actions CI for OmniFocus MCP Server
-# 
+#
 # IMPORTANT: This CI runs on Ubuntu and cannot fully test OmniFocus functionality
 # since OmniFocus is macOS-only. For complete testing:
 # 1. Run `npm run ci:local` on macOS with OmniFocus installed
@@ -12,9 +12,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
     inputs:
       run_omnifocus_tests:
@@ -25,7 +25,7 @@ on:
 
 env:
   NODE_VERSION: '20'
-  
+
 jobs:
   # Quick validation on Ubuntu for TypeScript/basic checks
   quick-check:
@@ -75,6 +75,15 @@ jobs:
           # let 16 accumulate silently. Keep the baseline at zero: fix warnings or
           # add a justified inline eslint-disable rather than relaxing this gate.
           npm run lint
+
+      - name: Prettier format check
+        run: |
+          echo "🎨 Checking Prettier formatting..."
+          # ESLint no longer enforces formatting rules (eslint-config-prettier turns
+          # them off). Prettier is the sole formatting authority; this gate catches
+          # mis-formatted files that bypass the pre-commit hook (--no-verify or
+          # direct GitHub UI edits).
+          npm run format:check
 
   # Comprehensive testing (Note: macOS runners not available on free GitHub)
   # This job simulates macOS testing but runs on Ubuntu with appropriate limitations
@@ -144,7 +153,7 @@ jobs:
           # Test a simple tool that doesn't require OmniFocus data
           # Note: This may fail on Ubuntu since OmniFocus is macOS-only, but we test server startup
           RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | timeout 15s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
-          
+
           if echo "$RESULT" | grep -q "version"; then
             echo "✅ Sample tool execution successful"
           else
@@ -159,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Only show this job for documentation purposes
-    if: false  # Disabled - requires macOS + OmniFocus setup
+    if: false # Disabled - requires macOS + OmniFocus setup
     needs: test-functionality
     steps:
       - name: Checkout

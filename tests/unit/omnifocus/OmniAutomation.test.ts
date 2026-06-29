@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { OmniAutomation, OmniAutomationError } from '../../../src/omnifocus/OmniAutomation.js';
-import { SCRIPT_ERROR_CONTEXT, type ScriptError, type ScriptResult } from '../../../src/omnifocus/script-result-types.js';
+import {
+  SCRIPT_ERROR_CONTEXT,
+  type ScriptError,
+  type ScriptResult,
+} from '../../../src/omnifocus/script-result-types.js';
 import { TagMutationResultSchema, CompleteResultSchema } from '../../../src/omnifocus/script-response-schemas.js';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -359,7 +363,12 @@ describe('OmniAutomation', () => {
     // the mock spawn harness, then re-apply the mock so other describe blocks are
     // unaffected. Both hooks are guarded so that in VITEST_ALLOW_JXA=1 mode (no spy
     // installed) we neither throw on mockRestore nor install a stub setup never wanted.
-    const defaultMockImpl = vi.fn(async (_script: string, _schema?: unknown): Promise<ScriptResult<unknown>> => ({ success: true as const, data: {} }));
+    const defaultMockImpl = vi.fn(
+      async (_script: string, _schema?: unknown): Promise<ScriptResult<unknown>> => ({
+        success: true as const,
+        data: {},
+      }),
+    );
     let restoredPrototypeSpy = false;
     beforeEach(() => {
       restoredPrototypeSpy = false;
@@ -484,7 +493,12 @@ describe('OmniAutomation', () => {
     // the spy guard is INSIDE the detection block, this describe block gets the outer
     // beforeEach/afterEach only, so we install our own spy guard.
 
-    const defaultMockImpl = vi.fn(async (_script: string, _schema?: unknown): Promise<ScriptResult<unknown>> => ({ success: true as const, data: {} }));
+    const defaultMockImpl = vi.fn(
+      async (_script: string, _schema?: unknown): Promise<ScriptResult<unknown>> => ({
+        success: true as const,
+        data: {},
+      }),
+    );
     let restoredPrototypeSpy = false;
     beforeEach(() => {
       restoredPrototypeSpy = false;

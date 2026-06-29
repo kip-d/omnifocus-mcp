@@ -3,6 +3,7 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import sonarjs from 'eslint-plugin-sonarjs';
 import importPlugin from 'eslint-plugin-import';
+import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
 import localRules from './eslint-rules/index.js';
 
@@ -70,13 +71,7 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
 
-      // Enforce consistency
       'no-console': 'off', // MCP servers often use console for debugging
-      quotes: ['error', 'single', { avoidEscape: true }],
-      semi: ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'no-trailing-spaces': 'error',
-      'eol-last': ['error', 'always'],
 
       // SonarJS overrides — relaxed for this codebase
       'sonarjs/cognitive-complexity': ['warn', 20],
@@ -219,4 +214,8 @@ export default [
       'tests/**/*.js', // Except test files that are specifically JS
     ],
   },
+
+  // Prettier compatibility — disables any ESLint formatting rules that overlap
+  // with Prettier. Must be last so it wins over any plugin added above.
+  prettierConfig,
 ];

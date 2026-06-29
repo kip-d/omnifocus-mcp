@@ -55,26 +55,26 @@ npm run lint && npm run build && npm test
 
 ## Principles
 
-| Principle | Action |
-|-----------|--------|
+| Principle               | Action                                 |
+| ----------------------- | -------------------------------------- |
 | Use existing interfaces | Check `script-response-types.ts` first |
-| Follow patterns | Don't invent new approaches |
-| Type guards over `any` | Handle unions safely |
-| Incremental validation | Build after each change |
+| Follow patterns         | Don't invent new approaches            |
+| Type guards over `any`  | Handle unions safely                   |
+| Incremental validation  | Build after each change                |
 
 ## Common Gotchas
 
-| Issue | Fix |
-|-------|-----|
+| Issue                            | Fix                                  |
+| -------------------------------- | ------------------------------------ |
 | Script returns wrapped/unwrapped | Handle both formats with type guards |
-| Interface mismatch | Check method signature expectations |
-| Union type access | Guard first: `if ('prop' in obj)` |
+| Interface mismatch               | Check method signature expectations  |
+| Union type access                | Guard first: `if ('prop' in obj)`    |
 
 ## Time Investment
 
-| Approach | Time |
-|----------|------|
-| Bad (3 fix cycles) | 15-20 min |
-| Good (upfront analysis) | 5-7 min |
+| Approach                | Time      |
+| ----------------------- | --------- |
+| Bad (3 fix cycles)      | 15-20 min |
+| Good (upfront analysis) | 5-7 min   |
 
 2-3 minutes of analysis saves 10+ minutes of rework.

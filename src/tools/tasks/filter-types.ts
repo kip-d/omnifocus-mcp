@@ -39,7 +39,6 @@ export interface NumberFilter {
   upperBound?: number; // For BETWEEN operator
 }
 
-
 /**
  * Advanced query filters with operator support
  *
