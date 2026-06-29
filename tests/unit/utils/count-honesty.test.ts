@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { createTaskResponseV2, createListResponseV2 } from '../../../src/utils/response-format.js';
 
 const task = (name: string) => ({ id: `id-${name}`, name, flagged: false, completed: false });
+const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
 
 describe('OMN-154 applyCountHonesty via createTaskResponseV2', () => {
   it('R1: total_count = population, returned_count = rows', () => {
@@ -77,8 +78,6 @@ describe('OMN-154 applyCountHonesty via createTaskResponseV2', () => {
 });
 
 describe('OMN-154 applyCountHonesty via createListResponseV2 (projects)', () => {
-  const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
-
   it('R1/R3: total_count and summary.total_projects = population', () => {
     const r = createListResponseV2('projects', [project('p1'), project('p2')], 'projects', {}, { population: 160 });
     expect(r.metadata.total_count).toBe(160);
@@ -109,9 +108,6 @@ describe('OMN-154 applyCountHonesty via createListResponseV2 (projects)', () => 
 // suppressed ({ summary: false }) — the metadata-honesty half (R1/R2) runs,
 // while the summary-insight half no-ops safely on the absent summary.
 describe('OMN-199 applyCountHonesty with summary omitted', () => {
-  // OMN-220: use the file-scope `task` factory (was a duplicate shadow here).
-  const project = (name: string) => ({ id: `id-${name}`, name, status: 'active' });
-
   it('tasks: metadata still gets population + truncated, no summary field', () => {
     const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48, summary: false });
     expect(r.metadata.total_count).toBe(48);
