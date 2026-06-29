@@ -566,14 +566,17 @@ Planned dates are distinct from due/defer — they represent when you **intend**
 
 ### Exports
 
-There is **no export tool** — exporting/backing up the database is a job for the OmniFocus app, not the MCP server. Direct the user there:
+There is **no export tool** — exporting/backing up the database is a job for the OmniFocus app, not the MCP server.
+Direct the user there:
 
-| Goal | Do this in OmniFocus |
-| ---- | -------------------- |
-| Full backup / snapshot | Automatic backups run already; for an on-demand copy use **File ▸ Back Up Database** (`.ofocus-archive`). |
-| Spreadsheet / filtered data | Build a perspective, select the rows, and copy-paste, or use the app's built-in export. |
+| Goal                        | Do this in OmniFocus                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Full backup / snapshot      | Automatic backups run already; for an on-demand copy use **File ▸ Back Up Database** (`.ofocus-archive`). |
+| Spreadsheet / filtered data | Build a perspective, select the rows, and copy-paste, or use the app's built-in export.                   |
 
-Why no server-side export: a full export either dumps the whole database into the model's context (token-prohibitive on a large library) or just repeats a query you can already run. If a user genuinely needs an ad-hoc file, run a *targeted* query for exactly the rows they want and write that small result to a file — don't reach for a bulk dump.
+Why no server-side export: a full export either dumps the whole database into the model's context (token-prohibitive on
+a large library) or just repeats a query you can already run. If a user genuinely needs an ad-hoc file, run a _targeted_
+query for exactly the rows they want and write that small result to a file — don't reach for a bulk dump.
 
 ### Project Queries
 

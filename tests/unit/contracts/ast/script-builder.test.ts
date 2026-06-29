@@ -1362,4 +1362,3 @@ describe('OMN-154: projects script counts the full population', () => {
     expect(parsed.metadata.total_available).toBe(5); // pre-filter total, unchanged
   });
 });
-

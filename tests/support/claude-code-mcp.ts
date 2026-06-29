@@ -83,7 +83,9 @@ class MCPTester {
   private messageId: number = 0;
   private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
   private _testResults: TestResult[] = [];
-  get testResults(): TestResult[] { return this._testResults; }
+  get testResults(): TestResult[] {
+    return this._testResults;
+  }
 
   async start(): Promise<void> {
     console.log(`Starting MCP server: ${CONFIG.serverPath}`);
@@ -102,7 +104,7 @@ class MCPTester {
       try {
         const response: MCPResponse = JSON.parse(line);
         this.handleResponse(response);
-      } catch (e) {
+      } catch {
         // Ignore non-JSON output
       }
     });
@@ -227,7 +229,7 @@ class MCPTester {
           }
 
           this._testResults.push({ tool: test.name, success: true, time: elapsed });
-        } catch (parseError) {
+        } catch {
           console.log(`      Raw result length: ${response.result.content[0].text.length} chars`);
           this._testResults.push({ tool: test.name, success: true, time: elapsed });
         }

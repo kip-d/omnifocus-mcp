@@ -236,6 +236,7 @@ omnifocus_read: query.type="perspectives", query.limit=5
 **Minimum validation**: Parts A-D (21 tests) **Full validation**: Parts A-E (23 tests)
 
 **AST Consolidation Coverage**:
+
 - Phase 1 (list-tasks): B1-B6 task queries
 - Phase 2 (mutations): C1b tags, C1-C6 create/update/delete
 - Phase 3 (projects/tags): B4, B5, B8 project/tag queries
@@ -279,3 +280,4 @@ During testing, note these IDs:
 - Second project ID: _______________
 
 **Cleanup reminder**: Delete test tasks (C1, C1b) after validation.
+```

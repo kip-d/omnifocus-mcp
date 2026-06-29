@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { MutationCompiler, type CompiledMutation } from '../../../../../src/tools/unified/compilers/MutationCompiler.js';
+import {
+  MutationCompiler,
+  type CompiledMutation,
+} from '../../../../../src/tools/unified/compilers/MutationCompiler.js';
 import type { WriteInput } from '../../../../../src/tools/unified/schemas/write-schema.js';
 
 type CompiledCreate = Extract<CompiledMutation, { operation: 'create' }>;

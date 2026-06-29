@@ -6,10 +6,10 @@ The MCP server requires macOS Automation permission to access OmniFocus via JXA.
 
 On startup, the server checks permission status non-blocking and caches the result.
 
-| Scenario | Behavior |
-|----------|----------|
-| Permission granted | Cached indefinitely |
-| Permission denied | Cached 60 seconds, then retry |
+| Scenario               | Behavior                          |
+| ---------------------- | --------------------------------- |
+| Permission granted     | Cached indefinitely               |
+| Permission denied      | Cached 60 seconds, then retry     |
 | Error during execution | Cache cleared for immediate retry |
 
 ## Granting Permissions
@@ -27,11 +27,11 @@ macOS prompts automatically on first OmniFocus command. Click "OK" to grant—pe
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| Permission denied | macOS blocked automation | Grant permission via System Settings (see above) |
-| OmniFocus not found | Not installed or wrong location | Install in `/Applications/` (v3+) |
-| Timeout | Dialog blocking or system load | Close OmniFocus dialogs, retry |
+| Error               | Cause                           | Fix                                              |
+| ------------------- | ------------------------------- | ------------------------------------------------ |
+| Permission denied   | macOS blocked automation        | Grant permission via System Settings (see above) |
+| OmniFocus not found | Not installed or wrong location | Install in `/Applications/` (v3+)                |
+| Timeout             | Dialog blocking or system load  | Close OmniFocus dialogs, retry                   |
 
 ## Testing
 
@@ -42,14 +42,15 @@ npx tsx tests/test-permissions.ts  # Checks status and runs simple script
 
 ## Technical Details
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| PermissionsChecker | `src/utils/permissions.ts` | Singleton managing permission state |
-| withPermissionCheck | `src/utils/permissions.ts` | Middleware wrapping OmniFocus operations |
-| Startup check | `src/index.ts` | Non-blocking check on server start |
-| Execution check | `src/omnifocus/OmniAutomation.ts` | Validates before script execution |
+| Component           | Location                          | Purpose                                  |
+| ------------------- | --------------------------------- | ---------------------------------------- |
+| PermissionsChecker  | `src/utils/permissions.ts`        | Singleton managing permission state      |
+| withPermissionCheck | `src/utils/permissions.ts`        | Middleware wrapping OmniFocus operations |
+| Startup check       | `src/index.ts`                    | Non-blocking check on server start       |
+| Execution check     | `src/omnifocus/OmniAutomation.ts` | Validates before script execution        |
 
-**Security:** macOS manages permissions at system level. Once granted, they persist until revoked. No sensitive data stored.
+**Security:** macOS manages permissions at system level. Once granted, they persist until revoked. No sensitive data
+stored.
 
 ## Best Practices
 
@@ -59,9 +60,9 @@ npx tsx tests/test-permissions.ts  # Checks status and runs simple script
 
 ## FAQ
 
-| Question | Answer |
-|----------|--------|
-| Why needed? | OmniFocus lacks public API; JXA requires user permission |
-| Safe to grant? | Yes—standard macOS automation; only accesses what you request |
-| Can revoke? | System Settings → Privacy & Security → Automation |
-| Per-app permissions? | Yes—switch terminal apps requires re-granting |
+| Question             | Answer                                                        |
+| -------------------- | ------------------------------------------------------------- |
+| Why needed?          | OmniFocus lacks public API; JXA requires user permission      |
+| Safe to grant?       | Yes—standard macOS automation; only accesses what you request |
+| Can revoke?          | System Settings → Privacy & Security → Automation             |
+| Per-app permissions? | Yes—switch terminal apps requires re-granting                 |

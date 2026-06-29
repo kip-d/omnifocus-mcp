@@ -479,9 +479,9 @@ describe('ReadSchema', () => {
     // a valid query type, and the export-specific params are gone from every type.
     it('should reject export queries entirely (OMN-193: export removed)', () => {
       expect(ReadSchema.safeParse({ query: { type: 'export' } }).success).toBe(false);
-      expect(
-        ReadSchema.safeParse({ query: { type: 'export', exportType: 'tasks', format: 'json' } }).success,
-      ).toBe(false);
+      expect(ReadSchema.safeParse({ query: { type: 'export', exportType: 'tasks', format: 'json' } }).success).toBe(
+        false,
+      );
     });
 
     it('should reject export-specific params on a tasks query (OMN-193)', () => {

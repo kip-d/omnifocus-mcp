@@ -11,9 +11,7 @@ describe('assertSandboxGuardAtStartup (OMN-46)', () => {
   });
 
   it('returns silently when NODE_ENV === "test" AND SANDBOX_GUARD_ENABLED === "true"', () => {
-    expect(() =>
-      assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: 'true' }),
-    ).not.toThrow();
+    expect(() => assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: 'true' })).not.toThrow();
   });
 
   it('THROWS SandboxGuardMisconfiguration when NODE_ENV === "test" and SANDBOX_GUARD_ENABLED is unset', () => {
@@ -21,15 +19,15 @@ describe('assertSandboxGuardAtStartup (OMN-46)', () => {
   });
 
   it('THROWS when NODE_ENV === "test" and SANDBOX_GUARD_ENABLED is the empty string', () => {
-    expect(() =>
-      assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: '' }),
-    ).toThrow(SandboxGuardMisconfiguration);
+    expect(() => assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: '' })).toThrow(
+      SandboxGuardMisconfiguration,
+    );
   });
 
   it('THROWS when NODE_ENV === "test" and SANDBOX_GUARD_ENABLED === "false" (explicit opt-out is still a bypass)', () => {
-    expect(() =>
-      assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: 'false' }),
-    ).toThrow(SandboxGuardMisconfiguration);
+    expect(() => assertSandboxGuardAtStartup({ NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: 'false' })).toThrow(
+      SandboxGuardMisconfiguration,
+    );
   });
 
   it('the error message names OMN-46 and points at the fix location', () => {

@@ -26,5 +26,7 @@ export function normalizeInputShape(inputArgs: unknown): string {
   if (inputArgs === null || typeof inputArgs !== 'object' || Array.isArray(inputArgs)) {
     return '<non-object>';
   }
-  return Object.keys(inputArgs as Record<string, unknown>).sort(byCodePoint).join(',');
+  return Object.keys(inputArgs as Record<string, unknown>)
+    .sort(byCodePoint)
+    .join(',');
 }

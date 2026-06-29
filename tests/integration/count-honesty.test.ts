@@ -314,9 +314,10 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
     // Basic invariants on the first call
     expect(firstMeta.returned_count, 'returned_count must be 1 (limit=1)').toBe(1);
     expect(typeof firstMeta.total_count, 'total_count must be a number').toBe('number');
-    expect((firstMeta.total_count as number) >= 1, 'total_count must be >= 1 (at least our holder project exists)').toBe(
-      true,
-    );
+    expect(
+      (firstMeta.total_count as number) >= 1,
+      'total_count must be >= 1 (at least our holder project exists)',
+    ).toBe(true);
 
     // If there are more projects than the limit, truncated must be true
     if ((firstMeta.total_count as number) > 1) {

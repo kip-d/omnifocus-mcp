@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { AnalysisCompiler, type CompiledAnalysis } from '../../../../../src/tools/unified/compilers/AnalysisCompiler.js';
+import {
+  AnalysisCompiler,
+  type CompiledAnalysis,
+} from '../../../../../src/tools/unified/compilers/AnalysisCompiler.js';
 import type { AnalyzeInput } from '../../../../../src/tools/unified/schemas/analyze-schema.js';
 
 type CompiledProductivityStats = Extract<CompiledAnalysis, { type: 'productivity_stats' }>;

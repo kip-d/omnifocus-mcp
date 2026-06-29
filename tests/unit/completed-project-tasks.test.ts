@@ -59,33 +59,12 @@ describe('Completed Project Task Handling', () => {
       expect(script).toContain('task.completed === false');
       expect(script).toContain('Task.Status.Dropped');
     });
-
   });
 
   describe('Integration Scenario Tests', () => {
     it('should correctly handle tasks in completed projects when filtering', () => {
       // This test simulates the scenario where a project is marked as completed
       // and we want to ensure its tasks are not returned when filtering for incomplete tasks
-
-      // Mock script demonstrating the scenario
-      `
-        ${getUnifiedHelpers()}
-        
-        // Simulate a task in a completed project
-        const mockTask = {
-          completed: () => false,  // Task itself is not completed
-          dropped: () => false,
-          containingProject: () => ({
-            completed: () => true,  // But the project is completed
-            dropped: () => false,
-            status: () => 'done'
-          })
-        };
-        
-        // Test that the task is considered completed
-        const result = isTaskEffectivelyCompleted(mockTask);
-        result; // This should be true
-      `;
 
       // Evaluate the mock script (in a real test, this would use the actual JXA execution)
       const isTaskEffectivelyCompletedLogic = `

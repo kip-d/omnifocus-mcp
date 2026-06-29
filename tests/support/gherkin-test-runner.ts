@@ -80,7 +80,9 @@ class GherkinTestRunner {
     failed: 0,
     startTime: Date.now(),
   };
-  get results(): TestResults { return this._results; }
+  get results(): TestResults {
+    return this._results;
+  }
 
   async start(): Promise<void> {
     console.log('🥒 Gherkin Test Runner for OmniFocus MCP');
@@ -100,7 +102,7 @@ class GherkinTestRunner {
       try {
         const response: MCPResponse = JSON.parse(line);
         this.handleResponse(response);
-      } catch (e) {
+      } catch {
         // Ignore non-JSON
       }
     });
@@ -305,7 +307,7 @@ class GherkinTestRunner {
         const props = propsMatch[1].split(', ');
         this.context.response.tasks.forEach((task: any) => {
           props.forEach((prop) => {
-            if (!task.hasOwnProperty(prop)) {
+            if (!Object.prototype.hasOwnProperty.call(task, prop)) {
               throw new Error(`Task missing property: ${prop}`);
             }
           });
@@ -329,7 +331,7 @@ class GherkinTestRunner {
       if (data) {
         const expectedMetrics = data.rows.map((row) => row[0]);
         expectedMetrics.forEach((metric) => {
-          if (!this.context.response.stats.hasOwnProperty(metric)) {
+          if (!Object.prototype.hasOwnProperty.call(this.context.response.stats, metric)) {
             throw new Error(`Missing expected metric: ${metric}`);
           }
         });
@@ -369,7 +371,7 @@ class GherkinTestRunner {
     try {
       const content = response.result.content[0].text;
       return JSON.parse(content);
-    } catch (e) {
+    } catch {
       return response.result;
     }
   }

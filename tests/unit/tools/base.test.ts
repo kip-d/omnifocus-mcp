@@ -85,7 +85,12 @@ class TestTool extends BaseTool<z.ZodObject<any>> {
 }
 
 // Test tool that throws errors
-class ErrorTestTool extends BaseTool<z.ZodObject<any>, StandardResponseV2<unknown> & { error?: { code: string; message: string; suggestion?: string; details?: TestErrorDetails } }> {
+class ErrorTestTool extends BaseTool<
+  z.ZodObject<any>,
+  StandardResponseV2<unknown> & {
+    error?: { code: string; message: string; suggestion?: string; details?: TestErrorDetails };
+  }
+> {
   name = 'error-test-tool';
   description = 'A test tool that throws errors';
   meta = undefined;

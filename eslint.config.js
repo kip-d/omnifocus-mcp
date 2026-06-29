@@ -196,10 +196,6 @@ export default [
     },
   },
 
-  // Prettier compatibility — disables any ESLint formatting rules that overlap
-  // with Prettier. Placed last so it wins any future plugin additions.
-  prettierConfig,
-
   // Ignore patterns
   {
     ignores: [
@@ -218,4 +214,8 @@ export default [
       'tests/**/*.js', // Except test files that are specifically JS
     ],
   },
+
+  // Prettier compatibility — disables any ESLint formatting rules that overlap
+  // with Prettier. Must be last so it wins over any plugin added above.
+  prettierConfig,
 ];
