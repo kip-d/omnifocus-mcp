@@ -1133,6 +1133,42 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(taskReads).toBe(2);
       });
 
+      it('OMN-126: scopes the project read by the CANONICAL existing name, not the raw user case', async () => {
+        // Bug: filter.project = the raw 'hardware' compiles to flattenedProjects.byName('hardware'),
+        // which is case-SENSITIVE in OmniFocus → null → the scoped read yields zero tasks → a real
+        // duplicate is missed and a second task is created. The existing dedup test passes only
+        // because it mocks responses by CALL ORDER (returning the task regardless of the script's
+        // project case); this test asserts on the emitted SCRIPT, where the bug actually lives.
+        // Fix: resolve the scope to the canonical existing name ('Hardware') so byName succeeds.
+        const scripts: string[] = [];
+        const dbResponses = [
+          createScriptSuccess({ projects: [{ name: 'Hardware' }] }), // project-names read
+          createScriptSuccess({ ok: true, v: 'ast', items: [] }), // tag-names read
+          createScriptSuccess({ tasks: [] }), // scoped task read
+        ];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          return Promise.resolve(dbResponses[call++] ?? createScriptSuccess({ tasks: [] }));
+        });
+
+        await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Order scanners', project: 'hardware' }] }, // lowercase mismatch
+          },
+        });
+
+        const projectRead = scripts.find((s) => s.includes('task.containingProject ==='));
+        expect(projectRead).toBeDefined();
+        // The byName target embedded in the scoped read is the canonical 'Hardware', not raw
+        // 'hardware'. (The program is embedded in app.evaluateJavascript("..."), so its quotes
+        // are backslash-escaped — assert on the case-distinct token, the only source of which
+        // is the project scope.)
+        expect(projectRead).toContain('Hardware');
+        expect(projectRead).not.toContain('hardware');
+      });
+
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
         const res: any = await tool.execute({
           analysis: {

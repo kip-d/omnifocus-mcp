@@ -2411,9 +2411,19 @@ SCOPE FILTERING:
         // `item.project ?? defaultProject ?? null` — so scoping the candidate read
         // changes no match results; it only kills the ~8s whole-DB scan and makes
         // the 2000-row cap effectively per-scope instead of a global truncation.
-        const scopeProjects = items.map((item) => item.project ?? defaultProject ?? null);
-        [existingProjects, existingTags, existingTasks] = await Promise.all([
-          this.fetchExistingProjectNames(warnings),
+        //
+        // The scoped read's project filter compiles to a case-SENSITIVE
+        // `flattenedProjects.byName()`; canonicalize each scope to the exact
+        // existing name (case-insensitive) so a case-mismatched `item.project`
+        // ('hardware' vs a real 'Hardware') still finds its project — otherwise
+        // byName returns null, the read yields zero tasks, and a real duplicate
+        // is missed. This requires the project-names read first, so it now
+        // precedes (rather than parallels) the scoped task read.
+        existingProjects = await this.fetchExistingProjectNames(warnings);
+        const scopeProjects = items.map((item) =>
+          this.canonicalProjectScope(item.project ?? defaultProject ?? null, existingProjects),
+        );
+        [existingTags, existingTasks] = await Promise.all([
           this.fetchExistingTagNames(warnings),
           this.fetchExistingIncompleteTasks(warnings, scopeProjects),
         ]);
@@ -2507,6 +2517,22 @@ SCOPE FILTERING:
         timer.toMetadata(),
       );
     }
+  }
+
+  /**
+   * OMN-126: map a requested project name to the canonical existing name (exact
+   * case-insensitive match) for scoping the dedup read. The scoped read's filter
+   * compiles to a case-SENSITIVE `flattenedProjects.byName()`, so a case-mismatched
+   * name would otherwise find no project and silently miss duplicates. `null`
+   * (inbox) passes through; an unknown name passes through unchanged (no existing
+   * project to scope to, so the read correctly finds nothing). Deliberately the
+   * `exact` match only — NOT resolveProjectName's `partial`/substring fallback,
+   * which would scope a different project than findDuplicateTask compares against.
+   */
+  private canonicalProjectScope(name: string | null, existing: string[]): string | null {
+    if (name === null) return null;
+    const lower = name.toLowerCase();
+    return existing.find((p) => p.toLowerCase() === lower) ?? name;
   }
 
   /** Resolve a requested project name against existing projects (case-insensitive). */
