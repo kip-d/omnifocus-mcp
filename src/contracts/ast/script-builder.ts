@@ -813,20 +813,27 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 }
 
 /**
+ * OMN-225: id-lookup builders must always project `id` so the read tool's
+ * id-match guard (OmniFocusReadTool.executeIdLookup / executeProjectIdLookup)
+ * can verify `row.id === requested id` BEFORE projectFields() re-adds id
+ * downstream. Without id in the row the guard reads undefined and mis-fires
+ * ID_MISMATCH for ANY id — the bug was misattributed to freshly-created ids
+ * because the failing repro also dropped id from `fields`. Empty `fields`
+ * already falls back to the DEFAULT_*_FIELDS set (which includes id) inside the
+ * *FieldProjection helpers, so only force id when an explicit list omits it.
+ * Single-sourced across both id-lookup builders so a future tweak can't silently
+ * re-open the bug on one path. Chosen over relaxing the guard, which would skip
+ * the right-task verification when id isn't requested.
+ */
+function ensureIdField(fields: string[]): string[] {
+  return fields.length === 0 || fields.includes('id') ? fields : ['id', ...fields];
+}
+
+/**
  * Build an OmniJS script for a specific task by ID
  */
 export function buildTaskByIdScript(taskId: string, fields: string[] = []): GeneratedScript {
-  // OMN-225: the id-lookup guard (OmniFocusReadTool.executeIdLookup) verifies
-  // `row.id === requested id` BEFORE projectFields() re-adds id downstream, so the
-  // row MUST carry id even when the caller's `fields` omit it — otherwise the guard
-  // reads undefined and mis-fires ID_MISMATCH for ANY id (the bug was misattributed
-  // to freshly-created ids because the failing repro also dropped id from `fields`).
-  // Empty `fields` already falls back to DEFAULT_FIELDS (which includes id) inside
-  // generateFieldProjection, so only force id when an explicit list omits it.
-  // Decision: force id in the script projection rather than relaxing the guard —
-  // relaxing would silently skip the right-task verification when id isn't requested.
-  const idFields = fields.length === 0 || fields.includes('id') ? fields : ['id', ...fields];
-  const fieldProjection = generateFieldProjection(idFields);
+  const fieldProjection = generateFieldProjection(ensureIdField(fields)); // OMN-225: see ensureIdField
 
   // OMN-185: resolve the task directly via Task.byIdentifier (O(1)) instead of
   // iterating flattenedTasks (O(n), pays the ~7-10s materialization floor for a
@@ -1577,11 +1584,7 @@ export function buildFilteredProjectsScript(
  * Build an OmniJS script for a specific project by ID
  */
 export function buildProjectByIdScript(projectId: string, fields: string[] = []): GeneratedScript {
-  // OMN-225: same id-lookup guard contract as buildTaskByIdScript — the project
-  // id-match guard (executeProjectIdLookup) inspects row.id before projectFields()
-  // re-adds it, so the row must carry id even when the caller's `fields` omit it.
-  const idFields = fields.length === 0 || fields.includes('id') ? fields : ['id', ...fields];
-  const fieldProjection = generateProjectFieldProjection(idFields);
+  const fieldProjection = generateProjectFieldProjection(ensureIdField(fields)); // OMN-225: see ensureIdField
 
   const omniJsSource = `
       (() => {
