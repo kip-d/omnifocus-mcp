@@ -390,7 +390,10 @@ describe('ReadSchema', () => {
       const result = ReadSchema.safeParse(input);
       expect(result.success).toBe(true);
       if (result.success && result.data.query.type === 'tasks') {
-        expect(result.data.query.fields).toContain('sequential');
+        // Pin the full round-trip array (matching the sibling project test) so a
+        // regression that drops/mutates/reorders fields is caught — toContain
+        // could not, since z.enum never silently drops an accepted value.
+        expect(result.data.query.fields).toEqual(['id', 'name', 'sequential']);
       }
     });
 
