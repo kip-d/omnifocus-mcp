@@ -112,15 +112,13 @@ describe('OMN-199 applyCountHonesty with summary omitted', () => {
     const r = createTaskResponseV2('tasks', [task('a'), task('b')], {}, { population: 48, summary: false });
     expect(r.metadata.total_count).toBe(48);
     expect(r.metadata.truncated).toBe(true);
-    expect(r.summary).toBeUndefined();
-    expect('summary' in r).toBe(false);
+    expect('summary' in r).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
   });
 
   it('projects: metadata still gets population + truncated, no summary field', () => {
     const r = createListResponseV2('projects', [project('p1')], 'projects', {}, { population: 160, summary: false });
     expect(r.metadata.total_count).toBe(160);
     expect(r.metadata.truncated).toBe(true);
-    expect(r.summary).toBeUndefined();
-    expect('summary' in r).toBe(false);
+    expect('summary' in r).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
   });
 });
