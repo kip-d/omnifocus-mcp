@@ -134,6 +134,10 @@ export const DETAIL_FIELDS = [
   // OMN-153: boolean marker for project-root rows (useful in detail views and
   // for agents that need to distinguish roots from regular tasks).
   'isProjectRoot',
+  // OMN-207: action-group ordering, read-side parity with the write side
+  // (OMN-198/206). Cheap boolean; reachable via details:true (DETAIL, not the
+  // thin MINIMAL default) — mirrors `sequential` in DETAIL_PROJECT_FIELDS.
+  'sequential',
 ];
 
 /**
@@ -342,6 +346,27 @@ function generateFieldProjection(
       // task.project !== null is the OmniJS definition of "this task IS a project root".
       case 'isProjectRoot':
         projections.push('isProjectRoot: task.project !== null');
+        break;
+      // OMN-207: action-group ordering, read-side parity with the write side
+      // (OMN-198/206). `|| false` returns the stored boolean — false ≠ absent.
+      // Mirrors the project projection case (`sequential: project.sequential || false`).
+      //
+      // Decision (OMN-207 /code-review): report the RAW stored property
+      // unconditionally, not conditionally on `task.children.length > 0`.
+      // `sequential` governs a task's OWN children's ordering; a leaf's value is
+      // vacuous-but-real. Conditional emission was rejected because:
+      //   (1) OmniFocus persists `sequential` across leaf↔action-group
+      //       transitions (childless tasks with a stored `true` exist), so
+      //       omitting it while childless would HIDE a real stored value;
+      //   (2) the write side (OMN-198/206) can SET `sequential` on a childless
+      //       task — omitting it on read re-opens the exact settable-but-not-
+      //       readable honesty gap this ticket closes;
+      //   (3) presence-coupled-to-child-count makes the response shape churn as
+      //       the tree mutates, breaking shape stability.
+      // (`|| false` is a defensive mirror of the project case; OmniJS currently
+      // returns a boolean for every task, so it is a no-op today.)
+      case 'sequential':
+        projections.push('sequential: task.sequential || false');
         break;
     }
   }

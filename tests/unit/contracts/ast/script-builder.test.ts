@@ -103,6 +103,14 @@ describe('buildFilteredTasksScript', () => {
       expect(result.script).toContain('flagged: task.flagged');
     });
 
+    it('OMN-207: projects task `sequential` as a real boolean (mirror of project side)', () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'sequential'] });
+
+      // `|| false` so the value is the stored boolean — false ≠ "field absent"
+      // (the same load-bearing distinction OMN-206 locked on the write side).
+      expect(result.script).toContain('sequential: task.sequential || false');
+    });
+
     it('excludes completed tasks by default', () => {
       const result = buildFilteredTasksScript({});
 

@@ -380,6 +380,23 @@ describe('ReadSchema', () => {
   });
 
   describe('type-discriminated fields', () => {
+    it('OMN-207: should accept sequential on task queries (read-side parity with the write side)', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          fields: ['id', 'name', 'sequential'],
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success && result.data.query.type === 'tasks') {
+        // Pin the full round-trip array (matching the sibling project test) so a
+        // regression that drops/mutates/reorders fields is caught — toContain
+        // could not, since z.enum never silently drops an accepted value.
+        expect(result.data.query.fields).toEqual(['id', 'name', 'sequential']);
+      }
+    });
+
     it('should accept project fields on project queries', () => {
       const input = {
         query: {

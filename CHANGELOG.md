@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **Readable `sequential` field on tasks** (OMN-207) — `type:"tasks"` queries can now request `sequential` via
+  `fields:["sequential"]`, closing the settable-but-not-readable gap left by the write side (OMN-198/206). Reported as
+  the raw stored boolean on every task (not conditional on child count): OmniFocus persists `sequential` across
+  leaf↔action-group transitions, and the write side can set it on a childless task, so a leaf's value is
+  vacuous-but-real and is reported honestly. The flag governs the ordering of a task's **own** children, so it is only
+  meaningful for projects and task action groups. Live write→read round-trip covered in `field-roundtrip.test.ts`.
 - **Folder filter on `type:"tasks"` queries** (OMN-167) — `filters.folder` now works on tasks (was rejected with
   steering since OMN-162). A string is a `Parent : Child` **path** matched against the folder **subtree** of the task's
   containing project (a bare name is a single-segment path; case-insensitive substring per segment; status-agnostic — no
@@ -18,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **`details:true` task responses now include `sequential`** (OMN-207) — adding the field to the task `details` set
+  means every task row from a `details:true` (or all-fields ID-lookup) query now carries a `sequential` boolean. Pure
+  **additive** shape change — no existing field is removed or altered — but a caller validating task rows against an
+  exact-equality fixture or a strict (no-unknown-keys) schema will see the new key.
 - **Projects folder filter widened to subtree path** (OMN-167) — `type:"projects"` `filters.folder: "<name>"` changed
   from a **direct-parent** substring match to a **subtree** `Parent : Child` path match (shared with the new tasks-side
   filter). This is a pure **superset**: subtree includes the direct-parent case, so no previously-matching query loses

@@ -300,6 +300,18 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       extract: (t) => /WEEKLY/i.test(t?.repetitionRule?.ruleString ?? ''),
       expected: true,
     },
+    {
+      // OMN-207: the task-side read parity this PR exists for. The project-side
+      // sequential round-trip lives in projectRows below; a childless task can
+      // carry `sequential: true` (OmniFocus persists the flag across leaf↔group
+      // transitions), so this exercises the live OmniJS task.sequential read.
+      field: 'sequential',
+      op: 'create',
+      setValue: true,
+      readFields: ['sequential'],
+      extract: (t) => t?.sequential,
+      expected: true,
+    },
   ];
 
   describe('task scalar fields', () => {
