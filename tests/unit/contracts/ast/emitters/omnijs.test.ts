@@ -658,8 +658,17 @@ describe('emitOmniJS', () => {
       };
       const result = emitOmniJS(ast);
       expect(result.preamble).toContain('Project.byIdentifier');
-      expect(result.preamble).toContain('flattenedProjects.byName');
-      expect(result.preamble).toContain('document.projectsMatching');
+      // OMN-224: name resolution scans flattenedProjects directly. Two guards:
+      // (1) the old `document.projectsMatching(target)` threw at runtime
+      // (`document` has no such method in OmniJS), failing every name-scoped read;
+      // (2) resolution must be status-aware — a dropped/completed same-named
+      // project must not shadow the active one (status-blind byName picked the
+      // first by creation order), so dead projects are filtered out of the pool.
+      expect(result.preamble).toContain('flattenedProjects.filter(function(p) { return p.name === target; })');
+      expect(result.preamble).toContain('Project.Status.Dropped');
+      expect(result.preamble).toContain('Project.Status.Done');
+      expect(result.preamble).not.toContain('document.projectsMatching');
+      expect(result.preamble).not.toContain('flattenedProjects.byName');
       expect(result.preamble).toContain('__projectTarget_0');
       expect(result.predicate).toBe('(__projectTarget_0 && task.containingProject === __projectTarget_0.project)');
     });

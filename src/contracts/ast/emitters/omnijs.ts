@@ -155,19 +155,33 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
     const varName = nextProjectVar();
     const val = JSON.stringify(projectValue);
 
+    // OMN-224: resolve a project name to a LIVE project via a status-aware scan of
+    // `flattenedProjects`. Two reasons it is written this way:
+    //   1. The previous `document.projectsMatching(target)` threw at runtime — in
+    //      OmniJS `projectsMatching` is a bare global (a Database method on the
+    //      global scope), NOT a method on `document` (undefined there). That
+    //      TypeError made EVERY name-scoped tasks read fail with a SCRIPT_ERROR.
+    //   2. `flattenedProjects.byName()` is status-blind and ordered by creation, so
+    //      a dropped/completed same-named project that precedes the active one would
+    //      resolve first — the predicate then targets the dead project and the
+    //      active project's tasks go silently invisible (success, 0 tasks). We
+    //      therefore prefer non-dropped, non-completed matches, falling back to dead
+    //      matches only when no live project carries the name (so a deliberately
+    //      dropped-project query does not newly return nothing). Duplicate detection
+    //      counts the same live pool, so dead projects never inflate the warning.
     const preamble = `var ${varName} = (function() {
   var target = ${val};
   var byId = Project.byIdentifier(target);
   if (byId) return { project: byId, method: "id", duplicates: 0, allMatches: [{ id: byId.id.primaryKey, name: byId.name }] };
-  var byName = flattenedProjects.byName(target);
-  if (!byName) return null;
-  var matches = document.projectsMatching(target);
-  var exact = matches.filter(function(p) { return p.name === target; });
+  var named = flattenedProjects.filter(function(p) { return p.name === target; });
+  if (named.length === 0) return null;
+  var live = named.filter(function(p) { return p.status !== Project.Status.Dropped && p.status !== Project.Status.Done; });
+  var pool = live.length > 0 ? live : named;
   return {
-    project: byName,
+    project: pool[0],
     method: "name",
-    duplicates: exact.length - 1,
-    allMatches: exact.map(function(p) { return { id: p.id.primaryKey, name: p.name }; })
+    duplicates: pool.length - 1,
+    allMatches: pool.map(function(p) { return { id: p.id.primaryKey, name: p.name }; })
   };
 })();`;
 
