@@ -2650,7 +2650,7 @@ SCOPE FILTERING:
     const merged: Array<{ name: string; project: string | null }> = [];
     for (const r of reads) {
       for (const t of r.tasks) {
-        const key = `${t.name.toLowerCase()} ${t.project?.toLowerCase() ?? ''}`;
+        const key = `${t.name.toLowerCase()}\u0000${t.project?.toLowerCase() ?? ''}`;
         if (!seen.has(key)) {
           seen.add(key);
           merged.push(t);
