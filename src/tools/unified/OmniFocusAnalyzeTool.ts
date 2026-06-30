@@ -2420,10 +2420,20 @@ SCOPE FILTERING:
         // null, the read returns zero tasks, and a real duplicate is missed. This
         // requires the project-names read first, so it now precedes (rather than
         // parallels) the scoped task read.
-        existingProjects = await this.fetchExistingProjectNames(warnings);
-        const scopeProjects = items.map((item) =>
-          this.canonicalProjectScope(item.project ?? defaultProject ?? null, existingProjects),
-        );
+        const proj = await this.fetchExistingProjectNames(warnings);
+        existingProjects = proj.names;
+        // Review ②: if the existing-projects read failed we cannot canonicalize a
+        // case-mismatched name, so per-project name-scoping would silently miss
+        // duplicates. Fall back to ONE whole-DB dedup read (findDuplicateTask
+        // compares project names case-insensitively) — pre-OMN-126 behavior on this
+        // error path. `undefined` signals that whole-DB read.
+        // Review ⑧: dedup the raw scopes first, then canonicalize each DISTINCT one
+        // (D canonicalizations, not one per item).
+        const scopeProjects = proj.ok
+          ? [...new Set(items.map((item) => this.requestedScope(item, defaultProject)))].map((s) =>
+              this.canonicalProjectScope(s, existingProjects),
+            )
+          : undefined;
         [existingTags, existingTasks] = await Promise.all([
           this.fetchExistingTagNames(warnings),
           this.fetchExistingIncompleteTasks(warnings, scopeProjects),
@@ -2431,7 +2441,7 @@ SCOPE FILTERING:
       }
 
       const previewItems = items.map((item) => {
-        const requestedProject = item.project ?? defaultProject ?? null;
+        const requestedProject = this.requestedScope(item, defaultProject);
         const combinedTags = [...new Set([...(item.tags ?? []), ...defaultTags])];
 
         const project = this.resolveProjectName(requestedProject, existingProjects, validate);
@@ -2521,20 +2531,33 @@ SCOPE FILTERING:
   }
 
   /**
+   * The project a structured item targets: `item.project`, else `defaultProject`,
+   * else the inbox (`null`). An empty-string project is treated as inbox (`null`),
+   * NOT a project literally named '' — otherwise the scoped dedup read would filter
+   * on `name === ''` (zero matches) and silently miss inbox duplicates (review ①).
+   * Used at both the scope-building and per-item preview sites so the two never
+   * diverge on what "the requested project" is.
+   */
+  private requestedScope(item: { project?: string | null }, defaultProject: string | null): string | null {
+    const p = item.project ?? defaultProject ?? null;
+    return p === '' ? null : p;
+  }
+
+  /**
    * OMN-126: map a requested project name to the canonical existing name (exact
    * case-insensitive match) for scoping the dedup read. The scoped read resolves
    * the name by a case-SENSITIVE exact match (post-OMN-224: a status-aware
    * `flattenedProjects` scan, `p.name === target`), so a case-mismatched name
-   * would otherwise find no project and silently miss duplicates. `null`
-   * (inbox) passes through; an unknown name passes through unchanged (no existing
-   * project to scope to, so the read correctly finds nothing). Deliberately the
-   * `exact` match only — NOT resolveProjectName's `partial`/substring fallback,
-   * which would scope a different project than findDuplicateTask compares against.
+   * would otherwise find no project and silently miss duplicates. `null` (inbox)
+   * passes through; an unknown name passes through unchanged (no existing project
+   * to scope to, so the read correctly finds nothing). Deliberately the EXACT match
+   * only — never resolveProjectName's `partial`/substring fallback, which would
+   * scope a different project than findDuplicateTask compares against. Delegates to
+   * resolveProjectName so the exact-match lookup lives in one place (review ⑥).
    */
   private canonicalProjectScope(name: string | null, existing: string[]): string | null {
-    if (name === null) return null;
-    const lower = name.toLowerCase();
-    return existing.find((p) => p.toLowerCase() === lower) ?? name;
+    const r = this.resolveProjectName(name, existing, true);
+    return r.match === 'exact' ? r.resolved : name;
   }
 
   /** Resolve a requested project name against existing projects (case-insensitive). */
@@ -2612,17 +2635,23 @@ SCOPE FILTERING:
     return data;
   }
 
-  /** Read existing project names (lite, no stats). Warns + returns [] on script error (OMN-204). */
-  private async fetchExistingProjectNames(warnings: string[]): Promise<string[]> {
+  /**
+   * Read existing project names (lite, no stats). Warns + returns `ok:false` on
+   * script error (OMN-204). The caller needs `ok` (not just an empty list) because
+   * a failed read means names can't be canonicalized, so the dedup read must fall
+   * back to a whole-DB scan rather than scope by an unresolvable name (review ②).
+   */
+  private async fetchExistingProjectNames(warnings: string[]): Promise<{ ok: boolean; names: string[] }> {
     const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
     const result = await this.execJson(gen.script, PROJECTS_LIST_SCHEMA);
     if (!isScriptSuccess(result)) {
       warnings.push('project resolution unavailable: existing-projects read failed');
-      return [];
+      return { ok: false, names: [] };
     }
-    return this.unwrapList(result.data, ['projects', 'items'])
+    const names = this.unwrapList(result.data, ['projects', 'items'])
       .map((p) => (p as { name?: unknown }).name)
       .filter((n): n is string => typeof n === 'string');
+    return { ok: true, names };
   }
 
   /** Read existing tag names (basic mode). Warns + returns empty set on script error. */
@@ -2654,22 +2683,36 @@ SCOPE FILTERING:
    * (findDuplicateTask) is already against `project.requested`, so scoping the
    * candidate set changes no match results; it only kills the ~8s whole-DB scan and
    * makes the 2000-row cap per-scope instead of a global truncation.
+   *
+   * `scopeProjects === undefined` requests a single WHOLE-DB read — the review-②
+   * fallback used when the existing-projects read failed and names can't be
+   * canonicalized. This is the only reachable whole-DB path (the call site always
+   * passes a non-empty scope list otherwise), so the ~8s scan is now a deliberate,
+   * named error fallback rather than dead defensive code.
    */
   private async fetchExistingIncompleteTasks(
     warnings: string[],
-    scopeProjects: Array<string | null> = [],
+    scopeProjects: Array<string | null> | undefined,
   ): Promise<Array<{ name: string; project: string | null }>> {
-    // `undefined` sentinel = no scope → whole-DB read (degenerate empty-items call,
-    // preserves the pre-OMN-126 behavior). Otherwise one read per distinct scope.
-    const distinct = [...new Set(scopeProjects)];
-    const scopes: Array<string | null | undefined> = distinct.length > 0 ? distinct : [undefined];
+    const scopes: Array<string | null | undefined> =
+      scopeProjects === undefined ? [undefined] : [...new Set(scopeProjects)];
 
-    const reads = await Promise.all(scopes.map((scope) => this.readScopedIncompleteTasks(scope)));
+    const reads = await Promise.all(
+      scopes.map(async (scope) => ({ scope, ...(await this.readScopedIncompleteTasks(scope)) })),
+    );
 
-    // A single failed scoped read degrades dedupe for that scope — surface it once
-    // (OMN-204 no-silent-failure), not once per failing scope.
-    if (reads.some((r) => !r.ok)) {
-      warnings.push('dedupe unavailable: incomplete-tasks read failed');
+    // Review ③: name the scope(s) whose read failed instead of a single blanket
+    // "dedupe unavailable" — dedupe still works for the scopes that succeeded, so a
+    // global warning is both over- and under-informative. (OMN-204 no-silent-failure.)
+    const failed = reads.filter((r) => !r.ok).map((r) => r.scope);
+    if (failed.length > 0) {
+      const label = (s: string | null | undefined): string => {
+        if (s === undefined) return 'whole database';
+        if (s === null) return 'inbox';
+        return s;
+      };
+      const names = failed.map(label).join(', ');
+      warnings.push(`dedupe unavailable: incomplete-tasks read failed for ${names}`);
     }
 
     // Merge + dedup by (name, project): scopes can overlap (e.g. two items request

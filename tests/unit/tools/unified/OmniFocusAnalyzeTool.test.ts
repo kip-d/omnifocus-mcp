@@ -1082,9 +1082,12 @@ describe('OmniFocusAnalyzeTool', () => {
         // narrowed by task.containingProject; an inbox-bound item → a separate
         // inbox.forEach read. The old whole-DB read had neither narrowing clause.
         const scripts: string[] = [];
+        // Wrap in a success envelope: the projects read must succeed (ok:true) for
+        // the per-scope path to run — a non-success projects read now falls back to
+        // a single whole-DB read (review ②).
         mockOmni.executeJson.mockImplementation((script: string) => {
           scripts.push(script);
-          return Promise.resolve({ tasks: [] });
+          return Promise.resolve(createScriptSuccess({ tasks: [] }));
         });
 
         await tool.execute({
@@ -1112,9 +1115,11 @@ describe('OmniFocusAnalyzeTool', () => {
         // "Contradictory conditions on field task.containingProject" in the AST. The
         // per-scope-read design avoids that — two distinct projects = two reads.
         let taskReads = 0;
+        // Success envelope so the projects read succeeds (ok:true) and the per-scope
+        // path runs; a non-success projects read falls back to one whole-DB read.
         mockOmni.executeJson.mockImplementation((script: string) => {
           if (script.includes('flattenedTasks')) taskReads++;
-          return Promise.resolve({ tasks: [] });
+          return Promise.resolve(createScriptSuccess({ tasks: [] }));
         });
 
         const res: any = await tool.execute({
@@ -1134,12 +1139,14 @@ describe('OmniFocusAnalyzeTool', () => {
       });
 
       it('OMN-126: scopes the project read by the CANONICAL existing name, not the raw user case', async () => {
-        // Bug: filter.project = the raw 'hardware' compiles to flattenedProjects.byName('hardware'),
-        // which is case-SENSITIVE in OmniFocus → null → the scoped read yields zero tasks → a real
-        // duplicate is missed and a second task is created. The existing dedup test passes only
-        // because it mocks responses by CALL ORDER (returning the task regardless of the script's
-        // project case); this test asserts on the emitted SCRIPT, where the bug actually lives.
-        // Fix: resolve the scope to the canonical existing name ('Hardware') so byName succeeds.
+        // Bug: filter.project = the raw 'hardware' resolves by a case-SENSITIVE exact
+        // match (post-OMN-224: a status-aware flattenedProjects scan, p.name === target)
+        // → null → the scoped read yields zero tasks → a real duplicate is missed and a
+        // second task is created. The existing dedup test passes only because it mocks
+        // responses by CALL ORDER (returning the task regardless of the script's project
+        // case); this test asserts on the emitted SCRIPT, where the bug actually lives.
+        // Fix: resolve the scope to the canonical existing name ('Hardware') so the
+        // exact-match read succeeds.
         const scripts: string[] = [];
         const dbResponses = [
           createScriptSuccess({ projects: [{ name: 'Hardware' }] }), // project-names read
@@ -1167,6 +1174,96 @@ describe('OmniFocusAnalyzeTool', () => {
         // is the project scope.)
         expect(projectRead).toContain('Hardware');
         expect(projectRead).not.toContain('hardware');
+      });
+
+      it("OMN-126 review ①: project:'' scopes the dedup read to the inbox, not a project named ''", async () => {
+        // An empty-string project must be treated as the inbox (null). Otherwise the
+        // scoped read filters on a project named '' (zero matches) and silently misses
+        // a real inbox duplicate.
+        const scripts: string[] = [];
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          return Promise.resolve(createScriptSuccess({ tasks: [] }));
+        });
+
+        await tool.execute({
+          analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', project: '' }] } },
+        });
+
+        // Inbox-scoped read present; no project-name narrowing (which would scope on '').
+        const inboxRead = scripts.find((s) => s.includes('inbox.forEach') && s.includes('task.inInbox === true'));
+        expect(inboxRead).toBeDefined();
+        const taskScripts = scripts.filter((s) => s.includes('flattenedTasks'));
+        expect(taskScripts.some((s) => s.includes('task.containingProject ==='))).toBe(false);
+      });
+
+      it('OMN-126 review ②: a failed projects read falls back to ONE whole-DB dedup read', async () => {
+        // When the existing-projects read fails, names can't be canonicalized, so
+        // per-project scoping is unreliable → fall back to a single whole-DB read
+        // (findDuplicateTask compares case-insensitively, so dedup still works).
+        const scripts: string[] = [];
+        let call = 0;
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          scripts.push(script);
+          call++;
+          // Call 1 is the projects read — fail it (non-success envelope).
+          if (call === 1) return Promise.resolve({});
+          return Promise.resolve(createScriptSuccess({ tasks: [{ name: 'Order scanners', project: 'Hardware' }] }));
+        });
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'Order scanners', project: 'hardware' }] },
+          },
+        });
+
+        // Exactly one task read, and it is whole-DB (no project/inbox narrowing).
+        const taskScripts = scripts.filter((s) => s.includes('flattenedTasks'));
+        expect(taskScripts).toHaveLength(1);
+        expect(taskScripts[0]).not.toContain('task.containingProject ===');
+        expect(taskScripts[0]).not.toContain('inbox.forEach');
+        expect((res.data.warnings as string[]).some((w) => w.includes('project resolution unavailable'))).toBe(true);
+        // Dedup still works via the whole-DB fallback (case-insensitive comparison).
+        expect(res.data.items[0].duplicateOf).toBeTruthy();
+        expect(res.data.items[0].readyToCreate).toBe(false);
+      });
+
+      it('OMN-126 review ③: a single failed scope read NAMES that scope in the warning', async () => {
+        // Two named scopes; the 'Software' read fails while 'Hardware' succeeds. The
+        // warning must name the failed scope, not blanket "dedupe unavailable" — dedup
+        // still worked for Hardware.
+        let call = 0;
+        mockOmni.executeJson.mockImplementation((script: string) => {
+          call++;
+          if (call === 1) {
+            return Promise.resolve(createScriptSuccess({ projects: [{ name: 'Hardware' }, { name: 'Software' }] }));
+          }
+          if (script.includes('flattenedTasks')) {
+            // Fail only the Software-scoped read (its scope name is embedded literally).
+            if (script.includes('Software')) return Promise.resolve({});
+            return Promise.resolve(createScriptSuccess({ tasks: [] }));
+          }
+          return Promise.resolve(createScriptSuccess({ tags: [] }));
+        });
+
+        const res: any = await tool.execute({
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: {
+              items: [
+                { name: 'A', project: 'Hardware' },
+                { name: 'B', project: 'Software' },
+              ],
+            },
+          },
+        });
+
+        const warnings = res.data.warnings as string[];
+        const dedupeWarn = warnings.find((w) => w.startsWith('dedupe unavailable'));
+        expect(dedupeWarn).toBeDefined();
+        expect(dedupeWarn).toContain('Software');
+        expect(dedupeWarn).not.toContain('Hardware');
       });
 
       it('emits a batchPayload that round-trips unchanged through WriteSchema { batch }', async () => {
