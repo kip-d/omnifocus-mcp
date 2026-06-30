@@ -455,6 +455,41 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
     );
   });
 
+  // ── OMN-225: id-lookup read-back must not require `id` in `fields` ──────
+  // The canonical "read back exactly this one task" path is filters:{id}. Its
+  // guard (executeIdLookup/executeProjectIdLookup) verifies the returned row's
+  // id BEFORE the final projection re-adds id, so when the caller's `fields`
+  // omit "id" the script projected no id and the guard mis-fired ID_MISMATCH —
+  // for ANY id, fresh or long-existing. (The bug was misattributed to
+  // freshly-created ids only because the failing repro also dropped id from
+  // `fields`.) NOTE: this block reads back with fields that OMIT id on purpose —
+  // it must NOT use taskQuery()/projectQuery(), which prepend 'id' and thereby
+  // hide exactly this defect.
+  describe('OMN-225: id-lookup read-back with id-omitting fields', () => {
+    it('task id-lookup succeeds (no ID_MISMATCH) when fields omit id, right after create', async () => {
+      const taskId = await createTask({ sequential: true });
+      const res = await client.callTool('omnifocus_read', {
+        query: { type: 'tasks', filters: { id: taskId }, fields: ['name', 'sequential'] },
+      });
+      expectOk(res, 'task id-lookup with fields omitting id');
+      const row = (res.data?.tasks ?? res.data?.items ?? [])[0];
+      // Even though the caller asked only for name+sequential, the row carries id
+      // (projectFields always re-adds it) and it matches the created id.
+      expect(row?.id, `id-lookup row id (response: ${JSON.stringify(res).slice(0, 300)})`).toBe(taskId);
+      expect(row?.sequential).toBe(true);
+    }, 120000);
+
+    it('project id-lookup succeeds (no ID_MISMATCH) when fields omit id', async () => {
+      const projId = await createProject({});
+      const res = await client.callTool('omnifocus_read', {
+        query: { type: 'projects', filters: { id: projId }, fields: ['name', 'status'] },
+      });
+      expectOk(res, 'project id-lookup with fields omitting id');
+      const row = (res.data?.projects ?? res.data?.items ?? [])[0];
+      expect(row?.id, `id-lookup row id (response: ${JSON.stringify(res).slice(0, 300)})`).toBe(projId);
+    }, 120000);
+  });
+
   // ── Relational fields (need extra sandbox entities) ───────────────────
   describe('relational fields', () => {
     it('task.project move persists (projectId reads back the new project)', async () => {
