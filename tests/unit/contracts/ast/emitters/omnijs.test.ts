@@ -659,7 +659,12 @@ describe('emitOmniJS', () => {
       const result = emitOmniJS(ast);
       expect(result.preamble).toContain('Project.byIdentifier');
       expect(result.preamble).toContain('flattenedProjects.byName');
-      expect(result.preamble).toContain('document.projectsMatching');
+      // OMN-224: exact-name dup detection scans flattenedProjects directly. The
+      // old `document.projectsMatching(target)` threw at runtime (`document` has
+      // no such method in OmniJS), failing every name-scoped tasks read. Guard
+      // against the broken receiver ever returning.
+      expect(result.preamble).toContain('flattenedProjects.filter(function(p) { return p.name === target; })');
+      expect(result.preamble).not.toContain('document.projectsMatching');
       expect(result.preamble).toContain('__projectTarget_0');
       expect(result.predicate).toBe('(__projectTarget_0 && task.containingProject === __projectTarget_0.project)');
     });

@@ -78,6 +78,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Tasks `project`-by-name filter now resolves real projects** (OMN-224) —
+  `read { type:"tasks", filters:{ project: "<exact existing name>" } }` returned **0 tasks** (a `SCRIPT_ERROR`) for real
+  populated projects; only the `projectId` filter worked. The OmniJS emitter (`emitProjectComparison`) built its
+  name-resolution preamble with `document.projectsMatching(target)` — but in OmniJS `projectsMatching` is a bare global
+  (a `Database` method exposed on the global scope), not a method on `document` (which is undefined there), so every
+  name-scoped tasks read threw `TypeError: document.projectsMatching is not a function`. Exact-name duplicate detection
+  now scans `flattenedProjects` directly (`flattenedProjects.filter(p => p.name === target)`), which is OmniJS-native
+  and never throws. Covered by a new integration test that exercises the **real** query path against a sandbox project
+  (the unit tests asserted on emitted script text and the parse integration test mocks `executeJson`, so the live path
+  was never run — which is why this stayed hidden). Unblocks OMN-126's name-scoped dedup read.
 - **Filter keys beside AND/OR/NOT and all logical-operator edge-cases now compose correctly** (OMN-151) — Filter keys at
   the same level as `AND`, `OR`, or `NOT` (e.g. `{ flagged: true, OR: [...] }`) were silently dropped instead of
   AND-composing with the operator group. `AND` merged via `Object.assign` (last-wins), so two AND items setting the same

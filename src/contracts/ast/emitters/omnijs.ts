@@ -155,14 +155,20 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
     const varName = nextProjectVar();
     const val = JSON.stringify(projectValue);
 
+    // OMN-224: exact-name duplicate detection scans `flattenedProjects` directly.
+    // The previous `document.projectsMatching(target)` threw at runtime — in OmniJS
+    // `projectsMatching` is a bare global (a Database method exposed on the global
+    // scope), NOT a method on `document` (which is undefined there). That TypeError
+    // made EVERY name-scoped tasks read fail with a SCRIPT_ERROR (returning zero
+    // tasks). `flattenedProjects.filter` is OmniJS-native and gives precise
+    // exact-name dup detection without depending on projectsMatching's fuzzy match.
     const preamble = `var ${varName} = (function() {
   var target = ${val};
   var byId = Project.byIdentifier(target);
   if (byId) return { project: byId, method: "id", duplicates: 0, allMatches: [{ id: byId.id.primaryKey, name: byId.name }] };
   var byName = flattenedProjects.byName(target);
   if (!byName) return null;
-  var matches = document.projectsMatching(target);
-  var exact = matches.filter(function(p) { return p.name === target; });
+  var exact = flattenedProjects.filter(function(p) { return p.name === target; });
   return {
     project: byName,
     method: "name",
