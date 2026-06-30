@@ -816,7 +816,17 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
  * Build an OmniJS script for a specific task by ID
  */
 export function buildTaskByIdScript(taskId: string, fields: string[] = []): GeneratedScript {
-  const fieldProjection = generateFieldProjection(fields);
+  // OMN-225: the id-lookup guard (OmniFocusReadTool.executeIdLookup) verifies
+  // `row.id === requested id` BEFORE projectFields() re-adds id downstream, so the
+  // row MUST carry id even when the caller's `fields` omit it — otherwise the guard
+  // reads undefined and mis-fires ID_MISMATCH for ANY id (the bug was misattributed
+  // to freshly-created ids because the failing repro also dropped id from `fields`).
+  // Empty `fields` already falls back to DEFAULT_FIELDS (which includes id) inside
+  // generateFieldProjection, so only force id when an explicit list omits it.
+  // Decision: force id in the script projection rather than relaxing the guard —
+  // relaxing would silently skip the right-task verification when id isn't requested.
+  const idFields = fields.length === 0 || fields.includes('id') ? fields : ['id', ...fields];
+  const fieldProjection = generateFieldProjection(idFields);
 
   // OMN-185: resolve the task directly via Task.byIdentifier (O(1)) instead of
   // iterating flattenedTasks (O(n), pays the ~7-10s materialization floor for a
@@ -1567,7 +1577,11 @@ export function buildFilteredProjectsScript(
  * Build an OmniJS script for a specific project by ID
  */
 export function buildProjectByIdScript(projectId: string, fields: string[] = []): GeneratedScript {
-  const fieldProjection = generateProjectFieldProjection(fields);
+  // OMN-225: same id-lookup guard contract as buildTaskByIdScript — the project
+  // id-match guard (executeProjectIdLookup) inspects row.id before projectFields()
+  // re-adds it, so the row must carry id even when the caller's `fields` omit it.
+  const idFields = fields.length === 0 || fields.includes('id') ? fields : ['id', ...fields];
+  const fieldProjection = generateProjectFieldProjection(idFields);
 
   const omniJsSource = `
       (() => {

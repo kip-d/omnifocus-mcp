@@ -4,6 +4,7 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  buildProjectByIdScript,
   buildRecurringTasksScript,
   buildTaskCountScript,
   buildFilteredProjectsScript,
@@ -459,6 +460,50 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
     expect(result.count).toBe(0);
     expect(result.mode).toBe('id_lookup');
     expect(result.targetId).toBe('missing');
+  });
+});
+
+describe('OMN-225: id-lookup always projects id so the id-match guard can verify it', () => {
+  // The read tool's id-lookup guard (executeIdLookup / executeProjectIdLookup)
+  // checks `row.id === requestedId` BEFORE projectFields() re-adds id. The script
+  // projects only the caller's requested fields, so a `fields` list that omits
+  // "id" left the row without an id → the guard read undefined and mis-fired
+  // ID_MISMATCH for ANY id (fresh or long-existing), not just freshly-created ones.
+
+  it('buildTaskByIdScript projects id even when the caller omits it from fields', () => {
+    const { script } = buildTaskByIdScript('abc123', ['name', 'sequential']);
+    expect(script).toContain('id: task.id.primaryKey');
+  });
+
+  it('buildTaskByIdScript: vm-executed row carries id when fields omit it', () => {
+    const Task = {
+      byIdentifier: (id: string) =>
+        id === 'abc123' ? { id: { primaryKey: 'abc123' }, name: 'X', sequential: true } : null,
+    };
+    const { script } = buildTaskByIdScript('abc123', ['name', 'sequential']);
+    const result = JSON.parse(vm.runInNewContext(script, { Task, JSON }) as string);
+
+    expect(result.tasks).toHaveLength(1);
+    // The row the guard inspects MUST carry id even though the caller asked only
+    // for name + sequential.
+    expect(result.tasks[0].id).toBe('abc123');
+  });
+
+  it('buildTaskByIdScript does not duplicate the id projection when fields include it', () => {
+    const { script } = buildTaskByIdScript('abc123', ['id', 'name']);
+    const matches = script.match(/id: task\.id\.primaryKey/g) ?? [];
+    expect(matches).toHaveLength(1);
+  });
+
+  it('buildProjectByIdScript projects id even when the caller omits it from fields', () => {
+    const { script } = buildProjectByIdScript('proj123', ['name', 'status']);
+    expect(script).toContain('id: project.id.primaryKey');
+  });
+
+  it('buildProjectByIdScript does not duplicate the id projection when fields include it', () => {
+    const { script } = buildProjectByIdScript('proj123', ['id', 'name']);
+    const matches = script.match(/id: project\.id\.primaryKey/g) ?? [];
+    expect(matches).toHaveLength(1);
   });
 });
 
