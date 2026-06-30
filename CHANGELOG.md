@@ -83,11 +83,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   populated projects; only the `projectId` filter worked. The OmniJS emitter (`emitProjectComparison`) built its
   name-resolution preamble with `document.projectsMatching(target)` — but in OmniJS `projectsMatching` is a bare global
   (a `Database` method exposed on the global scope), not a method on `document` (which is undefined there), so every
-  name-scoped tasks read threw `TypeError: document.projectsMatching is not a function`. Exact-name duplicate detection
-  now scans `flattenedProjects` directly (`flattenedProjects.filter(p => p.name === target)`), which is OmniJS-native
-  and never throws. Covered by a new integration test that exercises the **real** query path against a sandbox project
-  (the unit tests asserted on emitted script text and the parse integration test mocks `executeJson`, so the live path
-  was never run — which is why this stayed hidden). Unblocks OMN-126's name-scoped dedup read.
+  name-scoped tasks read threw `TypeError: document.projectsMatching is not a function`. Name resolution now uses a
+  **status-aware** scan of `flattenedProjects` (OmniJS-native, never throws): it prefers non-dropped, non-completed
+  projects, falling back to dead matches only when no live project carries the name. This also fixes a latent shadowing
+  bug — `flattenedProjects.byName` is status-blind and ordered by creation, so a dropped same-named project created
+  before the active one would resolve first and silently return zero tasks; and dead projects no longer inflate the
+  duplicate-project count. Covered by new integration tests that exercise the **real** query path against sandbox
+  projects, including a dropped-project shadowing case (the unit tests asserted on emitted script text and the parse
+  integration test mocks `executeJson`, so the live path was never run — which is why this stayed hidden). Unblocks
+  OMN-126's name-scoped dedup read.
 - **Filter keys beside AND/OR/NOT and all logical-operator edge-cases now compose correctly** (OMN-151) — Filter keys at
   the same level as `AND`, `OR`, or `NOT` (e.g. `{ flagged: true, OR: [...] }`) were silently dropped instead of
   AND-composing with the operator group. `AND` merged via `Object.assign` (last-wins), so two AND items setting the same

@@ -1281,7 +1281,8 @@ describe('buildFilteredTasksScript preamble and warning injection', () => {
     const filter = { projectId: 'Work' };
     const result = buildFilteredTasksScript(filter, { limit: 10 });
     expect(result.script).toContain('Project.byIdentifier');
-    expect(result.script).toContain('flattenedProjects.byName');
+    // OMN-224: status-aware name resolution scans flattenedProjects (byName removed).
+    expect(result.script).toContain('flattenedProjects.filter(function(p) { return p.name === target; })');
     expect(result.script).toContain('__projectTarget_0');
     const preambleIndex = result.script.indexOf('__projectTarget_0 = (function');
     const matchesFilterIndex = result.script.indexOf('function matchesFilter');

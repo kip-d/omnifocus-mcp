@@ -104,6 +104,7 @@ d('OMN-224: tasks project-by-name filter resolves real projects', () => {
     })) as BatchResponse;
 
     expect(response.success).toBe(true);
+    expect(response.data).toBeTruthy();
     const mapping = response.data.tempIdMapping ?? {};
     projectId = mapping['proj'];
     task1Id = mapping['task1'];
@@ -160,5 +161,86 @@ d('OMN-224: tasks project-by-name filter resolves real projects', () => {
     const nameIds = (byName.data?.tasks ?? []).map((t) => t.id).sort((a, b) => a.localeCompare(b));
     const idIds = (byId.data?.tasks ?? []).map((t) => t.id).sort((a, b) => a.localeCompare(b));
     expect(nameIds).toEqual(idIds);
+  }, 60000);
+});
+
+/**
+ * OMN-224 (review follow-up): a DROPPED project must not shadow an active project
+ * of the same name.
+ *
+ * `flattenedProjects` / `byName` are status-blind and ordered by creation, so a
+ * dropped same-named project created *before* the active one resolves first —
+ * the predicate then targets the dead project and the active project's tasks go
+ * silently invisible (success:true, 0 tasks). The emitter now resolves among
+ * "live" (non-dropped, non-completed) projects, falling back to dead matches only
+ * if no live project carries the name.
+ */
+d('OMN-224: a dropped same-named project does not shadow the active one', () => {
+  let client: MCPTestClient;
+
+  const DUP_NAME = runScopedName('OMN224_DroppedShadow');
+  let activeTaskId: string;
+
+  beforeAll(async () => {
+    client = await getSharedClient();
+    await ensureSandboxFolder();
+
+    // DROPPED project created FIRST (so it precedes the active one in
+    // flattenedProjects order — the worst case for status-blind byName), then the
+    // ACTIVE project holding the probe task.
+    const response = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'dropped', name: DUP_NAME, folder: SANDBOX_FOLDER_NAME, status: 'dropped' },
+          },
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'active', name: DUP_NAME, folder: SANDBOX_FOLDER_NAME, status: 'active' },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'activeTask', name: runScopedName('OMN224_ActiveDupTask'), parentTempId: 'active' },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
+    })) as BatchResponse;
+
+    expect(response.success).toBe(true);
+    expect(response.data).toBeTruthy();
+    const mapping = response.data.tempIdMapping ?? {};
+    activeTaskId = mapping['activeTask'];
+    expect(activeTaskId).toBeTruthy();
+  }, 120000);
+
+  afterAll(async () => {
+    await fullCleanup();
+    await client.thoroughCleanup();
+  });
+
+  it('resolves the active project, not the dropped one created first', async () => {
+    const result = (await client.callTool('omnifocus_read', {
+      query: {
+        type: 'tasks',
+        filters: { project: DUP_NAME, completed: false },
+        fields: ['id', 'name'],
+        limit: 50,
+      },
+    })) as TasksReadResponse;
+
+    expect(result.success).toBe(true);
+    const ids = (result.data?.tasks ?? []).map((t) => t.id);
+    // Pre-fix: byName resolved the dropped project (created first) → 0 tasks.
+    expect(ids).toContain(activeTaskId);
   }, 60000);
 });
