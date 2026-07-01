@@ -224,3 +224,68 @@ d('OMN-126: an empty-string project dedups against the inbox', () => {
     expect(item?.readyToCreate).toBe(false);
   }, 60000);
 });
+
+/**
+ * OMN-126 review: OmniFocus does not enforce unique project names. When two
+ * projects share the requested name, the dedup read must aggregate BOTH — a
+ * duplicate in the second same-named project must still be caught. (Pre-fix the
+ * read picked matches[0] and read only one project's subtree.)
+ */
+d('OMN-126: same-named projects — dedup aggregates across all of them', () => {
+  let client: MCPTestClient;
+  const DUP_PROJECT_NAME = runScopedName('OMN126SameName');
+  const DUP_TASK_NAME = runScopedName('OMN126SameNameTask');
+
+  beforeAll(async () => {
+    client = await getSharedClient();
+    await ensureSandboxFolder();
+    // Two active projects with the SAME name; the EMPTY one is created first (so a
+    // matches[0] pick would land on it and miss the task), the dup task lives in the
+    // second.
+    const response = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'p1', name: DUP_PROJECT_NAME, folder: SANDBOX_FOLDER_NAME },
+          },
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'p2', name: DUP_PROJECT_NAME, folder: SANDBOX_FOLDER_NAME },
+          },
+          { operation: 'create', target: 'task', data: { tempId: 'dup', name: DUP_TASK_NAME, parentTempId: 'p2' } },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
+    })) as BatchResponse;
+    expect(response.success).toBe(true);
+    expect(response.data?.tempIdMapping?.['dup']).toBeTruthy();
+  }, 120000);
+
+  afterAll(async () => {
+    await fullCleanup();
+    await client.thoroughCleanup();
+  });
+
+  it('flags a duplicate that lives in the SECOND same-named project', async () => {
+    const result = (await client.callTool('omnifocus_analyze', {
+      analysis: {
+        type: 'parse_meeting_notes',
+        params: { items: [{ name: DUP_TASK_NAME, project: DUP_PROJECT_NAME }] },
+      },
+    })) as ParseResponse;
+
+    expect(result.success).toBe(true);
+    const item = (result.data?.items ?? []).find((i) => i.name === DUP_TASK_NAME);
+    // Pre-fix: matches[0] = the empty first project → task missed → readyToCreate:true.
+    expect(item?.duplicateOf).toBeTruthy();
+    expect(item?.readyToCreate).toBe(false);
+  }, 60000);
+});

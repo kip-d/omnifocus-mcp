@@ -2417,9 +2417,11 @@ SCOPE FILTERING:
         // The scoped read resolves the project name case-insensitively itself, so
         // `existingProjects` is needed only for the preview's project.match — a
         // failed projects read degrades that preview, never the dedup read.
-        existingProjects = await this.fetchExistingProjectNames(warnings);
+        // scopeProjects derives purely from items/defaultProject (not existingProjects),
+        // so all three pre-flight reads run concurrently — no sequential dependency.
         const scopeProjects = [...new Set(items.map((item) => this.requestedScope(item, defaultProject)))];
-        [existingTags, existingTasks] = await Promise.all([
+        [existingProjects, existingTags, existingTasks] = await Promise.all([
+          this.fetchExistingProjectNames(warnings),
           this.fetchExistingTagNames(warnings),
           this.fetchExistingIncompleteTasks(warnings, scopeProjects),
         ]);
@@ -2656,10 +2658,9 @@ SCOPE FILTERING:
     warnings: string[],
     scopeProjects: Array<string | null>,
   ): Promise<Array<{ name: string; project: string | null }>> {
-    const scopes = [...new Set(scopeProjects)];
-
+    // scopeProjects is already de-duplicated by the caller — one read per distinct scope.
     const reads = await Promise.all(
-      scopes.map(async (scope) => ({ scope, ...(await this.readScopedIncompleteTasks(scope)) })),
+      scopeProjects.map(async (scope) => ({ scope, ...(await this.readScopedIncompleteTasks(scope)) })),
     );
 
     // Review ③: name the scope(s) whose read failed instead of a single blanket
@@ -2748,10 +2749,13 @@ SCOPE FILTERING:
       'var lower = target.toLowerCase();' +
       'var named = flattenedProjects.filter(function(p){ return p.name.toLowerCase() === lower; });' +
       'var live = named.filter(function(p){ return p.status !== Project.Status.Dropped && p.status !== Project.Status.Done; });' +
-      'var p = (live.length > 0 ? live : named)[0];' +
-      'if (!p) return JSON.stringify({ tasks: [] });' +
+      // OmniFocus does not enforce unique project names: aggregate across ALL matching
+      // live projects (fall back to any match only if none are live) so a duplicate in
+      // a second same-named project is not missed — matching the old whole-DB read,
+      // which keyed candidates by project NAME, not a single project object.
+      'var matches = live.length > 0 ? live : named;' +
       'var out = [];' +
-      'p.flattenedTasks.forEach(function(t){ if (t.taskStatus !== Task.Status.Completed && t.taskStatus !== Task.Status.Dropped) { out.push({ name: t.name, project: p.name }); } });' +
+      'matches.forEach(function(p){ p.flattenedTasks.forEach(function(t){ if (t.taskStatus !== Task.Status.Completed && t.taskStatus !== Task.Status.Dropped) { out.push({ name: t.name, project: p.name }); } }); });' +
       'return JSON.stringify({ tasks: out });' +
       '})()';
     return `(() => { const app = Application('OmniFocus'); return app.evaluateJavascript(${JSON.stringify(program)}); })()`;
