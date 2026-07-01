@@ -56,7 +56,7 @@ describe('OmniFocusReadTool', () => {
       expect(result.data.tasks[0].flagged).toBeUndefined();
       expect(result.metadata.mode).toBe('id_lookup');
       // Narrow lookup → no dashboard-style summary (OMN-19 rule, matches executeProjectIdLookup).
-      expect(result.summary).toBeUndefined();
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
     });
 
     it('returns NOT_FOUND error when task does not exist', async () => {
