@@ -1052,16 +1052,17 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(tasksScript).toContain('evaluateJavascript');
       });
 
-      it('OMN-191: the dedup tasks read excludes project-root rows by default (inherits OMN-153)', async () => {
-        // A project root is named identically to its project but is NOT an
-        // actionable task — it must not make "create a task named like the
-        // project" look like a duplicate. fetchExistingIncompleteTasks routes
-        // through buildListTasksScriptV4 -> buildFilteredTasksScript, which applies
-        // OMN-153's default project-root exclusion, so root rows never reach dedup.
+      it('OMN-191: the project-scoped dedup read excludes the project root by construction', async () => {
+        // A project root is named identically to its project but is NOT an actionable
+        // task — it must not make "create a task named like the project" look like a
+        // duplicate. The project-scoped read uses the resolved project's own subtree
+        // (project.flattenedTasks), which does NOT include the root (the root is
+        // project.task, not a member of flattenedTasks) — root exclusion is structural,
+        // no predicate needed.
         const scripts: string[] = [];
         mockOmni.executeJson.mockImplementation((script: string) => {
           scripts.push(script);
-          return Promise.resolve({ tasks: [] });
+          return Promise.resolve(createScriptSuccess({ tasks: [] }));
         });
 
         await tool.execute({
@@ -1070,9 +1071,8 @@ describe('OmniFocusAnalyzeTool', () => {
 
         const tasksScript = scripts.find((s) => s.includes('flattenedTasks'));
         expect(tasksScript).toBeDefined();
-        // OMN-153 predicate: a project root is the only task with task.project !== null,
-        // so excluding `task.project === null` rows keeps roots out of the dedup set.
-        expect(tasksScript).toContain('task.project === null');
+        expect(tasksScript).toContain('p.flattenedTasks');
+        expect(tasksScript).not.toContain('task.project === null');
       });
 
       it('OMN-126: scopes the dedup read per requested scope — project read + inbox read, not whole-DB', async () => {
@@ -1102,8 +1102,8 @@ describe('OmniFocusAnalyzeTool', () => {
           },
         });
 
-        // Project-scoped read: flattenedTasks narrowed by the containing-project target.
-        const projectRead = scripts.find((s) => s.includes('task.containingProject ==='));
+        // Project-scoped read: the resolved project's own subtree (project.flattenedTasks).
+        const projectRead = scripts.find((s) => s.includes('p.flattenedTasks'));
         expect(projectRead).toBeDefined();
         // Inbox-scoped read: a separate inbox.forEach pass for the project-less item.
         const inboxRead = scripts.find((s) => s.includes('inbox.forEach') && s.includes('task.inInbox === true'));
@@ -1138,25 +1138,16 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(taskReads).toBe(2);
       });
 
-      it('OMN-126: scopes the project read by the CANONICAL existing name, not the raw user case', async () => {
-        // Bug: filter.project = the raw 'hardware' resolves by a case-SENSITIVE exact
-        // match (post-OMN-224: a status-aware flattenedProjects scan, p.name === target)
-        // → null → the scoped read yields zero tasks → a real duplicate is missed and a
-        // second task is created. The existing dedup test passes only because it mocks
-        // responses by CALL ORDER (returning the task regardless of the script's project
-        // case); this test asserts on the emitted SCRIPT, where the bug actually lives.
-        // Fix: resolve the scope to the canonical existing name ('Hardware') so the
-        // exact-match read succeeds.
+      it('OMN-126: the project-scoped read resolves the project name case-insensitively', async () => {
+        // A case-mismatched item.project ('hardware' vs a real 'Hardware') must still
+        // find its project. The scoped read embeds the RAW requested name and resolves
+        // it case-insensitively inside OmniJS (flattenedProjects scan, both sides
+        // lowercased) — so the read needs no separate canonicalization step against the
+        // project-names list.
         const scripts: string[] = [];
-        const dbResponses = [
-          createScriptSuccess({ projects: [{ name: 'Hardware' }] }), // project-names read
-          createScriptSuccess({ ok: true, v: 'ast', items: [] }), // tag-names read
-          createScriptSuccess({ tasks: [] }), // scoped task read
-        ];
-        let call = 0;
         mockOmni.executeJson.mockImplementation((script: string) => {
           scripts.push(script);
-          return Promise.resolve(dbResponses[call++] ?? createScriptSuccess({ tasks: [] }));
+          return Promise.resolve(createScriptSuccess({ tasks: [] }));
         });
 
         await tool.execute({
@@ -1166,14 +1157,12 @@ describe('OmniFocusAnalyzeTool', () => {
           },
         });
 
-        const projectRead = scripts.find((s) => s.includes('task.containingProject ==='));
+        const projectRead = scripts.find((s) => s.includes('p.flattenedTasks'));
         expect(projectRead).toBeDefined();
-        // The byName target embedded in the scoped read is the canonical 'Hardware', not raw
-        // 'hardware'. (The program is embedded in app.evaluateJavascript("..."), so its quotes
-        // are backslash-escaped — assert on the case-distinct token, the only source of which
-        // is the project scope.)
-        expect(projectRead).toContain('Hardware');
-        expect(projectRead).not.toContain('hardware');
+        // Raw requested name embedded + case-insensitive resolution (toLowerCase on both
+        // sides), so 'hardware' resolves to a real 'Hardware' at runtime.
+        expect(projectRead).toContain('hardware');
+        expect(projectRead).toContain('toLowerCase');
       });
 
       it("OMN-126 review ①: project:'' scopes the dedup read to the inbox, not a project named ''", async () => {
@@ -1197,10 +1186,11 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(taskScripts.some((s) => s.includes('task.containingProject ==='))).toBe(false);
       });
 
-      it('OMN-126 review ②: a failed projects read falls back to ONE whole-DB dedup read', async () => {
-        // When the existing-projects read fails, names can't be canonicalized, so
-        // per-project scoping is unreliable → fall back to a single whole-DB read
-        // (findDuplicateTask compares case-insensitively, so dedup still works).
+      it('OMN-126 review ②: a failed projects read does NOT break dedup (the scoped read self-resolves)', async () => {
+        // The scoped dedup read resolves the project name itself, so a failed
+        // existing-projects read degrades only the preview's project.match — never
+        // duplicate detection. (Contrast the pre-rework design, where the read scoped
+        // by a name it could not canonicalize and silently missed dups.)
         const scripts: string[] = [];
         let call = 0;
         mockOmni.executeJson.mockImplementation((script: string) => {
@@ -1218,15 +1208,15 @@ describe('OmniFocusAnalyzeTool', () => {
           },
         });
 
-        // Exactly one task read, and it is whole-DB (no project/inbox narrowing).
-        const taskScripts = scripts.filter((s) => s.includes('flattenedTasks'));
-        expect(taskScripts).toHaveLength(1);
-        expect(taskScripts[0]).not.toContain('task.containingProject ===');
-        expect(taskScripts[0]).not.toContain('inbox.forEach');
-        expect((res.data.warnings as string[]).some((w) => w.includes('project resolution unavailable'))).toBe(true);
-        // Dedup still works via the whole-DB fallback (case-insensitive comparison).
+        // The dedup read is still the project-scoped self-resolving read (not whole-DB).
+        const projectRead = scripts.find((s) => s.includes('p.flattenedTasks'));
+        expect(projectRead).toBeDefined();
+        // Dedup still works (the scoped read self-resolved 'hardware'; findDuplicateTask
+        // compares case-insensitively).
         expect(res.data.items[0].duplicateOf).toBeTruthy();
         expect(res.data.items[0].readyToCreate).toBe(false);
+        // The projects-read failure is still surfaced (degrades preview match only).
+        expect((res.data.warnings as string[]).some((w) => w.includes('project resolution unavailable'))).toBe(true);
       });
 
       it('OMN-126 review ③: a single failed scope read NAMES that scope in the warning', async () => {

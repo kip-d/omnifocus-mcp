@@ -2,13 +2,13 @@
  * OMN-126: parse_meeting_notes dedup, scoped to the target project, must detect a
  * real existing task — exercised against REAL OmniFocus.
  *
- * OMN-126 scopes the dedup candidate read to the requested project(s) + inbox via
- * `filter.project = <canonical name>` (instead of an ~8s whole-DB scan). That
- * scoped read is exactly the path that OMN-224 fixed: before OMN-224 it threw
- * (`document.projectsMatching is not a function`), the failure was swallowed, and
- * dedup silently found nothing — every item came back `duplicateOf: null`. The
- * unit tests on this path mock `execJson`, so they validate the scoping LOGIC but
- * never run the scoped read; this test runs it end-to-end through the server.
+ * OMN-126 scopes the dedup candidate read to the requested project(s) + inbox.
+ * Each named scope reads the resolved project's OWN subtree (project.flattenedTasks,
+ * ~0.3s, resolving the name case-insensitively) instead of filtering the global
+ * flattenedTasks (~10s floor PER scope, which serialized past the timeout over many
+ * projects). The unit tests on this path mock `execJson`, so they validate the
+ * scoping LOGIC but never run the scoped read; this test runs it end-to-end through
+ * the server.
  *
  * Contract under test:
  *  - an item whose name matches an existing task in the target project is flagged
@@ -105,7 +105,7 @@ d('OMN-126: project-scoped dedup detects a real existing task', () => {
 
     expect(result.success).toBe(true);
     // The scoped read must have succeeded — no swallowed dedupe failure.
-    expect(result.data?.warnings ?? []).not.toContain('dedupe unavailable: incomplete-tasks read failed');
+    expect((result.data?.warnings ?? []).some((w) => w.includes('dedupe unavailable'))).toBe(false);
 
     const items = result.data?.items ?? [];
     const dup = items.find((i) => i.name === DUP_TASK_NAME);
@@ -133,8 +133,8 @@ d('OMN-126: a case-mismatched project name still dedups (canonicalization)', () 
   let client: MCPTestClient;
 
   // Same full name in two cases: identical `__TEST__-<runid>-` prefix, suffix
-  // differs only in case → case-insensitively equal, so canonicalProjectScope must
-  // resolve the lowercase query to the canonical mixed-case project.
+  // differs only in case → case-insensitively equal, so the scoped read's own
+  // case-insensitive resolution must map the lowercase query to the real project.
   const SUFFIX = 'OMN126CanonHW';
   const PROJECT_NAME = runScopedName(SUFFIX); // ...-OMN126CanonHW
   const LOWER_QUERY = `${RUN_NAME_PREFIX}${SUFFIX.toLowerCase()}`; // ...-omn126canonhw
@@ -179,7 +179,7 @@ d('OMN-126: a case-mismatched project name still dedups (canonicalization)', () 
     })) as ParseResponse;
 
     expect(result.success).toBe(true);
-    expect(result.data?.warnings ?? []).not.toContain('dedupe unavailable: incomplete-tasks read failed');
+    expect((result.data?.warnings ?? []).some((w) => w.includes('dedupe unavailable'))).toBe(false);
     const item = (result.data?.items ?? []).find((i) => i.name === DUP_TASK_NAME);
     // Case-mismatched scope must still resolve → dup found.
     expect(item?.duplicateOf).toBeTruthy();

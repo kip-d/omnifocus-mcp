@@ -57,7 +57,6 @@ import { extractDates } from '../capture/date-extraction.js';
 // OMN-124: read-only pre-flight for structured meeting-note items.
 import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
-import type { TaskFilter } from '../../contracts/filters.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
 // Response types
@@ -2405,35 +2404,21 @@ SCOPE FILTERING:
       let existingTags = new Set<string>();
       let existingTasks: Array<{ name: string; project: string | null }> = [];
       if (validate) {
-        // OMN-126: scope the dedup read to the requested target project(s) + inbox
-        // instead of the whole DB. The duplicate comparison (findDuplicateTask) is
-        // already project-scoped against `project.requested` — which is exactly
-        // `item.project ?? defaultProject ?? null` — so scoping the candidate read
-        // changes no match results; it only kills the ~8s whole-DB scan and makes
-        // the 2000-row cap effectively per-scope instead of a global truncation.
+        // OMN-126: scope the dedup read to the requested target project(s) + inbox.
+        // Each named scope reads ONLY that project's own task subtree
+        // (`project.flattenedTasks`, ~0.3s — see readScopedIncompleteTasks), NOT a
+        // filter over the global `flattenedTasks`, which hits the ~10s whole-DB
+        // iteration floor PER scope and, fanned out over N distinct projects,
+        // serializes on OmniFocus's single automation channel past the osascript
+        // timeout. The duplicate comparison (findDuplicateTask) is already against
+        // `project.requested` and compares names case-insensitively, so scoping the
+        // candidate read changes no match results.
         //
-        // The scoped read's project filter resolves the name by a case-SENSITIVE
-        // exact match (post-OMN-224: a status-aware `flattenedProjects` scan,
-        // `p.name === target`); canonicalize each scope to the exact existing name
-        // (case-insensitive) so a case-mismatched `item.project` ('hardware' vs a
-        // real 'Hardware') still finds its project — otherwise resolution yields
-        // null, the read returns zero tasks, and a real duplicate is missed. This
-        // requires the project-names read first, so it now precedes (rather than
-        // parallels) the scoped task read.
-        const proj = await this.fetchExistingProjectNames(warnings);
-        existingProjects = proj.names;
-        // Review ②: if the existing-projects read failed we cannot canonicalize a
-        // case-mismatched name, so per-project name-scoping would silently miss
-        // duplicates. Fall back to ONE whole-DB dedup read (findDuplicateTask
-        // compares project names case-insensitively) — pre-OMN-126 behavior on this
-        // error path. `undefined` signals that whole-DB read.
-        // Review ⑧: dedup the raw scopes first, then canonicalize each DISTINCT one
-        // (D canonicalizations, not one per item).
-        const scopeProjects = proj.ok
-          ? [...new Set(items.map((item) => this.requestedScope(item, defaultProject)))].map((s) =>
-              this.canonicalProjectScope(s, existingProjects),
-            )
-          : undefined;
+        // The scoped read resolves the project name case-insensitively itself, so
+        // `existingProjects` is needed only for the preview's project.match — a
+        // failed projects read degrades that preview, never the dedup read.
+        existingProjects = await this.fetchExistingProjectNames(warnings);
+        const scopeProjects = [...new Set(items.map((item) => this.requestedScope(item, defaultProject)))];
         [existingTags, existingTasks] = await Promise.all([
           this.fetchExistingTagNames(warnings),
           this.fetchExistingIncompleteTasks(warnings, scopeProjects),
@@ -2543,23 +2528,6 @@ SCOPE FILTERING:
     return p === '' ? null : p;
   }
 
-  /**
-   * OMN-126: map a requested project name to the canonical existing name (exact
-   * case-insensitive match) for scoping the dedup read. The scoped read resolves
-   * the name by a case-SENSITIVE exact match (post-OMN-224: a status-aware
-   * `flattenedProjects` scan, `p.name === target`), so a case-mismatched name
-   * would otherwise find no project and silently miss duplicates. `null` (inbox)
-   * passes through; an unknown name passes through unchanged (no existing project
-   * to scope to, so the read correctly finds nothing). Deliberately the EXACT match
-   * only — never resolveProjectName's `partial`/substring fallback, which would
-   * scope a different project than findDuplicateTask compares against. Delegates to
-   * resolveProjectName so the exact-match lookup lives in one place (review ⑥).
-   */
-  private canonicalProjectScope(name: string | null, existing: string[]): string | null {
-    const r = this.resolveProjectName(name, existing, true);
-    return r.match === 'exact' ? r.resolved : name;
-  }
-
   /** Resolve a requested project name against existing projects (case-insensitive). */
   private resolveProjectName(
     requested: string | null,
@@ -2636,22 +2604,22 @@ SCOPE FILTERING:
   }
 
   /**
-   * Read existing project names (lite, no stats). Warns + returns `ok:false` on
-   * script error (OMN-204). The caller needs `ok` (not just an empty list) because
-   * a failed read means names can't be canonicalized, so the dedup read must fall
-   * back to a whole-DB scan rather than scope by an unresolvable name (review ②).
+   * Read existing project names (lite, no stats) for the preview's project.match
+   * classification. Warns + returns [] on script error (OMN-204). NOTE: the dedup
+   * read no longer depends on this — readScopedIncompleteTasks resolves each project
+   * name case-insensitively itself — so a failed projects read degrades only the
+   * preview's match labels, never duplicate detection.
    */
-  private async fetchExistingProjectNames(warnings: string[]): Promise<{ ok: boolean; names: string[] }> {
+  private async fetchExistingProjectNames(warnings: string[]): Promise<string[]> {
     const gen = buildFilteredProjectsScript({}, { limit: 1000, includeStats: false, performanceMode: 'lite' });
     const result = await this.execJson(gen.script, PROJECTS_LIST_SCHEMA);
     if (!isScriptSuccess(result)) {
       warnings.push('project resolution unavailable: existing-projects read failed');
-      return { ok: false, names: [] };
+      return [];
     }
-    const names = this.unwrapList(result.data, ['projects', 'items'])
+    return this.unwrapList(result.data, ['projects', 'items'])
       .map((p) => (p as { name?: unknown }).name)
       .filter((n): n is string => typeof n === 'string');
-    return { ok: true, names };
   }
 
   /** Read existing tag names (basic mode). Warns + returns empty set on script error. */
@@ -2683,19 +2651,12 @@ SCOPE FILTERING:
    * (findDuplicateTask) is already against `project.requested`, so scoping the
    * candidate set changes no match results; it only kills the ~8s whole-DB scan and
    * makes the 2000-row cap per-scope instead of a global truncation.
-   *
-   * `scopeProjects === undefined` requests a single WHOLE-DB read — the review-②
-   * fallback used when the existing-projects read failed and names can't be
-   * canonicalized. This is the only reachable whole-DB path (the call site always
-   * passes a non-empty scope list otherwise), so the ~8s scan is now a deliberate,
-   * named error fallback rather than dead defensive code.
    */
   private async fetchExistingIncompleteTasks(
     warnings: string[],
-    scopeProjects: Array<string | null> | undefined,
+    scopeProjects: Array<string | null>,
   ): Promise<Array<{ name: string; project: string | null }>> {
-    const scopes: Array<string | null | undefined> =
-      scopeProjects === undefined ? [undefined] : [...new Set(scopeProjects)];
+    const scopes = [...new Set(scopeProjects)];
 
     const reads = await Promise.all(
       scopes.map(async (scope) => ({ scope, ...(await this.readScopedIncompleteTasks(scope)) })),
@@ -2706,12 +2667,7 @@ SCOPE FILTERING:
     // global warning is both over- and under-informative. (OMN-204 no-silent-failure.)
     const failed = reads.filter((r) => !r.ok).map((r) => r.scope);
     if (failed.length > 0) {
-      const label = (s: string | null | undefined): string => {
-        if (s === undefined) return 'whole database';
-        if (s === null) return 'inbox';
-        return s;
-      };
-      const names = failed.map(label).join(', ');
+      const names = failed.map((s) => (s === null ? 'inbox' : s)).join(', ');
       warnings.push(`dedupe unavailable: incomplete-tasks read failed for ${names}`);
     }
 
@@ -2732,36 +2688,35 @@ SCOPE FILTERING:
   }
 
   /**
-   * One scoped incomplete-tasks read. `scope`: a project name → tasks in that
-   * project; `null` → inbox tasks; `undefined` → whole DB (no scope).
+   * One scoped incomplete-tasks read. `scope`: a project name → tasks in THAT
+   * project's own subtree; `null` → inbox tasks.
+   *
+   * Named project: read `project.flattenedTasks` (the resolved project's own
+   * descendants) instead of filtering the global `flattenedTasks`. The latter
+   * iterates the whole database (~10s floor) on EVERY scope, which serializes past
+   * the script timeout over multiple projects; `project.flattenedTasks` is ~40x
+   * faster and naturally excludes the project ROOT (OMN-191: a root is named like
+   * its project but is not actionable, so it must not look like a duplicate). The
+   * project name is resolved case-insensitively here, so the dedup read needs no
+   * separate canonicalization step.
+   *
+   * Inbox: the global `flattenedTasks` pipeline (buildListTasksScriptV4, embedded in
+   * the JXA→bridge harness) is fine — the inbox is small, so the read is sub-second.
    *
    * Both terminal states excluded: a dropped task has completed===false, so without
-   * dropped:false an abandoned task would false-positive as a duplicate.
-   *
-   * Uses buildListTasksScriptV4, NOT the bare buildFilteredTasksScript — the latter
-   * returns an OmniJS body that uses `flattenedTasks`, which only exists inside the
-   * evaluateJavascript bridge. The V4 wrapper embeds that body in the JXA→bridge
-   * harness. (OMN-124: passing the bare body to execJson threw "Can't find variable:
-   * flattenedTasks" and silently disabled dedupe.)
-   *
-   * OMN-191: inherits OMN-153's default project-root exclusion — a project root is
-   * named identically to its project but is NOT an actionable task, so it must not
-   * make "create a task named like the project" look like a duplicate.
+   * the Dropped exclusion an abandoned task would false-positive as a duplicate.
    */
   private async readScopedIncompleteTasks(
-    scope: string | null | undefined,
+    scope: string | null,
   ): Promise<{ ok: boolean; tasks: Array<{ name: string; project: string | null }> }> {
-    const filter: TaskFilter = { completed: false, dropped: false };
-    if (scope === null) {
-      filter.inInbox = true; // inbox-bound items dedup against inbox tasks
-    } else if (typeof scope === 'string') {
-      filter.project = scope; // named-project items dedup against that project's tasks
-    }
-    const script = buildListTasksScriptV4({
-      filter,
-      fields: ['name', 'project'],
-      limit: 2000,
-    });
+    const script =
+      scope === null
+        ? buildListTasksScriptV4({
+            filter: { completed: false, dropped: false, inInbox: true },
+            fields: ['name', 'project'],
+            limit: 2000,
+          })
+        : this.buildProjectScopedDedupScript(scope);
     const result = await this.execJson(script, TASKS_LIST_SCHEMA);
     if (!isScriptSuccess(result)) {
       return { ok: false, tasks: [] };
@@ -2776,6 +2731,30 @@ SCOPE FILTERING:
       })
       .filter((t) => t.name.length > 0);
     return { ok: true, tasks };
+  }
+
+  /**
+   * Build a JXA→OmniJS script that reads incomplete (not completed/dropped) tasks
+   * from ONE project's own subtree (`project.flattenedTasks`), resolving the project
+   * name case-insensitively (status-aware: prefer a non-dropped/done match). Returns
+   * raw `{ tasks: [{ name, project }] }` for execJson to wrap. The program crosses
+   * the JXA→OmniJS boundary as a single JSON.stringify'd string (no nested template /
+   * hand-rolled escaper — closes the OMN-111/113 injection class).
+   */
+  private buildProjectScopedDedupScript(projectName: string): string {
+    const program =
+      '(() => {' +
+      `var target = ${JSON.stringify(projectName)};` +
+      'var lower = target.toLowerCase();' +
+      'var named = flattenedProjects.filter(function(p){ return p.name.toLowerCase() === lower; });' +
+      'var live = named.filter(function(p){ return p.status !== Project.Status.Dropped && p.status !== Project.Status.Done; });' +
+      'var p = (live.length > 0 ? live : named)[0];' +
+      'if (!p) return JSON.stringify({ tasks: [] });' +
+      'var out = [];' +
+      'p.flattenedTasks.forEach(function(t){ if (t.taskStatus !== Task.Status.Completed && t.taskStatus !== Task.Status.Dropped) { out.push({ name: t.name, project: p.name }); } });' +
+      'return JSON.stringify({ tasks: out });' +
+      '})()';
+    return `(() => { const app = Application('OmniFocus'); return app.evaluateJavascript(${JSON.stringify(program)}); })()`;
   }
 
   /**
