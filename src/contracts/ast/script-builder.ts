@@ -26,6 +26,7 @@ import {
 } from './filter-generator.js';
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
+import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
 import { ACTIONABLE_STATUSES } from './types.js';
 
 // =============================================================================
@@ -400,6 +401,12 @@ interface ScriptBuildContext {
   projectValue: string | undefined | null;
   limit: number;
   offset: number;
+  /**
+   * OMN-218: an OmniJS guard statement emitted at the top of the row loop that returns a
+   * FOLDER_NOT_FOUND envelope when a string folder PATH filter resolves to no folder.
+   * Empty string when there is no folder-path filter (or `folder:null` top-level).
+   */
+  folderExistsGuard: string;
 }
 
 /** Generate the duplicate-project warnings block (shared by sort and no-sort paths) */
@@ -442,6 +449,7 @@ function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
 
   return `
 (() => {
+  ${ctx.folderExistsGuard}
   const allResults = [];
 
   ${matchesFilterBlock}
@@ -491,6 +499,7 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
 
   return `
 (() => {
+  ${ctx.folderExistsGuard}
   const results = [];
   let count = 0;
   let totalMatched = 0;
@@ -633,6 +642,11 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
   const completionCheck = filter.completed !== undefined ? '' : defaultCompletionCheck;
 
+  // OMN-218: fail loudly on any unresolvable folder PATH — the top-level `filter.folder`
+  // AND any OR-branch's `folder` (review round 2). `folder:null` arrives as folderTopLevel,
+  // a boolean the collector ignores, so it keeps returning empty-set success (guard stays '').
+  const folderExistsGuard = emitFolderNotFoundGuardsForFilter(filter, 'folder');
+
   const ctx: ScriptBuildContext = {
     filterCode,
     filterDescription,
@@ -642,6 +656,7 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     projectValue: filter.projectId ?? filter.project,
     limit,
     offset,
+    folderExistsGuard,
   };
 
   // When sort is specified, collect ALL matching tasks, sort in-script, then slice.
@@ -760,8 +775,15 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
   const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
 
+  // OMN-218 (review round 2): inbox mode was missing the guard entirely — a folder
+  // filter combined with mode:'inbox' bypassed the loud-error path. Inbox tasks
+  // structurally have no containing folder (the filter always matches nothing), but
+  // an UNRESOLVABLE folder reference must still error, independent of match count.
+  const folderExistsGuard = emitFolderNotFoundGuardsForFilter(filter, 'folder');
+
   const script = `
 (() => {
+  ${folderExistsGuard}
   const results = [];
   let count = 0;
   let totalMatched = 0;
@@ -1424,8 +1446,19 @@ export function buildFilteredProjectsScript(
   // Include task counts only in normal mode
   const includeTaskCounts = performanceMode !== 'lite';
 
+  // OMN-218: fail loudly on any unresolvable folder PATH — top-level + OR branches
+  // (review round 2). Not folder:null / topLevelOnly (boolean, ignored by the collector).
+  // Skipped when `id` is set (review round 3, PR #168): `id` is documented elsewhere
+  // (buildProjectByIdScript / buildTaskByIdScript) as the sole selector — sibling keys
+  // are ignored. countOnly routes id+folder queries THROUGH this builder instead of the
+  // dedicated id-lookup path (compiled.countOnly is checked before projectFilter.id in
+  // OmniFocusReadTool), so without this guard an id-scoped countOnly query could newly
+  // hard-error on a typo'd folder where the equivalent non-countOnly query ignores it.
+  const folderGuard = filter.id ? '' : emitFolderNotFoundGuardsForFilter(filter, 'folderName');
+
   const omniJsSource = `
       (() => {
+        ${folderGuard}
         const results = [];
         let count = 0;
         let totalMatched = 0;
@@ -1548,6 +1581,12 @@ export function buildFilteredProjectsScript(
   try {
     const resultJson = app.evaluateJavascript(${JSON.stringify(omniJsSource)});
     const result = JSON.parse(resultJson);
+
+    // OMN-218: propagate an in-script error envelope (e.g. the folder-not-found guard)
+    // verbatim rather than mangling it into a success shape with undefined rows.
+    if (result && result.error) {
+      return resultJson;
+    }
 
     return JSON.stringify({
       projects: result.projects,
@@ -1940,10 +1979,22 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   // Check if the filter needs tags - only fetch tags if the filter uses them
   const needsTags = filterCode.predicate.includes('taskTags');
 
+  // OMN-218: countOnly parity with the list path — any unresolvable folder PATH (top-level
+  // or OR-branch, review round 2) fails loudly instead of silently counting 0.
+  // folder:null / folderTopLevel is a different (boolean) flag and stays a valid 0-count.
+  // Skipped when `id` is set (review round 3, PR #168): `id` is documented elsewhere
+  // (buildTaskByIdScript) as the sole selector — sibling keys are ignored. countOnly
+  // routes id+folder queries THROUGH this builder instead of the dedicated id-lookup
+  // path (compiled.countOnly is checked before filter.id in OmniFocusReadTool), so
+  // without this guard an id-scoped countOnly query could newly hard-error on a typo'd
+  // folder where the equivalent non-countOnly query ignores it entirely.
+  const folderGuard = normalizedFilter.id ? '' : emitFolderNotFoundGuardsForFilter(normalizedFilter, 'folder');
+
   // Count runs in OmniJS (see JSDoc): one bridge round-trip, no per-task IPC.
   const omniJsSource = `
 (() => {
   try {
+    ${folderGuard}
     const startTime = Date.now();
     const maxScan = ${maxScan};
     let count = 0;

@@ -124,7 +124,7 @@ const filterFields = {
   // folder SUBTREE (shared emitter, src/contracts/ast/folder-path-match.ts), and
   // tasks queries SUPPORT folder (was OMN-162 reject) — the task's containing
   // project's folder ancestry, inbox excluded. Bare name = single-segment path.
-  folder: z.union([z.string(), z.null()]).optional(), // "<Parent : Child path>" = subtree match (OMN-167); null = top-level only (OMN-96). tasks queries (OMN-167): folder of the task's containing project, subtree, inbox excluded. projects queries: subtree path match. folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders.
+  folder: z.union([z.string(), z.null()]).optional(), // "<Parent : Child path>" = subtree match (OMN-167; OMN-218: "/" separator accepted too, so a folders-query path round-trips); null = top-level only (OMN-96). tasks queries (OMN-167): folder of the task's containing project, subtree, inbox excluded. projects queries: subtree path match; an unresolvable path errors NOT_FOUND (OMN-218). folders queries (OMN-170): "<name>" = parent folder name, null = top-level folders.
 };
 
 // Flat filter: base fields only, no logical operators.

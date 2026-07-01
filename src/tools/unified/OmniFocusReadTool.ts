@@ -12,7 +12,12 @@ import {
   resolveEffectiveTaskFields,
   resolveEffectiveProjectFields,
 } from '../../contracts/ast/script-builder.js';
-import { isScriptSuccess, isScriptError, type ScriptResult } from '../../omnifocus/script-result-types.js';
+import {
+  isScriptSuccess,
+  isScriptError,
+  type ScriptResult,
+  type ScriptError,
+} from '../../omnifocus/script-result-types.js';
 import {
   listResultSchema,
   CountResultSchema,
@@ -247,6 +252,23 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
 // TASK_DATE_FIELDS contract in `src/tools/tasks/task-query-pipeline.ts`.
 const PROJECT_DATE_FIELDS = ['dueDate', 'completionDate', 'nextReviewDate', 'lastReviewDate'] as const;
 
+/**
+ * OMN-218: detect the in-script folder-existence guard's error envelope. The guard
+ * (emitFolderNotFoundGuard) returns `{ error:true, details:{ code:'FOLDER_NOT_FOUND' } }`;
+ * `detectKnownErrorShape` preserves the code inside `details` (a top-level `code` would be
+ * dropped). Callers map this to a loud NOT_FOUND instead of a generic SCRIPT_ERROR, so an
+ * unresolvable folder reference never masquerades as a valid-but-empty result.
+ *
+ * Takes `ScriptError` (not `ScriptResult`) — every call site is already inside an
+ * `if (!isScriptSuccess(result))` block, which narrows the discriminated union for free.
+ * A type predicate here lets callers use `result.error`/`result.details` directly instead
+ * of re-checking `isScriptError` at each site.
+ */
+function isFolderNotFoundError(result: ScriptError): result is ScriptError & { details: { code: 'FOLDER_NOT_FOUND' } } {
+  const details = result.details;
+  return typeof details === 'object' && details !== null && (details as { code?: unknown }).code === 'FOLDER_NOT_FOUND';
+}
+
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
   description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, or folders.
@@ -279,7 +301,7 @@ FILTER OPERATORS:
 - text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox
-- folder (tasks AND projects queries): "<Parent : Child path>" matches the folder SUBTREE (a bare name is a single-segment path; case-insensitive substring per segment); null = top-level only (no containing folder). On tasks queries it matches the folder ancestry of the task's containing project (inbox tasks excluded). status: "on_hold" is still rejected on tasks queries with guidance (query projects first, then tasks by projectId)
+- folder (tasks AND projects queries): "<Parent : Child path>" (or "Parent/Child" — both ':' and '/' separators are accepted, so a path copied from a folders query round-trips) matches the folder SUBTREE (a bare name is a single-segment path; case-insensitive substring per segment); an unresolvable folder path returns a NOT_FOUND error rather than a silent empty result; null = top-level only (no containing folder). On tasks queries it matches the folder ancestry of the task's containing project (inbox tasks excluded). status: "on_hold" is still rejected on tasks queries with guidance (query projects first, then tasks by projectId)
 - logic: { OR: [...] }, { AND: [...] }; NOT supports ONLY { status: "completed" } or { status: "active" } — anything else is rejected. For tag exclusion use tags: { none: [...] }; for flag exclusion use flagged: false. A terminal status: "dropped"/"completed" inside an OR branch is rejected (tasks exclude those by default, so the branch would never match) — put it at the top level instead
 - Projects filters: status, completed, flagged, name, text, folder, id. AND merges; OR: [...] returns the union of its branches; NOT: { status: "active"|"on_hold"|"completed"|"dropped" } matches the complement of that status over the four project states (broader than the tasks NOT, which is completed/active only).
 
@@ -437,6 +459,26 @@ PERFORMANCE:
     }
   }
 
+  /**
+   * OMN-218: shared NOT_FOUND mapping for the folder-existence guard's error envelope.
+   * Single source of truth for all 4 call sites (tasks list, tasks count, projects list,
+   * projects/tags/folders count-only tail) so the message/hint can't drift out of sync.
+   */
+  private folderNotFoundResponse(
+    entityType: 'tasks' | 'projects' | 'tags' | 'folders',
+    result: ScriptError & { details: { code: 'FOLDER_NOT_FOUND' } },
+    timer: OperationTimerV2,
+  ): unknown {
+    return createErrorResponseV2(
+      entityType,
+      'NOT_FOUND',
+      result.error,
+      "Check the folder name; run a folders query to see exact paths (both ':' and '/' separators are accepted).",
+      result.details,
+      timer.toMetadata(),
+    );
+  }
+
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tasks') throw new Error('handleTaskQuery: wrong type');
     const timer = new OperationTimerV2();
@@ -463,6 +505,11 @@ PERFORMANCE:
     const result = await this.execJson(script, TASK_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
+      // OMN-218: an unresolvable folder reference fails loudly (NOT_FOUND), not as an
+      // opaque SCRIPT_ERROR or a silent empty result.
+      if (isFolderNotFoundError(result)) {
+        return this.folderNotFoundResponse('tasks', result, timer);
+      }
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
@@ -616,6 +663,10 @@ PERFORMANCE:
     const result = await this.execJson(script, CountResultSchema);
 
     if (!isScriptSuccess(result)) {
+      // OMN-218: unresolvable folder → loud NOT_FOUND (parity with the list path).
+      if (isFolderNotFoundError(result)) {
+        return this.folderNotFoundResponse('tasks', result, timer);
+      }
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
@@ -844,6 +895,11 @@ PERFORMANCE:
     timer: OperationTimerV2,
   ): unknown {
     if (!isScriptSuccess(result)) {
+      // OMN-218: unresolvable folder → loud NOT_FOUND (parity with the list path).
+      // Only projects carries a folder path; tags/folders never emit this code.
+      if (isFolderNotFoundError(result)) {
+        return this.folderNotFoundResponse(entityType, result, timer);
+      }
       return createErrorResponseV2(
         entityType,
         'SCRIPT_ERROR',
@@ -944,6 +1000,11 @@ PERFORMANCE:
     const result = await this.execJson(generatedScript.script, PROJECT_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
+      // OMN-218: an unresolvable folder reference fails loudly (NOT_FOUND), not as an
+      // opaque SCRIPT_ERROR or a silent empty result.
+      if (isFolderNotFoundError(result)) {
+        return this.folderNotFoundResponse('projects', result, timer);
+      }
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',

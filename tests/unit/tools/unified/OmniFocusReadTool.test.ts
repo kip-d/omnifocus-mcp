@@ -1850,4 +1850,92 @@ describe('OmniFocusReadTool', () => {
       expect(occurrences).toBe(1);
     });
   });
+
+  // ─── OMN-218: unresolvable folder reference → loud NOT_FOUND ────────
+  describe('OMN-218 folder-not-found mapping', () => {
+    const folderNotFoundResult = {
+      success: false as const,
+      error: "Folder not found: No Such Folder. Verify the folder exists; both ':' and '/' separators are accepted.",
+      context: 'Script reported an error',
+      details: { code: 'FOLDER_NOT_FOUND', folder: 'No Such Folder' },
+    } satisfies ScriptResult;
+
+    it('maps a FOLDER_NOT_FOUND script error to a NOT_FOUND response (projects)', async () => {
+      execJsonSpy.mockResolvedValueOnce(folderNotFoundResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { folder: 'No Such Folder' } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toContain('Folder not found');
+    });
+
+    it('maps a FOLDER_NOT_FOUND script error to a NOT_FOUND response (tasks)', async () => {
+      execJsonSpy.mockResolvedValueOnce(folderNotFoundResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { folder: 'No Such Folder' } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toContain('Folder not found');
+    });
+
+    it('an existing-but-empty folder still returns success with zero rows (empty ≠ unresolvable)', async () => {
+      // The guard fires only on unresolvable folders; a real folder with no matching
+      // projects returns a normal empty success, NOT a NOT_FOUND error.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_available: 0 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { folder: 'Real Empty Folder' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.projects).toHaveLength(0);
+    });
+
+    it('maps FOLDER_NOT_FOUND to NOT_FOUND on a tasks countOnly query', async () => {
+      execJsonSpy.mockResolvedValueOnce(folderNotFoundResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { folder: 'No Such Folder' }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toContain('Folder not found');
+    });
+
+    it('maps FOLDER_NOT_FOUND to NOT_FOUND on a projects countOnly query', async () => {
+      execJsonSpy.mockResolvedValueOnce(folderNotFoundResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { folder: 'No Such Folder' }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toContain('Folder not found');
+    });
+
+    it('a generic (non-folder) script error still maps to SCRIPT_ERROR, not NOT_FOUND', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'OmniFocus not running',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { folder: 'Anything' } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+  });
 });
