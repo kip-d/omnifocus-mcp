@@ -1082,9 +1082,11 @@ describe('OmniFocusAnalyzeTool', () => {
         // narrowed by task.containingProject; an inbox-bound item → a separate
         // inbox.forEach read. The old whole-DB read had neither narrowing clause.
         const scripts: string[] = [];
-        // Wrap in a success envelope: the projects read must succeed (ok:true) for
-        // the per-scope path to run — a non-success projects read now falls back to
-        // a single whole-DB read (review ②).
+        // Every mocked read returns a success envelope so the scripts yield
+        // well-formed data. The per-scope dedup path runs independently of the
+        // projects read — scopeProjects derives from items/defaultProject, not
+        // existingProjects — so there is no whole-DB fallback (review ②: a failed
+        // projects read degrades only the preview's match labels, never dedup).
         mockOmni.executeJson.mockImplementation((script: string) => {
           scripts.push(script);
           return Promise.resolve(createScriptSuccess({ tasks: [] }));
@@ -1115,8 +1117,9 @@ describe('OmniFocusAnalyzeTool', () => {
         // "Contradictory conditions on field task.containingProject" in the AST. The
         // per-scope-read design avoids that — two distinct projects = two reads.
         let taskReads = 0;
-        // Success envelope so the projects read succeeds (ok:true) and the per-scope
-        // path runs; a non-success projects read falls back to one whole-DB read.
+        // Every mocked read returns a success envelope. The per-scope path runs
+        // independently of the projects read (scopeProjects derives from
+        // items/defaultProject), so there is no whole-DB fallback — see review ②.
         mockOmni.executeJson.mockImplementation((script: string) => {
           if (script.includes('flattenedTasks')) taskReads++;
           return Promise.resolve(createScriptSuccess({ tasks: [] }));
