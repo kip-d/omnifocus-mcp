@@ -252,4 +252,28 @@ describe('emitFolderNotFoundGuardsForFilter — collects folder paths across OR 
     const out = emitFolderNotFoundGuardsForFilter({ orBranches: [{ folderName: 'Typo' }] } as any, 'folderName');
     expect(out).toContain('Typo');
   });
+
+  // OMN-218 /code-review high (PR #168): dedup must operate on the NORMALIZED path
+  // (lowercased, segment-parsed), not the raw string — otherwise the same real folder
+  // referenced via different separators/casing emits redundant guard closures.
+  it('dedupes the same folder referenced via `:` and `/` separators (one guard, not two)', () => {
+    const out = emitFolderNotFoundGuardsForFilter(
+      { folder: 'Personal/Bills', orBranches: [{ folder: 'Personal : Bills' }] } as any,
+      'folder',
+    );
+    expect((out.match(/FOLDER_NOT_FOUND/g) || []).length).toBe(1);
+  });
+
+  it('dedupes the same folder referenced via different casing/whitespace', () => {
+    const out = emitFolderNotFoundGuardsForFilter(
+      { folder: 'Personal / Bills', orBranches: [{ folder: 'PERSONAL/BILLS' }] } as any,
+      'folder',
+    );
+    expect((out.match(/FOLDER_NOT_FOUND/g) || []).length).toBe(1);
+  });
+
+  it('still emits two guards for genuinely distinct folders', () => {
+    const out = emitFolderNotFoundGuardsForFilter({ folder: 'A', orBranches: [{ folder: 'B' }] } as any, 'folder');
+    expect((out.match(/FOLDER_NOT_FOUND/g) || []).length).toBe(2);
+  });
 });

@@ -1448,7 +1448,13 @@ export function buildFilteredProjectsScript(
 
   // OMN-218: fail loudly on any unresolvable folder PATH — top-level + OR branches
   // (review round 2). Not folder:null / topLevelOnly (boolean, ignored by the collector).
-  const folderGuard = emitFolderNotFoundGuardsForFilter(filter, 'folderName');
+  // Skipped when `id` is set (review round 3, PR #168): `id` is documented elsewhere
+  // (buildProjectByIdScript / buildTaskByIdScript) as the sole selector — sibling keys
+  // are ignored. countOnly routes id+folder queries THROUGH this builder instead of the
+  // dedicated id-lookup path (compiled.countOnly is checked before projectFilter.id in
+  // OmniFocusReadTool), so without this guard an id-scoped countOnly query could newly
+  // hard-error on a typo'd folder where the equivalent non-countOnly query ignores it.
+  const folderGuard = filter.id ? '' : emitFolderNotFoundGuardsForFilter(filter, 'folderName');
 
   const omniJsSource = `
       (() => {
@@ -1976,7 +1982,13 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   // OMN-218: countOnly parity with the list path — any unresolvable folder PATH (top-level
   // or OR-branch, review round 2) fails loudly instead of silently counting 0.
   // folder:null / folderTopLevel is a different (boolean) flag and stays a valid 0-count.
-  const folderGuard = emitFolderNotFoundGuardsForFilter(normalizedFilter, 'folder');
+  // Skipped when `id` is set (review round 3, PR #168): `id` is documented elsewhere
+  // (buildTaskByIdScript) as the sole selector — sibling keys are ignored. countOnly
+  // routes id+folder queries THROUGH this builder instead of the dedicated id-lookup
+  // path (compiled.countOnly is checked before filter.id in OmniFocusReadTool), so
+  // without this guard an id-scoped countOnly query could newly hard-error on a typo'd
+  // folder where the equivalent non-countOnly query ignores it entirely.
+  const folderGuard = normalizedFilter.id ? '' : emitFolderNotFoundGuardsForFilter(normalizedFilter, 'folder');
 
   // Count runs in OmniJS (see JSDoc): one bridge round-trip, no per-task IPC.
   const omniJsSource = `

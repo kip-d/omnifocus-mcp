@@ -138,3 +138,45 @@ describe('OMN-218 review round 2: inbox mode + folder filter', () => {
     expect(wrapped).toContain(CODE);
   });
 });
+
+// OMN-218 /code-review high (PR #168): countOnly is routed BEFORE the id short-circuit
+// in OmniFocusReadTool (compiled.countOnly checked before filter.id), so an
+// {id, folder} countOnly query reaches buildTaskCountScript/buildFilteredProjectsScript
+// directly instead of the dedicated id-lookup builder — unlike the non-countOnly path,
+// where id already short-circuits BEFORE these builders ever see a folder value.
+// buildTaskByIdScript documents "the id filter is the sole selector (sibling keys are
+// ignored)"; the count builders must honor that same convention so id+folder+countOnly
+// doesn't newly hard-error where id+folder without countOnly silently ignores folder.
+describe('OMN-218 review (PR #168): folder guard skipped when filter.id is present', () => {
+  it('buildTaskCountScript does NOT guard folder when id is also set', () => {
+    const { script } = buildTaskCountScript({ id: 'abc123', folder: 'Typo Folder' });
+    expect(script).not.toContain(CODE);
+  });
+
+  it('buildTaskCountScript DOES guard folder when id is absent (regression check)', () => {
+    const { script } = buildTaskCountScript({ folder: 'Typo Folder' });
+    expect(script).toContain(CODE);
+  });
+
+  it('buildFilteredProjectsScript does NOT guard folderName when id is also set', () => {
+    const { script } = buildFilteredProjectsScript({ id: 'abc123', folderName: 'Typo Folder' } as ProjectFilter);
+    expect(script).not.toContain(CODE);
+  });
+
+  it('buildFilteredProjectsScript DOES guard folderName when id is absent (regression check)', () => {
+    const { script } = buildFilteredProjectsScript({ folderName: 'Typo Folder' } as ProjectFilter);
+    expect(script).toContain(CODE);
+  });
+});
+
+// OMN-218 /code-review high (PR #168): the guard collector deduped on the raw filter
+// string, not the normalized (lowercased, segment-parsed) path — so "Personal/Bills"
+// and "Personal : Bills" (same real folder, different separator) emitted two redundant
+// existence-guard closures instead of one. Dedup behavior itself is exercised at the
+// collector level (folder-path-match.test.ts) — two different string values for the
+// SAME field on separate OR branches trips an unrelated, pre-existing validator bug
+// (`detectContradictions` doesn't respect OR-branch scoping; confirmed general, not
+// folder-specific, e.g. `{OR:[{projectId:'A'},{projectId:'B'}]}` also throws on `main`
+// today) when routed through the full generateFilterCode/validate pipeline, so a
+// builder-level (`buildFilteredTasksScript`) dedup demonstration can't be constructed
+// without tripping that orthogonal defect. Flagged separately; out of scope here.

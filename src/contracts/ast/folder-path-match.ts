@@ -164,6 +164,19 @@ export function emitFolderNotFoundGuardsForFilter<K extends string>(
   filter: FilterWithFolderAndOr<K> | undefined,
   key: K,
 ): string {
-  const uniquePaths = [...new Set(collectFolderPaths(filter, key))];
+  // OMN-218 (review round 3, PR #168): dedup on the NORMALIZED path (the same
+  // lowercased, segment-parsed form parseFolderFilterPath produces), not the raw
+  // string — otherwise "Personal/Bills" and "Personal : Bills" (same real folder,
+  // different separator/casing) each emit their own redundant guard closure. Keep
+  // one representative raw path per unique normalized form (first-seen wins) so
+  // emitFolderNotFoundGuard's error message still echoes something the caller wrote.
+  const seenNormalized = new Set<string>();
+  const uniquePaths: string[] = [];
+  for (const path of collectFolderPaths(filter, key)) {
+    const normalized = JSON.stringify(parseFolderFilterPath(path));
+    if (seenNormalized.has(normalized)) continue;
+    seenNormalized.add(normalized);
+    uniquePaths.push(path);
+  }
   return uniquePaths.map((path) => emitFolderNotFoundGuard(path)).join('\n');
 }
