@@ -90,6 +90,12 @@ export function buildListTasksScriptV4(params: {
     const resultJson = app.evaluateJavascript(${JSON.stringify(generatedScript.script)});
     const result = JSON.parse(resultJson);
 
+    // OMN-218: propagate an in-script error envelope (e.g. the folder-not-found guard)
+    // verbatim rather than wrapping it into a success shape with undefined tasks.
+    if (result && result.error) {
+      return resultJson;
+    }
+
     // Return with metadata
     return JSON.stringify({
       tasks: result.tasks,
