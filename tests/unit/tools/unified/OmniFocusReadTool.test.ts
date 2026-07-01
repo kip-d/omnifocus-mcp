@@ -55,6 +55,8 @@ describe('OmniFocusReadTool', () => {
       // Field projection: flagged should be excluded
       expect(result.data.tasks[0].flagged).toBeUndefined();
       expect(result.metadata.mode).toBe('id_lookup');
+      // Narrow lookup → no dashboard-style summary (OMN-19 rule, matches executeProjectIdLookup).
+      expect(result.summary).toBeUndefined();
     });
 
     it('returns NOT_FOUND error when task does not exist', async () => {
