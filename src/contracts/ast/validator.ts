@@ -181,9 +181,11 @@ function validateLogicalNode(
  *
  * A contradiction is a property of a single AND scope: `==` comparisons
  * co-constrain only when conjoined. Nested `and` children flatten into the
- * parent scope (AND is associative); `or` and `not` children are scope
- * boundaries — `OR(x==A, x==B)` and `AND(x==A, NOT(x==B))` are satisfiable.
- * Each OR branch is then checked independently for its own contradictions.
+ * parent scope (AND is associative); `or` children are scope boundaries whose
+ * branches are each checked independently — `OR(x==A, x==B)` is satisfiable.
+ * `not` subtrees are fully opaque: no negation reasoning is attempted, so
+ * `AND(x==A, NOT(x==B))` (satisfiable) is correctly not flagged, and
+ * `AND(x==A, NOT(x==A))` (unsatisfiable) is knowingly not detected.
  */
 function detectContradictions(ast: FilterNode, errors: ValidationError[]): void {
   switch (ast.type) {
