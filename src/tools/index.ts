@@ -109,10 +109,19 @@ export function registerTools(
       // OMN-228: the transport connects before the startup cache warm finishes;
       // tool calls wait here until the warm completes so no MCP-originated
       // osascript runs concurrently with the warm queries. The gate is built
-      // never-rejecting, but .catch defends against a future caller passing a
-      // rejectable promise — a failed warm must never wedge tool dispatch.
+      // never-rejecting; if a future caller passes a rejectable promise the
+      // rejection is logged loudly but must never wedge tool dispatch.
       if (startupGate) {
-        await startupGate.catch(() => {});
+        const gateStart = Date.now();
+        await startupGate.catch((error: unknown) => {
+          correlatedLogger.warn('Startup gate rejected; proceeding with tool execution', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+        const gateWaitMs = Date.now() - gateStart;
+        if (gateWaitMs > 100) {
+          correlatedLogger.info(`Tool ${name} waited ${gateWaitMs}ms for the startup cache warm`);
+        }
       }
       try {
         // Pass correlation context to the tool if it supports it

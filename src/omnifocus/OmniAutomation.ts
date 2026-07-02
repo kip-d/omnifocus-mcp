@@ -53,6 +53,13 @@ export class OmniAutomation {
       timeout || (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
   }
 
+  // OMN-228 concurrency note: there is NO serialization lock here. During
+  // startup, the no-concurrent-osascript invariant is enforced one layer up —
+  // MCP tool dispatch awaits the startupGate (src/tools/index.ts) while the
+  // cache warm's own execute() calls run ungated (they ARE the warm). Any NEW
+  // code path that reaches execute() outside tool dispatch (resource handlers,
+  // HTTP diagnostics, direct tool instantiation) must either gate on the warm
+  // or tolerate racing it.
   public async execute<T = unknown>(script: string): Promise<T> {
     // Use empirical size monitoring for better feedback
     const sizeAnalysis = monitorScriptSize(script, 'jxa');

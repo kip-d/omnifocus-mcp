@@ -88,7 +88,7 @@ export async function runServer() {
   }
   startupTimer.mark('permsEnd');
 
-  // Warm cache with frequently accessed data (blocking — awaited before the transport connects)
+  // Warm cache with frequently accessed data (backgrounded — see OMN-228 block below)
   // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
   // ENABLE_CACHE_WARMING=true overrides test mode (for integration tests that want realistic behavior)
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
@@ -148,8 +148,18 @@ export async function runServer() {
     // still runs it to completion — the of-mcp-redeploy pre-warm
     // (node dist/index.js < /dev/null) depends on the full warm finishing
     // before the process exits.
+    // Consequence (accepted): a real client that disconnects mid-warm delays
+    // exit until the warm settles (bounded by the warm timeout above) — an
+    // improvement over the old unbounded orphan, but slower than an instant
+    // exit. Both cases present as identical stdin EOFs; exiting early for
+    // real clients would need an explicit signal (e.g. an env var set by the
+    // redeploy script) — not added until the delay is observed to matter.
     pendingOperations.add(warmPromise);
-    void warmPromise.finally(() => pendingOperations.delete(warmPromise));
+    logger.debug(`Added cache warm to pending operations (size: ${pendingOperations.size})`);
+    void warmPromise.finally(() => {
+      pendingOperations.delete(warmPromise);
+      logger.debug(`Removed cache warm from pending operations (size: ${pendingOperations.size})`);
+    });
   }
   // warmEnd now marks warm LAUNCH, not completion — the STARTUP COMPLETE line's
   // `warm` segment measures launch cost (~0ms); warm duration is logged
