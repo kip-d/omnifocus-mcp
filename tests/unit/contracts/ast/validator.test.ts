@@ -87,6 +87,121 @@ describe('validateFilterAST', () => {
     });
   });
 
+  describe('contradictions — AND-scope boundaries (OMN-226)', () => {
+    it('does not flag different values on the same field across OR branches', () => {
+      // AND(completed==false, OR(project==AAA, project==BBB)) — an ordinary "A or B" query
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.filter((e) => e.code === 'CONTRADICTION')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('does not flag a comparison against a NOT-wrapped comparison on the same field', () => {
+      // AND(project==AAA, NOT(project==BBB)) — satisfiable
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+          {
+            type: 'not',
+            child: { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.filter((e) => e.code === 'CONTRADICTION')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('still flags a genuine AND contradiction alongside an OR sibling', () => {
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.some((e) => e.code === 'CONTRADICTION' && e.message.includes('task.completed'))).toBe(true);
+      expect(
+        result.errors.some((e) => e.code === 'CONTRADICTION' && e.message.includes('task.containingProject')),
+      ).toBe(false);
+    });
+
+    it('still flags contradictions across nested AND flattening', () => {
+      // AND(completed==true, AND(completed==false, flagged==true)) — genuinely unsatisfiable
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'and',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      const contradictions = result.errors.filter((e) => e.code === 'CONTRADICTION');
+      expect(contradictions).toHaveLength(1);
+      expect(contradictions[0].message).toContain('task.completed');
+    });
+
+    it('flags a contradictory AND nested inside an OR branch', () => {
+      // AND(flagged==true, OR(AND(completed==true, completed==false), inInbox==true))
+      // — the first OR branch can never match; each branch is its own AND scope
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              {
+                type: 'and',
+                children: [
+                  { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+                  { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+                ],
+              },
+              { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      const contradictions = result.errors.filter((e) => e.code === 'CONTRADICTION');
+      expect(contradictions).toHaveLength(1);
+      expect(contradictions[0].message).toContain('task.completed');
+    });
+  });
+
   describe('tautologies', () => {
     it('returns warning for always-true OR', () => {
       const ast: FilterNode = {
