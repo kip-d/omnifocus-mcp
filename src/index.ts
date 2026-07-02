@@ -221,9 +221,15 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
       }
     }
 
-    // Close server connection cleanly, allowing transport to flush responses
+    // Close server connection cleanly, allowing transport to flush responses.
+    // Wrapped: on an EPIPE-triggered exit the pipe is already dead and the
+    // flush may itself throw — that must not prevent the exit.
     logger.info('Closing server connection...');
-    await stdioServer.close();
+    try {
+      await stdioServer.close();
+    } catch (error) {
+      logger.warn('Server close failed during shutdown (continuing to exit):', error);
+    }
 
     logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
@@ -237,11 +243,15 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
     gracefulExit('stdin stream closed');
   });
 
-  // Handle EPIPE errors when Claude Desktop disconnects abruptly
+  // Handle EPIPE errors when Claude Desktop disconnects abruptly.
+  // OMN-228 review: EPIPE routes through gracefulExit (not an immediate
+  // process.exit) so an in-flight background cache warm in pendingOperations
+  // drains before exit — otherwise the warm's osascript child is orphaned
+  // mid-script, exactly the gap the pendingOperations tracking closes for
+  // the stdin-EOF path.
   process.stdout.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
-      logger.info('stdout EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
+      gracefulExit('stdout EPIPE - client disconnected');
     } else {
       logger.error('stdout error:', err);
       process.exit(1);
@@ -250,8 +260,7 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
 
   process.stderr.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
-      logger.info('stderr EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
+      gracefulExit('stderr EPIPE - client disconnected');
     } else {
       console.error('stderr error:', err);
       process.exit(1);
@@ -273,7 +282,11 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, s
     authEnabled: !!cliConfig.authToken,
   });
 
-  // Validate CLI configuration
+  // Validate CLI configuration.
+  // OMN-228 review note: this exit deliberately does NOT drain the background
+  // cache warm — a config typo should fail fast, not wait out a 13-60s warm.
+  // The warm's in-flight osascript (if any) runs its one script to completion
+  // and exits on its own; the orphan is bounded by the script timeout.
   try {
     validateCLIConfig(cliConfig);
   } catch (error) {
@@ -298,6 +311,14 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, s
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
+    // OMN-228 review: a listen failure (port in use) is a real deployment
+    // scenario — drain the in-flight background cache warm before exiting so
+    // its osascript child isn't orphaned against OmniFocus's single
+    // automation channel right when the operator retries the start.
+    if (pendingOperations.size > 0) {
+      logger.info(`Waiting for ${pendingOperations.size} pending operations (cache warm) before exit...`);
+      await Promise.allSettled([...pendingOperations]);
+    }
     process.exit(1);
   }
   startupTimer.mark('ready');

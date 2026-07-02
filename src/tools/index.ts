@@ -123,6 +123,9 @@ export function registerTools(
           correlatedLogger.info(`Tool ${name} waited ${gateWaitMs}ms for the startup cache warm`);
         }
       }
+      // executionTime is measured from AFTER the gate so it reports actual
+      // tool work; gate wait is logged separately above (OMN-228 review).
+      const execStart = Date.now();
       try {
         // Pass correlation context to the tool if it supports it
         let result: unknown;
@@ -136,7 +139,7 @@ export function registerTools(
         }
 
         // Log successful execution with timing
-        const executionTime = Date.now() - startTime;
+        const executionTime = Date.now() - execStart;
         correlatedLogger.info(`Tool execution completed: ${name}`, {
           executionTime,
           success: true,
@@ -152,7 +155,7 @@ export function registerTools(
         };
       } catch (error) {
         // Log execution failure with timing and correlation
-        const executionTime = Date.now() - startTime;
+        const executionTime = Date.now() - execStart;
         correlatedLogger.error(`Tool execution failed: ${name}`, {
           executionTime,
           success: false,
