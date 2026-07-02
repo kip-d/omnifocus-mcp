@@ -113,8 +113,14 @@ export async function runServer() {
     },
   });
 
-  // Warm cache BEFORE accepting requests to prevent concurrent osascript execution
-  // This ensures batch operations don't run concurrently with cache warming
+  // OMN-228: the warm runs in the BACKGROUND so the transport connects (and the
+  // MCP initialize handshake answers) immediately instead of sitting behind a
+  // 13-60s warm inside the client's ~30s connect window. Tool calls gate on
+  // `startupGate` (see registerTools), which preserves the invariant the old
+  // blocking warm enforced: no MCP-originated osascript runs concurrently with
+  // the warm queries. The gate always resolves — a failed warm must never wedge
+  // the server.
+  let startupGate: Promise<void> = Promise.resolve();
   if (isCIEnvironment && !forceCacheWarming) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
   } else if (isTestEnvironment && !forceCacheWarming) {
@@ -125,31 +131,43 @@ export async function runServer() {
     if (forceCacheWarming) {
       logger.info('Cache warming enabled via ENABLE_CACHE_WARMING override');
     }
-    logger.info('Warming cache before accepting requests...');
-    try {
-      await cacheWarmer.warmCache();
-      logger.info('Cache warming completed successfully');
-      // Emit cache statistics after warm‑up to verify hit‑rate potential
-      const stats = cacheManager.getStats();
-      logger.debug('Post‑warm cache stats:', JSON.stringify(stats));
-    } catch (error) {
-      logger.warn('Cache warming failed:', error);
-    }
+    logger.info('Warming cache in background; transport connects immediately (OMN-228)...');
+    const warmPromise = (async () => {
+      try {
+        await cacheWarmer.warmCache();
+        logger.info('Cache warming completed successfully');
+        // Emit cache statistics after warm‑up to verify hit‑rate potential
+        const stats = cacheManager.getStats();
+        logger.debug('Post‑warm cache stats:', JSON.stringify(stats));
+      } catch (error) {
+        logger.warn('Cache warming failed:', error);
+      }
+    })();
+    startupGate = warmPromise;
+    // Track the warm as a pending operation so the stdin-EOF shutdown path
+    // still runs it to completion — the of-mcp-redeploy pre-warm
+    // (node dist/index.js < /dev/null) depends on the full warm finishing
+    // before the process exits.
+    pendingOperations.add(warmPromise);
+    void warmPromise.finally(() => pendingOperations.delete(warmPromise));
   }
+  // warmEnd now marks warm LAUNCH, not completion — the STARTUP COMPLETE line's
+  // `warm` segment measures launch cost (~0ms); warm duration is logged
+  // separately by the cache-warmer on completion.
   startupTimer.mark('warmEnd');
 
   // Check if we're running in HTTP mode
   if (cliConfig.httpMode) {
-    await runHttpServer(cacheManager, cliConfig);
+    await runHttpServer(cacheManager, cliConfig, startupGate);
   } else {
-    await runStdioServer(cacheManager);
+    await runStdioServer(cacheManager, startupGate);
   }
 }
 
 /**
  * Runs the server in stdio mode (original behavior)
  */
-async function runStdioServer(cacheManager: CacheManager) {
+async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<void>) {
   logger.info('Starting server in stdio mode');
 
   // Create server instance with MCP 2025-11-25 metadata
@@ -172,7 +190,7 @@ async function runStdioServer(cacheManager: CacheManager) {
   );
 
   // Register all tools and prompts AFTER server creation but BEFORE connection
-  await registerTools(stdioServer, cacheManager, pendingOperations);
+  await registerTools(stdioServer, cacheManager, pendingOperations, startupGate);
   registerPrompts(stdioServer);
   startupTimer.mark('registerEnd');
 
@@ -238,7 +256,7 @@ async function runStdioServer(cacheManager: CacheManager) {
 /**
  * Runs the server in HTTP mode
  */
-async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
+async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, startupGate: Promise<void>) {
   logger.info('Starting server in HTTP mode', {
     port: cliConfig.port,
     host: cliConfig.host,
@@ -256,7 +274,7 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
   }
 
   // Create session manager
-  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken);
+  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken, undefined, startupGate);
   sessionManager.startCleanupInterval();
 
   // Create HTTP server manager

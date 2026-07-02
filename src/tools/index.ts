@@ -32,8 +32,13 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
   return 'withCorrelation' in tool && typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
-// eslint-disable-next-line sonarjs/deprecation
-export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
+export function registerTools(
+  // eslint-disable-next-line sonarjs/deprecation
+  server: Server,
+  cache: CacheManager,
+  pendingOperations?: Set<Promise<unknown>>,
+  startupGate?: Promise<void>,
+): void {
   logger.info(
     'OmniFocus MCP v3.0.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)',
   );
@@ -101,6 +106,14 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
 
     // Create execution promise and track it to prevent premature server exit
     const executionPromise = (async () => {
+      // OMN-228: the transport connects before the startup cache warm finishes;
+      // tool calls wait here until the warm completes so no MCP-originated
+      // osascript runs concurrently with the warm queries. The gate is built
+      // never-rejecting, but .catch defends against a future caller passing a
+      // rejectable promise — a failed warm must never wedge tool dispatch.
+      if (startupGate) {
+        await startupGate.catch(() => {});
+      }
       try {
         // Pass correlation context to the tool if it supports it
         let result: unknown;

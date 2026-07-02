@@ -31,13 +31,20 @@ export class SessionManager {
   private authToken?: string;
   private sessionTimeout: number;
   private cleanupInterval?: ReturnType<typeof setInterval>;
+  private startupGate?: Promise<void>;
 
-  constructor(cacheManager: CacheManager, authToken?: string, sessionTimeout: number = 30 * 60 * 1000) {
+  constructor(
+    cacheManager: CacheManager,
+    authToken?: string,
+    sessionTimeout: number = 30 * 60 * 1000,
+    startupGate?: Promise<void>,
+  ) {
     this.sessions = new Map();
     this.cacheManager = cacheManager;
     this.pendingOperations = new Set();
     this.authToken = authToken;
     this.sessionTimeout = sessionTimeout;
+    this.startupGate = startupGate;
 
     // Initialize pending operations tracking
     setPendingOperationsTracker(this.pendingOperations);
@@ -112,7 +119,7 @@ export class SessionManager {
     );
 
     // Register tools and prompts for this session
-    await registerTools(server, this.cacheManager, this.pendingOperations);
+    await registerTools(server, this.cacheManager, this.pendingOperations, this.startupGate);
     registerPrompts(server);
 
     // Connect the server to the transport
