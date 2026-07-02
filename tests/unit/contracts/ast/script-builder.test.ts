@@ -231,6 +231,15 @@ describe('buildFilteredTasksScript', () => {
       expect(result.script).toContain('task.completed === false');
       expect(result.isEmptyFilter).toBe(false);
     });
+
+    it('OR branches on the same ==-field are not a contradiction (OMN-226)', () => {
+      // "tasks in project A or project B" — must not throw "Contradictory conditions"
+      const result = buildFilteredTasksScript({ orBranches: [{ projectId: 'AAA' }, { projectId: 'BBB' }] });
+
+      expect(result.script).toContain('||');
+      expect(result.script).toContain('AAA');
+      expect(result.script).toContain('BBB');
+    });
   });
 
   describe('OR queries compose with defaults and modes (OMN-151 V6 / OMN-157)', () => {

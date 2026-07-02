@@ -178,11 +178,68 @@ function validateLogicalNode(
 
 /**
  * Detect contradictions like: completed: true AND completed: false
+ *
+ * A contradiction is a property of an AND path: `==` comparisons co-constrain
+ * when conjoined, including across an `or` boundary — each OR branch INHERITS
+ * its ancestor AND scope's comparisons (`AND(x==A, OR(x==B, x==C))` is
+ * unsatisfiable), while sibling branches never mix (`OR(x==A, x==B)` is
+ * satisfiable). Nested `and` children flatten into the parent scope (AND is
+ * associative). A scope that already contradicts is reported once and not
+ * descended into — its whole subtree is unsatisfiable. `not` subtrees are
+ * fully opaque: no negation reasoning is attempted, so `AND(x==A, NOT(x==B))`
+ * (satisfiable) is correctly not flagged, and `AND(x==A, NOT(x==A))`
+ * (unsatisfiable) is knowingly not detected.
  */
 function detectContradictions(ast: FilterNode, errors: ValidationError[]): void {
-  if (ast.type !== 'and') return;
+  visitForContradictions(ast, [], errors);
+}
 
-  const comparisons = collectComparisons(ast);
+function visitForContradictions(node: FilterNode, inherited: ComparisonNode[], errors: ValidationError[]): void {
+  switch (node.type) {
+    case 'and': {
+      const comparisons = [...inherited];
+      const orBoundaries: OrNode[] = [];
+      collectAndScope(node, comparisons, orBoundaries);
+      const before = errors.length;
+      checkScopeForContradictions(comparisons, errors);
+      if (errors.length > before) return; // scope unsatisfiable — deeper checks would re-report it
+      orBoundaries.forEach((or) => visitForContradictions(or, comparisons, errors));
+      break;
+    }
+    case 'or':
+      node.children.forEach((child) => {
+        if (child.type === 'comparison') {
+          checkScopeForContradictions([...inherited, child], errors);
+        } else {
+          visitForContradictions(child, inherited, errors);
+        }
+      });
+      break;
+  }
+}
+
+/**
+ * Collect the `and` node's own scope: direct comparison children, flattening
+ * through nested `and` children only. `or` children are recorded as boundaries
+ * for independent checking; `not`/`exists`/`literal` children are opaque.
+ */
+function collectAndScope(node: AndNode, comparisons: ComparisonNode[], orBoundaries: OrNode[]): void {
+  for (const child of node.children) {
+    switch (child.type) {
+      case 'comparison':
+        comparisons.push(child);
+        break;
+      case 'and':
+        collectAndScope(child, comparisons, orBoundaries);
+        break;
+      case 'or':
+        orBoundaries.push(child);
+        break;
+    }
+  }
+}
+
+function checkScopeForContradictions(comparisons: ComparisonNode[], errors: ValidationError[]): void {
   const fieldValues = new Map<string, unknown[]>();
 
   for (const comp of comparisons) {
@@ -212,28 +269,6 @@ function hasContradiction(values: unknown[]): boolean {
   // For other types, different values in AND is a contradiction
   const uniqueValues = new Set(values.map((v) => JSON.stringify(v)));
   return uniqueValues.size > 1;
-}
-
-function collectComparisons(node: FilterNode): ComparisonNode[] {
-  const result: ComparisonNode[] = [];
-
-  function collect(n: FilterNode): void {
-    switch (n.type) {
-      case 'comparison':
-        result.push(n);
-        break;
-      case 'and':
-      case 'or':
-        n.children.forEach(collect);
-        break;
-      case 'not':
-        collect(n.child);
-        break;
-    }
-  }
-
-  collect(node);
-  return result;
 }
 
 // =============================================================================

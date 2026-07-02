@@ -172,11 +172,21 @@ describe('OMN-218 review (PR #168): folder guard skipped when filter.id is prese
 // OMN-218 /code-review high (PR #168): the guard collector deduped on the raw filter
 // string, not the normalized (lowercased, segment-parsed) path — so "Personal/Bills"
 // and "Personal : Bills" (same real folder, different separator) emitted two redundant
-// existence-guard closures instead of one. Dedup behavior itself is exercised at the
-// collector level (folder-path-match.test.ts) — two different string values for the
-// SAME field on separate OR branches trips an unrelated, pre-existing validator bug
-// (`detectContradictions` doesn't respect OR-branch scoping; confirmed general, not
-// folder-specific, e.g. `{OR:[{projectId:'A'},{projectId:'B'}]}` also throws on `main`
-// today) when routed through the full generateFilterCode/validate pipeline, so a
-// builder-level (`buildFilteredTasksScript`) dedup demonstration can't be constructed
-// without tripping that orthogonal defect. Flagged separately; out of scope here.
+// existence-guard closures instead of one. The builder-level demonstration below was
+// deferred while `detectContradictions` falsely rejected same-field OR branches; the
+// OMN-226 validator fix unblocked it.
+describe('OMN-218 guard dedup at the builder level (unblocked by OMN-226)', () => {
+  it('emits ONE guard when OR branches spell the same folder with both separators', () => {
+    const { script } = buildFilteredTasksScript({
+      orBranches: [{ folder: 'Personal/Bills' }, { folder: 'Personal : Bills' }],
+    } as NormalizedTaskFilter);
+    expect(script.split(EXISTS).length - 1).toBe(1);
+  });
+
+  it('emits TWO guards for genuinely different folders across OR branches (control)', () => {
+    const { script } = buildFilteredTasksScript({
+      orBranches: [{ folder: 'Personal/Bills' }, { folder: 'Library' }],
+    } as NormalizedTaskFilter);
+    expect(script.split(EXISTS).length - 1).toBe(2);
+  });
+});

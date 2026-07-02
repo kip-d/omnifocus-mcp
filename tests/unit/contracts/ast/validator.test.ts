@@ -87,6 +87,187 @@ describe('validateFilterAST', () => {
     });
   });
 
+  describe('contradictions — AND-scope boundaries (OMN-226)', () => {
+    it('does not flag different values on the same field across OR branches', () => {
+      // AND(completed==false, OR(project==AAA, project==BBB)) — an ordinary "A or B" query
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.filter((e) => e.code === 'CONTRADICTION')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('does not flag a comparison against a NOT-wrapped comparison on the same field', () => {
+      // AND(project==AAA, NOT(project==BBB)) — satisfiable
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+          {
+            type: 'not',
+            child: { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.filter((e) => e.code === 'CONTRADICTION')).toHaveLength(0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('still flags a genuine AND contradiction alongside an OR sibling', () => {
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.some((e) => e.code === 'CONTRADICTION' && e.message.includes('task.completed'))).toBe(true);
+      expect(
+        result.errors.some((e) => e.code === 'CONTRADICTION' && e.message.includes('task.containingProject')),
+      ).toBe(false);
+    });
+
+    it('still flags contradictions across nested AND flattening', () => {
+      // AND(completed==true, AND(completed==false, flagged==true)) — genuinely unsatisfiable
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'and',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      const contradictions = result.errors.filter((e) => e.code === 'CONTRADICTION');
+      expect(contradictions).toHaveLength(1);
+      expect(contradictions[0].message).toContain('task.completed');
+    });
+
+    it('flags a contradiction between an AND scope and every branch of its nested OR', () => {
+      // AND(project==X, OR(project==Y, project==Z)) — unsatisfiable: the outer
+      // constraint is inherited by each branch, and both branches conflict with it
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'X' },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'Y' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'Z' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.some((e) => e.code === 'CONTRADICTION')).toBe(true);
+      expect(result.valid).toBe(false);
+    });
+
+    it('flags an OR branch that conflicts with the inherited AND scope even when a sibling branch survives', () => {
+      // AND(project==X, OR(project==X, project==Y)) — satisfiable via the first branch,
+      // but the second branch is dead. Dead branch = hard error, matching pre-OMN-226
+      // behavior and the recorded PR decision (loud over silently-inert).
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'X' },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'X' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'Y' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.some((e) => e.code === 'CONTRADICTION')).toBe(true);
+    });
+
+    it('reports a contradictory parent scope once, without cascading into OR branches', () => {
+      // The parent contradiction makes the whole subtree unsatisfiable; branch
+      // recursion would only re-report the same conflict per branch.
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+              { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.errors.filter((e) => e.code === 'CONTRADICTION')).toHaveLength(1);
+    });
+
+    it('flags a contradictory AND nested inside an OR branch', () => {
+      // AND(flagged==true, OR(AND(completed==true, completed==false), inInbox==true))
+      // — the first OR branch can never match; each branch is its own AND scope
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              {
+                type: 'and',
+                children: [
+                  { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+                  { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+                ],
+              },
+              { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      const contradictions = result.errors.filter((e) => e.code === 'CONTRADICTION');
+      expect(contradictions).toHaveLength(1);
+      expect(contradictions[0].message).toContain('task.completed');
+    });
+  });
+
   describe('tautologies', () => {
     it('returns warning for always-true OR', () => {
       const ast: FilterNode = {
