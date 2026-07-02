@@ -179,26 +179,41 @@ function validateLogicalNode(
 /**
  * Detect contradictions like: completed: true AND completed: false
  *
- * A contradiction is a property of a single AND scope: `==` comparisons
- * co-constrain only when conjoined. Nested `and` children flatten into the
- * parent scope (AND is associative); `or` children are scope boundaries whose
- * branches are each checked independently — `OR(x==A, x==B)` is satisfiable.
- * `not` subtrees are fully opaque: no negation reasoning is attempted, so
- * `AND(x==A, NOT(x==B))` (satisfiable) is correctly not flagged, and
- * `AND(x==A, NOT(x==A))` (unsatisfiable) is knowingly not detected.
+ * A contradiction is a property of an AND path: `==` comparisons co-constrain
+ * when conjoined, including across an `or` boundary — each OR branch INHERITS
+ * its ancestor AND scope's comparisons (`AND(x==A, OR(x==B, x==C))` is
+ * unsatisfiable), while sibling branches never mix (`OR(x==A, x==B)` is
+ * satisfiable). Nested `and` children flatten into the parent scope (AND is
+ * associative). A scope that already contradicts is reported once and not
+ * descended into — its whole subtree is unsatisfiable. `not` subtrees are
+ * fully opaque: no negation reasoning is attempted, so `AND(x==A, NOT(x==B))`
+ * (satisfiable) is correctly not flagged, and `AND(x==A, NOT(x==A))`
+ * (unsatisfiable) is knowingly not detected.
  */
 function detectContradictions(ast: FilterNode, errors: ValidationError[]): void {
-  switch (ast.type) {
+  visitForContradictions(ast, [], errors);
+}
+
+function visitForContradictions(node: FilterNode, inherited: ComparisonNode[], errors: ValidationError[]): void {
+  switch (node.type) {
     case 'and': {
-      const comparisons: ComparisonNode[] = [];
+      const comparisons = [...inherited];
       const orBoundaries: OrNode[] = [];
-      collectAndScope(ast, comparisons, orBoundaries);
+      collectAndScope(node, comparisons, orBoundaries);
+      const before = errors.length;
       checkScopeForContradictions(comparisons, errors);
-      orBoundaries.forEach((or) => detectContradictions(or, errors));
+      if (errors.length > before) return; // scope unsatisfiable — deeper checks would re-report it
+      orBoundaries.forEach((or) => visitForContradictions(or, comparisons, errors));
       break;
     }
     case 'or':
-      ast.children.forEach((child) => detectContradictions(child, errors));
+      node.children.forEach((child) => {
+        if (child.type === 'comparison') {
+          checkScopeForContradictions([...inherited, child], errors);
+        } else {
+          visitForContradictions(child, inherited, errors);
+        }
+      });
       break;
   }
 }
