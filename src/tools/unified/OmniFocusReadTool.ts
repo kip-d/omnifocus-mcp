@@ -564,9 +564,16 @@ PERFORMANCE:
     // Project fields (after counting)
     tasks = projectFields(tasks, compiled.fields);
 
+    // OMN-223: suppress the dashboard summary on narrow lookups, mirroring the
+    // project side's rule (name || text || id → no summary). The id key is
+    // handled by the fast path above and never reaches here; it stays in the
+    // guard for parity and as defense against future routing changes.
+    const isNarrowLookup = Boolean(filter.name || filter.text || filter.id);
+
     return createTaskResponseV2('tasks', tasks, metadata, {
       population: totalMatched,
       offset: compiled.offset || 0,
+      summary: !isNarrowLookup,
     });
   }
 

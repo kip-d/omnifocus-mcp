@@ -460,6 +460,87 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── OMN-223: task summary suppression on narrow lookups ───────
+  // Extends the OMN-19 rule (projects: name || text || id → no summary) to the
+  // task main query path. OMN-219 covered only the id fast path; text/name task
+  // lookups still emitted the full dashboard summary — inconsistent with projects.
+  describe('OMN-223 task summary suppression on narrow lookups', () => {
+    const tasksPayload = {
+      success: true as const,
+      data: {
+        tasks: [{ id: 't1', name: 'Review budget', completed: false, flagged: false, blocked: false }],
+        metadata: { total_matched: 1 },
+      },
+    };
+
+    it('strips summary when text.contains filter is present (lookup-by-text)', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { text: { contains: 'budget' } } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
+    });
+
+    it('strips summary when name.contains filter is present (lookup-by-name)', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { name: { contains: 'budget' } } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
+    });
+
+    it('strips summary on mode:"search" with a text filter', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'search', filters: { text: { contains: 'budget' } } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
+    });
+
+    it('preserves summary for broad browses (no narrow filter)', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+      expect(result.summary.total_count).toBe(1);
+    });
+
+    it('preserves summary for flagged-only browses (dashboard-like)', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', filters: { flagged: true } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+
+    it('preserves summary for mode-only browses (mode:"overdue")', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'overdue' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+  });
+
   // ─── OMN-40: project id-lookup correctness ─────────────────────
 
   describe('OMN-40 project id-lookup', () => {
