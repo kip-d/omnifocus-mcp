@@ -32,8 +32,13 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
   return 'withCorrelation' in tool && typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
-// eslint-disable-next-line sonarjs/deprecation
-export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
+export function registerTools(
+  // eslint-disable-next-line sonarjs/deprecation
+  server: Server,
+  cache: CacheManager,
+  pendingOperations?: Set<Promise<unknown>>,
+  startupGate?: Promise<void>,
+): void {
   logger.info(
     'OmniFocus MCP v3.0.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)',
   );
@@ -101,6 +106,26 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
 
     // Create execution promise and track it to prevent premature server exit
     const executionPromise = (async () => {
+      // OMN-228: the transport connects before the startup cache warm finishes;
+      // tool calls wait here until the warm completes so no MCP-originated
+      // osascript runs concurrently with the warm queries. The gate is built
+      // never-rejecting; if a future caller passes a rejectable promise the
+      // rejection is logged loudly but must never wedge tool dispatch.
+      if (startupGate) {
+        const gateStart = Date.now();
+        await startupGate.catch((error: unknown) => {
+          correlatedLogger.warn('Startup gate rejected; proceeding with tool execution', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+        const gateWaitMs = Date.now() - gateStart;
+        if (gateWaitMs > 100) {
+          correlatedLogger.info(`Tool ${name} waited ${gateWaitMs}ms for the startup cache warm`);
+        }
+      }
+      // executionTime is measured from AFTER the gate so it reports actual
+      // tool work; gate wait is logged separately above (OMN-228 review).
+      const execStart = Date.now();
       try {
         // Pass correlation context to the tool if it supports it
         let result: unknown;
@@ -114,7 +139,7 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
         }
 
         // Log successful execution with timing
-        const executionTime = Date.now() - startTime;
+        const executionTime = Date.now() - execStart;
         correlatedLogger.info(`Tool execution completed: ${name}`, {
           executionTime,
           success: true,
@@ -130,7 +155,7 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
         };
       } catch (error) {
         // Log execution failure with timing and correlation
-        const executionTime = Date.now() - startTime;
+        const executionTime = Date.now() - execStart;
         correlatedLogger.error(`Tool execution failed: ${name}`, {
           executionTime,
           success: false,

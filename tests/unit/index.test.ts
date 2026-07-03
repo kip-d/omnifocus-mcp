@@ -73,7 +73,7 @@ const getVersionInfoMock = vi.fn(() => ({
 
 const registerPromptsMock = vi.fn();
 let lastRegisteredPendingOps: Set<Promise<unknown>> | undefined;
-const registerToolsMock = vi.fn(async (_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+const registerToolsMock = vi.fn((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
   lastRegisteredPendingOps = pendingOps;
 });
 
@@ -119,7 +119,7 @@ vi.mock('../../src/omnifocus/OmniAutomation.js', () => ({
   setPendingOperationsTracker: setPendingOperationsTrackerMock,
 }));
 
-function resetEnv(overrides: NodeJS.ProcessEnv = {}) {
+function resetEnv(overrides: Record<string, string | undefined> = {}) {
   process.env = { ...originalEnv, ...overrides };
 }
 
@@ -148,7 +148,7 @@ describe('server entrypoint', () => {
     cacheWarmerInstances.length = 0;
     CacheWarmerMock.mockClear();
     registerToolsMock.mockClear();
-    registerToolsMock.mockImplementation(async (_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
       lastRegisteredPendingOps = pendingOps;
     });
     registerPromptsMock.mockClear();
@@ -167,6 +167,107 @@ describe('server entrypoint', () => {
     process.stdin.removeAllListeners('close');
     process.stdout.removeAllListeners('error');
     process.stderr.removeAllListeners('error');
+  });
+
+  it('connects the transport before cache warming completes (OMN-228)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development', CI: 'false' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    const warmDeferred = createDeferred<{ enabled: boolean; results: unknown[] }>();
+    CacheWarmerMock.mockImplementationOnce((_cache, options) => {
+      const instance = { warmCache: vi.fn(() => warmDeferred.promise), options };
+      cacheWarmerInstances.push(instance);
+      return instance;
+    });
+    const { runServer } = await importEntry();
+
+    // runServer must return (transport connected) while the warm is still in flight
+    await runServer();
+
+    expect(serverConnectMock).toHaveBeenCalledTimes(1);
+    expect(cacheWarmerInstances[0].warmCache).toHaveBeenCalledTimes(1);
+
+    // The warm must be tracked as a pending operation so the stdin-EOF
+    // pre-warm path (node dist/index.js < /dev/null) waits for it to finish.
+    expect(lastRegisteredPendingOps?.size).toBe(1);
+
+    warmDeferred.resolve({ enabled: true, results: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(lastRegisteredPendingOps?.size).toBe(0);
+  });
+
+  it('passes a startup gate to registerTools that opens when the warm completes (OMN-228)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development', CI: 'false' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    const warmDeferred = createDeferred<{ enabled: boolean; results: unknown[] }>();
+    CacheWarmerMock.mockImplementationOnce((_cache, options) => {
+      const instance = { warmCache: vi.fn(() => warmDeferred.promise), options };
+      cacheWarmerInstances.push(instance);
+      return instance;
+    });
+    let capturedGate: Promise<void> | undefined;
+    registerToolsMock.mockImplementation(
+      (_server, _cache, pendingOps: Set<Promise<unknown>>, startupGate?: Promise<void>) => {
+        lastRegisteredPendingOps = pendingOps;
+        capturedGate = startupGate;
+      },
+    );
+    const { runServer } = await importEntry();
+
+    await runServer();
+
+    expect(capturedGate).toBeInstanceOf(Promise);
+    let gateOpen = false;
+    void capturedGate!.then(() => {
+      gateOpen = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(gateOpen).toBe(false);
+
+    warmDeferred.resolve({ enabled: true, results: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(gateOpen).toBe(true);
+  });
+
+  it('opens the startup gate even when the warm fails (OMN-228)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development', CI: 'false' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    CacheWarmerMock.mockImplementationOnce((_cache, options) => {
+      const instance = { warmCache: vi.fn(() => Promise.reject(new Error('warm exploded'))), options };
+      cacheWarmerInstances.push(instance);
+      return instance;
+    });
+    let capturedGate: Promise<void> | undefined;
+    registerToolsMock.mockImplementation(
+      (_server, _cache, pendingOps: Set<Promise<unknown>>, startupGate?: Promise<void>) => {
+        lastRegisteredPendingOps = pendingOps;
+        capturedGate = startupGate;
+      },
+    );
+    const { runServer } = await importEntry();
+
+    await runServer();
+
+    // Gate must resolve (not reject, not hang) so tools are never blocked forever
+    await expect(capturedGate).resolves.toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(lastRegisteredPendingOps?.size).toBe(0);
+  });
+
+  it('passes an already-open gate when warming is disabled (OMN-228)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'test', SANDBOX_GUARD_ENABLED: 'true' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    let capturedGate: Promise<void> | undefined;
+    registerToolsMock.mockImplementation(
+      (_server, _cache, pendingOps: Set<Promise<unknown>>, startupGate?: Promise<void>) => {
+        lastRegisteredPendingOps = pendingOps;
+        capturedGate = startupGate;
+      },
+    );
+    const { runServer } = await importEntry();
+
+    await runServer();
+
+    await expect(capturedGate).resolves.toBeUndefined();
   });
 
   it('initializes the server, registers tools, and warms the cache', async () => {
@@ -188,7 +289,12 @@ describe('server entrypoint', () => {
     expect(registerPromptsMock).toHaveBeenCalledTimes(1);
     expect(registerToolsMock).toHaveBeenCalledTimes(1);
     expect(lastRegisteredPendingOps).toBeInstanceOf(Set);
-    expect(registerToolsMock).toHaveBeenCalledWith(expect.any(Object), cacheManager, lastRegisteredPendingOps);
+    expect(registerToolsMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      cacheManager,
+      lastRegisteredPendingOps,
+      expect.any(Promise),
+    );
     expect(cacheWarmer.options.enabled).toBe(true);
     expect(cacheWarmer.warmCache).toHaveBeenCalledTimes(1);
     expect(cacheManager.getStats).toHaveBeenCalledTimes(1);
@@ -214,7 +320,7 @@ describe('server entrypoint', () => {
     // vitest-inherited NODE_ENV='test' would trip assertSandboxGuardAtStartup().
     resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
     const deferred = createDeferred<void>();
-    registerToolsMock.mockImplementation(async (_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
       lastRegisteredPendingOps = pendingOps;
     });
     const { runServer } = await importEntry();

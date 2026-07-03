@@ -88,7 +88,7 @@ export async function runServer() {
   }
   startupTimer.mark('permsEnd');
 
-  // Warm cache with frequently accessed data (blocking — awaited before the transport connects)
+  // Warm cache with frequently accessed data (backgrounded — see OMN-228 block below)
   // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
   // ENABLE_CACHE_WARMING=true overrides test mode (for integration tests that want realistic behavior)
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
@@ -113,8 +113,14 @@ export async function runServer() {
     },
   });
 
-  // Warm cache BEFORE accepting requests to prevent concurrent osascript execution
-  // This ensures batch operations don't run concurrently with cache warming
+  // OMN-228: the warm runs in the BACKGROUND so the transport connects (and the
+  // MCP initialize handshake answers) immediately instead of sitting behind a
+  // 13-60s warm inside the client's ~30s connect window. Tool calls gate on
+  // `startupGate` (see registerTools), which preserves the invariant the old
+  // blocking warm enforced: no MCP-originated osascript runs concurrently with
+  // the warm queries. The gate always resolves — a failed warm must never wedge
+  // the server.
+  let startupGate: Promise<void> = Promise.resolve();
   if (isCIEnvironment && !forceCacheWarming) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
   } else if (isTestEnvironment && !forceCacheWarming) {
@@ -125,31 +131,53 @@ export async function runServer() {
     if (forceCacheWarming) {
       logger.info('Cache warming enabled via ENABLE_CACHE_WARMING override');
     }
-    logger.info('Warming cache before accepting requests...');
-    try {
-      await cacheWarmer.warmCache();
-      logger.info('Cache warming completed successfully');
-      // Emit cache statistics after warm‑up to verify hit‑rate potential
-      const stats = cacheManager.getStats();
-      logger.debug('Post‑warm cache stats:', JSON.stringify(stats));
-    } catch (error) {
-      logger.warn('Cache warming failed:', error);
-    }
+    logger.info('Warming cache in background; transport connects immediately (OMN-228)...');
+    const warmPromise = (async () => {
+      try {
+        await cacheWarmer.warmCache();
+        logger.info('Cache warming completed successfully');
+        // Emit cache statistics after warm‑up to verify hit‑rate potential
+        const stats = cacheManager.getStats();
+        logger.debug('Post‑warm cache stats:', JSON.stringify(stats));
+      } catch (error) {
+        logger.warn('Cache warming failed:', error);
+      }
+    })();
+    startupGate = warmPromise;
+    // Track the warm as a pending operation so the stdin-EOF shutdown path
+    // still runs it to completion — the of-mcp-redeploy pre-warm
+    // (node dist/index.js < /dev/null) depends on the full warm finishing
+    // before the process exits.
+    // Consequence (accepted): a real client that disconnects mid-warm delays
+    // exit until the warm settles (bounded by the warm timeout above) — an
+    // improvement over the old unbounded orphan, but slower than an instant
+    // exit. Both cases present as identical stdin EOFs; exiting early for
+    // real clients would need an explicit signal (e.g. an env var set by the
+    // redeploy script) — not added until the delay is observed to matter.
+    pendingOperations.add(warmPromise);
+    logger.debug(`Added cache warm to pending operations (size: ${pendingOperations.size})`);
+    void warmPromise.finally(() => {
+      pendingOperations.delete(warmPromise);
+      logger.debug(`Removed cache warm from pending operations (size: ${pendingOperations.size})`);
+    });
   }
+  // warmEnd now marks warm LAUNCH, not completion — the STARTUP COMPLETE line's
+  // `warm` segment measures launch cost (~0ms); warm duration is logged
+  // separately by the cache-warmer on completion.
   startupTimer.mark('warmEnd');
 
   // Check if we're running in HTTP mode
   if (cliConfig.httpMode) {
-    await runHttpServer(cacheManager, cliConfig);
+    await runHttpServer(cacheManager, cliConfig, startupGate);
   } else {
-    await runStdioServer(cacheManager);
+    await runStdioServer(cacheManager, startupGate);
   }
 }
 
 /**
  * Runs the server in stdio mode (original behavior)
  */
-async function runStdioServer(cacheManager: CacheManager) {
+async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<void>) {
   logger.info('Starting server in stdio mode');
 
   // Create server instance with MCP 2025-11-25 metadata
@@ -172,7 +200,7 @@ async function runStdioServer(cacheManager: CacheManager) {
   );
 
   // Register all tools and prompts AFTER server creation but BEFORE connection
-  await registerTools(stdioServer, cacheManager, pendingOperations);
+  await registerTools(stdioServer, cacheManager, pendingOperations, startupGate);
   registerPrompts(stdioServer);
   startupTimer.mark('registerEnd');
 
@@ -193,9 +221,15 @@ async function runStdioServer(cacheManager: CacheManager) {
       }
     }
 
-    // Close server connection cleanly, allowing transport to flush responses
+    // Close server connection cleanly, allowing transport to flush responses.
+    // Wrapped: on an EPIPE-triggered exit the pipe is already dead and the
+    // flush may itself throw — that must not prevent the exit.
     logger.info('Closing server connection...');
-    await stdioServer.close();
+    try {
+      await stdioServer.close();
+    } catch (error) {
+      logger.warn('Server close failed during shutdown (continuing to exit):', error);
+    }
 
     logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
@@ -209,11 +243,15 @@ async function runStdioServer(cacheManager: CacheManager) {
     gracefulExit('stdin stream closed');
   });
 
-  // Handle EPIPE errors when Claude Desktop disconnects abruptly
+  // Handle EPIPE errors when Claude Desktop disconnects abruptly.
+  // OMN-228 review: EPIPE routes through gracefulExit (not an immediate
+  // process.exit) so an in-flight background cache warm in pendingOperations
+  // drains before exit — otherwise the warm's osascript child is orphaned
+  // mid-script, exactly the gap the pendingOperations tracking closes for
+  // the stdin-EOF path.
   process.stdout.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
-      logger.info('stdout EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
+      gracefulExit('stdout EPIPE - client disconnected');
     } else {
       logger.error('stdout error:', err);
       process.exit(1);
@@ -222,8 +260,7 @@ async function runStdioServer(cacheManager: CacheManager) {
 
   process.stderr.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
-      logger.info('stderr EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
+      gracefulExit('stderr EPIPE - client disconnected');
     } else {
       console.error('stderr error:', err);
       process.exit(1);
@@ -238,14 +275,18 @@ async function runStdioServer(cacheManager: CacheManager) {
 /**
  * Runs the server in HTTP mode
  */
-async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
+async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, startupGate: Promise<void>) {
   logger.info('Starting server in HTTP mode', {
     port: cliConfig.port,
     host: cliConfig.host,
     authEnabled: !!cliConfig.authToken,
   });
 
-  // Validate CLI configuration
+  // Validate CLI configuration.
+  // OMN-228 review note: this exit deliberately does NOT drain the background
+  // cache warm — a config typo should fail fast, not wait out a 13-60s warm.
+  // The warm's in-flight osascript (if any) runs its one script to completion
+  // and exits on its own; the orphan is bounded by the script timeout.
   try {
     validateCLIConfig(cliConfig);
   } catch (error) {
@@ -256,7 +297,7 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
   }
 
   // Create session manager
-  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken);
+  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken, undefined, startupGate);
   sessionManager.startCleanupInterval();
 
   // Create HTTP server manager
@@ -270,6 +311,14 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
+    // OMN-228 review: a listen failure (port in use) is a real deployment
+    // scenario — drain the in-flight background cache warm before exiting so
+    // its osascript child isn't orphaned against OmniFocus's single
+    // automation channel right when the operator retries the start.
+    if (pendingOperations.size > 0) {
+      logger.info(`Waiting for ${pendingOperations.size} pending operations (cache warm) before exit...`);
+      await Promise.allSettled([...pendingOperations]);
+    }
     process.exit(1);
   }
   startupTimer.mark('ready');
