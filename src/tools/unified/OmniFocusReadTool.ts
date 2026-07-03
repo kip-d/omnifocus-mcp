@@ -178,6 +178,17 @@ function resolveFieldsMode(
 /**
  * Build the full task query: resolve mode, augment filters, inject fields, build script.
  */
+/**
+ * OMN-19/OMN-223: a filter targeting specific items by name, text, or id is a
+ * "narrow lookup" — the dashboard summary block is noise there and is suppressed.
+ * Shared by the task and project paths so the rule has a single edit point.
+ * Top-level keys only: text/name inside OR branches do not narrow (both paths;
+ * tracked as OMN-229).
+ */
+function isNarrowLookupFilter(filter: { name?: unknown; text?: unknown; id?: unknown }): boolean {
+  return Boolean(filter.name || filter.text || filter.id);
+}
+
 function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
   if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
   const limit = compiled.limit || 25;
@@ -565,10 +576,10 @@ PERFORMANCE:
     tasks = projectFields(tasks, compiled.fields);
 
     // OMN-223: suppress the dashboard summary on narrow lookups, mirroring the
-    // project side's rule (name || text || id → no summary). The id key is
-    // handled by the fast path above and never reaches here; it stays in the
-    // guard for parity and as defense against future routing changes.
-    const isNarrowLookup = Boolean(filter.name || filter.text || filter.id);
+    // project side's rule. The id key is handled by the fast path above and
+    // never reaches here; it stays in the shared predicate for parity and as
+    // defense against future routing changes.
+    const isNarrowLookup = isNarrowLookupFilter(filter);
 
     return createTaskResponseV2('tasks', tasks, metadata, {
       population: totalMatched,
@@ -972,7 +983,7 @@ PERFORMANCE:
     // Status- and folder-only browses still return the summary — those look
     // dashboard-ish and users may be scanning review state. See Linear OMN-19
     // for the full option trade-off (explicit param vs heuristic vs slim mode).
-    const isNarrowLookup = Boolean(projectFilter.name || projectFilter.text || projectFilter.id);
+    const isNarrowLookup = isNarrowLookupFilter(projectFilter);
 
     // Build cache key
     const cacheParams = { ...projectFilter, limit, includeStats };
