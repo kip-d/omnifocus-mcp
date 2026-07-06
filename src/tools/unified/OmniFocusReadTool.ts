@@ -586,8 +586,11 @@ PERFORMANCE:
       metadata.flagged_count = counts.flaggedCount;
     }
 
-    // Project fields (after counting)
-    tasks = projectFields(tasks, compiled.fields);
+    // Project fields (after counting). OMN-241: projectFields() now returns the
+    // honest partial shape (OmniFocusTask | ProjectedTask), so this is a
+    // separate variable rather than reassigning `tasks` (which other code
+    // above relies on being OmniFocusTask[]).
+    const projectedTasks = projectFields(tasks, compiled.fields);
 
     // OMN-223: suppress the dashboard summary on narrow lookups, mirroring the
     // project side's rule. The id key is handled by the fast path above and
@@ -595,7 +598,7 @@ PERFORMANCE:
     // defense against future routing changes.
     const isNarrowLookup = isNarrowLookupFilter(filter);
 
-    return createTaskResponseV2('tasks', tasks, metadata, {
+    return createTaskResponseV2('tasks', projectedTasks, metadata, {
       population: totalMatched,
       offset: compiled.offset || 0,
       summary: !isNarrowLookup,

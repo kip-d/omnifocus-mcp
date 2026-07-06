@@ -46,3 +46,17 @@ export interface OmniFocusTask {
   reason?: 'overdue' | 'due_soon' | 'flagged' | null; // today mode — category the task was bucketed under
   daysOverdue?: number; // today mode — 0 when not overdue
 }
+
+/**
+ * OMN-241: honest type for the output of `projectFields()` in
+ * task-query-pipeline.ts. A projected task is a partial slice of
+ * OmniFocusTask — only `id` plus the caller-selected fields are
+ * guaranteed present. Previously projectFields() built this same
+ * shape (Partial<OmniFocusTask> & {id}) but cast it `as OmniFocusTask`,
+ * lying to the type system: downstream code could read any field as if
+ * it were always populated, with no compile-time signal that most
+ * fields are conditionally absent. Consumers that need specific fields
+ * beyond `id` must narrow (e.g. `if (task.name) ...`) or accept
+ * ProjectedTask and only touch fields they've checked.
+ */
+export type ProjectedTask = Partial<OmniFocusTask> & Pick<OmniFocusTask, 'id'>;
