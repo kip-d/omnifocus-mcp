@@ -193,8 +193,11 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
     // D3: total_matched must NOT be present
     expect('total_matched' in meta, 'metadata.total_matched must be absent (D3)').toBe(false);
 
-    // summary.total_count alignment
-    expect(result.summary?.total_count, 'summary.total_count must equal full population').toBe(TASK_COUNT);
+    // OMN-223: a top-level name filter is a narrow lookup — the dashboard
+    // summary block is deliberately suppressed for this query shape, so the
+    // count-honesty contract lives entirely in metadata (asserted above).
+    // Pin the suppression so an accidental summary revival is caught here.
+    expect(result.summary, 'summary must be suppressed on name narrow lookups (OMN-223)').toBeUndefined();
   }, 60_000);
 
   it('R4 agreement: countOnly reports same total_count as full query', async () => {
