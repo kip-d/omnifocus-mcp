@@ -68,6 +68,10 @@ export function parseCLIArgs(): CLIConfig {
         printHelp();
         process.exit(0);
         break;
+      default:
+        logger.error(`unknown argument: ${args[i]}`);
+        process.stderr.write(getUsageText());
+        process.exit(1);
     }
   }
 
@@ -98,14 +102,22 @@ export function validateCLIConfig(config: CLIConfig): void {
     if (!config.host || config.host.trim() === '') {
       throw new Error('Host cannot be empty in HTTP mode.');
     }
+
+    if (!config.authToken) {
+      logger.warn(
+        'HTTP transport is enabled with NO authentication (MCP_AUTH_TOKEN is not set) — ' +
+          'any client that can reach this endpoint can call every tool with no credential check. ' +
+          'Set MCP_AUTH_TOKEN to require a bearer token, or ensure this endpoint is not reachable off-host.',
+      );
+    }
   }
 }
 
 /**
- * Prints help information for the CLI
+ * Usage text shared by --help (stdout) and the unknown-argument error path (stderr)
  */
-export function printHelp(): void {
-  console.log(`
+function getUsageText(): string {
+  return `
 Usage: omnifocus-mcp-cached [options]
 
 Options:
@@ -132,5 +144,12 @@ Examples:
   export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
   export MCP_PORT=3000
   node dist/index.js --http
-`);
+`;
+}
+
+/**
+ * Prints help information for the CLI
+ */
+export function printHelp(): void {
+  console.log(getUsageText());
 }
