@@ -12,9 +12,8 @@ Check here BEFORE debugging.
 | `Expected object, received string`         | `inputSchema` override wasn't hand-crafted for the discriminated union |
 | Works in CLI, fails in Claude Desktop      | Schema falls through to `{type: "string"}`                             |
 
-**Fix:** There is no automatic Zod→JSON-Schema conversion — `get inputSchema()` in `src/tools/base.ts` throws if a
-subclass doesn't override it (grep for `must override inputSchema`). Hand-craft the `oneOf` variant in the tool's own
-`inputSchema` override; see CLAUDE.md's "Dual-Schema Architecture" section for the pattern:
+**Fix:** Hand-craft the `oneOf` variant in the tool's own `inputSchema` override (grep for `must override inputSchema`);
+see CLAUDE.md's "Dual-Schema Architecture" section for why:
 
 ```typescript
 {
@@ -146,11 +145,11 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ## Can't Find Helper
 
-| Function                         | File                  |
-| -------------------------------- | --------------------- |
-| `safeGet()`, `validateProject()` | helpers.ts            |
-| `bridgeSetTags()`                | minimal-tag-bridge.ts |
-| `getBridgeOperations()`          | bridge-helpers.ts     |
+| Function / need                  | File                                      |
+| -------------------------------- | ----------------------------------------- |
+| `safeGet()`, project validation  | `src/omnifocus/scripts/shared/helpers.ts` |
+| Tag assignment (OmniJS `addTag`) | `src/contracts/ast/mutation/emitter.ts`   |
+| OmniJS script emission           | `src/contracts/ast/` builders             |
 
 **Always:** Use `getUnifiedHelpers()` (~16KB, includes everything).
 
