@@ -562,6 +562,48 @@ describe('projectFields', () => {
     expect(result[0].id).toBe('1');
     expect(result[0].estimatedMinutes).toBeUndefined();
   });
+
+  // OMN-222: pin projection of fields added to OmniFocusTask to close the
+  // `as keyof OmniFocusTask` masking gap — these previously reached
+  // projectFields() only via the widening cast, absent from the interface.
+  it('projects newly-typed fields (isProjectRoot, hasNote, plannedDate, repetitionRule)', () => {
+    const tasksWithNewFields: OmniFocusTask[] = [
+      {
+        id: '2',
+        name: 'Task Two',
+        completed: false,
+        flagged: false,
+        blocked: false,
+        isProjectRoot: true,
+        hasNote: true,
+        plannedDate: '2026-01-15',
+        repetitionRule: {
+          ruleString: 'FREQ=DAILY',
+          scheduleType: 'DueDate',
+          anchorDateKey: null,
+          catchUpAutomatically: false,
+        },
+      },
+    ];
+
+    const result = projectFields(tasksWithNewFields, [
+      'id',
+      'isProjectRoot',
+      'hasNote',
+      'plannedDate',
+      'repetitionRule',
+    ]);
+
+    expect(result[0].isProjectRoot).toBe(true);
+    expect(result[0].hasNote).toBe(true);
+    expect(result[0].plannedDate).toBe('2026-01-15');
+    expect(result[0].repetitionRule).toEqual({
+      ruleString: 'FREQ=DAILY',
+      scheduleType: 'DueDate',
+      anchorDateKey: null,
+      catchUpAutomatically: false,
+    });
+  });
 });
 
 describe('scoreForSmartSuggest', () => {

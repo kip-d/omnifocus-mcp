@@ -10,6 +10,20 @@
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 import type { TaskFilter } from '../../contracts/filters.js';
 import type { SortOption } from './filter-types.js';
+import type { TaskFieldEnum } from '../unified/schemas/read-schema.js';
+import type { z } from 'zod';
+
+// OMN-222: compile-time guard closing the `as keyof OmniFocusTask` masking gap
+// below. If a future TaskFieldEnum member (the set callers can request via
+// `fields:[...]`) is added without a matching OmniFocusTask interface member,
+// this line fails to build instead of silently widening the cast at runtime.
+// One-directional on purpose: OmniFocusTask legitimately carries members
+// (id, name, completed, ...) that aren't user-selectable, so the reverse
+// direction is expected to have extras.
+type _TaskFieldsAreKnownKeys =
+  Exclude<z.output<typeof TaskFieldEnum>, keyof OmniFocusTask> extends never ? true : never;
+const _taskFieldsAreKnownKeys: _TaskFieldsAreKnownKeys = true;
+void _taskFieldsAreKnownKeys;
 
 // =============================================================================
 // MODE-SPECIFIC FILTER AUGMENTATION
@@ -290,6 +304,13 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
 
     selectedFields.forEach((field) => {
       if (field in task) {
+        // OMN-222: selectedFields is `string[]` at this call site (CompiledQuery.fields
+        // is shared across query types), so this cast can't be narrowed away without a
+        // wider refactor of that shared type. The `_taskFieldsAreKnownKeys` guard above
+        // makes drift safe: every literal TaskFieldEnum can emit is asserted to be a
+        // real OmniFocusTask member at compile time, so a future field added to the
+        // enum without a matching interface member fails the build there instead of
+        // silently widening this cast.
         const typedField = field as keyof OmniFocusTask;
         (projectedTask as Record<string, unknown>)[field] = task[typedField];
       }
