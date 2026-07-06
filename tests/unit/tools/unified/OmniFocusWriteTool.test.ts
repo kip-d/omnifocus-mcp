@@ -1073,6 +1073,123 @@ describe('OmniFocusWriteTool task operations', () => {
       buildSpy.mockRestore();
     });
 
+    it('OMN-239: a delete failure mid-rollback reports partial rollback with orphaned item IDs, not unconditional success', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      // Call 1: batch create — t1 and t2 succeed, t3 fails (triggers atomic rollback).
+      // Rollback runs in reverse creation order: t2's delete first, then t1's.
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: 'real-2', success: true },
+              { tempId: 't3', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // Rollback delete for t2 fails — it stays orphaned in OmniFocus.
+        .mockRejectedValueOnce(new Error('Delete failed: item is locked'))
+        // Rollback delete for t1 succeeds.
+        .mockResolvedValueOnce({ success: true, data: {} });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: true,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+            { operation: 'create', target: 'task', data: { tempId: 't3', name: 'C', parentTaskId: 'MISSING' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      const items = result.data.results as Array<Record<string, unknown>>;
+
+      // t2's delete failed — it must NOT be reported as a successfully-undone
+      // create (that would lie about an orphaned object). It must remain
+      // visibly flagged so the client can surface/clean it up.
+      const orphaned = items.find((r) => r.tempId === 't2');
+      expect(orphaned).toBeDefined();
+      expect(orphaned!.success).toBe(true);
+      expect(String((orphaned as { warnings?: string[] }).warnings)).toMatch(
+        /orphan|not (?:be )?remov|rollback.*fail/i,
+      );
+
+      // t1's delete succeeded — it's genuinely rolled back.
+      const undone = items.find((r) => r.tempId === 't1');
+      expect(undone).toBeDefined();
+      expect(undone!.success).toBe(false);
+      expect(String(undone!.error)).toContain('rolled back');
+
+      // The phase-level error must not claim a clean, full rollback, and must
+      // name the orphaned item so it's actionable.
+      const rollbackError = items.find(
+        (r) => r.operation === 'create' && r.id === null && !('tempId' in r) && typeof r.error === 'string',
+      );
+      expect(rollbackError).toBeDefined();
+      expect(String(rollbackError!.error)).not.toMatch(/^Atomic batch rolled back:/);
+      expect(String(rollbackError!.error)).toContain('real-2');
+      buildSpy.mockRestore();
+    });
+
+    it('OMN-239 control: when every rollback delete succeeds, the batch still reports a full clean rollback', async () => {
+      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        .mockResolvedValue({ success: true, data: {} });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: true,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B', parentTaskId: 'MISSING' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      const items = result.data.results as Array<Record<string, unknown>>;
+      const undone = items.find((r) => r.tempId === 't1');
+      expect(undone!.success).toBe(false);
+      expect(String(undone!.error)).toContain('rolled back');
+      // No orphan warnings anywhere — the rollback was clean.
+      expect(items.some((r) => JSON.stringify((r as { warnings?: string[] }).warnings ?? '').match(/orphan/i))).toBe(
+        false,
+      );
+      const rollbackError = items.find(
+        (r) => r.operation === 'create' && r.id === null && !('tempId' in r) && typeof r.error === 'string',
+      );
+      expect(String(rollbackError!.error)).toContain('Atomic batch rolled back:');
+      buildSpy.mockRestore();
+    });
+
     it('slow path: batch task create passes repetitionRule to the builder with NO second script', async () => {
       // repetitionRule on an item forces the per-item path; the rule must ride
       // the create script itself (applyRepetitionRuleSilently is gone).

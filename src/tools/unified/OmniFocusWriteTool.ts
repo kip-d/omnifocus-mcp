@@ -144,6 +144,9 @@ BATCH OPERATIONS:
 - createSequentially: true (respects dependencies)
 - returnMapping: true (returns tempId → realId map)
 - stopOnError: true (halt on first failure)
+- atomicOperation: false (best-effort rollback of prior creations if any fail; if a
+  compensating delete itself fails, the response reports rolledBack: "partial" plus a
+  rollbackFailures list of orphaned items — never assume a clean undo without checking)
 - Example with subtasks:
   { "mutation": { "operation": "batch", "operations": [
     { "operation": "create", "target": "task", "data": { "name": "Parent", "tempId": "p1", "project": "My Project" } },
@@ -1636,18 +1639,40 @@ SAFETY:
       // operation:'unknown'/error:'undefined'. The halt/rollback itself is a
       // compact phase-level error; errors[] is reserved for that shape.
       if (createResult.success === false && createResult.rolledBack) {
-        // Successes were undone by the rollback — mark them so the flattened
-        // rows don't claim surviving creates.
+        // OMN-239: a compensating delete can itself fail — that item is still
+        // sitting in OmniFocus, not "rolled back". Only mark a success row as
+        // undone when its rollback delete actually succeeded; orphaned items
+        // stay `success: true` with a warning so the client can see and clean
+        // them up, instead of being lied to about a clean rollback.
+        const orphanedRealIds = new Set((createResult.rollbackFailures ?? []).map((f) => f.realId));
         results.created.push({
           ...createResult,
-          results: createResult.results.map((r) =>
-            r.success ? { ...r, success: false, error: 'Created, then rolled back (atomicOperation)' } : r,
-          ),
+          results: createResult.results.map((r) => {
+            if (!r.success) return r;
+            if (r.realId && orphanedRealIds.has(r.realId)) {
+              return {
+                ...r,
+                warnings: [
+                  ...(r.warnings ?? []),
+                  'Rollback delete failed: this item was NOT removed and may be orphaned in OmniFocus',
+                ],
+              };
+            }
+            return { ...r, success: false, error: 'Created, then rolled back (atomicOperation)' };
+          }),
         });
-        results.errors.push({
-          phase: 'create',
-          error: `Atomic batch rolled back: ${createResult.failed} of ${createResult.totalItems} creates failed; all created items were removed`,
-        });
+        if (createResult.rolledBack === 'partial') {
+          const orphanList = (createResult.rollbackFailures ?? []).map((f) => `${f.type}:${f.realId}`).join(', ');
+          results.errors.push({
+            phase: 'create',
+            error: `Atomic batch rollback PARTIALLY failed: ${createResult.failed} of ${createResult.totalItems} creates failed; ${createResult.rollbackFailures?.length ?? 0} created item(s) could NOT be removed and remain in OmniFocus (orphaned): ${orphanList}`,
+          });
+        } else {
+          results.errors.push({
+            phase: 'create',
+            error: `Atomic batch rolled back: ${createResult.failed} of ${createResult.totalItems} creates failed; all created items were removed`,
+          });
+        }
         if (compiled.stopOnError) hadError = true;
       } else if (createResult.failed > 0 && compiled.stopOnError) {
         results.created.push(createResult);
@@ -1743,7 +1768,10 @@ SAFETY:
     totalItems: number;
     results: BatchItemCreationResult[];
     mapping?: Record<string, string>;
-    rolledBack?: boolean;
+    /** OMN-239: `true` only when every compensating delete succeeded; `'partial'` when at least one failed. */
+    rolledBack?: boolean | 'partial';
+    /** OMN-239: present only when `rolledBack === 'partial'` — items that survived the rollback attempt. */
+    rollbackFailures?: Array<{ type: 'project' | 'task'; realId: string; error: string }>;
   }> {
     const resolver = new TempIdResolver();
     const batchResults: BatchItemCreationResult[] = [];
@@ -1790,14 +1818,16 @@ SAFETY:
     // Step 5: Handle atomic operation rollback if needed
     const failedCount = resolver.getFailedCount();
     if (options.atomicOperation && failedCount > 0) {
-      await this.rollbackBatchCreations(resolver);
+      const { rollbackFailures } = await this.rollbackBatchCreations(resolver);
+      const cleanRollback = rollbackFailures.length === 0;
       return {
         success: false,
         created: 0,
         failed: failedCount,
         totalItems: items.length,
         results: batchResults,
-        rolledBack: true,
+        rolledBack: cleanRollback ? true : 'partial',
+        ...(cleanRollback ? {} : { rollbackFailures }),
       };
     }
 
@@ -2199,10 +2229,22 @@ SAFETY:
 
   /**
    * Rollback all created items in reverse order (children first, parents last).
+   *
+   * OMN-239: a compensating delete can itself fail, leaving the item orphaned
+   * in OmniFocus. Callers must know exactly which items were actually removed
+   * vs. which ones survived the "rollback" — silently swallowing the failure
+   * (as before) let the batch response claim `rolledBack: true` while an
+   * orphaned object sat in the database with no client-visible signal.
    */
-  private async rollbackBatchCreations(resolver: TempIdResolver): Promise<void> {
+  private async rollbackBatchCreations(resolver: TempIdResolver): Promise<{
+    rolledBack: Array<{ type: 'project' | 'task'; realId: string }>;
+    rollbackFailures: Array<{ type: 'project' | 'task'; realId: string; error: string }>;
+  }> {
     const createdItems = resolver.getCreatedIds();
     this.logger.warn(`Rolling back ${createdItems.length} created items`);
+
+    const rolledBack: Array<{ type: 'project' | 'task'; realId: string }> = [];
+    const rollbackFailures: Array<{ type: 'project' | 'task'; realId: string; error: string }> = [];
 
     for (let i = createdItems.length - 1; i >= 0; i--) {
       const item = createdItems[i];
@@ -2210,10 +2252,18 @@ SAFETY:
         const generatedScript = await buildDeleteScript(item.type, item.realId);
         await this.execJson(generatedScript.script, DeleteResultSchema);
         this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
+        rolledBack.push({ type: item.type, realId: item.realId });
       } catch (error) {
         this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);
+        rollbackFailures.push({
+          type: item.type,
+          realId: item.realId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
+
+    return { rolledBack, rollbackFailures };
   }
 
   private validateTagManageParams(
