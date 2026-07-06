@@ -144,12 +144,13 @@ BATCH OPERATIONS:
 - createSequentially: true (respects dependencies)
 - returnMapping: true (returns tempId → realId map)
 - stopOnError: true (halt on first failure)
-- atomicOperation: false (best-effort rollback of prior creations if any fail; if a
+- atomicOperation: false (no rollback — items created before a failure stay in OmniFocus).
+  Set true for best-effort rollback of prior creations when a later one fails; if a
   compensating delete itself fails, the response reports rolledBack: "partial" plus a
   rollbackFailures list of orphaned items — never assume a clean undo without checking.
   A top-level data.orphanedItems { count, ids } also appears on the batch response in
   that case — check it before retrying the whole batch, or you will duplicate the
-  items that already persisted)
+  items that already persisted
 - Example with subtasks:
   { "mutation": { "operation": "batch", "operations": [
     { "operation": "create", "target": "task", "data": { "name": "Parent", "tempId": "p1", "project": "My Project" } },
@@ -1484,11 +1485,7 @@ SAFETY:
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     const batchTimer = new OperationTimerV2();
 
-    // Partition operations by type
     const createOps = compiled.operations.filter((op) => op.operation === 'create');
-    const updateOps = compiled.operations.filter((op) => op.operation === 'update');
-    const completeOps = compiled.operations.filter((op) => op.operation === 'complete');
-    const deleteOps = compiled.operations.filter((op) => op.operation === 'delete');
 
     // OMN-119: batch creates run through a separate execution path that bypassed the
     // per-builder sandbox guard. Validate create sub-ops up front (no-op outside test mode)
@@ -1521,33 +1518,7 @@ SAFETY:
     }
 
     // Phase 2-4: Updates, completes, deletes — route through inline handlers
-    const phases: Array<{
-      name: string;
-      ops: typeof updateOps;
-      resultKey: 'updated' | 'completed' | 'deleted';
-    }> = [
-      { name: 'update', ops: updateOps, resultKey: 'updated' },
-      { name: 'complete', ops: completeOps, resultKey: 'completed' },
-      { name: 'delete', ops: deleteOps, resultKey: 'deleted' },
-    ];
-
-    for (const phase of phases) {
-      if (hadError || phase.ops.length === 0) continue;
-
-      for (const op of phase.ops) {
-        try {
-          const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-          const result = await this.dispatchBatchOp(op, resolvedId);
-          results[phase.resultKey].push(result);
-        } catch (err) {
-          results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
-          if (compiled.stopOnError) {
-            hadError = true;
-            break;
-          }
-        }
-      }
-    }
+    await this.runBatchFollowupPhases(compiled, tempIdMapping, results, hadError);
 
     return {
       success: results.errors.length === 0,
@@ -1570,6 +1541,44 @@ SAFETY:
         ...batchTimer.toMetadata(),
       },
     };
+  }
+
+  /**
+   * Phases 2–4 of a batch: updates, completes, deletes, dispatched through the
+   * inline handlers with tempId resolution. Mutates `results`. Skipped entirely
+   * when the create phase already halted the batch (stopOnError).
+   */
+  private async runBatchFollowupPhases(
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
+    tempIdMapping: Record<string, string>,
+    results: { updated: unknown[]; completed: unknown[]; deleted: unknown[]; errors: unknown[] },
+    hadError: boolean,
+  ): Promise<void> {
+    let halted = hadError;
+    const phases = [
+      { name: 'update', resultKey: 'updated' as const },
+      { name: 'complete', resultKey: 'completed' as const },
+      { name: 'delete', resultKey: 'deleted' as const },
+    ];
+
+    for (const phase of phases) {
+      const ops = compiled.operations.filter((op) => op.operation === phase.name);
+      if (halted || ops.length === 0) continue;
+
+      for (const op of ops) {
+        try {
+          const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
+          const result = await this.dispatchBatchOp(op, resolvedId);
+          results[phase.resultKey].push(result);
+        } catch (err) {
+          results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
+          if (compiled.stopOnError) {
+            halted = true;
+            break;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -1852,7 +1861,10 @@ SAFETY:
       this.invalidateBatchCaches(items, batchResults, resolver);
       return {
         success: false,
-        created: 0,
+        // A clean rollback removed everything (0 remain); a partial rollback
+        // leaves each rollbackFailures item persisted in OmniFocus, and the
+        // summary must agree with the per-item rows that still say success.
+        created: rollbackFailures.length,
         failed: failedCount,
         totalItems: items.length,
         results: batchResults,
