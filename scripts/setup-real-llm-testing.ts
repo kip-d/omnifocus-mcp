@@ -8,6 +8,7 @@
 
 import { Ollama } from 'ollama';
 import { spawn } from 'child_process';
+import { isRunDirectly } from './lib/run-directly.js';
 
 interface TestModel {
   name: string;
@@ -247,6 +248,6 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunDirectly(import.meta.url)) {
   main().catch(console.error);
 }

@@ -10,6 +10,7 @@
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
+import { isRunDirectly } from './lib/run-directly.js';
 import { parseFailureLog } from '../src/diagnostics/failure-log.js';
 import { clusterFailures, isIgnored } from '../src/diagnostics/clustering.js';
 import {
@@ -340,8 +341,7 @@ async function main(): Promise<void> {
 }
 
 // Guard: only run main() when this file is the direct entry point, not when imported by tests.
-// tsx preserves the .ts extension in import.meta.url, so match against the raw argv[1] path.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunDirectly(import.meta.url)) {
   void main().catch((e: unknown) => {
     console.error('[diagnose-failures] fatal:', e);
     process.exit(1);
