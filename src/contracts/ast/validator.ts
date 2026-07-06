@@ -239,17 +239,25 @@ function collectAndScope(node: AndNode, comparisons: ComparisonNode[], orBoundar
   }
 }
 
-function checkScopeForContradictions(comparisons: ComparisonNode[], errors: ValidationError[]): void {
+/**
+ * Group the values of `==` comparisons by field. Shared by contradiction
+ * detection (AND scopes) and tautology detection (OR nodes) so the two
+ * detectors can't drift on how they aggregate.
+ */
+function groupEqualityComparisonsByField(comparisons: ComparisonNode[]): Map<string, unknown[]> {
   const fieldValues = new Map<string, unknown[]>();
-
   for (const comp of comparisons) {
     if (comp.operator === '==') {
-      const key = comp.field;
-      const values = fieldValues.get(key) || [];
+      const values = fieldValues.get(comp.field) || [];
       values.push(comp.value);
-      fieldValues.set(key, values);
+      fieldValues.set(comp.field, values);
     }
   }
+  return fieldValues;
+}
+
+function checkScopeForContradictions(comparisons: ComparisonNode[], errors: ValidationError[]): void {
+  const fieldValues = groupEqualityComparisonsByField(comparisons);
 
   for (const [field, values] of fieldValues) {
     if (values.length > 1 && hasContradiction(values)) {
@@ -302,16 +310,8 @@ function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): v
 }
 
 function checkOrForTautology(node: OrNode, warnings: ValidationWarning[]): void {
-  const comparisons = node.children.filter((c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==');
-
-  const fieldValues = new Map<string, unknown[]>();
-
-  for (const comp of comparisons) {
-    const key = comp.field;
-    const values = fieldValues.get(key) || [];
-    values.push(comp.value);
-    fieldValues.set(key, values);
-  }
+  const comparisons = node.children.filter((c): c is ComparisonNode => c.type === 'comparison');
+  const fieldValues = groupEqualityComparisonsByField(comparisons);
 
   for (const [field, values] of fieldValues) {
     // For boolean fields, true OR false is a tautology
