@@ -63,12 +63,16 @@ export const WORKFLOW_ANALYSIS_V3 = `
           // OMN-208: data.tasks is capped independently of the full-population
           // metrics loop below (maxTasksToProcess stays = totalTasks). This cap
           // only protects the raw-record echo (currently unreachable in prod —
-          // includeRawData is hardcoded false by OmniFocusAnalyzeTool — but the
-          // OmniJS bridge return path has a ~261KB limit, and OMN-200 removed the
-          // old 1000-task cap that used to bound this array incidentally).
-          // ~330 bytes/record observed for a realistic task (id, name, project,
-          // tags, dates) → 500 records ≈ 165KB, comfortably under the 261KB
-          // bridge limit with headroom for insights/patterns/recommendations.
+          // includeRawData is hardcoded false by OmniFocusAnalyzeTool — and
+          // OMN-200 removed the old 1000-task cap that used to bound this array
+          // incidentally). The ~261KB figure is EXTRAPOLATED from the measured
+          // evaluateJavascript INPUT-size limit (EMPIRICAL_LIMITS.omniJsBridge
+          // in script-size-monitor.ts; SCRIPT_SIZE_LIMITS.md) — the return-path
+          // limit has not been separately measured. Count-capping is typical-case
+          // headroom, not a byte bound: ~330 bytes/record observed for a realistic
+          // task (id, name, project, tags, dates) → 500 records ≈ 165KB, but
+          // name/project/tags are unbounded strings. Add byte accounting before
+          // ever flipping includeRawData on.
           const MAX_RAW_DATA_TASKS = 500;
           let rawDataTaskCount = 0;
           const data = {
@@ -839,8 +843,9 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
           // OMN-208: surface how many raw records were omitted by the cap above.
           // 0 when includeRawData is false (data.tasks was never populated) or
-          // when the population is within the cap.
-          data.tasksOmittedCount = rawDataTaskCount > MAX_RAW_DATA_TASKS
+          // when the population is within the cap. Keyed off tasksTruncated so
+          // this can't desync from the loop's cap comparison.
+          data.tasksOmittedCount = data.tasksTruncated
             ? rawDataTaskCount - MAX_RAW_DATA_TASKS
             : 0;
 

@@ -618,7 +618,9 @@ describe('OmniFocusAnalyzeTool', () => {
       // A truncation marker is set once the cap is exceeded, so a future consumer
       // of includeRawData can tell the raw slice is partial.
       expect(source).toMatch(/data\.tasksTruncated = true;/);
-      expect(source).toMatch(/data\.tasksOmittedCount = rawDataTaskCount > MAX_RAW_DATA_TASKS/);
+      // Omitted-count is keyed off the truncation flag (not a second independent
+      // cap comparison), so the two can't desync.
+      expect(source).toMatch(/data\.tasksOmittedCount = data\.tasksTruncated/);
       // Critical invariant: the aggregate metrics loop must still iterate the FULL
       // population — only the raw data.tasks echo is capped. OMN-200 removed the
       // old 1000-task cap specifically so *Percentage metrics reflect the whole DB;
