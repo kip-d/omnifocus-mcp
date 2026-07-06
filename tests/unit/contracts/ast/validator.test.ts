@@ -467,10 +467,13 @@ describe('validateFilterAST', () => {
       expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
     });
 
-    it('finds a degenerate OR inside a NOT child of an OR (gate-review repro)', () => {
+    it('knowingly does NOT flag a degenerate OR inside a NOT (opaque boundary, gate-review resolution)', () => {
       // OR(flagged==true, NOT(OR(completed==true, completed==false))) — the
-      // NOT is a scope boundary but is walked THROUGH: the degenerate inner
-      // OR the user wrote is still flagged as an independent root.
+      // inner OR is degenerate, but `not` subtrees are fully opaque BY DESIGN
+      // (OMN-227): no negation reasoning, mirroring the contradiction
+      // detector's documented stance. NOT(always-true) is always-false — a
+      // TAUTOLOGY warning here would mislabel a contradiction. This test pins
+      // the deliberate limitation so a future change is a conscious decision.
       const ast: FilterNode = {
         type: 'or',
         children: [
@@ -489,25 +492,7 @@ describe('validateFilterAST', () => {
       };
       const result = validateFilterAST(ast);
 
-      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(1);
-    });
-
-    it('finds a degenerate OR under a root-level NOT', () => {
-      // NOT(OR(completed==true, completed==false)) — NOT anywhere is walked
-      // through when hunting OR roots.
-      const ast: FilterNode = {
-        type: 'not',
-        child: {
-          type: 'or',
-          children: [
-            { type: 'comparison', field: 'task.completed', operator: '==', value: true },
-            { type: 'comparison', field: 'task.completed', operator: '==', value: false },
-          ],
-        },
-      };
-      const result = validateFilterAST(ast);
-
-      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(1);
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
     });
 
     it('does not double-report a tautology once flattening absorbs the nested OR', () => {
