@@ -125,6 +125,11 @@ JXA `task.tags = …` and `task.addTags()` silently no-op. Assign tags via OmniJ
 (`src/contracts/ast/mutation-script-builder.ts`) or the AST tag builders
 (`src/contracts/ast/tag-mutation-script-builder.ts`).
 
+**Pipeline:** `mutation-script-builder.ts` / `tag-mutation-script-builder.ts` (entry points) route into
+`mutation/defs.ts` (`MUTATION_DEFS` lowering builds an `assignTags` AST node), which `mutation/emitter.ts` emits as
+OmniJS `addTag()` / `removeTag()` calls inside `evaluateJavascript`. This is the single authoritative description of the
+pipeline — other docs should link here rather than restate it.
+
 ## Code & Writing Standards
 
 - **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.

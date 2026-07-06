@@ -85,8 +85,7 @@ Single osascript execution.
 Notes:
 
 - Only `added` has a date-range filter; **no `modified` filter exists**.
-- Mutation pipeline: `mutation-script-builder.ts` (entry points) -> `mutation/defs.ts` (`MUTATION_DEFS` lowering,
-  `assignTags`, repetition wiring) -> `mutation/emitter.ts` (emits OmniJS `addTag`).
+- Tag-assignment pipeline (entry points -> lowering -> emission): see repo CLAUDE.md -> "🏷️ Tag Operations".
 
 ---
 
