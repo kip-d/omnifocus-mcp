@@ -77,12 +77,12 @@ Single osascript execution.
 | Use Case           | Pattern | File                                                                                                                      |
 | ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Set tags           | Bridge  | OmniJS `addTag()` via `src/contracts/ast/mutation-script-builder.ts` + `src/contracts/ast/tag-mutation-script-builder.ts` |
-| Get added/modified | Filter  | `task.added` / `task.modified` in `src/contracts/filters.ts` + `src/contracts/ast/builder.ts`                             |
+| Get added (created) | Filter  | `task.added` date-range filter in `src/contracts/filters.ts` (type) + `src/contracts/ast/builder.ts` (`DATE_FILTER_DEFS`); no `modified` filter exists |
 | Set planned date   | Bridge  | `plannedDate` handling in `src/contracts/ast/mutation-script-builder.ts`                                                  |
-| Repetition rule    | Bridge  | `src/contracts/ast/mutation/repetition.ts` (build-time lowering) + `mutation-script-builder.ts`                           |
+| Repetition rule    | Bridge  | `src/contracts/ast/mutation/repetition.ts` (`lowerRepetitionRule`, build-time lowering) wired into `src/contracts/ast/mutation/defs.ts` (`MUTATION_DEFS`)  |
 | Validate project   | Helpers | `helpers.ts`                                                                                                              |
 | Query with filters | Script  | `list-tasks-ast.ts`                                                                                                       |
-| Create task + tags | Script  | `src/contracts/ast/mutation-script-builder.ts` via `MutationCompiler.ts`                                                  |
+| Create task + tags | Script  | `src/contracts/ast/mutation-script-builder.ts` (`buildCreateTaskScript`, entry point) → `src/contracts/ast/mutation/defs.ts` (`MUTATION_DEFS` lowering, `assignTags`) → `src/contracts/ast/mutation/emitter.ts` (emits `addTag`) |
 
 ---
 

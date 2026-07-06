@@ -43,8 +43,9 @@ should show `{oneOf: [...]}`, not `{type: "string"}`.
 // ❌ JXA methods fail silently
 task.addTags(tags);
 
-// ✅ Bridge works — OmniJS addTag(), built by the AST tag mutation builders
-// (src/contracts/ast/mutation-script-builder.ts, src/contracts/ast/tag-mutation-script-builder.ts)
+// ✅ Bridge works — OmniJS addTag(), emitted by src/contracts/ast/mutation/emitter.ts
+// (routed from src/contracts/ast/mutation/defs.ts; entry points are
+// src/contracts/ast/mutation-script-builder.ts and tag-mutation-script-builder.ts)
 task.addTag(tag); // inside evaluateJavascript
 ```
 
