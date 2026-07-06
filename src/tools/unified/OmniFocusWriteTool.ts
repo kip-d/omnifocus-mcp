@@ -102,6 +102,12 @@ interface BatchItemCreationResult {
   warnings?: string[];
 }
 
+/** OMN-243: orphan summary attached to batch responses when rolledBack === 'partial'. */
+interface BatchOrphanedItems {
+  count: number;
+  ids: Array<{ type: 'project' | 'task'; realId: string }>;
+}
+
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
   description = `Create, update, complete, or delete OmniFocus tasks and projects.
@@ -1506,7 +1512,7 @@ SAFETY:
     let tempIdMapping: Record<string, string> = {};
     let createdCount = 0;
     let hadError = false;
-    let orphanedItems: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> } | undefined;
+    let orphanedItems: BatchOrphanedItems | undefined;
 
     // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
@@ -1627,12 +1633,12 @@ SAFETY:
      *  distinguish "nothing persisted, safe to retry" from "some items persisted,
      *  retrying the whole batch will duplicate them" without digging into
      *  per-item warnings. */
-    orphanedItems?: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> };
+    orphanedItems?: BatchOrphanedItems;
   }> {
     let tempIdMapping: Record<string, string> = {};
     let createdCount = 0;
     let hadError = false;
-    let orphanedItems: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> } | undefined;
+    let orphanedItems: BatchOrphanedItems | undefined;
 
     try {
       let autoTempIdCounter = 0;
