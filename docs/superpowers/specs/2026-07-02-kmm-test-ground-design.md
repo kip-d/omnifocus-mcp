@@ -1,7 +1,7 @@
 # KMM Test Ground — Design
 
-**Date:** 2026-07-02 **Status:** Approved design, pre-implementation **Prior art:** `docs/SELF_HOSTED_CI_MAC.md`
-(self-hosted CI runner sketch — becomes Phase 2 of this design)
+**Date:** 2026-07-02 **Ticket:** OMN-235 **Status:** Approved design, pre-implementation **Prior art:**
+`docs/SELF_HOSTED_CI_MAC.md` (self-hosted CI runner sketch — becomes Phase 2 of this design)
 
 ## Goal
 
@@ -89,7 +89,8 @@ modified in place; a new version is a deliberate, documented replacement (re-run
 ### 3. `of-db-reset` script — `scripts/kmm/of-db-reset.sh` (the one new build)
 
 1. Quit OmniFocus gracefully via osascript; fall back to `pkill` after a timeout.
-2. Restore the golden `.ofocus` over the OmniFocus 4 container database path.
+2. Unzip the golden snapshot and restore the extracted `.ofocus` over the OmniFocus 4 container database path (the
+   golden copy is stored zipped — never copy the archive itself onto the container path).
 3. Relaunch OmniFocus.
 4. Poll `osascript` until the default document answers (bounded retries).
 5. Verify: read task/project counts and diff against `PROVENANCE.md` numbers; fail loudly on mismatch.
@@ -102,7 +103,11 @@ is wedged (it doesn't depend on the server).
 - **LaunchAgent** in the logged-in user's GUI session (a LaunchDaemon cannot send Apple Events — console-session
   constraint).
 - Command: `node dist/index.js --http --port 3111 --host <tailscale-ip>`. Binding to the Tailscale interface makes the
-  tailnet the network boundary; `--auth-token` on top as defense-in-depth.
+  tailnet the network boundary; a bearer token on top as defense-in-depth. **Auth is env-var-only** — there is no
+  `--auth-token` CLI flag (`parseCLIArgs` recognizes only `--http`/`--port`/`--host`/`--help`, and unknown flags are
+  silently ignored today — OMN-236 tracks making that fail loud). Set `MCP_AUTH_TOKEN` in the LaunchAgent plist's
+  `EnvironmentVariables` dict, and verify at deploy time that the server actually rejects an unauthenticated request (a
+  missing token silently disables auth entirely).
 - Fully open: no sandbox guard, no `NODE_ENV=test`. Cache warming ON — a long-lived process pays the warm once, not per
   session.
 - Deploy: `of-kmm-redeploy` (git pull, npm ci, build, `launchctl kickstart`), verified via the `system{version}`
