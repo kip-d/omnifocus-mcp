@@ -17,24 +17,34 @@
 // mutation path could reintroduce the exact 33f0217 shape and nothing would catch
 // it before it shipped. This test closes that gap (OMN-240).
 //
-// Two independent guards, each targeting one half of the bug class:
+// Two independent guards, each targeting one half of the bug class. Both
+// guards match the comparison/call in EITHER operand order and are not tied
+// to one hardcoded variable spelling — an earlier revision only matched the
+// left-hand `.id()` / a literal `target` identifier / a lowercase word-bounded
+// `byName(`, and code review found each of those three narrowings had a live
+// evasion (reversed operand order, a differently-named identifier, and a
+// camelCase `findProjectByName(`-style call respectively). See the fixtures
+// below for the exact evading shapes.
 //
-//   1. `.id() ===` / `==` / `!==` / `!=` — a JXA-style id() call used in an
-//      equality comparison. This is the literal 33f0217 shape: JXA `.id()` used
-//      to identify an object by comparison instead of an OmniJS
+//   1. `.id() ===` / `==` / `!==` / `!=`, matched with `.id()` on EITHER side
+//      of the operator — a JXA-style id() call used in an equality
+//      comparison. This is the literal 33f0217 shape: JXA `.id()` used to
+//      identify an object by comparison instead of an OmniJS
 //      `*.byIdentifier()` lookup. There is no legitimate use of this pattern
 //      anywhere in the generated-script sources today (verified by grep before
 //      writing this test), so it is banned with NO allowlist.
 //
-//   2. Bare name-equality resolution of a "target"-shaped variable
-//      (`.name === target`) with no `byIdentifier(` call anywhere earlier in the
-//      same file. Name-based fallback resolution is legitimate ONLY as a
-//      fallback after an id-based lookup has already been attempted (e.g.
-//      `resolveProjectFlexible` in mutation/snippets.ts: try
-//      `Project.byIdentifier(target)` first, fall back to a name scan only if
-//      that returns null). A file that resolves a target purely by name with no
-//      byIdentifier attempt anywhere is exactly the "name-based target
-//      resolution where an ID is available" shape OMN-240 flags.
+//   2. Bare name-equality resolution of a target-shaped variable
+//      (`.name === <any identifier>`, either operand order, OR a `byName(`
+//      call matched case-insensitively as a suffix of any identifier) with no
+//      `byIdentifier(` call anywhere earlier in the same file. Name-based
+//      fallback resolution is legitimate ONLY as a fallback after an id-based
+//      lookup has already been attempted (e.g. `resolveProjectFlexible` in
+//      mutation/snippets.ts: try `Project.byIdentifier(target)` first, fall
+//      back to a name scan only if that returns null). A file that resolves a
+//      target purely by name with no byIdentifier attempt anywhere is exactly
+//      the "name-based target resolution where an ID is available" shape
+//      OMN-240 flags.
 //
 // Self-test: a fixture string modeled on a NEW mutation path resolving a project
 // via JXA `.id() ===` (the 33f0217 shape, reintroduced) must be flagged by guard
@@ -99,7 +109,14 @@ const scannedFiles: ScannedFile[] = SCAN_DIRS.flatMap((dir) =>
 // an OmniJS `*.byIdentifier()` job).
 // -----------------------------------------------------------------------------
 
-const JXA_ID_EQUALITY_PATTERN = /\.id\(\)\s*(===|==|!==|!=)/;
+// Matches `.id()` on EITHER side of a comparison operator. The original
+// pattern (`/\.id\(\)\s*(===|==|!==|!=)/`) only caught `.id()` on the LEFT —
+// `target === items[i].id()` (reversed operand order) evaded it entirely
+// (OMN-240 review finding). The second alternative catches that reversed
+// form: operator, then an identifier/member-access/index chain (word chars,
+// `$`, `.`, `[`, `]` — no parens, so it can't run past a call boundary), then
+// a literal `.id()`.
+const JXA_ID_EQUALITY_PATTERN = /\.id\(\)\s*(===|==|!==|!=)|(===|==|!==|!=)\s*[\w$.[\]]*\.id\(\)/;
 
 describe('Guard: JXA .id() equality comparison is banned (33f0217 class, OMN-240)', () => {
   it('guard pattern actually matches a fixture reproducing the 33f0217 shape (self-test)', () => {
@@ -111,6 +128,29 @@ describe('Guard: JXA .id() equality comparison is banned (33f0217 class, OMN-240
             return items[i];
           }
         }
+      }
+    `;
+    expect(JXA_ID_EQUALITY_PATTERN.test(fixture)).toBe(true);
+  });
+
+  it('guard pattern matches the REVERSED-operand form — .id() on the right (self-test, OMN-240)', () => {
+    const fixture = `
+      function buildEvilCompleteScriptReversed(targetId) {
+        const items = doc.flattenedProjects();
+        for (let i = 0; i < items.length; i++) {
+          if (targetId === items[i].id()) {
+            return items[i];
+          }
+        }
+      }
+    `;
+    expect(JXA_ID_EQUALITY_PATTERN.test(fixture)).toBe(true);
+  });
+
+  it('guard pattern matches the reversed-operand form against a bare property access', () => {
+    const fixture = `
+      if (targetId !== project.id()) {
+        return null;
       }
     `;
     expect(JXA_ID_EQUALITY_PATTERN.test(fixture)).toBe(true);
@@ -151,8 +191,28 @@ describe('Guard: JXA .id() equality comparison is banned (33f0217 class, OMN-240
 // for that call's presence, not its correctness.
 // -----------------------------------------------------------------------------
 
-const BARE_NAME_TARGET_PATTERN = /\.name\s*===\s*target\b/;
-const BY_NAME_CALL_PATTERN = /\bbyName\(/;
+// `.name === <ident>` generalized from a hardwired literal `target` to ANY
+// right-hand identifier, plus the reversed operand order (`<ident> ===
+// x.name`) for symmetry with the JXA_ID_EQUALITY_PATTERN fix above — both
+// were OMN-240 review findings: a bare-name comparison against a
+// differently-named variable (`p.name === projectName`) or in reversed order
+// evaded the old `target`-only, left-side-only pattern. The negative
+// lookahead excludes `undefined`/`null`/`true`/`false` — those are literal
+// comparisons (e.g. `f.name === undefined` as a null-check in builder.ts),
+// not name-based target resolution, and re-running the generalized pattern
+// against main's sources surfaced exactly that one false-positive shape.
+const NOT_A_LITERAL = '(?!undefined\\b|null\\b|true\\b|false\\b)';
+const BARE_NAME_TARGET_PATTERN = new RegExp(
+  `\\.name\\s*===\\s*${NOT_A_LITERAL}[A-Za-z_$][\\w$]*` +
+    `|\\b${NOT_A_LITERAL}[A-Za-z_$][\\w$]*\\s*===\\s*[\\w$.[\\]]*\\.name\\b`,
+);
+// `byName(` matched case-INSENSITIVELY and with no leading word-boundary
+// requirement, so it also catches it as a SUFFIX of a camelCase identifier
+// (`findProjectByName(`, `resolveByName(`) — the old `/\bbyName\(/` pattern's
+// `\b` sits between two word characters in `findProjectByName(` (no
+// word/non-word transition there), so it never matched (OMN-240 review
+// finding).
+const BY_NAME_CALL_PATTERN = /byname\s*\(/i;
 const BY_IDENTIFIER_PATTERN = /\bbyIdentifier\(/;
 
 describe('Guard: unguarded name-based target resolution is banned (OMN-240)', () => {
@@ -161,6 +221,44 @@ describe('Guard: unguarded name-based target resolution is banned (OMN-240)', ()
       function resolveTargetProjectByNameOnly(target) {
         var found = flattenedProjects.filter(function (p) { return p.name === target; });
         return found[0];
+      }
+    `;
+    const hasNameResolution = BARE_NAME_TARGET_PATTERN.test(fixture) || BY_NAME_CALL_PATTERN.test(fixture);
+    const hasByIdentifierGuard = BY_IDENTIFIER_PATTERN.test(fixture);
+    expect(hasNameResolution).toBe(true);
+    expect(hasByIdentifierGuard).toBe(false);
+  });
+
+  it('guard fires on a bare-name comparison against a non-"target" identifier (self-test, OMN-240)', () => {
+    const fixture = `
+      function resolveProjectByGivenName(projectName) {
+        var found = flattenedProjects.filter(function (p) { return p.name === projectName; });
+        return found[0];
+      }
+    `;
+    const hasNameResolution = BARE_NAME_TARGET_PATTERN.test(fixture) || BY_NAME_CALL_PATTERN.test(fixture);
+    const hasByIdentifierGuard = BY_IDENTIFIER_PATTERN.test(fixture);
+    expect(hasNameResolution).toBe(true);
+    expect(hasByIdentifierGuard).toBe(false);
+  });
+
+  it('guard fires on the reversed-operand form (identifier === x.name) (self-test, OMN-240)', () => {
+    const fixture = `
+      function resolveProjectReversed(projectName) {
+        var found = flattenedProjects.filter(function (p) { return projectName === p.name; });
+        return found[0];
+      }
+    `;
+    const hasNameResolution = BARE_NAME_TARGET_PATTERN.test(fixture) || BY_NAME_CALL_PATTERN.test(fixture);
+    const hasByIdentifierGuard = BY_IDENTIFIER_PATTERN.test(fixture);
+    expect(hasNameResolution).toBe(true);
+    expect(hasByIdentifierGuard).toBe(false);
+  });
+
+  it('guard fires on a camelCase byName()-style call with no byIdentifier attempt (self-test, OMN-240)', () => {
+    const fixture = `
+      function findProjectByName(name) {
+        return flattenedProjects.filter(function (p) { return p.name === name; })[0];
       }
     `;
     const hasNameResolution = BARE_NAME_TARGET_PATTERN.test(fixture) || BY_NAME_CALL_PATTERN.test(fixture);
