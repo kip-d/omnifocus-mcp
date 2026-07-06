@@ -4,6 +4,8 @@
  */
 
 // Task-related types
+// NOTE: kept (not removed per the OMN-94 Cat A work order) because TaskOperationDataV2
+// (a live/kept interface below) still references it as `task?: TaskV2 | {...}`.
 export interface TaskV2 {
   id: string;
   name: string;
@@ -22,42 +24,6 @@ export interface TaskV2 {
   numberOfCompletedTasks?: number;
   modificationDate?: string;
   completionDate?: string | null;
-}
-
-export interface TasksDataV2 {
-  tasks: TaskV2[];
-}
-
-// Project-related types
-export interface ProjectV2 {
-  id: string;
-  name: string;
-  status?: string;
-  completed?: boolean;
-  dueDate?: string | null;
-  deferDate?: string | null;
-  completionDate?: string | null;
-  note?: string | null;
-  flagged?: boolean;
-  tags?: string[];
-  taskCount?: number;
-  availableTaskCount?: number;
-  completedTaskCount?: number;
-  nextReviewDate?: string | null;
-  lastReviewDate?: string | null;
-  reviewInterval?: number | { unit: string; steps: number; fixed?: boolean };
-  folder?: string | null;
-  effectiveStatus?: string;
-}
-
-export interface ProjectsDataV2 {
-  projects: ProjectV2[];
-}
-
-export interface ProjectOperationDataV2 {
-  project: ProjectV2;
-  operation: string;
-  changes?: Record<string, unknown>;
 }
 
 // Analytics-related types
@@ -122,64 +88,6 @@ export interface TaskOperationDataV2 {
   [key: string]: unknown; // Allow additional fields for flexibility
 }
 
-// Tag-related types
-export interface TagV2 {
-  id: string;
-  name: string;
-  available?: boolean;
-  availableTaskCount?: number;
-  remainingTaskCount?: number;
-  noteExpanded?: boolean;
-  note?: string | null;
-  allowsNextAction?: boolean;
-  status?: string;
-  children?: TagV2[];
-}
-
-export interface TagsDataV2 {
-  tags: TagV2[] | string[]; // Entity-specific key for consistency
-}
-
-export interface TagOperationDataV2 {
-  result: {
-    success: boolean;
-    message?: string;
-    data?: unknown;
-  };
-  action: 'create' | 'rename' | 'delete' | 'merge' | 'nest' | 'unparent' | 'reparent';
-  tagName: string;
-  newName?: string;
-  targetTag?: string;
-}
-
-// Folder-related types
-export interface FolderV2 {
-  id: string;
-  name: string;
-  status?: string;
-  noteExpanded?: boolean;
-  note?: string | null;
-  projectCount?: number;
-  effectiveStatus?: string;
-  children?: FolderV2[];
-}
-
-export interface FoldersDataV2 {
-  folders: FolderV2[];
-}
-
-// Pattern Analysis types
-export interface PatternFinding {
-  type: string;
-  severity: 'info' | 'warning' | 'critical';
-  count: number;
-  items?: unknown;
-  recommendation?: string;
-}
-
-// Pattern analysis returns a record of pattern findings keyed by pattern name
-export type PatternAnalysisDataV2 = Record<string, PatternFinding>;
-
 // Recurring task types
 export interface RecurringTaskV2 {
   id: string;
@@ -198,26 +106,5 @@ export interface RecurringTasksDataV2 {
   summary?: {
     totalRecurring: number;
     byFrequency?: Record<string, number>;
-  };
-}
-
-// System types
-// Review types
-export interface ReviewV2 {
-  projectId: string;
-  projectName: string;
-  nextReviewDate?: string | null;
-  lastReviewDate?: string | null;
-  reviewInterval?: number | { unit: string; steps: number };
-  overdue?: boolean;
-  daysUntilReview?: number;
-}
-
-export interface ReviewsDataV2 {
-  reviews: ReviewV2[];
-  summary?: {
-    totalReviews: number;
-    overdue: number;
-    upcoming: number;
   };
 }
