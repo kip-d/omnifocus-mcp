@@ -1374,6 +1374,182 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  describe('OMN-243: top-level orphanedItems on partial-rollback batch responses', () => {
+    function mockFastPathCreate() {
+      return vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+    }
+
+    it('partial rollback surfaces a top-level orphanedItems count + ids so callers do not retry and duplicate', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // Compensating delete for real-1 fails in-band (script-error shape) — orphaned.
+        .mockResolvedValueOnce(createScriptError('Task is locked', 'delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      // OMN-239 (#195): summary.created counts items that still exist — the
+      // orphan survived its rollback delete, so it must equal orphanedItems.count.
+      expect(result.data.summary.created).toBe(1);
+      expect(result.data.orphanedItems).toBeDefined();
+      expect(result.data.orphanedItems.count).toBe(1);
+      expect(result.data.orphanedItems.ids).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'task', realId: 'real-1' })]),
+      );
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+
+    it('control: a clean rollback (rolledBack: true) does NOT carry a top-level orphanedItems field', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // Compensating delete succeeds — clean rollback, nothing orphaned.
+        .mockResolvedValueOnce(createScriptSuccess({ taskId: 'real-1', deleted: true }));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect('orphanedItems' in result.data).toBe(false);
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+
+    it('control: a non-atomic batch failure does NOT carry a top-level orphanedItems field', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          results: [
+            { tempId: 't1', taskId: 'real-1', success: true },
+            { tempId: 't2', taskId: null, success: false, error: 'boom' },
+          ],
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: false,
+          stopOnError: true,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect('orphanedItems' in result.data).toBe(false);
+
+      buildBatchSpy.mockRestore();
+    });
+
+    it('phase-level error message leads with the orphan warning as its first sentence', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        .mockResolvedValueOnce(createScriptError('Task is locked', 'delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      const rows = result.data.results as Array<Record<string, unknown>>;
+      const phaseError = rows.find((r) => r.operation === 'create' && r.id === null && !('tempId' in r));
+      expect(String(phaseError?.error)).toMatch(/^orphan/i);
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+  });
+
   describe('project complete', () => {
     it('completes a project via buildCompleteScript and invalidates cache', async () => {
       // Clean AST envelope — no inner `success` key (spec §2.3)
