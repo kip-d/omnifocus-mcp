@@ -2,10 +2,16 @@
 /**
  * Test script to verify that Claude Code can use our MCP server
  * This provides command-line testing without needing Claude Desktop
+ *
+ * OMN-234: composes `StdioJsonRpcTransport` (the shared spawn/id-correlation
+ * core) instead of carrying its own `pendingRequests` copy. What stays HERE
+ * (client-specific, not owned by the transport): the `NODE_ENV=test`-only
+ * env (no sandbox guard vars), `protocolVersion: '2024-11-05'`, the
+ * stderr/child `error` listeners, and non-graceful (`kill()`-style) cleanup.
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import { createInterface, Interface } from 'readline';
+import type { spawn } from 'child_process';
+import { StdioJsonRpcTransport } from '../integration/helpers/stdio-jsonrpc-transport.js';
 
 console.log('Claude Code MCP Integration Test');
 console.log('================================');
@@ -78,42 +84,36 @@ const CONFIG: TestConfig = {
   ],
 };
 
-class MCPTester {
-  private server: ChildProcess | null = null;
-  private messageId: number = 0;
-  private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
+export interface MCPTesterOptions {
+  /** Test seam only: substitute for `child_process.spawn`. See `StdioJsonRpcTransport`. */
+  spawnFn?: typeof spawn;
+}
+
+export class MCPTester {
+  private readonly transport: StdioJsonRpcTransport;
   private _testResults: TestResult[] = [];
   get testResults(): TestResult[] {
     return this._testResults;
   }
 
+  constructor(options: MCPTesterOptions = {}) {
+    this.transport = new StdioJsonRpcTransport({
+      serverPath: CONFIG.serverPath,
+      spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NODE_ENV: 'test' } },
+      spawnFn: options.spawnFn,
+    });
+  }
+
   async start(): Promise<void> {
     console.log(`Starting MCP server: ${CONFIG.serverPath}`);
 
-    this.server = spawn('node', [CONFIG.serverPath], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' },
-    });
+    this.transport.start();
 
-    const rl: Interface = createInterface({
-      input: this.server.stdout!,
-      crlfDelay: Infinity,
-    });
-
-    rl.on('line', (line: string) => {
-      try {
-        const response: MCPResponse = JSON.parse(line);
-        this.handleResponse(response);
-      } catch {
-        // Ignore non-JSON output
-      }
-    });
-
-    this.server.stderr!.on('data', (data: Buffer) => {
+    this.transport.child.stderr!.on('data', (data: Buffer) => {
       console.error('Server error:', data.toString());
     });
 
-    this.server.on('error', (error: Error) => {
+    this.transport.child.on('error', (error: Error) => {
       console.error('Failed to start server:', error);
       process.exit(1);
     });
@@ -146,12 +146,7 @@ class MCPTester {
       console.log(`   Server: ${response.result.serverInfo.name} v${response.result.serverInfo.version}`);
 
       // Send initialized notification
-      this.server!.stdin!.write(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }) + '\n',
-      );
+      this.transport.sendNotification('notifications/initialized');
 
       return true;
     } else {
@@ -241,35 +236,11 @@ class MCPTester {
   }
 
   async sendRequest(request: MCPRequest, timeout: number = 10000): Promise<MCPResponse> {
-    return new Promise((resolve, reject) => {
-      const requestId = request.id!;
-
-      // Store the resolver
-      this.pendingRequests.set(requestId, resolve);
-
-      // Send the request
-      this.server!.stdin!.write(JSON.stringify(request) + '\n');
-
-      // Set timeout
-      setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
-          reject(new Error(`Request ${requestId} timed out after ${timeout}ms`));
-        }
-      }, timeout);
-    });
-  }
-
-  handleResponse(response: MCPResponse): void {
-    if (response.id && this.pendingRequests.has(response.id)) {
-      const resolver = this.pendingRequests.get(response.id)!;
-      this.pendingRequests.delete(response.id);
-      resolver(response);
-    }
+    return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
   nextId(): number {
-    return ++this.messageId;
+    return this.transport.nextId();
   }
 
   delay(ms: number): Promise<void> {
@@ -306,9 +277,7 @@ class MCPTester {
   }
 
   async cleanup(): Promise<void> {
-    if (this.server && !this.server.killed) {
-      this.server.kill();
-    }
+    await this.transport.close({ graceful: false });
   }
 }
 
@@ -343,4 +312,8 @@ async function runTest(): Promise<void> {
   }
 }
 
-runTest();
+// Only auto-run when executed directly (e.g. `npx tsx tests/support/claude-code-mcp.ts`),
+// not when imported by a unit test.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void runTest();
+}
