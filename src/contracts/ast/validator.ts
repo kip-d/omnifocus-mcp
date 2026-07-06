@@ -285,16 +285,24 @@ function hasContradiction(values: unknown[]): boolean {
 
 /**
  * Detect tautologies like: completed: true OR completed: false
+ *
+ * A tautology is a property of an OR scope: nested `or` children flatten
+ * into the parent scope (OR is associative, mirroring `collectAndScope` on
+ * the AND side), so `OR(x==true, OR(x==false, y==true))` is caught even
+ * though neither OR's own direct children contain both values. `and`
+ * children are boundaries — not flattened — and are instead re-checked as
+ * independent roots so a degenerate OR they contain is still found. `not`
+ * subtrees are fully opaque: no negation reasoning is attempted, mirroring
+ * the contradiction detector (OMN-227's deliberate stance), so a degenerate
+ * OR inside a NOT is knowingly not flagged.
  */
 function detectTautologies(ast: FilterNode, warnings: ValidationWarning[]): void {
   visitForTautologies(ast, warnings);
 }
 
 /**
- * Walk `and`/`or` edges looking for `or` nodes to check. Mirrors the
- * OMN-226 `detectContradictions` walk shape: `or` nodes are recursed into
- * (an OR's branches can themselves hide degenerate ORs), `and` nodes are
- * transparent, and `not` is an opaque boundary — matching the pre-OMN-227
+ * Walk `and`/`or` edges looking for `or` scopes to check. `and` nodes are
+ * transparent; `not` is an opaque boundary — matching the pre-OMN-227
  * bare-root-OR-only behavior for negated subtrees.
  */
 function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): void {
@@ -302,15 +310,40 @@ function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): v
     case 'and':
       node.children.forEach((child) => visitForTautologies(child, warnings));
       break;
-    case 'or':
-      checkOrForTautology(node, warnings);
-      node.children.forEach((child) => visitForTautologies(child, warnings));
+    case 'or': {
+      const comparisons: ComparisonNode[] = [];
+      const andBoundaries: AndNode[] = [];
+      collectOrScope(node, comparisons, andBoundaries);
+      checkScopeForTautology(comparisons, warnings);
+      andBoundaries.forEach((and) => visitForTautologies(and, warnings));
       break;
+    }
   }
 }
 
-function checkOrForTautology(node: OrNode, warnings: ValidationWarning[]): void {
-  const comparisons = node.children.filter((c): c is ComparisonNode => c.type === 'comparison');
+/**
+ * Collect the `or` node's own scope: direct comparison children, flattening
+ * through nested `or` children only (OR is associative). `and` children are
+ * recorded as boundaries for independent checking; `not`/`exists`/`literal`
+ * children are opaque, mirroring `collectAndScope`.
+ */
+function collectOrScope(node: OrNode, comparisons: ComparisonNode[], andBoundaries: AndNode[]): void {
+  for (const child of node.children) {
+    switch (child.type) {
+      case 'comparison':
+        comparisons.push(child);
+        break;
+      case 'or':
+        collectOrScope(child, comparisons, andBoundaries);
+        break;
+      case 'and':
+        andBoundaries.push(child);
+        break;
+    }
+  }
+}
+
+function checkScopeForTautology(comparisons: ComparisonNode[], warnings: ValidationWarning[]): void {
   const fieldValues = groupEqualityComparisonsByField(comparisons);
 
   for (const [field, values] of fieldValues) {
