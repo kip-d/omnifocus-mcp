@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
+import { buildAST } from '../../../../src/contracts/ast/builder.js';
 import type { FilterNode } from '../../../../src/contracts/ast/types.js';
 
 describe('validateFilterAST', () => {
@@ -281,6 +282,100 @@ describe('validateFilterAST', () => {
 
       // Tautology is a warning, not an error (filter will work, just always matches)
       expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+  });
+
+  describe('tautologies — nested OR under AND (OMN-227)', () => {
+    it('warns on the orBranches shape AND(defaults, OR(completed==true, completed==false))', () => {
+      // Direct validator-level repro of the ticket's degenerate shape.
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+
+    it('warns via the builder path: orBranches composed alongside another filter key', () => {
+      // Mirrors real query construction: buildAST always produces
+      // AND(defaults, OR(...)) once any base condition sits beside orBranches.
+      const ast = buildAST({
+        flagged: true,
+        orBranches: [{ completed: true }, { completed: false }],
+      });
+
+      expect(ast.type).toBe('and');
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+
+    it('still finds an OR nested under another OR', () => {
+      // OR(inInbox==true, OR(completed==true, completed==false))
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+
+    it('does not warn for an OR hidden under a NOT (opaque boundary)', () => {
+      // NOT(OR(completed==true, completed==false)) — NOT is opaque, matching
+      // detectContradictions' treatment of NOT as a boundary.
+      const ast: FilterNode = {
+        type: 'not',
+        child: {
+          type: 'or',
+          children: [
+            { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+            { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          ],
+        },
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
+    });
+
+    it('does not warn for a non-degenerate OR nested under AND', () => {
+      // AND(flagged==true, OR(project==AAA, project==BBB)) — ordinary "A or B", not a tautology
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'AAA' },
+              { type: 'comparison', field: 'task.containingProject', operator: '==', value: 'BBB' },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
     });
   });
 
