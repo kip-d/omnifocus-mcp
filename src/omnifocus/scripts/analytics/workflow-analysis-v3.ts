@@ -85,6 +85,20 @@ export const WORKFLOW_ANALYSIS_V3 = `
           const RAW_DATA_BYTE_BUDGET = 150000;
           let rawDataTaskCount = 0;
           let rawDataBytesUsed = 0;
+          // True UTF-8 byte length — JS String.length counts UTF-16 code units,
+          // undercounting CJK (3 bytes vs 1 unit) and astral emoji (4 vs 2).
+          // UTF-8 bytes >= UTF-16 units for every string, so this is conservative
+          // whichever unit the (unmeasured) bridge limit actually binds on.
+          // Code-point arithmetic: OmniJS has no TextEncoder/Buffer.
+          function utf8ByteLength(str) {
+            let bytes = 0;
+            for (let i = 0; i < str.length; i++) {
+              const cp = str.codePointAt(i);
+              if (cp > 0xffff) i++; // astral: consumed a surrogate pair
+              bytes += cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
+            }
+            return bytes;
+          }
           const data = {
             tasks: [],
             tasksTruncated: false,
@@ -375,7 +389,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                     dueDate: dueDate ? dueDate.toISOString() : null,
                     deferDate: deferDate ? deferDate.toISOString() : null
                   };
-                  const rawDataRecordBytes = JSON.stringify(rawDataRecord).length;
+                  const rawDataRecordBytes = utf8ByteLength(JSON.stringify(rawDataRecord));
                   if (
                     data.tasks.length < MAX_RAW_DATA_TASKS &&
                     rawDataBytesUsed + rawDataRecordBytes <= RAW_DATA_BYTE_BUDGET

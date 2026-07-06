@@ -642,9 +642,11 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(source).toMatch(
         /data\.tasks\.length < MAX_RAW_DATA_TASKS &&\s*\n\s*rawDataBytesUsed \+ rawDataRecordBytes <= RAW_DATA_BYTE_BUDGET/,
       );
-      // The running byte tally is measured via JSON.stringify on the actual
-      // record shape that gets pushed, not an estimate.
-      expect(source).toMatch(/const rawDataRecordBytes = JSON\.stringify\(rawDataRecord\)\.length;/);
+      // The running byte tally measures true UTF-8 bytes of the actual record
+      // shape that gets pushed — NOT String.length, which counts UTF-16 code
+      // units and undercounts CJK/emoji names by 1.5-3x (gate-review finding).
+      expect(source).toMatch(/const rawDataRecordBytes = utf8ByteLength\(JSON\.stringify\(rawDataRecord\)\);/);
+      expect(source).toMatch(/function utf8ByteLength\(str\)/);
       // Once truncated, the loop stops building/measuring further records
       // (perf: avoid JSON.stringify on records we won't push).
       expect(source).toMatch(/if \(!data\.tasksTruncated\) {/);
