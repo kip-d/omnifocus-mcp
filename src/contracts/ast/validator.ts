@@ -279,9 +279,30 @@ function hasContradiction(values: unknown[]): boolean {
  * Detect tautologies like: completed: true OR completed: false
  */
 function detectTautologies(ast: FilterNode, warnings: ValidationWarning[]): void {
-  if (ast.type !== 'or') return;
+  visitForTautologies(ast, warnings);
+}
 
-  const comparisons = ast.children.filter((c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==');
+/**
+ * Walk `and`/`or` edges looking for `or` nodes to check. Mirrors the
+ * OMN-226 `detectContradictions` walk shape: `or` nodes are recursed into
+ * (an OR's branches can themselves hide degenerate ORs), `and` nodes are
+ * transparent, and `not` is an opaque boundary — matching the pre-OMN-227
+ * bare-root-OR-only behavior for negated subtrees.
+ */
+function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): void {
+  switch (node.type) {
+    case 'and':
+      node.children.forEach((child) => visitForTautologies(child, warnings));
+      break;
+    case 'or':
+      checkOrForTautology(node, warnings);
+      node.children.forEach((child) => visitForTautologies(child, warnings));
+      break;
+  }
+}
+
+function checkOrForTautology(node: OrNode, warnings: ValidationWarning[]): void {
+  const comparisons = node.children.filter((c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==');
 
   const fieldValues = new Map<string, unknown[]>();
 
