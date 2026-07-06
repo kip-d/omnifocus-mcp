@@ -144,9 +144,10 @@ BATCH OPERATIONS:
 - createSequentially: true (respects dependencies)
 - returnMapping: true (returns tempId → realId map)
 - stopOnError: true (halt on first failure)
-- atomicOperation: false (best-effort rollback of prior creations if any fail; if a
+- atomicOperation: false (no rollback — items created before a failure stay in OmniFocus).
+  Set true for best-effort rollback of prior creations when a later one fails; if a
   compensating delete itself fails, the response reports rolledBack: "partial" plus a
-  rollbackFailures list of orphaned items — never assume a clean undo without checking)
+  rollbackFailures list of orphaned items — never assume a clean undo without checking
 - Example with subtasks:
   { "mutation": { "operation": "batch", "operations": [
     { "operation": "create", "target": "task", "data": { "name": "Parent", "tempId": "p1", "project": "My Project" } },
@@ -1826,7 +1827,10 @@ SAFETY:
       this.invalidateBatchCaches(items, batchResults, resolver);
       return {
         success: false,
-        created: 0,
+        // A clean rollback removed everything (0 remain); a partial rollback
+        // leaves each rollbackFailures item persisted in OmniFocus, and the
+        // summary must agree with the per-item rows that still say success.
+        created: rollbackFailures.length,
         failed: failedCount,
         totalItems: items.length,
         results: batchResults,
