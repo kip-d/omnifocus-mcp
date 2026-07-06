@@ -333,7 +333,7 @@ FILTER OPERATORS:
 RESPONSE CONTROL:
 - Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available, hasNote)
 - details: true returns all fields with full notes
-- fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true)
+- fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true; projects only: a truncated note carries a sibling noteTruncated: true — absent when the note was returned in full)
 - ID lookup always returns all fields with full notes
 - fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
 - fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox, sequential

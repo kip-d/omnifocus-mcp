@@ -122,6 +122,8 @@ export interface ProjectData {
   effectivePlannedDate?: string | null;
   completionDate?: string | null;
   note?: string;
+  /** OMN-242: present (true) only when `note` was truncated to `noteTruncateLength`; absent otherwise */
+  noteTruncated?: boolean;
   sequential?: boolean;
   reviewInterval?: number | null;
   lastReviewed?: string | null;
