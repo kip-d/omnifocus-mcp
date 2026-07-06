@@ -379,6 +379,117 @@ describe('validateFilterAST', () => {
     });
   });
 
+  describe('tautologies — nested OR flattening (OMN-231)', () => {
+    it('warns when the tautology splits across a nested OR (gate-review repro)', () => {
+      // OR(completed==true, OR(completed==false, flagged==true)) — always true,
+      // but neither OR's OWN direct children contain both completed values.
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+
+    it('flattens three levels of OR nesting', () => {
+      // OR(completed==true, OR(flagged==true, OR(completed==false, inInbox==true)))
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+              {
+                type: 'or',
+                children: [
+                  { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+                  { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
+    });
+
+    it('does not warn when an AND child breaks the OR scope', () => {
+      // OR(completed==true, AND(completed==false, flagged==true)) — the AND
+      // branch is not a bare comparison in the OR's scope, so it must not
+      // be flattened together with the sibling comparison.
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'and',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
+    });
+
+    it('does not warn when a NOT child breaks the OR scope', () => {
+      // OR(completed==true, NOT(completed==false)) — NOT is opaque, matching
+      // the AND-scope boundary treatment.
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+          {
+            type: 'not',
+            child: { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
+    });
+
+    it('does not double-report a tautology once flattening absorbs the nested OR', () => {
+      // OR(inInbox==true, OR(completed==true, completed==false)) — the inner
+      // OR's comparisons flatten into the outer scope AND the inner OR node
+      // is still walked directly; must report exactly one warning, not two.
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.inInbox', operator: '==', value: true },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+              { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+            ],
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(1);
+    });
+  });
+
   describe('empty children', () => {
     it('returns warning for empty AND node', () => {
       const ast: FilterNode = {
