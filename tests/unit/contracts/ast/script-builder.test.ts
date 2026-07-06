@@ -218,24 +218,15 @@ describe('buildFilteredTasksScript', () => {
   // is caught) AND the exact key it projects to (so a mutant emitting the
   // wrong output key is caught).
   describe('date field projections (OMN-202)', () => {
-    it('projects dueDate reading task.dueDate with ISO/null guard', () => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', 'dueDate'] });
-      expect(result.script).toContain('dueDate: task.dueDate ? task.dueDate.toISOString() : null');
-    });
-
-    it('projects deferDate reading task.deferDate with ISO/null guard', () => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', 'deferDate'] });
-      expect(result.script).toContain('deferDate: task.deferDate ? task.deferDate.toISOString() : null');
-    });
-
-    it('projects plannedDate reading task.plannedDate with ISO/null guard', () => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', 'plannedDate'] });
-      expect(result.script).toContain('plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null');
-    });
-
-    it('projects completionDate reading task.completionDate with ISO/null guard', () => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', 'completionDate'] });
-      expect(result.script).toContain('completionDate: task.completionDate ? task.completionDate.toISOString() : null');
+    it.each([
+      ['dueDate'],
+      ['deferDate'],
+      ['plannedDate'],
+      ['completionDate'],
+      ['effectivePlannedDate'],
+    ])('projects %s reading task.%s with ISO/null guard', (field) => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', field] });
+      expect(result.script).toContain(`${field}: task.${field} ? task.${field}.toISOString() : null`);
     });
 
     it('requesting all four date fields together emits four distinct, non-cross-contaminated projections', () => {
