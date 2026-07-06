@@ -25,17 +25,16 @@ type _TaskFieldsAreKnownKeys =
 const _taskFieldsAreKnownKeys: _TaskFieldsAreKnownKeys = true;
 void _taskFieldsAreKnownKeys;
 
-// Mode-injected fields live outside TaskFieldEnum (spliced into scriptFields by
-// OmniFocusReadTool per query mode), so the guard above can't see them. Pin the
-// known set here: adding one to the splice without an OmniFocusTask member
-// fails this line instead of reopening the drift gap. (Making the splice list
-// itself the single source of truth is OMN follow-up work.)
-const _modeInjectedFieldsAreKnownKeys: ReadonlyArray<keyof OmniFocusTask> = [
-  'effectivePlannedDate',
-  'reason',
-  'daysOverdue',
-];
-void _modeInjectedFieldsAreKnownKeys;
+// OMN-232: today mode's category-bucketing fields live outside TaskFieldEnum
+// (they're spliced into scriptFields by OmniFocusReadTool per query mode, not
+// selected by the caller), so the guard above can't see them. This is the single
+// source of truth for that splice: OmniFocusReadTool spreads MODE_INJECTED_FIELDS
+// instead of repeating the literals, and the `satisfies` clause fails the build
+// if a field is added here that isn't on OmniFocusTask — closing the drift gap
+// the old `_modeInjectedFieldsAreKnownKeys` stopgap only detected after the fact.
+export const MODE_INJECTED_FIELDS = ['reason', 'daysOverdue', 'modified'] as const satisfies ReadonlyArray<
+  keyof OmniFocusTask
+>;
 
 // =============================================================================
 // MODE-SPECIFIC FILTER AUGMENTATION

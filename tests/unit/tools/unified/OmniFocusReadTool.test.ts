@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OmniFocusReadTool, isNarrowLookupFilter } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import type { ScriptResult } from '../../../../src/omnifocus/script-result-types.js';
+import { MODE_INJECTED_FIELDS } from '../../../../src/tools/tasks/task-query-pipeline.js';
 
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
@@ -1028,10 +1029,12 @@ describe('OmniFocusReadTool', () => {
       });
 
       const scriptArg = execJsonSpy.mock.calls[0][0] as string;
-      // Should have today-specific fields
-      expect(scriptArg).toContain('reason');
-      expect(scriptArg).toContain('daysOverdue');
-      expect(scriptArg).toContain('modified');
+      // OMN-232: pin against the exported MODE_INJECTED_FIELDS source of truth
+      // rather than repeating the literals, so this test fails if the splice
+      // site in OmniFocusReadTool drifts from the constant it's meant to use.
+      for (const field of MODE_INJECTED_FIELDS) {
+        expect(scriptArg).toContain(field);
+      }
       // But not all detail fields (note shouldn't be there)
       expect(scriptArg).not.toContain('estimatedMinutes');
     });

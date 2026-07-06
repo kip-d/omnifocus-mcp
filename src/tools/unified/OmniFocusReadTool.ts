@@ -52,6 +52,7 @@ import {
   projectFields,
   scoreForSmartSuggest,
   countTodayCategories,
+  MODE_INJECTED_FIELDS,
   type TaskQueryMode,
 } from '../tasks/task-query-pipeline.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
@@ -235,7 +236,7 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
 
   // Today mode needs extra fields for category counting
   if (mode === 'today') {
-    scriptFields = [...new Set([...scriptFields, 'reason', 'daysOverdue', 'modified'])];
+    scriptFields = [...new Set([...scriptFields, ...MODE_INJECTED_FIELDS])];
   }
 
   // OMN-130 #3: smart_suggest scoring uses task.available (+30 pts). Force-inject
