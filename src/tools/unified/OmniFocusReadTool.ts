@@ -176,14 +176,27 @@ function resolveFieldsMode(
 }
 
 /**
- * OMN-19/OMN-223: a filter targeting specific items by name, text, or id is a
- * "narrow lookup" — the dashboard summary block is noise there and is suppressed.
- * Shared by the task and project paths so the rule has a single edit point.
- * Top-level keys only: text/name inside OR branches do not narrow (both paths;
- * tracked as OMN-229).
+ * OMN-19/OMN-223/OMN-229: a filter targeting specific items by name, text, or id
+ * is a "narrow lookup" — the dashboard summary block is noise there and is
+ * suppressed. Shared by the task and project paths so the rule has a single
+ * edit point. An OR filter narrows iff EVERY branch narrows (a branch with
+ * only broad keys, e.g. {flagged: true}, means the caller may get a
+ * dashboard-shaped slice); branches are checked recursively since a branch
+ * may itself carry orBranches.
  */
-function isNarrowLookupFilter(filter: { name?: unknown; text?: unknown; id?: unknown }): boolean {
-  return Boolean(filter.name || filter.text || filter.id);
+interface NarrowLookupFilter {
+  name?: unknown;
+  text?: unknown;
+  id?: unknown;
+  orBranches?: NarrowLookupFilter[];
+}
+
+export function isNarrowLookupFilter(filter: NarrowLookupFilter): boolean {
+  if (filter.name || filter.text || filter.id) return true;
+  if (filter.orBranches && filter.orBranches.length > 0) {
+    return filter.orBranches.every((branch) => isNarrowLookupFilter(branch));
+  }
+  return false;
 }
 
 /**
