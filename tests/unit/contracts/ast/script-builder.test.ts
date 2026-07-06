@@ -209,6 +209,58 @@ describe('buildFilteredTasksScript', () => {
     });
   });
 
+  // OMN-202: mutation testing (OMN-201 baseline) found the four date-field
+  // `case` labels in generateFieldProjection unpinned — a regression that
+  // swapped one date field's source property for another's (or dropped its
+  // toISOString()/null-guard) would not be caught. Each assertion below pins
+  // BOTH the field's own OmniJS source property (so a mutant reading the wrong
+  // task property, e.g. `deferDate` falling through to read `task.dueDate`,
+  // is caught) AND the exact key it projects to (so a mutant emitting the
+  // wrong output key is caught).
+  describe('date field projections (OMN-202)', () => {
+    it('projects dueDate reading task.dueDate with ISO/null guard', () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'dueDate'] });
+      expect(result.script).toContain('dueDate: task.dueDate ? task.dueDate.toISOString() : null');
+    });
+
+    it('projects deferDate reading task.deferDate with ISO/null guard', () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'deferDate'] });
+      expect(result.script).toContain('deferDate: task.deferDate ? task.deferDate.toISOString() : null');
+    });
+
+    it('projects plannedDate reading task.plannedDate with ISO/null guard', () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'plannedDate'] });
+      expect(result.script).toContain('plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null');
+    });
+
+    it('projects completionDate reading task.completionDate with ISO/null guard', () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'completionDate'] });
+      expect(result.script).toContain('completionDate: task.completionDate ? task.completionDate.toISOString() : null');
+    });
+
+    it('requesting all four date fields together emits four distinct, non-cross-contaminated projections', () => {
+      // Guards against a mutant that makes one case fall through to another
+      // (e.g. `case 'deferDate':` dropping through into the `case 'dueDate':`
+      // body) — each key must read its OWN source property, not a sibling's.
+      const result = buildFilteredTasksScript(
+        {},
+        { fields: ['id', 'dueDate', 'deferDate', 'plannedDate', 'completionDate'] },
+      );
+      expect(result.script).toContain('dueDate: task.dueDate ? task.dueDate.toISOString() : null');
+      expect(result.script).toContain('deferDate: task.deferDate ? task.deferDate.toISOString() : null');
+      expect(result.script).toContain('plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null');
+      expect(result.script).toContain('completionDate: task.completionDate ? task.completionDate.toISOString() : null');
+      // Each field's projection appears exactly once — a fallthrough mutant
+      // that duplicates one field's projection line under two case labels
+      // would push one of these counts to 2.
+      const occurrences = (needle: string) => result.script.split(needle).length - 1;
+      expect(occurrences('dueDate: task.dueDate')).toBe(1);
+      expect(occurrences('deferDate: task.deferDate')).toBe(1);
+      expect(occurrences('plannedDate: task.plannedDate')).toBe(1);
+      expect(occurrences('completionDate: task.completionDate')).toBe(1);
+    });
+  });
+
   describe('text filters', () => {
     it('generates script with text search', () => {
       const filter: TaskFilter = { text: 'review', textOperator: 'CONTAINS' };

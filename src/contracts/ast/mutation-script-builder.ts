@@ -31,7 +31,17 @@ import { validateMutationProgram } from './mutation/validator.js';
 // =============================================================================
 // TEST SANDBOX GUARD
 // =============================================================================
-
+// OMN-202: this whole section is test-infrastructure — it only executes when
+// isTestMode() is true (NODE_ENV==='test' && SANDBOX_GUARD_ENABLED==='true'),
+// gating integration-test writes to the real OmniFocus sandbox. Mutating it
+// measures test-harness coverage, not product-code defect detection, and was
+// deflating this file's mutation score with noise (mutation-testing baseline
+// OMN-201). Excluded from `mutate` via these
+// Stryker comment directives rather than a stryker.config.json path/glob
+// exclusion because the guard lives inline in this product file alongside the
+// real script builders below (SCRIPT BUILDERS section) — a file-level
+// exclusion would also blind mutation testing to those.
+// Stryker disable all
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -446,6 +456,7 @@ export function markProjectAsValidated(projectId: string): void {
 export function markTaskAsValidated(taskId: string): void {
   validatedTaskIds.add(taskId);
 }
+// Stryker restore all
 
 // =============================================================================
 // TYPES
