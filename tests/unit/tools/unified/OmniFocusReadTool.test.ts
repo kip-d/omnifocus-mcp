@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OmniFocusReadTool } from '../../../../src/tools/unified/OmniFocusReadTool.js';
+import { OmniFocusReadTool, isNarrowLookupFilter } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import type { ScriptResult } from '../../../../src/omnifocus/script-result-types.js';
 
@@ -538,6 +538,113 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.summary).toBeDefined();
+    });
+  });
+
+  // ─── OMN-229: OR-branch narrow-lookup summary suppression ──────
+  // Extends the OMN-19/OMN-223 rule to OR-composed filters. QueryCompiler
+  // routes OR conditions into filter.orBranches rather than merging them into
+  // top-level text/name, so an OR-composed narrow lookup (e.g. text.contains
+  // 'meeting' OR text.contains 'budget') used to keep the full summary. Rule:
+  // an OR filter narrows iff EVERY branch narrows.
+  describe('OMN-229 OR-branch narrow-lookup summary suppression', () => {
+    const tasksPayload = {
+      success: true as const,
+      data: {
+        tasks: [{ id: 't1', name: 'Review budget', completed: false, flagged: false, blocked: false }],
+        metadata: { total_matched: 1 },
+      },
+    };
+
+    const projectsPayload = {
+      success: true as const,
+      data: {
+        projects: [{ id: 'p1', name: 'OmniFocus MCP', status: 'active' }],
+        metadata: { total_available: 1 },
+      },
+    };
+
+    it('strips summary for tasks when OR composes two text-narrow branches', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          filters: {
+            OR: [{ text: { contains: 'meeting' } }, { text: { contains: 'budget' } }],
+          },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
+    });
+
+    it('strips summary for projects when OR composes two text-narrow branches', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'projects',
+          filters: {
+            OR: [{ text: { contains: 'meeting' } }, { name: { contains: 'budget' } }],
+          },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect('summary' in result).toBe(false); // OMN-220: pin key-absence, not just `=== undefined`
+    });
+
+    it('preserves summary when one OR branch is broad-only (e.g. {flagged: true})', async () => {
+      execJsonSpy.mockResolvedValueOnce(tasksPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          filters: {
+            OR: [{ text: { contains: 'budget' } }, { flagged: true }],
+          },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+
+    it('preserves summary for projects when one OR branch is broad-only (e.g. {flagged: true})', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'projects',
+          filters: {
+            OR: [{ name: { contains: 'budget' } }, { flagged: true }],
+          },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+
+    // Nested OR branches aren't reachable through the public schema today (one
+    // level only), but TaskFilter/ProjectFilter.orBranches is recursive by type
+    // — pin the predicate's own recursion directly against the compiled shape.
+    it('treats a nested OR branch (every sub-branch narrow) as narrow', () => {
+      expect(
+        isNarrowLookupFilter({
+          orBranches: [{ text: 'meeting' }, { orBranches: [{ name: 'budget' }, { id: 't1' }] }],
+        }),
+      ).toBe(true);
+    });
+
+    it('treats a nested OR branch with a broad-only leaf as not narrow', () => {
+      expect(
+        isNarrowLookupFilter({
+          orBranches: [{ text: 'meeting' }, { orBranches: [{ name: 'budget' }, {}] }],
+        }),
+      ).toBe(false);
     });
   });
 
