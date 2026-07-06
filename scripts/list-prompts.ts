@@ -7,6 +7,7 @@
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { isRunDirectly } from './lib/run-directly.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -414,6 +415,6 @@ async function main(): Promise<void> {
 }
 
 // Run the CLI
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunDirectly(import.meta.url)) {
   main().catch(console.error);
 }

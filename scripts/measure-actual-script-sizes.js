@@ -9,6 +9,25 @@
 
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+
+/**
+ * Robust "run directly, not imported" check (OMN-234 gate review; OMN-238).
+ * The naive `import.meta.url === \`file://${argv[1]}\`` breaks on
+ * percent-encoded characters (spaces, non-ASCII) and symlinked paths,
+ * silently turning a direct run into an exit-0 no-op. Copied inline here
+ * (canonical version: `scripts/lib/run-directly.ts`) because this file is
+ * plain JS run via `node`, not `tsx`, and can't import a `.ts` module.
+ */
+function isRunDirectly(importMetaUrl) {
+  if (!process.argv[1]) return false;
+  try {
+    return importMetaUrl === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
 
 console.log('📏 Measuring Actual Script Sizes in Codebase\n');
 
@@ -241,6 +260,6 @@ async function analyzeScriptSizes() {
 }
 
 // Run the analysis
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunDirectly(import.meta.url)) {
   analyzeScriptSizes().catch(console.error);
 }
