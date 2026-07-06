@@ -2,10 +2,18 @@
 /**
  * Gherkin-style test runner for OmniFocus MCP
  * Executes BDD scenarios against the MCP server
+ *
+ * OMN-234: composes `StdioJsonRpcTransport` (the shared spawn/id-correlation
+ * core) instead of carrying its own `pendingRequests` copy. What stays HERE
+ * (client-specific, not owned by the transport): the `NODE_ENV=test`-only
+ * env, the `DEBUG`-gated stderr listener, `protocolVersion: '2024-11-05'`,
+ * and non-graceful (`kill()`-style) cleanup.
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import { createInterface, Interface } from 'readline';
+import type { spawn } from 'child_process';
+import { StdioJsonRpcTransport } from '../integration/helpers/stdio-jsonrpc-transport.js';
+import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
 
 interface MCPRequest {
   jsonrpc: '2.0';
@@ -69,10 +77,13 @@ interface TestContext {
   [key: string]: any;
 }
 
-class GherkinTestRunner {
-  private server: ChildProcess | null = null;
-  private messageId: number = 0;
-  private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
+export interface GherkinTestRunnerOptions {
+  /** Test seam only: substitute for `child_process.spawn`. See `StdioJsonRpcTransport`. */
+  spawnFn?: typeof spawn;
+}
+
+export class GherkinTestRunner {
+  private readonly transport: StdioJsonRpcTransport;
   private context: TestContext = {}; // Shared context between steps
   private _results: TestResults = {
     scenarios: [],
@@ -84,30 +95,21 @@ class GherkinTestRunner {
     return this._results;
   }
 
+  constructor(options: GherkinTestRunnerOptions = {}) {
+    this.transport = new StdioJsonRpcTransport({
+      serverPath: './dist/index.js',
+      spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NODE_ENV: 'test' } },
+      spawnFn: options.spawnFn,
+    });
+  }
+
   async start(): Promise<void> {
     console.log('🥒 Gherkin Test Runner for OmniFocus MCP');
     console.log('========================================\n');
 
-    this.server = spawn('node', ['./dist/index.js'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' },
-    });
+    this.transport.start();
 
-    const rl: Interface = createInterface({
-      input: this.server.stdout!,
-      crlfDelay: Infinity,
-    });
-
-    rl.on('line', (line: string) => {
-      try {
-        const response: MCPResponse = JSON.parse(line);
-        this.handleResponse(response);
-      } catch {
-        // Ignore non-JSON
-      }
-    });
-
-    this.server.stderr!.on('data', (data: Buffer) => {
+    this.transport.child.stderr!.on('data', (data: Buffer) => {
       if (process.env.DEBUG) {
         console.error('Server error:', data.toString());
       }
@@ -139,12 +141,7 @@ class GherkinTestRunner {
     }
 
     // Send initialized notification
-    this.server!.stdin!.write(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      }) + '\n',
-    );
+    this.transport.sendNotification('notifications/initialized');
 
     await this.delay(100);
   }
@@ -403,31 +400,16 @@ class GherkinTestRunner {
   }
 
   async sendRequest(request: MCPRequest, timeout: number = 10000): Promise<MCPResponse> {
-    return new Promise((resolve, reject) => {
-      const requestId = request.id!;
-
-      this.pendingRequests.set(requestId, resolve);
-      this.server!.stdin!.write(JSON.stringify(request) + '\n');
-
-      setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
-          reject(new Error(`Request ${requestId} timed out`));
-        }
-      }, timeout);
-    });
-  }
-
-  handleResponse(response: MCPResponse): void {
-    if (response.id && this.pendingRequests.has(response.id)) {
-      const resolver = this.pendingRequests.get(response.id)!;
-      this.pendingRequests.delete(response.id);
-      resolver(response);
+    if (request.id === undefined) {
+      // The transport keys its pending map on a numeric id; an id-less request
+      // would sit keyed on undefined until timeout. Fail fast instead.
+      throw new Error('sendRequest requires request.id — use nextId()');
     }
+    return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
   nextId(): number {
-    return ++this.messageId;
+    return this.transport.nextId();
   }
 
   delay(ms: number): Promise<void> {
@@ -457,9 +439,7 @@ class GherkinTestRunner {
   }
 
   async cleanup(): Promise<void> {
-    if (this.server && !this.server.killed) {
-      this.server.kill();
-    }
+    await this.transport.close({ graceful: false });
   }
 }
 
@@ -538,15 +518,36 @@ async function runTests(): Promise<void> {
   }
 }
 
-// Handle command line args
-if (process.argv[2] === '--help') {
-  console.log('Usage: node test/gherkin-test-runner.js [--verbose]');
-  console.log('  --verbose    Show detailed server output');
-  process.exit(0);
+// Only auto-run when executed directly (e.g. `npx tsx tests/support/gherkin-test-runner.ts`),
+// not when imported by a unit test.
+
+/**
+ * Robust "run directly, not imported" check (OMN-234 gate review): the naive
+ * `import.meta.url === \`file://${argv[1]}\`` breaks on percent-encoded
+ * characters (spaces, non-ASCII) and symlinked paths, silently turning a
+ * direct run into an exit-0 no-op. pathToFileURL handles encoding;
+ * realpathSync resolves symlinks on the argv side.
+ */
+function isRunDirectly(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
 }
 
-if (process.argv[2] === '--verbose') {
-  process.env.DEBUG = 'true';
-}
+if (isRunDirectly()) {
+  // Handle command line args
+  if (process.argv[2] === '--help') {
+    console.log('Usage: node test/gherkin-test-runner.js [--verbose]');
+    console.log('  --verbose    Show detailed server output');
+    process.exit(0);
+  }
 
-runTests();
+  if (process.argv[2] === '--verbose') {
+    process.env.DEBUG = 'true';
+  }
+
+  void runTests();
+}

@@ -1,62 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PassThrough } from 'stream';
-import { EventEmitter } from 'events';
 import { StdioJsonRpcTransport } from '../../integration/helpers/stdio-jsonrpc-transport.js';
+import { makeFakeChild, sendLine, type FakeChild } from '../helpers/fake-child.js';
 
 /**
  * OMN-181 — unit coverage for the extracted stdio JSON-RPC correlation core.
  * Pins the OMN-146 regression guard (route by id, not first-line-wins) without
  * needing a live `node dist/index.js` child — the whole point of this test.
  */
-
-interface FakeChild extends EventEmitter {
-  stdout: PassThrough;
-  stdin: PassThrough;
-  killed: boolean;
-  exitCode: number | null;
-  signalCode: string | null;
-  kill: (signal?: string) => void;
-  /** Emulate the child dying on its own (crash/clean exit) — the case `killed` never reports. */
-  selfExit: (code?: number) => void;
-  writes: string[];
-}
-
-function makeFakeChild(): FakeChild {
-  const stdout = new PassThrough();
-  const stdin = new PassThrough();
-  const writes: string[] = [];
-  const child = new EventEmitter() as FakeChild;
-  child.stdout = stdout;
-  child.stdin = stdin;
-  child.killed = false;
-  child.exitCode = null;
-  child.signalCode = null;
-  child.writes = writes;
-  // Capture writes instead of letting them vanish into a PassThrough with no reader.
-  const realWrite = stdin.write.bind(stdin);
-  stdin.write = ((chunk: any, ...rest: any[]) => {
-    writes.push(String(chunk));
-    return realWrite(chunk, ...(rest as []));
-  }) as typeof stdin.write;
-  child.kill = vi.fn((signal?: string) => {
-    child.killed = true;
-    process.nextTick(() => {
-      child.signalCode = signal ?? 'SIGTERM';
-      child.emit('exit', null, child.signalCode);
-    });
-  });
-  child.selfExit = (code = 1) => {
-    // Mirrors real Node semantics: `killed` stays false; exitCode is set and
-    // 'exit' fires.
-    child.exitCode = code;
-    child.emit('exit', code, null);
-  };
-  return child;
-}
-
-function sendLine(child: FakeChild, obj: unknown): void {
-  child.stdout.write(JSON.stringify(obj) + '\n');
-}
 
 describe('StdioJsonRpcTransport', () => {
   let child: FakeChild;
