@@ -1,7 +1,6 @@
-import { spawn, ChildProcess } from 'child_process';
-import { createInterface } from 'readline';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from './run-id.js';
+import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
 
 export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
 
@@ -54,9 +53,7 @@ export interface MCPTestClientOptions {
 }
 
 export class MCPTestClient {
-  private server: ChildProcess | null = null;
-  private messageId: number = 0;
-  private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
+  private readonly transport: StdioJsonRpcTransport;
   private createdTaskIds: string[] = [];
   private createdProjectIds: string[] = [];
   private sessionId: string = generateSessionId(); // Unique session tag for efficient cleanup
@@ -71,9 +68,10 @@ export class MCPTestClient {
 
   constructor(options: MCPTestClientOptions = {}) {
     this.options = options;
-  }
-
-  async startServer(): Promise<void> {
+    // The transport is constructed EAGERLY (spawn is deferred to startServer →
+    // transport.start()) so pre-start calls like nextId() keep the old plain-
+    // counter contract instead of throwing on a new precondition.
+    //
     // Build environment variables.
     // OMN-77: OMNIFOCUS_MCP_DISABLE_FAILURE_LOG is intentional belt-and-suspenders, NOT
     // redundant with NODE_ENV=test — failure-log-gate.ts treats them as two independent
@@ -96,29 +94,14 @@ export class MCPTestClient {
       env.ENABLE_CACHE_WARMING = 'true';
     }
 
-    this.server = spawn('node', ['./dist/index.js'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env,
+    this.transport = new StdioJsonRpcTransport({
+      serverPath: './dist/index.js',
+      spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env },
     });
+  }
 
-    // Critical Issue #2: Defensive checks for stdio pipes
-    if (!this.server.stdout || !this.server.stdin) {
-      throw new Error('Server process does not have required stdio pipes');
-    }
-
-    const rl = createInterface({
-      input: this.server.stdout,
-      crlfDelay: Infinity,
-    });
-
-    rl.on('line', (line: string) => {
-      try {
-        const response: MCPResponse = JSON.parse(line);
-        this.handleResponse(response);
-      } catch {
-        // Ignore non-JSON output (logging lines, etc.)
-      }
-    });
+  async startServer(): Promise<void> {
+    this.transport.start();
 
     // Initialize MCP connection
     const initRequest: MCPRequest = {
@@ -142,69 +125,23 @@ export class MCPTestClient {
     }
 
     // Send initialized notification
-    if (!this.server.stdin) {
-      throw new Error('Server stdin not available for notifications');
-    }
-    this.server.stdin.write(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      }) + '\n',
-    );
+    this.transport.sendNotification('notifications/initialized');
 
     await this.delay(100);
   }
 
-  async sendRequest(request: MCPRequest, timeout: number = 120000): Promise<MCPResponse> {
-    return new Promise((resolve, reject) => {
-      // Critical Issue #3: Request ID validation
-      if (request.id === undefined) {
-        reject(new Error('Request must have an id for sendRequest'));
-        return;
-      }
-      const requestId = request.id;
-
-      // Critical Issue #2: Defensive checks for stdio pipes
-      if (!this.server || !this.server.stdin) {
-        reject(new Error('Server or server stdin not available'));
-        return;
-      }
-
-      // Critical Issue #5: Store timeout handle for cleanup
-      const cleanup = () => {
-        this.pendingRequests.delete(requestId);
-      };
-
-      this.pendingRequests.set(requestId, resolve);
-      this.server.stdin.write(JSON.stringify(request) + '\n');
-
-      const timeoutHandle = setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          cleanup();
-          reject(new Error(`Request ${requestId} timed out after ${timeout}ms`));
-        }
-      }, timeout);
-
-      // Ensure timeout is cleared on success
-      const originalResolve = resolve;
-      this.pendingRequests.set(requestId, (response: MCPResponse) => {
-        clearTimeout(timeoutHandle);
-        cleanup();
-        originalResolve(response);
-      });
-    });
-  }
-
-  handleResponse(response: MCPResponse): void {
-    if (response.id && this.pendingRequests.has(response.id)) {
-      const resolver = this.pendingRequests.get(response.id)!;
-      this.pendingRequests.delete(response.id);
-      resolver(response);
+  async sendRequest(request: MCPRequest, timeout: number = DEFAULT_TIMEOUT_MS): Promise<MCPResponse> {
+    // Critical Issue #3: Request ID validation
+    if (request.id === undefined) {
+      throw new Error('Request must have an id for sendRequest');
     }
+    // Pre-start sends still fail informatively: the transport rejects with
+    // "server stdin not available" until start() has spawned the child.
+    return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
   nextId(): number {
-    return ++this.messageId;
+    return this.transport.nextId();
   }
 
   delay(ms: number): Promise<void> {
@@ -477,40 +414,6 @@ export class MCPTestClient {
   }
 
   async stop(): Promise<void> {
-    if (this.server && !this.server.killed) {
-      try {
-        this.server.stdin?.end();
-      } catch {
-        // Ignore errors during stdin close
-      }
-
-      await new Promise<void>((resolve) => {
-        const gracefulTimeout = setTimeout(() => {
-          console.log('⚠️  Server did not exit gracefully, sending SIGTERM...');
-          if (this.server && !this.server.killed) {
-            this.server.kill('SIGTERM');
-
-            setTimeout(() => {
-              if (this.server && !this.server.killed) {
-                this.server.kill('SIGKILL');
-              }
-              resolve();
-            }, 2000);
-          } else {
-            resolve();
-          }
-        }, 5000);
-
-        if (this.server) {
-          this.server.once('exit', () => {
-            clearTimeout(gracefulTimeout);
-            resolve();
-          });
-        } else {
-          clearTimeout(gracefulTimeout);
-          resolve();
-        }
-      });
-    }
+    await this.transport.close({ graceful: true });
   }
 }

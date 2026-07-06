@@ -19,6 +19,16 @@
  * `pendingRequests` Map keyed by request id, so every response routes to its
  * own request. Under the existing sequential callers the behavior is identical.
  *
+ * ── OMN-181 ──────────────────────────────────────────────────────────────
+ * The stdio spawn + readline id-router + `pendingRequests` core described
+ * above is now `StdioJsonRpcTransport` (`./stdio-jsonrpc-transport.ts`),
+ * shared with `mcp-test-client.ts` — this class composes it rather than
+ * carrying its own copy. What stays HERE (deliberately not shared):
+ * `protocolVersion: '2025-06-18'`, the guarded/unguarded env policy below,
+ * throwing (not returning an envelope) on a tool error, and the
+ * exit-triggered `rejectAllPending` (registered onto `transport.child`,
+ * since the transport itself doesn't impose that policy).
+ *
  * ── Guard env (OMN-46 / OMN-77) ─────────────────────────────────────────────
  * The guard-relevant env is set EXPLICITLY, not inherited. The pre-extraction
  * guarded server passed no env and relied on the child inheriting NODE_ENV=test
@@ -39,14 +49,12 @@
  * NOT a unit gate: every consumer mutates the real OmniFocus DB and runs only
  * under `npm run test:integration`.
  */
-import { spawn, ChildProcess, type SpawnOptions } from 'child_process';
-import { createInterface, type Interface } from 'readline';
+import type { ChildProcess, SpawnOptions } from 'child_process';
 import path from 'path';
+import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
 
 /** Resolve `dist/index.js` from this helper's location (tests/integration/helpers → repo root). */
 const SERVER_PATH = path.join(__dirname, '../../../dist/index.js');
-
-const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface StartOptions {
   /**
@@ -58,35 +66,31 @@ export interface StartOptions {
   guarded?: boolean;
 }
 
-interface PendingRequest {
-  resolve: (result: any) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 /**
  * One spawned MCP server (`node dist/index.js`) over stdio, with id-correlated
  * JSON-RPC. Construct via `UnifiedTestServer.start()` (spawns + initializes);
  * `kill()` when done (also drains in-flight requests and closes the reader).
  */
 export class UnifiedTestServer {
-  private nextId = 1;
-  private readonly pending = new Map<number, PendingRequest>();
-  private readonly rl: Interface;
+  private readonly transport: StdioJsonRpcTransport;
 
-  private constructor(readonly proc: ChildProcess) {
-    if (!proc.stdout || !proc.stdin) {
-      throw new Error('Server process is missing stdout/stdin pipes');
-    }
-    this.rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
-    this.rl.on('line', (line: string) => this.handleLine(line));
+  private constructor(transport: StdioJsonRpcTransport) {
+    this.transport = transport;
     // If the child dies with requests still in flight, fail them fast with a
-    // clear cause instead of letting each hang to the timeout.
-    proc.once('exit', (code, signal) =>
-      this.rejectAllPending(
+    // clear cause instead of letting each hang to the timeout. This policy is
+    // specific to UnifiedTestServer (MCPTestClient does not register it) so
+    // it's hooked here via the transport's exposed `child`, not baked into
+    // the shared transport itself.
+    transport.child.once('exit', (code, signal) =>
+      transport.rejectAllPending(
         new Error(`Server process exited (code=${code}, signal=${signal}) with requests in flight`),
       ),
     );
+  }
+
+  /** The spawned child process, exposed for callers that need stderr/exit hooks. */
+  get proc(): ChildProcess {
+    return this.transport.child;
   }
 
   /** Spawn a server and complete the MCP `initialize` handshake. */
@@ -103,8 +107,9 @@ export class UnifiedTestServer {
       delete env.SANDBOX_GUARD_ENABLED;
     }
     const spawnOptions: SpawnOptions = { stdio: ['pipe', 'pipe', 'pipe'], env };
-    const proc = spawn('node', [SERVER_PATH], spawnOptions);
-    const server = new UnifiedTestServer(proc);
+    const transport = new StdioJsonRpcTransport({ serverPath: SERVER_PATH, spawnOptions });
+    transport.start();
+    const server = new UnifiedTestServer(transport);
     try {
       await server.initialize();
     } catch (err) {
@@ -115,51 +120,19 @@ export class UnifiedTestServer {
     return server;
   }
 
-  private handleLine(line: string): void {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('{')) return; // skip log/diagnostic lines
-    let parsed: any;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      return; // partial / non-JSON line — ignore
+  /** Send a raw JSON-RPC request (id pre-assigned) and resolve with its `result` — throws on an `error` frame. */
+  private async send(request: { id: number; [k: string]: unknown }, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<any> {
+    const response = await this.transport.sendRequest(request, timeoutMs);
+    if ('error' in response) {
+      throw new Error(`MCP error: ${JSON.stringify(response.error)}`);
     }
-    if (parsed.jsonrpc !== '2.0' || typeof parsed.id !== 'number') return;
-    // Settle only on a well-formed result/error frame; a frame carrying neither
-    // key is left for the timeout (don't resolve a request with `undefined`).
-    const isError = 'error' in parsed;
-    if (!isError && !('result' in parsed)) return;
-    const entry = this.pending.get(parsed.id);
-    if (!entry) return; // notification or already-settled id
-    this.pending.delete(parsed.id);
-    clearTimeout(entry.timer);
-    if (isError) {
-      entry.reject(new Error(`MCP error: ${JSON.stringify(parsed.error)}`));
-    } else {
-      entry.resolve(parsed.result);
-    }
-  }
-
-  /** Send a raw JSON-RPC request (id pre-assigned) and resolve with its `result`. */
-  private send(request: { id: number; [k: string]: unknown }, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!this.proc.stdin) {
-        reject(new Error('Server stdin not available'));
-        return;
-      }
-      const timer = setTimeout(() => {
-        this.pending.delete(request.id);
-        reject(new Error(`Request ${request.id} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-      this.pending.set(request.id, { resolve, reject, timer });
-      this.proc.stdin.write(JSON.stringify(request) + '\n');
-    });
+    return response.result;
   }
 
   private async initialize(): Promise<void> {
     await this.send({
       jsonrpc: '2.0',
-      id: this.nextId++,
+      id: this.transport.nextId(),
       method: 'initialize',
       params: {
         protocolVersion: '2025-06-18',
@@ -173,7 +146,7 @@ export class UnifiedTestServer {
   async callTool(name: string, args: unknown): Promise<any> {
     const result = await this.send({
       jsonrpc: '2.0',
-      id: this.nextId++,
+      id: this.transport.nextId(),
       method: 'tools/call',
       params: { name, arguments: args },
     });
@@ -184,18 +157,8 @@ export class UnifiedTestServer {
     return JSON.parse(content[0].text);
   }
 
-  private rejectAllPending(error: Error): void {
-    for (const entry of this.pending.values()) {
-      clearTimeout(entry.timer);
-      entry.reject(error);
-    }
-    this.pending.clear();
-  }
-
   /** Terminate the child process and tear down: reject in-flight requests, close the reader. */
   kill(): void {
-    this.rejectAllPending(new Error('Server killed before request completed'));
-    this.rl.close();
-    this.proc.kill();
+    void this.transport.close({ graceful: false });
   }
 }
