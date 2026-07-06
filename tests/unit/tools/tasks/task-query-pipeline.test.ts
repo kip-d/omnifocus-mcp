@@ -604,6 +604,35 @@ describe('projectFields', () => {
       catchUpAutomatically: false,
     });
   });
+
+  // OMN-222 review follow-up: the projection emits explicit null (not undefined)
+  // for absent nullable fields, and mode-injected fields (effectivePlannedDate)
+  // sit outside TaskFieldEnum — pin both so the interface can't silently narrow.
+  it('projects null-valued nullable fields and mode-injected effectivePlannedDate', () => {
+    const tasksWithNulls: OmniFocusTask[] = [
+      {
+        id: '3',
+        name: 'Task Three',
+        completed: false,
+        flagged: false,
+        blocked: false,
+        plannedDate: null,
+        effectivePlannedDate: null,
+        repetitionRule: {
+          ruleString: null,
+          scheduleType: null,
+          anchorDateKey: null,
+          catchUpAutomatically: null,
+        },
+      },
+    ];
+
+    const result = projectFields(tasksWithNulls, ['id', 'plannedDate', 'effectivePlannedDate', 'repetitionRule']);
+
+    expect(result[0].plannedDate).toBeNull();
+    expect(result[0].effectivePlannedDate).toBeNull();
+    expect(result[0].repetitionRule?.catchUpAutomatically).toBeNull();
+  });
 });
 
 describe('scoreForSmartSuggest', () => {

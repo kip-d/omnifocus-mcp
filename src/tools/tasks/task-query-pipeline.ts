@@ -25,6 +25,18 @@ type _TaskFieldsAreKnownKeys =
 const _taskFieldsAreKnownKeys: _TaskFieldsAreKnownKeys = true;
 void _taskFieldsAreKnownKeys;
 
+// Mode-injected fields live outside TaskFieldEnum (spliced into scriptFields by
+// OmniFocusReadTool per query mode), so the guard above can't see them. Pin the
+// known set here: adding one to the splice without an OmniFocusTask member
+// fails this line instead of reopening the drift gap. (Making the splice list
+// itself the single source of truth is OMN follow-up work.)
+const _modeInjectedFieldsAreKnownKeys: ReadonlyArray<keyof OmniFocusTask> = [
+  'effectivePlannedDate',
+  'reason',
+  'daysOverdue',
+];
+void _modeInjectedFieldsAreKnownKeys;
+
 // =============================================================================
 // MODE-SPECIFIC FILTER AUGMENTATION
 // =============================================================================
@@ -406,7 +418,7 @@ export function countTodayCategories(tasks: OmniFocusTask[]): TodayCategoryCount
     dueSoonCount = 0,
     flaggedCount = 0;
   for (const task of tasks) {
-    const reason = (task as unknown as Record<string, unknown>).reason;
+    const reason = task.reason;
     if (reason === 'overdue') overdueCount++;
     else if (reason === 'due_soon') dueSoonCount++;
     else if (reason === 'flagged') flaggedCount++;
