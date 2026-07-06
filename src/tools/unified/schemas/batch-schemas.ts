@@ -50,7 +50,9 @@ export const BatchCreateSchema = z.object({
     .describe(
       'Best-effort rollback of prior creations if any fail (default: false). ' +
         'If a compensating delete itself fails, the response reports rolledBack: "partial" ' +
-        'plus a rollbackFailures list of orphaned items — check for it rather than assuming a clean undo.',
+        'plus a rollbackFailures list of orphaned items — check for it rather than assuming a clean undo. ' +
+        'A top-level data.orphanedItems { count, ids } also appears in that case — check it before ' +
+        'retrying the whole batch, or you will duplicate items that already persisted.',
     ),
 
   returnMapping: coerceBoolean().optional().default(true).describe('Return tempId -> realId mapping (default: true)'),

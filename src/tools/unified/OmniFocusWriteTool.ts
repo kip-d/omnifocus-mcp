@@ -146,7 +146,10 @@ BATCH OPERATIONS:
 - stopOnError: true (halt on first failure)
 - atomicOperation: false (best-effort rollback of prior creations if any fail; if a
   compensating delete itself fails, the response reports rolledBack: "partial" plus a
-  rollbackFailures list of orphaned items — never assume a clean undo without checking)
+  rollbackFailures list of orphaned items — never assume a clean undo without checking.
+  A top-level data.orphanedItems { count, ids } also appears on the batch response in
+  that case — check it before retrying the whole batch, or you will duplicate the
+  items that already persisted)
 - Example with subtasks:
   { "mutation": { "operation": "batch", "operations": [
     { "operation": "create", "target": "task", "data": { "name": "Parent", "tempId": "p1", "project": "My Project" } },
@@ -1506,6 +1509,7 @@ SAFETY:
     let tempIdMapping: Record<string, string> = {};
     let createdCount = 0;
     let hadError = false;
+    let orphanedItems: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> } | undefined;
 
     // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
@@ -1513,6 +1517,7 @@ SAFETY:
       createdCount = createPhase.createdCount;
       tempIdMapping = createPhase.tempIdMapping;
       hadError = createPhase.hadError;
+      orphanedItems = createPhase.orphanedItems;
     }
 
     // Phase 2-4: Updates, completes, deletes — route through inline handlers
@@ -1557,6 +1562,7 @@ SAFETY:
         },
         results: flattenBatchResults(results),
         ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
+        ...(orphanedItems ? { orphanedItems } : {}),
       },
       metadata: {
         operation: 'batch',
@@ -1603,10 +1609,21 @@ SAFETY:
     createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
     compiled: Extract<CompiledMutation, { operation: 'batch' }>,
     results: { created: unknown[]; errors: unknown[] },
-  ): Promise<{ createdCount: number; tempIdMapping: Record<string, string>; hadError: boolean }> {
+  ): Promise<{
+    createdCount: number;
+    tempIdMapping: Record<string, string>;
+    hadError: boolean;
+    /** OMN-243: present only when the atomic rollback was partial — items still
+     *  sitting in OmniFocus after a failed compensating delete. Lets a caller
+     *  distinguish "nothing persisted, safe to retry" from "some items persisted,
+     *  retrying the whole batch will duplicate them" without digging into
+     *  per-item warnings. */
+    orphanedItems?: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> };
+  }> {
     let tempIdMapping: Record<string, string> = {};
     let createdCount = 0;
     let hadError = false;
+    let orphanedItems: { count: number; ids: Array<{ type: 'project' | 'task'; realId: string }> } | undefined;
 
     try {
       let autoTempIdCounter = 0;
@@ -1663,9 +1680,18 @@ SAFETY:
         });
         if (createResult.rolledBack === 'partial') {
           const orphanList = (createResult.rollbackFailures ?? []).map((f) => `${f.type}:${f.realId}`).join(', ');
+          const orphanCount = createResult.rollbackFailures?.length ?? 0;
+          // OMN-243: surface the orphan situation to the batch phase caller so it
+          // can land at the TOP LEVEL of the batch response (data.orphanedItems) —
+          // a caller checking only top-level success/created must not conclude
+          // "nothing persisted" and retry the whole batch, duplicating these items.
+          orphanedItems = {
+            count: orphanCount,
+            ids: (createResult.rollbackFailures ?? []).map((f) => ({ type: f.type, realId: f.realId })),
+          };
           results.errors.push({
             phase: 'create',
-            error: `Atomic batch rollback PARTIALLY failed: ${createResult.failed} of ${createResult.totalItems} creates failed; ${createResult.rollbackFailures?.length ?? 0} created item(s) could NOT be removed and remain in OmniFocus (orphaned): ${orphanList}`,
+            error: `ORPHANED: ${orphanCount} created item(s) could NOT be removed and remain in OmniFocus: ${orphanList}. Atomic batch rollback PARTIALLY failed: ${createResult.failed} of ${createResult.totalItems} creates failed.`,
           });
         } else {
           results.errors.push({
@@ -1702,7 +1728,7 @@ SAFETY:
       if (compiled.stopOnError) hadError = true;
     }
 
-    return { createdCount, tempIdMapping, hadError };
+    return { createdCount, tempIdMapping, hadError, orphanedItems };
   }
 
   /**
