@@ -135,7 +135,7 @@ export class MCPTestClient {
     if (!this.transport) {
       throw new Error('Server or server stdin not available');
     }
-    return this.transport.sendRequest(request as { id: number; [k: string]: unknown }, timeout);
+    return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
   nextId(): number {

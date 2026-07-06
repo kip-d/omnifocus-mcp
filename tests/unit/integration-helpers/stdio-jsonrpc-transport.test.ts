@@ -50,7 +50,7 @@ describe('StdioJsonRpcTransport', () => {
   beforeEach(() => {
     child = makeFakeChild();
     transport = new StdioJsonRpcTransport({
-      spawnFn: () => child as unknown as ReturnType<typeof import('child_process').spawn>,
+      spawnFn: (() => child) as unknown as typeof import('child_process').spawn,
     });
     transport.start();
   });
