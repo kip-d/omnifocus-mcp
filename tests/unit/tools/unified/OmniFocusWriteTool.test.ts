@@ -1228,6 +1228,169 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  describe('OMN-239: batch create atomicOperation rollback honesty', () => {
+    // All-task batch → fast path: ONE create script call, then (on failure) one
+    // buildDeleteScript + execJson round-trip per successfully-created item.
+    // Response shape is FLATTENED (batch-response-flatten.ts): per-item create
+    // rows plus one phase-level error row — there is no top-level `errors` array
+    // and rolledBack/rollbackFailures never appear directly in the response, so
+    // assertions below read the per-item warning and the phase-level error string.
+    function mockFastPathCreate() {
+      return vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+        script: 'mock batch script',
+        operation: 'create',
+        target: 'task',
+        description: 'mock',
+      });
+    }
+
+    it('resolved script-error rollback delete is reported as orphaned, not silently treated as rolled back (execJson does not reject on in-band failure)', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        // Step 4: batch create — t1 succeeds, t2 fails
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // Step 5 rollback: compensating delete for real-1 RESOLVES with an
+        // in-band script error (not a thrown rejection) — this is the shape
+        // execJson actually returns on script-level failure.
+        .mockResolvedValueOnce(createScriptError('Task is locked', 'delete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      const rows = result.data.results as Array<Record<string, unknown>>;
+
+      // real-1 survived the failed compensating delete — it must stay success:true
+      // with a loud orphan warning, NOT be silently counted as cleanly rolled back.
+      const orphanRow = rows.find((r) => r.tempId === 't1');
+      expect(orphanRow?.success).toBe(true);
+      expect(orphanRow?.warnings).toEqual(expect.arrayContaining([expect.stringContaining('orphaned')]));
+
+      // Phase-level error names the PARTIAL failure and the specific orphaned id.
+      const phaseError = rows.find((r) => r.operation === 'create' && r.id === null && !('tempId' in r));
+      expect(phaseError?.error).toContain('PARTIALLY failed');
+      expect(phaseError?.error).toContain('real-1');
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+
+    it('thrown rejection from the compensating delete is also reported as orphaned (both failure modes handled)', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // This time the delete call itself throws (e.g. osascript spawn failure).
+        .mockRejectedValueOnce(new Error('osascript ENOENT'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      const rows = result.data.results as Array<Record<string, unknown>>;
+      const orphanRow = rows.find((r) => r.tempId === 't1');
+      expect(orphanRow?.success).toBe(true);
+      expect(orphanRow?.warnings).toEqual(expect.arrayContaining([expect.stringContaining('orphaned')]));
+      const phaseError = rows.find((r) => r.operation === 'create' && r.id === null && !('tempId' in r));
+      expect(phaseError?.error).toContain('PARTIALLY failed');
+      expect(phaseError?.error).toContain('real-1');
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+
+    it('invalidates caches on the partial-rollback path (creates + compensating deletes touched the DB either way)', async () => {
+      const buildBatchSpy = mockFastPathCreate();
+      const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+        script: 'mock delete script',
+        operation: 'delete',
+        target: 'task',
+        description: 'mock',
+      });
+
+      execJsonSpy
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            results: [
+              { tempId: 't1', taskId: 'real-1', success: true },
+              { tempId: 't2', taskId: null, success: false, error: 'boom' },
+            ],
+          },
+        })
+        // Clean rollback this time — delete succeeds.
+        .mockResolvedValueOnce(createScriptSuccess({ taskId: 'real-1', deleted: true }));
+
+      await tool.execute({
+        mutation: {
+          operation: 'batch',
+          target: 'task',
+          atomicOperation: true,
+          stopOnError: false,
+          operations: [
+            { operation: 'create', target: 'task', data: { tempId: 't1', name: 'A' } },
+            { operation: 'create', target: 'task', data: { tempId: 't2', name: 'B' } },
+          ],
+        },
+      });
+
+      expect(mockCache.invalidateTaskQueries).toHaveBeenCalledWith(['today', 'inbox']);
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+
+      buildBatchSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+  });
+
   describe('project complete', () => {
     it('completes a project via buildCompleteScript and invalidates cache', async () => {
       // Clean AST envelope — no inner `success` key (spec §2.3)

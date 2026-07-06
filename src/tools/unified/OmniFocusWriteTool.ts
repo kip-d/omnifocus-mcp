@@ -1820,6 +1820,10 @@ SAFETY:
     if (options.atomicOperation && failedCount > 0) {
       const { rollbackFailures } = await this.rollbackBatchCreations(resolver);
       const cleanRollback = rollbackFailures.length === 0;
+      // OMN-239: creates happened either way — a clean rollback still performed
+      // creates+deletes, and a partial rollback leaves orphaned items in the DB.
+      // Either way stale read caches must not survive to their TTL.
+      this.invalidateBatchCaches(items, batchResults, resolver);
       return {
         success: false,
         created: 0,
@@ -2235,24 +2239,34 @@ SAFETY:
    * vs. which ones survived the "rollback" — silently swallowing the failure
    * (as before) let the batch response claim `rolledBack: true` while an
    * orphaned object sat in the database with no client-visible signal.
+   *
+   * execJson does NOT reject on a script-level failure — it resolves with a
+   * ScriptResult carrying `success: false` + an error. A bare try/catch around
+   * the call would only ever catch a thrown rejection (e.g. the osascript
+   * process itself failing to spawn) and would misclassify every in-band
+   * script error as a successful rollback. Both failure shapes are real and
+   * both must land in `rollbackFailures`.
    */
   private async rollbackBatchCreations(resolver: TempIdResolver): Promise<{
-    rolledBack: Array<{ type: 'project' | 'task'; realId: string }>;
     rollbackFailures: Array<{ type: 'project' | 'task'; realId: string; error: string }>;
   }> {
     const createdItems = resolver.getCreatedIds();
     this.logger.warn(`Rolling back ${createdItems.length} created items`);
 
-    const rolledBack: Array<{ type: 'project' | 'task'; realId: string }> = [];
     const rollbackFailures: Array<{ type: 'project' | 'task'; realId: string; error: string }> = [];
 
     for (let i = createdItems.length - 1; i >= 0; i--) {
       const item = createdItems[i];
       try {
         const generatedScript = await buildDeleteScript(item.type, item.realId);
-        await this.execJson(generatedScript.script, DeleteResultSchema);
-        this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
-        rolledBack.push({ type: item.type, realId: item.realId });
+        const result = await this.execJson(generatedScript.script, DeleteResultSchema);
+        if (isScriptError(result)) {
+          const errorMessage = typeof result.error === 'string' ? result.error : 'Rollback delete script failed';
+          this.logger.error(`Failed to rollback ${item.type} ${item.realId}: ${errorMessage}`);
+          rollbackFailures.push({ type: item.type, realId: item.realId, error: errorMessage });
+        } else {
+          this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
+        }
       } catch (error) {
         this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);
         rollbackFailures.push({
@@ -2263,7 +2277,7 @@ SAFETY:
       }
     }
 
-    return { rolledBack, rollbackFailures };
+    return { rollbackFailures };
   }
 
   private validateTagManageParams(
