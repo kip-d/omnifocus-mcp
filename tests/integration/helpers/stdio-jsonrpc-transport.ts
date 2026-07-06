@@ -75,6 +75,7 @@ export class StdioJsonRpcTransport {
   private readonly pending = new Map<number, PendingEntry>();
   private rl: Interface | null = null;
   private _child: ChildProcess | null = null;
+  private _exited = false;
   private readonly spawnFn: typeof spawn;
 
   constructor(private readonly options: StdioJsonRpcTransportOptions = {}) {
@@ -102,8 +103,28 @@ export class StdioJsonRpcTransport {
     if (!this._child.stdout || !this._child.stdin) {
       throw new Error('StdioJsonRpcTransport: server process is missing stdout/stdin pipes');
     }
+    // Track death at the source: `ChildProcess.killed` only turns true after
+    // OUR OWN .kill() call — it stays false when the child exits or crashes on
+    // its own, and a `once('exit')` listener attached later can miss an event
+    // that already fired. This flag is the race-free "is it dead" signal that
+    // close() consults.
+    this._exited = false;
+    this._child.once('exit', () => {
+      this._exited = true;
+    });
     this.rl = createInterface({ input: this._child.stdout, crlfDelay: Infinity });
     this.rl.on('line', (line: string) => this.handleLine(line));
+  }
+
+  /**
+   * True when the child is gone (self-exit, crash, or our own kill). `killed`
+   * alone is NOT sufficient — see the comment in start(). `exitCode`/
+   * `signalCode` use a loose `!= null` so a test double that never defines
+   * them doesn't read as dead.
+   */
+  private childIsDead(): boolean {
+    if (!this._child) return true;
+    return this._exited || this._child.exitCode != null || this._child.signalCode != null || this._child.killed;
   }
 
   private handleLine(line: string): void {
@@ -116,10 +137,24 @@ export class StdioJsonRpcTransport {
       return; // partial / non-JSON line — ignore
     }
     if (parsed.jsonrpc !== '2.0' || typeof parsed.id !== 'number') return;
-    const isError = 'error' in parsed;
-    if (!isError && !('result' in parsed)) return;
     const entry = this.pending.get(parsed.id);
     if (!entry) return; // notification, log frame, or already-settled/timed-out id
+    if (!('error' in parsed) && !('result' in parsed)) {
+      // The frame self-identifies as a JSON-RPC 2.0 response to a request we
+      // have in flight, but carries neither `result` nor `error` — spec-invalid.
+      // Reject NOW with the payload rather than silently dropping it and
+      // letting the caller ride out its full timeout on a malformed response.
+      // (Log/diagnostic lines can't false-trigger this: they lack the
+      // `jsonrpc: '2.0'` tag, so they returned above.)
+      this.pending.delete(parsed.id);
+      clearTimeout(entry.timer);
+      entry.reject(
+        new Error(
+          `Malformed JSON-RPC response for request ${parsed.id} (no result or error): ${trimmed.slice(0, 200)}`,
+        ),
+      );
+      return;
+    }
     this.pending.delete(parsed.id);
     clearTimeout(entry.timer);
     entry.resolve(parsed); // full envelope — error-vs-result policy lives in the caller
@@ -168,10 +203,13 @@ export class StdioJsonRpcTransport {
   /**
    * Graceful shutdown (default, `MCPTestClient` policy): end stdin, wait up
    * to 5s for the child to exit on its own, else SIGTERM, then SIGKILL after
-   * another 2s. Does NOT proactively reject in-flight requests while the
-   * child is still alive — except if the child has ALREADY died before
-   * `close()` was called, in which case pending requests are rejected
-   * immediately rather than left to ride out their own timeout.
+   * another 2s. Does NOT reject in-flight requests while the child is still
+   * alive (they may yet complete during the grace window) — but once the
+   * child is gone, whether it had ALREADY died before `close()` was called
+   * (detected via the exit flag / exitCode, NOT `.killed`, which only reports
+   * our own kills) or it exited during the grace window, any still-pending
+   * requests are rejected immediately rather than left to ride out their own
+   * timeout.
    *
    * `close({ graceful: false })` (`UnifiedTestServer` policy): proactively
    * reject all pending requests, close the reader, and kill the child
@@ -187,24 +225,30 @@ export class StdioJsonRpcTransport {
       return;
     }
 
-    if (!this._child || this._child.killed) {
+    if (this.childIsDead()) {
       this.rejectAllPending(new Error('transport closed with request in flight'));
       this.rl?.close();
       return;
     }
 
     try {
-      this._child.stdin?.end();
+      this._child!.stdin?.end();
     } catch {
       // Ignore errors during stdin close
     }
 
     await new Promise<void>((resolve) => {
+      if (this._exited) {
+        // Child died between the liveness check above and here — don't wait
+        // on an 'exit' event that already fired.
+        resolve();
+        return;
+      }
       const gracefulTimeout = setTimeout(() => {
-        if (this._child && !this._child.killed) {
+        if (this._child && !this.childIsDead()) {
           this._child.kill('SIGTERM');
           setTimeout(() => {
-            if (this._child && !this._child.killed) {
+            if (this._child && !this.childIsDead()) {
               this._child.kill('SIGKILL');
             }
             resolve();
@@ -220,6 +264,9 @@ export class StdioJsonRpcTransport {
       });
     });
 
+    // The child is gone; nothing in flight can complete now. Fail fast instead
+    // of leaving survivors to ride out their own (up to 120s) timeouts.
+    this.rejectAllPending(new Error('transport closed with request in flight'));
     this.rl?.close();
   }
 }

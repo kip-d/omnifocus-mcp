@@ -53,7 +53,7 @@ export interface MCPTestClientOptions {
 }
 
 export class MCPTestClient {
-  private transport: StdioJsonRpcTransport | null = null;
+  private readonly transport: StdioJsonRpcTransport;
   private createdTaskIds: string[] = [];
   private createdProjectIds: string[] = [];
   private sessionId: string = generateSessionId(); // Unique session tag for efficient cleanup
@@ -68,9 +68,10 @@ export class MCPTestClient {
 
   constructor(options: MCPTestClientOptions = {}) {
     this.options = options;
-  }
-
-  async startServer(): Promise<void> {
+    // The transport is constructed EAGERLY (spawn is deferred to startServer →
+    // transport.start()) so pre-start calls like nextId() keep the old plain-
+    // counter contract instead of throwing on a new precondition.
+    //
     // Build environment variables.
     // OMN-77: OMNIFOCUS_MCP_DISABLE_FAILURE_LOG is intentional belt-and-suspenders, NOT
     // redundant with NODE_ENV=test — failure-log-gate.ts treats them as two independent
@@ -97,6 +98,9 @@ export class MCPTestClient {
       serverPath: './dist/index.js',
       spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env },
     });
+  }
+
+  async startServer(): Promise<void> {
     this.transport.start();
 
     // Initialize MCP connection
@@ -131,17 +135,12 @@ export class MCPTestClient {
     if (request.id === undefined) {
       throw new Error('Request must have an id for sendRequest');
     }
-    // Critical Issue #2: Defensive checks for stdio pipes
-    if (!this.transport) {
-      throw new Error('Server or server stdin not available');
-    }
+    // Pre-start sends still fail informatively: the transport rejects with
+    // "server stdin not available" until start() has spawned the child.
     return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
   nextId(): number {
-    if (!this.transport) {
-      throw new Error('MCPTestClient: call startServer() before nextId()');
-    }
     return this.transport.nextId();
   }
 
@@ -415,8 +414,6 @@ export class MCPTestClient {
   }
 
   async stop(): Promise<void> {
-    if (this.transport) {
-      await this.transport.close({ graceful: true });
-    }
+    await this.transport.close({ graceful: true });
   }
 }
