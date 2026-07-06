@@ -1191,7 +1191,7 @@ describe('field set constants', () => {
   });
 
   it('MINIMAL_FIELDS and DETAIL_FIELDS do not overlap', () => {
-    const overlap = MINIMAL_FIELDS.filter((f) => DETAIL_FIELDS.includes(f));
+    const overlap = MINIMAL_FIELDS.filter((f) => (DETAIL_FIELDS as readonly string[]).includes(f));
     expect(overlap).toEqual([]);
   });
 

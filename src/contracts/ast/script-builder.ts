@@ -28,6 +28,7 @@ import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
 import { ACTIONABLE_STATUSES } from './types.js';
+import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
 // TYPES
@@ -90,6 +91,11 @@ export interface GeneratedScript {
  * alternative but rejected — it is redundant with the full `note` field in
  * DETAIL_FIELDS and contradicts the token-cost goal of the lean default.
  * `hasNote` answers "is there context?"; the client requests `note` if yes.
+ *
+ * OMN-237: `as const satisfies ReadonlyArray<keyof OmniFocusTask>` closes the
+ * same interface-drift class OMN-222/OMN-232 closed for TaskFieldEnum and
+ * MODE_INJECTED_FIELDS — a field added or renamed here without a matching
+ * OmniFocusTask member now fails the build instead of compiling green.
  */
 export const MINIMAL_FIELDS = [
   'id',
@@ -102,7 +108,7 @@ export const MINIMAL_FIELDS = [
   'project',
   'available',
   'hasNote',
-];
+] as const satisfies ReadonlyArray<keyof OmniFocusTask>;
 
 /**
  * Heavier fields gated behind details=true or explicit field selection.
@@ -115,6 +121,12 @@ export const MINIMAL_FIELDS = [
  *
  * Enforced by the parity test in
  * `tests/unit/architecture/schema-impl-parity.test.ts`.
+ *
+ * OMN-237: `as const satisfies ReadonlyArray<keyof OmniFocusTask>` — see
+ * MINIMAL_FIELDS above. This is also the compile-time guard that
+ * `effectivePlannedDate` (detail-gated via `details:true`) stays a real
+ * OmniFocusTask member; OMN-232 deliberately dropped a runtime stopgap pin
+ * for it in favor of this class of fix.
  */
 export const DETAIL_FIELDS = [
   'note',
@@ -139,12 +151,14 @@ export const DETAIL_FIELDS = [
   // (OMN-198/206). Cheap boolean; reachable via details:true (DETAIL, not the
   // thin MINIMAL default) — mirrors `sequential` in DETAIL_PROJECT_FIELDS.
   'sequential',
-];
+] as const satisfies ReadonlyArray<keyof OmniFocusTask>;
 
 /**
  * Full field set — union of MINIMAL + DETAIL. Preserves backward compatibility.
  */
-export const DEFAULT_FIELDS = [...MINIMAL_FIELDS, ...DETAIL_FIELDS];
+export const DEFAULT_FIELDS = [...MINIMAL_FIELDS, ...DETAIL_FIELDS] as const satisfies ReadonlyArray<
+  keyof OmniFocusTask
+>;
 
 /**
  * Maximum characters for truncated note content in thin-default responses.
@@ -185,8 +199,8 @@ export const DETAIL_PROJECT_FIELDS = [
  */
 export function resolveEffectiveTaskFields(userFields: string[] | undefined, details: boolean | undefined): string[] {
   if (userFields && userFields.length > 0) return userFields;
-  if (details) return DEFAULT_FIELDS;
-  return MINIMAL_FIELDS;
+  if (details) return [...DEFAULT_FIELDS];
+  return [...MINIMAL_FIELDS];
 }
 
 /**
