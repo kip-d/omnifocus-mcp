@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { parseCLIArgs, validateCLIConfig, DEFAULT_CLI_CONFIG, type CLIConfig } from '../../../src/utils/cli.js';
 
 describe('parseCLIArgs', () => {
   const origArgv = process.argv;
   const origAuthToken = process.env.MCP_AUTH_TOKEN;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: MockInstance<typeof process.exit>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
 
   beforeEach(() => {
     delete process.env.MCP_AUTH_TOKEN;
@@ -56,7 +56,7 @@ describe('parseCLIArgs', () => {
 });
 
 describe('validateCLIConfig — --http without MCP_AUTH_TOKEN', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: MockInstance<typeof process.stderr.write>;
 
   beforeEach(() => {
     warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
