@@ -134,7 +134,7 @@ export interface RepetitionRuleData {
   ruleString?: string | null;
   scheduleType?: string | null;
   anchorDateKey?: string | null;
-  catchUpAutomatically?: boolean;
+  catchUpAutomatically?: boolean | null;
 }
 
 // =============================================================================
