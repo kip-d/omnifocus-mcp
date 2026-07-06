@@ -7,7 +7,7 @@
  * Used by OmniFocusReadTool (unified read path).
  */
 
-import type { OmniFocusTask } from '../../omnifocus/types.js';
+import type { OmniFocusTask, ProjectedTask } from '../../omnifocus/types.js';
 import type { TaskFilter } from '../../contracts/filters.js';
 import type { SortOption } from './filter-types.js';
 import type { TaskFieldEnum } from '../unified/schemas/read-schema.js';
@@ -302,16 +302,13 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * Project task fields based on user selection for performance optimization.
  * Always includes 'id' if any fields are selected.
  */
-export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): OmniFocusTask[] {
+export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): (OmniFocusTask | ProjectedTask)[] {
   if (!selectedFields || selectedFields.length === 0) {
     return tasks;
   }
 
   return tasks.map((task) => {
-    const projectedTask: Partial<OmniFocusTask> = {};
-
-    // Always include id for task identity (even if not explicitly requested)
-    projectedTask.id = task.id;
+    const projectedTask: ProjectedTask = { id: task.id };
 
     selectedFields.forEach((field) => {
       if (field in task) {
@@ -327,7 +324,10 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
       }
     });
 
-    return projectedTask as OmniFocusTask;
+    // OMN-241: return the honest partial shape — no `as OmniFocusTask` cast.
+    // Callers that need a specific field beyond `id` must narrow (check
+    // presence) rather than assume it's always populated.
+    return projectedTask;
   });
 }
 

@@ -633,6 +633,23 @@ describe('projectFields', () => {
     expect(result[0].effectivePlannedDate).toBeNull();
     expect(result[0].repetitionRule?.catchUpAutomatically).toBeNull();
   });
+
+  // OMN-241: type-level guard (compiled, never executed) pinning that
+  // projectFields()'s output is NOT assignable to full OmniFocusTask without
+  // narrowing. Mirrors the `_taskFieldsAreKnownKeys` compile-time-guard style
+  // above in task-query-pipeline.ts: a `// @ts-expect-error` here fails the
+  // build (via `npm run typecheck:test`) if projectFields() ever regresses to
+  // a blanket `as OmniFocusTask` cast, silently re-widening the return type.
+  it('type-level: projected output is not assignable to OmniFocusTask without narrowing', () => {
+    function _typeGuard(selected: ReturnType<typeof projectFields>) {
+      // @ts-expect-error - ProjectedTask (Partial<OmniFocusTask> & {id}) must
+      // NOT be assignable to OmniFocusTask: most fields are optional/absent.
+      const _fullTask: OmniFocusTask[] = selected;
+      void _fullTask;
+    }
+    void _typeGuard;
+    expect(true).toBe(true);
+  });
 });
 
 describe('scoreForSmartSuggest', () => {
