@@ -65,16 +65,26 @@ export const WORKFLOW_ANALYSIS_V3 = `
           // only protects the raw-record echo (currently unreachable in prod —
           // includeRawData is hardcoded false by OmniFocusAnalyzeTool — and
           // OMN-200 removed the old 1000-task cap that used to bound this array
-          // incidentally). The ~261KB figure is EXTRAPOLATED from the measured
-          // evaluateJavascript INPUT-size limit (EMPIRICAL_LIMITS.omniJsBridge
-          // in script-size-monitor.ts; SCRIPT_SIZE_LIMITS.md) — the return-path
-          // limit has not been separately measured. Count-capping is typical-case
-          // headroom, not a byte bound: ~330 bytes/record observed for a realistic
-          // task (id, name, project, tags, dates) → 500 records ≈ 165KB, but
-          // name/project/tags are unbounded strings. Add byte accounting before
-          // ever flipping includeRawData on.
+          // incidentally).
+          // OMN-233: byte accounting is now in place (RAW_DATA_BYTE_BUDGET
+          // below) — push is gated on BOTH the count cap and a running byte
+          // tally, since name/project/tags are unbounded strings and a
+          // count-only cap can't bound payload size. The budget itself is
+          // EXTRAPOLATED pending measurement: the ~261,124-char figure is the
+          // measured evaluateJavascript INPUT-size limit
+          // (EMPIRICAL_LIMITS.omniJsBridge in script-size-monitor.ts;
+          // SCRIPT_SIZE_LIMITS.md) — the RETURN-path limit (this payload flows
+          // FROM OmniJS back TO JXA, the opposite direction) has never been
+          // separately measured. Before ever flipping includeRawData on, run
+          // scripts/measure-bridge-return-limit.ts against live OmniFocus and
+          // replace RAW_DATA_BYTE_BUDGET with a measured figure.
           const MAX_RAW_DATA_TASKS = 500;
+          // Conservative fraction of the (unmeasured) ~261,124-char bridge
+          // ceiling, leaving headroom for insights/patterns/recommendations
+          // that share the same JSON.stringify() return payload.
+          const RAW_DATA_BYTE_BUDGET = 150000;
           let rawDataTaskCount = 0;
+          let rawDataBytesUsed = 0;
           const data = {
             tasks: [],
             tasksTruncated: false,
@@ -341,14 +351,16 @@ export const WORKFLOW_ANALYSIS_V3 = `
               });
 
               // Include task data if requested
-              // OMN-208: cap at push time so the OmniJS-side array never grows
-              // past MAX_RAW_DATA_TASKS, regardless of DB size. Counting past
-              // the cap (instead of stopping) lets data.tasksTruncated report
-              // an accurate "N more omitted" figure without re-scanning.
+              // OMN-208/OMN-233: cap at push time on BOTH the task-count cap
+              // and a running byte tally, so the OmniJS-side array never
+              // grows past MAX_RAW_DATA_TASKS or RAW_DATA_BYTE_BUDGET,
+              // regardless of DB size or record size. Counting past the cap
+              // (instead of stopping) lets data.tasksTruncated report an
+              // accurate "N more omitted" figure without re-scanning.
               if (includeRawData) {
                 rawDataTaskCount++;
-                if (rawDataTaskCount <= MAX_RAW_DATA_TASKS) {
-                  data.tasks.push({
+                if (!data.tasksTruncated) {
+                  const rawDataRecord = {
                     id: task.id.primaryKey || 'unknown',
                     name: task.name || 'Unnamed Task',
                     completed,
@@ -362,9 +374,17 @@ export const WORKFLOW_ANALYSIS_V3 = `
                     tags,
                     dueDate: dueDate ? dueDate.toISOString() : null,
                     deferDate: deferDate ? deferDate.toISOString() : null
-                  });
-                } else {
-                  data.tasksTruncated = true;
+                  };
+                  const rawDataRecordBytes = JSON.stringify(rawDataRecord).length;
+                  if (
+                    data.tasks.length < MAX_RAW_DATA_TASKS &&
+                    rawDataBytesUsed + rawDataRecordBytes <= RAW_DATA_BYTE_BUDGET
+                  ) {
+                    data.tasks.push(rawDataRecord);
+                    rawDataBytesUsed += rawDataRecordBytes;
+                  } else {
+                    data.tasksTruncated = true;
+                  }
                 }
               }
 
@@ -841,12 +861,14 @@ export const WORKFLOW_ANALYSIS_V3 = `
             deferralDetails: deferredTaskDetails.slice().sort(function(a, b) { return b.deferDays - a.deferDays; }).slice(0, 10)
           };
 
-          // OMN-208: surface how many raw records were omitted by the cap above.
-          // 0 when includeRawData is false (data.tasks was never populated) or
-          // when the population is within the cap. Keyed off tasksTruncated so
-          // this can't desync from the loop's cap comparison.
+          // OMN-208/OMN-233: surface how many raw records were omitted by the
+          // caps above (count cap OR byte budget, whichever hit first). 0 when
+          // includeRawData is false (data.tasks was never populated) or when
+          // the population is within both caps. Keyed off tasksTruncated and
+          // the actual pushed length — not a second independent cap
+          // comparison — so this can't desync from the loop's gating.
           data.tasksOmittedCount = data.tasksTruncated
-            ? rawDataTaskCount - MAX_RAW_DATA_TASKS
+            ? rawDataTaskCount - data.tasks.length
             : 0;
 
           return JSON.stringify({

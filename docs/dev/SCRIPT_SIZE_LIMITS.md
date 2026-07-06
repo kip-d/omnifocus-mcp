@@ -26,6 +26,11 @@ assumption was only **3.6%** of actual JXA capacity!
 - **Test Method:** JXA wrapper calling `app.evaluateJavascript(omniJSScript)`
 - **Boundary Testing:** All scripts 261,118-261,130 chars passed
 - **Confidence:** High (matches our tag assignment bridge usage)
+- **Direction measured:** INPUT only — the size of OmniJS source handed INTO `evaluateJavascript()`. The RETURN path
+  (how large a value `evaluateJavascript()` can hand back to JXA) has never been separately measured; it is measurable
+  via `scripts/measure-bridge-return-limit.ts` (pending — run manually, supervised, against live OmniFocus).
+  `RAW_DATA_BYTE_BUDGET` in `src/omnifocus/scripts/analytics/workflow-analysis-v3.ts` (OMN-233) is an extrapolation from
+  this input-side figure until that script has been run.
 
 ### Method Comparison
 

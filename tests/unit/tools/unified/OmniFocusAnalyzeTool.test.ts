@@ -613,13 +613,11 @@ describe('OmniFocusAnalyzeTool', () => {
       const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
       // Cap constant exists and is a bounded few-hundred figure, not full-DB size.
       expect(source).toMatch(/const MAX_RAW_DATA_TASKS = 500;/);
-      // Push is gated on the running count vs the cap (cap-at-push, not slice-at-return).
-      expect(source).toMatch(/if \(rawDataTaskCount <= MAX_RAW_DATA_TASKS\)/);
-      // A truncation marker is set once the cap is exceeded, so a future consumer
+      // A truncation marker is set once a cap is exceeded, so a future consumer
       // of includeRawData can tell the raw slice is partial.
       expect(source).toMatch(/data\.tasksTruncated = true;/);
-      // Omitted-count is keyed off the truncation flag (not a second independent
-      // cap comparison), so the two can't desync.
+      // Omitted-count is keyed off the truncation flag and the actual pushed
+      // length (not a second independent cap comparison), so the two can't desync.
       expect(source).toMatch(/data\.tasksOmittedCount = data\.tasksTruncated/);
       // Critical invariant: the aggregate metrics loop must still iterate the FULL
       // population — only the raw data.tasks echo is capped. OMN-200 removed the
@@ -627,6 +625,36 @@ describe('OmniFocusAnalyzeTool', () => {
       // this cap must not reintroduce that regression.
       expect(source).toMatch(/const maxTasksToProcess = totalTasks;/);
       expect(source).not.toMatch(/maxTasksToProcess = MAX_RAW_DATA_TASKS/);
+    });
+
+    it('OMN-233: gates the raw data.tasks push on both a count cap and a byte budget', async () => {
+      const fs = await import('fs');
+      const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
+      // Byte budget constant exists, is comfortably under the ~261,124-char
+      // measured OmniJS bridge INPUT limit (return-path unmeasured — see
+      // scripts/measure-bridge-return-limit.ts), and leaves headroom for the
+      // rest of the response payload (insights/patterns/recommendations).
+      expect(source).toMatch(/const RAW_DATA_BYTE_BUDGET = 150000;/);
+      // Push is gated on BOTH conditions: still under the count cap AND still
+      // under the byte budget. Neither cap alone is sufficient — count caps
+      // don't bound unbounded name/project/tags strings, and a byte-only cap
+      // could still admit an unbounded number of tiny records.
+      expect(source).toMatch(
+        /data\.tasks\.length < MAX_RAW_DATA_TASKS &&\s*\n\s*rawDataBytesUsed \+ rawDataRecordBytes <= RAW_DATA_BYTE_BUDGET/,
+      );
+      // The running byte tally is measured via JSON.stringify on the actual
+      // record shape that gets pushed, not an estimate.
+      expect(source).toMatch(/const rawDataRecordBytes = JSON\.stringify\(rawDataRecord\)\.length;/);
+      // Once truncated, the loop stops building/measuring further records
+      // (perf: avoid JSON.stringify on records we won't push).
+      expect(source).toMatch(/if \(!data\.tasksTruncated\) {/);
+      // Omitted-count must reflect whichever cap tripped first (count OR
+      // bytes) by diffing against the actual pushed length, not re-deriving
+      // from MAX_RAW_DATA_TASKS alone (which would be wrong when the byte
+      // budget truncates before the count cap does).
+      expect(source).toMatch(
+        /data\.tasksOmittedCount = data\.tasksTruncated\s*\n\s*\? rawDataTaskCount - data\.tasks\.length\s*\n\s*: 0;/,
+      );
     });
   });
 
