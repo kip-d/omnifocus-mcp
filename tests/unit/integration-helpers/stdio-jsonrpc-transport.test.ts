@@ -111,6 +111,16 @@ describe('StdioJsonRpcTransport', () => {
     // in a real run if the entry wasn't cleaned up before close tore things down).
   });
 
+  it('close({ graceful: true }) rejects in-flight requests instead of leaving them dangling when the child already died', async () => {
+    const id = transport.nextId();
+    const promise = transport.sendRequest({ jsonrpc: '2.0', id, method: 'tools/call' });
+    const assertion = expect(promise).rejects.toThrow('transport closed with request in flight');
+
+    child.killed = true;
+    await transport.close({ graceful: true });
+    await assertion;
+  });
+
   it('rejectAllPending rejects every in-flight request with the supplied error', async () => {
     const id1 = transport.nextId();
     const id2 = transport.nextId();

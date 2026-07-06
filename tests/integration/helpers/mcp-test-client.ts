@@ -1,6 +1,6 @@
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from './run-id.js';
-import { StdioJsonRpcTransport } from './stdio-jsonrpc-transport.js';
+import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
 
 export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
 
@@ -126,7 +126,7 @@ export class MCPTestClient {
     await this.delay(100);
   }
 
-  async sendRequest(request: MCPRequest, timeout: number = 120000): Promise<MCPResponse> {
+  async sendRequest(request: MCPRequest, timeout: number = DEFAULT_TIMEOUT_MS): Promise<MCPResponse> {
     // Critical Issue #3: Request ID validation
     if (request.id === undefined) {
       throw new Error('Request must have an id for sendRequest');

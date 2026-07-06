@@ -68,7 +68,7 @@ interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
 }
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+export const DEFAULT_TIMEOUT_MS = 120_000;
 
 export class StdioJsonRpcTransport {
   private messageId = 0;
@@ -168,7 +168,10 @@ export class StdioJsonRpcTransport {
   /**
    * Graceful shutdown (default, `MCPTestClient` policy): end stdin, wait up
    * to 5s for the child to exit on its own, else SIGTERM, then SIGKILL after
-   * another 2s. Does NOT proactively reject in-flight requests.
+   * another 2s. Does NOT proactively reject in-flight requests while the
+   * child is still alive — except if the child has ALREADY died before
+   * `close()` was called, in which case pending requests are rejected
+   * immediately rather than left to ride out their own timeout.
    *
    * `close({ graceful: false })` (`UnifiedTestServer` policy): proactively
    * reject all pending requests, close the reader, and kill the child
@@ -185,6 +188,7 @@ export class StdioJsonRpcTransport {
     }
 
     if (!this._child || this._child.killed) {
+      this.rejectAllPending(new Error('transport closed with request in flight'));
       this.rl?.close();
       return;
     }

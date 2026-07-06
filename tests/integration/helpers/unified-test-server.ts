@@ -51,12 +51,10 @@
  */
 import type { ChildProcess, SpawnOptions } from 'child_process';
 import path from 'path';
-import { StdioJsonRpcTransport } from './stdio-jsonrpc-transport.js';
+import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
 
 /** Resolve `dist/index.js` from this helper's location (tests/integration/helpers → repo root). */
 const SERVER_PATH = path.join(__dirname, '../../../dist/index.js');
-
-const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface StartOptions {
   /**
