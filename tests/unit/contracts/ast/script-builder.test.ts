@@ -218,16 +218,13 @@ describe('buildFilteredTasksScript', () => {
   // is caught) AND the exact key it projects to (so a mutant emitting the
   // wrong output key is caught).
   describe('date field projections (OMN-202)', () => {
-    it.each([
-      ['dueDate'],
-      ['deferDate'],
-      ['plannedDate'],
-      ['completionDate'],
-      ['effectivePlannedDate'],
-    ])('projects %s reading task.%s with ISO/null guard', (field) => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', field] });
-      expect(result.script).toContain(`${field}: task.${field} ? task.${field}.toISOString() : null`);
-    });
+    it.each([['dueDate'], ['deferDate'], ['plannedDate'], ['completionDate'], ['effectivePlannedDate']])(
+      'projects %s reading task.%s with ISO/null guard',
+      (field) => {
+        const result = buildFilteredTasksScript({}, { fields: ['id', field] });
+        expect(result.script).toContain(`${field}: task.${field} ? task.${field}.toISOString() : null`);
+      },
+    );
 
     it('requesting all four date fields together emits four distinct, non-cross-contaminated projections', () => {
       // Guards against a mutant that makes one case fall through to another
