@@ -209,7 +209,7 @@ describe('buildFilteredTasksScript', () => {
     });
   });
 
-  // OMN-202: mutation testing (OMN-201 baseline) found the four date-field
+  // OMN-202: mutation testing (OMN-201 baseline) found the date-field
   // `case` labels in generateFieldProjection unpinned — a regression that
   // swapped one date field's source property for another's (or dropped its
   // toISOString()/null-guard) would not be caught. Each assertion below pins
@@ -226,18 +226,21 @@ describe('buildFilteredTasksScript', () => {
       },
     );
 
-    it('requesting all four date fields together emits four distinct, non-cross-contaminated projections', () => {
+    it('requesting all five date fields together emits five distinct, non-cross-contaminated projections', () => {
       // Guards against a mutant that makes one case fall through to another
       // (e.g. `case 'deferDate':` dropping through into the `case 'dueDate':`
       // body) — each key must read its OWN source property, not a sibling's.
       const result = buildFilteredTasksScript(
         {},
-        { fields: ['id', 'dueDate', 'deferDate', 'plannedDate', 'completionDate'] },
+        { fields: ['id', 'dueDate', 'deferDate', 'plannedDate', 'completionDate', 'effectivePlannedDate'] },
       );
       expect(result.script).toContain('dueDate: task.dueDate ? task.dueDate.toISOString() : null');
       expect(result.script).toContain('deferDate: task.deferDate ? task.deferDate.toISOString() : null');
       expect(result.script).toContain('plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null');
       expect(result.script).toContain('completionDate: task.completionDate ? task.completionDate.toISOString() : null');
+      expect(result.script).toContain(
+        'effectivePlannedDate: task.effectivePlannedDate ? task.effectivePlannedDate.toISOString() : null',
+      );
       // Each field's projection appears exactly once — a fallthrough mutant
       // that duplicates one field's projection line under two case labels
       // would push one of these counts to 2.
@@ -246,6 +249,7 @@ describe('buildFilteredTasksScript', () => {
       expect(occurrences('deferDate: task.deferDate')).toBe(1);
       expect(occurrences('plannedDate: task.plannedDate')).toBe(1);
       expect(occurrences('completionDate: task.completionDate')).toBe(1);
+      expect(occurrences('effectivePlannedDate: task.effectivePlannedDate')).toBe(1);
     });
   });
 
