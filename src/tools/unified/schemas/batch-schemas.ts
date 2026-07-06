@@ -47,7 +47,11 @@ export const BatchCreateSchema = z.object({
   atomicOperation: coerceBoolean()
     .optional()
     .default(false)
-    .describe('Rollback all creations if any fail (default: false)'),
+    .describe(
+      'Best-effort rollback of prior creations if any fail (default: false). ' +
+        'If a compensating delete itself fails, the response reports rolledBack: "partial" ' +
+        'plus a rollbackFailures list of orphaned items — check for it rather than assuming a clean undo.',
+    ),
 
   returnMapping: coerceBoolean().optional().default(true).describe('Return tempId -> realId mapping (default: true)'),
 
