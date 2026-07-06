@@ -1,7 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { PassThrough } from 'stream';
-import { EventEmitter } from 'events';
+import { describe, it, expect } from 'vitest';
 import { GherkinTestRunner } from '../../support/gherkin-test-runner.js';
+import { makeFakeChild, sendLine, type FakeChild } from '../helpers/fake-child.js';
 
 /**
  * OMN-234 — unit coverage for GherkinTestRunner composing
@@ -11,41 +10,6 @@ import { GherkinTestRunner } from '../../support/gherkin-test-runner.js';
  * public API (`sendRequest`/`nextId`) — does not drive `start()`/`initialize()`
  * (those require a real MCP handshake response) or a real child process.
  */
-
-interface FakeChild extends EventEmitter {
-  stdout: PassThrough;
-  stdin: PassThrough;
-  stderr: PassThrough;
-  killed: boolean;
-  exitCode: number | null;
-  signalCode: string | null;
-  kill: (signal?: string) => void;
-}
-
-function makeFakeChild(): FakeChild {
-  const stdout = new PassThrough();
-  const stdin = new PassThrough();
-  const stderr = new PassThrough();
-  const child = new EventEmitter() as FakeChild;
-  child.stdout = stdout;
-  child.stdin = stdin;
-  child.stderr = stderr;
-  child.killed = false;
-  child.exitCode = null;
-  child.signalCode = null;
-  child.kill = vi.fn((signal?: string) => {
-    child.killed = true;
-    process.nextTick(() => {
-      child.signalCode = signal ?? 'SIGTERM';
-      child.emit('exit', null, child.signalCode);
-    });
-  });
-  return child;
-}
-
-function sendLine(child: FakeChild, obj: unknown): void {
-  child.stdout.write(JSON.stringify(obj) + '\n');
-}
 
 describe('GherkinTestRunner (composed over StdioJsonRpcTransport)', () => {
   /** Drives `start()` (which performs the real `initialize()` MCP handshake) to completion by answering its id-1 request, using only the runner's public API. */

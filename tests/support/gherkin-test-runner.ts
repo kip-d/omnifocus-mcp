@@ -12,6 +12,8 @@
 
 import type { spawn } from 'child_process';
 import { StdioJsonRpcTransport } from '../integration/helpers/stdio-jsonrpc-transport.js';
+import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
 
 interface MCPRequest {
   jsonrpc: '2.0';
@@ -398,6 +400,11 @@ export class GherkinTestRunner {
   }
 
   async sendRequest(request: MCPRequest, timeout: number = 10000): Promise<MCPResponse> {
+    if (request.id === undefined) {
+      // The transport keys its pending map on a numeric id; an id-less request
+      // would sit keyed on undefined until timeout. Fail fast instead.
+      throw new Error('sendRequest requires request.id — use nextId()');
+    }
     return this.transport.sendRequest(request as unknown as { id: number; [k: string]: unknown }, timeout);
   }
 
@@ -513,7 +520,24 @@ async function runTests(): Promise<void> {
 
 // Only auto-run when executed directly (e.g. `npx tsx tests/support/gherkin-test-runner.ts`),
 // not when imported by a unit test.
-if (import.meta.url === `file://${process.argv[1]}`) {
+
+/**
+ * Robust "run directly, not imported" check (OMN-234 gate review): the naive
+ * `import.meta.url === \`file://${argv[1]}\`` breaks on percent-encoded
+ * characters (spaces, non-ASCII) and symlinked paths, silently turning a
+ * direct run into an exit-0 no-op. pathToFileURL handles encoding;
+ * realpathSync resolves symlinks on the argv side.
+ */
+function isRunDirectly(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isRunDirectly()) {
   // Handle command line args
   if (process.argv[2] === '--help') {
     console.log('Usage: node test/gherkin-test-runner.js [--verbose]');

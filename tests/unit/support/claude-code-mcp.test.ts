@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { PassThrough } from 'stream';
-import { EventEmitter } from 'events';
 import { MCPTester } from '../../support/claude-code-mcp.js';
+import { makeFakeChild, sendLine } from '../helpers/fake-child.js';
 
 /**
  * OMN-234 — unit coverage for MCPTester composing StdioJsonRpcTransport
@@ -9,41 +8,6 @@ import { MCPTester } from '../../support/claude-code-mcp.js';
  * FakeChild pattern from `stdio-jsonrpc-transport.test.ts`, exercised
  * through MCPTester's own public API (`sendRequest`/`nextId`).
  */
-
-interface FakeChild extends EventEmitter {
-  stdout: PassThrough;
-  stdin: PassThrough;
-  stderr: PassThrough;
-  killed: boolean;
-  exitCode: number | null;
-  signalCode: string | null;
-  kill: (signal?: string) => void;
-}
-
-function makeFakeChild(): FakeChild {
-  const stdout = new PassThrough();
-  const stdin = new PassThrough();
-  const stderr = new PassThrough();
-  const child = new EventEmitter() as FakeChild;
-  child.stdout = stdout;
-  child.stdin = stdin;
-  child.stderr = stderr;
-  child.killed = false;
-  child.exitCode = null;
-  child.signalCode = null;
-  child.kill = vi.fn((signal?: string) => {
-    child.killed = true;
-    process.nextTick(() => {
-      child.signalCode = signal ?? 'SIGTERM';
-      child.emit('exit', null, child.signalCode);
-    });
-  });
-  return child;
-}
-
-function sendLine(child: FakeChild, obj: unknown): void {
-  child.stdout.write(JSON.stringify(obj) + '\n');
-}
 
 describe('MCPTester (composed over StdioJsonRpcTransport)', () => {
   it('routes interleaved responses to the request with the matching id through sendRequest/nextId', async () => {
