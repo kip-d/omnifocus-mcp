@@ -25,6 +25,16 @@ function createMockCache(): CacheManager {
   } as unknown as CacheManager;
 }
 
+/** Single source for the fast-path batch-create builder mock — every batch test spies the same shape. */
+function mockFastPathCreate() {
+  return vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
+    script: 'mock batch script',
+    operation: 'create',
+    target: 'task',
+    description: 'mock',
+  });
+}
+
 describe('OmniFocusWriteTool task operations', () => {
   let tool: OmniFocusWriteTool;
   let mockCache: CacheManager;
@@ -834,12 +844,7 @@ describe('OmniFocusWriteTool task operations', () => {
 
   describe('batch create warnings pass-through', () => {
     it('fast path: per-item script warnings survive into the flattened batch results', async () => {
-      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
+      const buildSpy = mockFastPathCreate();
       execJsonSpy.mockResolvedValue({
         success: true,
         data: {
@@ -967,12 +972,7 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('OMN-141: stopOnError=true with a failing item keeps per-item rows (no operation:unknown degradation)', async () => {
-      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
+      const buildSpy = mockFastPathCreate();
       // Script halted after the failing second item — third row never produced.
       execJsonSpy.mockResolvedValue({
         success: true,
@@ -1022,12 +1022,7 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('OMN-141 rider: atomic rollback keeps per-item rows, marking undone creates instead of degrading', async () => {
-      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
+      const buildSpy = mockFastPathCreate();
       // First call: the batch create script (one ok, one fail). Later calls
       // (rollback deletes) get a generic success.
       execJsonSpy
@@ -1074,12 +1069,7 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('OMN-239: a delete failure mid-rollback reports partial rollback with orphaned item IDs, not unconditional success', async () => {
-      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
+      const buildSpy = mockFastPathCreate();
       // Call 1: batch create — t1 and t2 succeed, t3 fails (triggers atomic rollback).
       // Rollback runs in reverse creation order: t2's delete first, then t1's.
       execJsonSpy
@@ -1115,6 +1105,10 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(false);
       const items = result.data.results as Array<Record<string, unknown>>;
 
+      // The top-line summary must agree with the per-item rows: t2 survived the
+      // failed rollback delete, so exactly 1 item still exists in OmniFocus.
+      expect(result.data.summary.created).toBe(1);
+
       // t2's delete failed — it must NOT be reported as a successfully-undone
       // create (that would lie about an orphaned object). It must remain
       // visibly flagged so the client can surface/clean it up.
@@ -1143,12 +1137,7 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('OMN-239 control: when every rollback delete succeeds, the batch still reports a full clean rollback', async () => {
-      const buildSpy = vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
+      const buildSpy = mockFastPathCreate();
       execJsonSpy
         .mockResolvedValueOnce({
           success: true,
@@ -1176,6 +1165,8 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(false);
       const items = result.data.results as Array<Record<string, unknown>>;
+      // Clean rollback: nothing survives, so the summary reports 0 created.
+      expect(result.data.summary.created).toBe(0);
       const undone = items.find((r) => r.tempId === 't1');
       expect(undone!.success).toBe(false);
       expect(String(undone!.error)).toContain('rolled back');
@@ -1235,14 +1226,6 @@ describe('OmniFocusWriteTool task operations', () => {
     // rows plus one phase-level error row — there is no top-level `errors` array
     // and rolledBack/rollbackFailures never appear directly in the response, so
     // assertions below read the per-item warning and the phase-level error string.
-    function mockFastPathCreate() {
-      return vi.spyOn(scriptBuilder, 'buildBatchCreateTasksScript').mockResolvedValue({
-        script: 'mock batch script',
-        operation: 'create',
-        target: 'task',
-        description: 'mock',
-      });
-    }
 
     it('resolved script-error rollback delete is reported as orphaned, not silently treated as rolled back (execJson does not reject on in-band failure)', async () => {
       const buildBatchSpy = mockFastPathCreate();
