@@ -10,7 +10,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { FilterNode, ComparisonNode, ExistsNode, AndNode, OrNode } from './types.js';
+import type { FilterNode, ComparisonNode, ExistsNode, AndNode, OrNode, NotNode } from './types.js';
 import { KNOWN_FIELDS } from './types.js';
 
 // =============================================================================
@@ -298,21 +298,26 @@ function detectTautologies(ast: FilterNode, warnings: ValidationWarning[]): void
 }
 
 /**
- * Walk `and`/`or` edges looking for `or` scopes to check. `and` nodes are
- * transparent; `not` is an opaque boundary — matching the pre-OMN-227
- * bare-root-OR-only behavior for negated subtrees.
+ * Walk `and`/`or`/`not` edges looking for `or` scopes to check. `and` nodes
+ * are transparent; `not` is a scope boundary (its contents never flatten into
+ * an enclosing OR scope) but is walked THROUGH so a degenerate OR inside a
+ * negation is still found as an independent root — the warning is about the
+ * degenerate sub-filter the user wrote, regardless of the wrapper.
  */
 function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): void {
   switch (node.type) {
     case 'and':
       node.children.forEach((child) => visitForTautologies(child, warnings));
       break;
+    case 'not':
+      visitForTautologies(node.child, warnings);
+      break;
     case 'or': {
       const comparisons: ComparisonNode[] = [];
-      const andBoundaries: AndNode[] = [];
-      collectOrScope(node, comparisons, andBoundaries);
+      const boundaries: Array<AndNode | NotNode> = [];
+      collectOrScope(node, comparisons, boundaries);
       checkScopeForTautology(comparisons, warnings);
-      andBoundaries.forEach((and) => visitForTautologies(and, warnings));
+      boundaries.forEach((boundary) => visitForTautologies(boundary, warnings));
       break;
     }
   }
@@ -320,21 +325,23 @@ function visitForTautologies(node: FilterNode, warnings: ValidationWarning[]): v
 
 /**
  * Collect the `or` node's own scope: direct comparison children, flattening
- * through nested `or` children only (OR is associative). `and` children are
- * recorded as boundaries for independent checking; `not`/`exists`/`literal`
- * children are opaque, mirroring `collectAndScope`.
+ * through nested `or` children only (OR is associative). `and` and `not`
+ * children are recorded as boundaries for independent re-checking (never
+ * flattened); `exists`/`literal` children are opaque, mirroring
+ * `collectAndScope`.
  */
-function collectOrScope(node: OrNode, comparisons: ComparisonNode[], andBoundaries: AndNode[]): void {
+function collectOrScope(node: OrNode, comparisons: ComparisonNode[], boundaries: Array<AndNode | NotNode>): void {
   for (const child of node.children) {
     switch (child.type) {
       case 'comparison':
         comparisons.push(child);
         break;
       case 'or':
-        collectOrScope(child, comparisons, andBoundaries);
+        collectOrScope(child, comparisons, boundaries);
         break;
       case 'and':
-        andBoundaries.push(child);
+      case 'not':
+        boundaries.push(child);
         break;
     }
   }

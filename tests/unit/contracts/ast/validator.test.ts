@@ -450,8 +450,8 @@ describe('validateFilterAST', () => {
     });
 
     it('does not warn when a NOT child breaks the OR scope', () => {
-      // OR(completed==true, NOT(completed==false)) — NOT is opaque, matching
-      // the AND-scope boundary treatment.
+      // OR(completed==true, NOT(completed==false)) — NOT contents never
+      // flatten into the enclosing OR scope.
       const ast: FilterNode = {
         type: 'or',
         children: [
@@ -465,6 +465,49 @@ describe('validateFilterAST', () => {
       const result = validateFilterAST(ast);
 
       expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(0);
+    });
+
+    it('finds a degenerate OR inside a NOT child of an OR (gate-review repro)', () => {
+      // OR(flagged==true, NOT(OR(completed==true, completed==false))) — the
+      // NOT is a scope boundary but is walked THROUGH: the degenerate inner
+      // OR the user wrote is still flagged as an independent root.
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          {
+            type: 'not',
+            child: {
+              type: 'or',
+              children: [
+                { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+                { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+              ],
+            },
+          },
+        ],
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(1);
+    });
+
+    it('finds a degenerate OR under a root-level NOT', () => {
+      // NOT(OR(completed==true, completed==false)) — NOT anywhere is walked
+      // through when hunting OR roots.
+      const ast: FilterNode = {
+        type: 'not',
+        child: {
+          type: 'or',
+          children: [
+            { type: 'comparison', field: 'task.completed', operator: '==', value: true },
+            { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          ],
+        },
+      };
+      const result = validateFilterAST(ast);
+
+      expect(result.warnings.filter((w) => w.code === 'TAUTOLOGY')).toHaveLength(1);
     });
 
     it('does not double-report a tautology once flattening absorbs the nested OR', () => {
