@@ -80,7 +80,7 @@ describe('TaskRowSchema ↔ generateFieldProjection switch-case parity', () => {
 // ---------------------------------------------------------------------------
 
 describe('ProjectRowSchema ↔ generateProjectFieldProjection switch-case parity', () => {
-  it('switch case labels are a subset of ProjectRowSchema.shape; difference is exactly {taskCounts, nextTask, stats}', () => {
+  it('switch case labels are a subset of ProjectRowSchema.shape; difference is exactly {taskCounts, nextTask, stats, noteTruncated}', () => {
     // Slice: from `function generateProjectFieldProjection` to the next top-level function
     const slice = sliceBetweenFunctions(
       scriptBuilderSrc,
@@ -97,8 +97,10 @@ describe('ProjectRowSchema ↔ generateProjectFieldProjection switch-case parity
       `Switch has labels not in ProjectRowSchema.shape: ${missingFromSchema.join(', ')}`,
     ).toEqual([]);
 
-    // The difference (schema keys NOT in the switch) must be exactly these three
-    const expectedExtra = new Set(['taskCounts', 'nextTask', 'stats']);
+    // The difference (schema keys NOT in the switch) must be exactly these four.
+    // noteTruncated (OMN-242) piggybacks on the 'note' case rather than being
+    // its own switch label — it's emitted conditionally within that case body.
+    const expectedExtra = new Set(['taskCounts', 'nextTask', 'stats', 'noteTruncated']);
     const actualExtra = new Set([...schemaKeys].filter((k) => !switchLabels.has(k)));
 
     expect(actualExtra).toEqual(expectedExtra);

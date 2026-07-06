@@ -1370,6 +1370,55 @@ describe('note truncation in project field projection', () => {
   });
 });
 
+// OMN-242: `note` alone can't distinguish "short note" from "silently truncated
+// note" — the projected object needs a sibling flag that only appears when
+// truncation actually fired at runtime.
+describe('OMN-242: noteTruncated flag on project note truncation', () => {
+  it('emits runtime logic that adds noteTruncated:true only on the truncated branch', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 200,
+      },
+    );
+
+    const inner = recoverInnerProgram(result.script);
+    // Truncation is a runtime decision (depends on each project's actual note
+    // length), so the emitted script must branch: truncated notes carry the
+    // flag, the else branch (untruncated, even though a limit is configured)
+    // does not.
+    expect(inner).toContain('noteTruncated: true');
+    expect(inner).toContain('truncated = n.length > 200');
+    expect(inner).toMatch(
+      /truncated \? \{ note: n\.substring\(0, 200\) \+ "\.\.\.", noteTruncated: true \} : \{ note: n \}/,
+    );
+  });
+
+  it('does not emit noteTruncated at all when noteTruncateLength is not set', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      {
+        fields: ['id', 'note'],
+      },
+    );
+
+    expect(recoverInnerProgram(result.script)).not.toContain('noteTruncated');
+  });
+
+  it('does not emit noteTruncated when noteTruncateLength is 0', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 0,
+      },
+    );
+
+    expect(recoverInnerProgram(result.script)).not.toContain('noteTruncated');
+  });
+});
+
 // =============================================================================
 // PREAMBLE AND WARNING ASSEMBLY TESTS
 // =============================================================================

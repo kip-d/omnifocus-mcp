@@ -134,6 +134,10 @@ export const ProjectRowSchema = z
     status: z.string().optional(),
     flagged: z.boolean().optional(),
     note: z.string().optional(),
+    // OMN-242: sibling flag emitted alongside `note` ONLY when truncation
+    // actually fired at runtime (n.length > noteTruncateLength). Not its own
+    // switch case — piggybacks on the 'note' case in generateProjectFieldProjection.
+    noteTruncated: z.boolean().optional(),
     dueDate: isoDateOrNull.optional(),
     deferDate: isoDateOrNull.optional(),
     folder: z.string().nullable().optional(),

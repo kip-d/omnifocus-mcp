@@ -1373,8 +1373,10 @@ function generateProjectFieldProjection(fields: string[], context?: { noteTrunca
         break;
       case 'note':
         if (noteTruncateLength && noteTruncateLength > 0) {
+          // OMN-242: signal truncation via a sibling flag, only emitted when it
+          // actually fired, so responses stay byte-identical for the common case.
           projections.push(
-            `note: (() => { const n = project.note || ""; return n.length > ${noteTruncateLength} ? n.substring(0, ${noteTruncateLength}) + "..." : n; })()`,
+            `...(() => { const n = project.note || ""; const truncated = n.length > ${noteTruncateLength}; return truncated ? { note: n.substring(0, ${noteTruncateLength}) + "...", noteTruncated: true } : { note: n }; })()`,
           );
         } else {
           projections.push('note: project.note || ""');
