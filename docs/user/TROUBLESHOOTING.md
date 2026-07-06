@@ -131,9 +131,8 @@ Build first with `npm run build` if Inspector fails.
 
 #### Verify installation
 
-```bash
-node dist/index.js --version
-```
+There is no `--version` CLI flag (unknown flags exit with an error). Verify via the MCP `system` tool's `version`
+operation below, or `node dist/index.js --help`.
 
 #### Test connection
 
