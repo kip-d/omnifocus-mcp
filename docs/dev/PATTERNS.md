@@ -42,11 +42,12 @@ should show `{oneOf: [...]}`, not `{type: "string"}`.
 // ❌ JXA methods fail silently
 task.addTags(tags);
 
-// ✅ Bridge works — OmniJS addTag(), emitted by src/contracts/ast/mutation/emitter.ts
-// (routed from src/contracts/ast/mutation/defs.ts; entry points are
-// src/contracts/ast/mutation-script-builder.ts and tag-mutation-script-builder.ts)
-task.addTag(tag); // inside evaluateJavascript
+// ✅ Bridge works — OmniJS addTag() inside evaluateJavascript
+task.addTag(tag);
 ```
+
+Entry points: `src/contracts/ast/mutation-script-builder.ts`, `tag-mutation-script-builder.ts`. Full pipeline
+description: repo CLAUDE.md → "🏷️ Tag Operations".
 
 ---
 
