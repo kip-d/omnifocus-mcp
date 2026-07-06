@@ -32,8 +32,8 @@ date filter requires one line in the registry.
 | Layer                | File                                                          | Function                          | Responsibility                                         |
 | -------------------- | ------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------ |
 | 1. Schema            | `src/tools/unified/schemas/read-schema.ts`                    | Zod schema validation             | Accepts/rejects API input structure                    |
-| 2. Compiler          | `src/tools/unified/compilers/QueryCompiler.ts:76`             | `transformFilters()`              | Transforms API names → `TaskFilter` property names     |
-| 3. AST Builder       | `src/contracts/ast/builder.ts:37`                             | `buildAST()` + `DATE_FILTER_DEFS` | Builds `FilterNode` tree from `TaskFilter`             |
+| 2. Compiler          | `src/tools/unified/compilers/QueryCompiler.ts`                | `transformFilters()`              | Transforms API names → `TaskFilter` property names     |
+| 3. AST Builder       | `src/contracts/ast/builder.ts`                                | `buildAST()` + `DATE_FILTER_DEFS` | Builds `FilterNode` tree from `TaskFilter`             |
 | 4. Validator/Emitter | `src/contracts/ast/types.ts` + `src/contracts/ast/emitter.ts` | `KNOWN_FIELDS` + `emitOmniJS()`   | Validates field names, generates OmniJS predicate code |
 
 ### The Contract Layer

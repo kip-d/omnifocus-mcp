@@ -74,15 +74,15 @@ Single osascript execution.
 
 ## Use Case Reference
 
-| Use Case           | Pattern | File                       |
-| ------------------ | ------- | -------------------------- |
-| Set tags           | Bridge  | `minimal-tag-bridge.ts:41` |
-| Get added/modified | Bridge  | `date-fields-bridge.ts:13` |
-| Set planned date   | Bridge  | `minimal-tag-bridge.ts:73` |
-| Repetition rule    | Bridge  | `create-task.ts:142`       |
-| Validate project   | Helpers | `helpers.ts`               |
-| Query with filters | Script  | `list-tasks-ast.ts`        |
-| Create task + tags | Script  | `create-task.ts`           |
+| Use Case           | Pattern | File                                                                                                                      |
+| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Set tags           | Bridge  | OmniJS `addTag()` via `src/contracts/ast/mutation-script-builder.ts` + `src/contracts/ast/tag-mutation-script-builder.ts` |
+| Get added/modified | Filter  | `task.added` / `task.modified` in `src/contracts/filters.ts` + `src/contracts/ast/builder.ts`                             |
+| Set planned date   | Bridge  | `plannedDate` handling in `src/contracts/ast/mutation-script-builder.ts`                                                  |
+| Repetition rule    | Bridge  | `src/contracts/ast/mutation/repetition.ts` (build-time lowering) + `mutation-script-builder.ts`                           |
+| Validate project   | Helpers | `helpers.ts`                                                                                                              |
+| Query with filters | Script  | `list-tasks-ast.ts`                                                                                                       |
+| Create task + tags | Script  | `src/contracts/ast/mutation-script-builder.ts` via `MutationCompiler.ts`                                                  |
 
 ---
 

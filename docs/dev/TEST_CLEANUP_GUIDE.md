@@ -58,7 +58,7 @@ trackCreatedProjectId(result: any): void {
 }
 ```
 
-**Location**: `tests/integration/helpers/mcp-test-client.ts:252-268`
+**Location**: `trackCreatedProjectId()` in `tests/integration/helpers/mcp-test-client.ts`
 
 ### How to Use
 

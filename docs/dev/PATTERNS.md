@@ -6,20 +6,22 @@ Check here BEFORE debugging.
 
 ## Discriminated Unions Failing in Claude Desktop
 
-| Symptom                                    | Cause                                      |
-| ------------------------------------------ | ------------------------------------------ |
-| Claude sends JSON string instead of object | Missing ZodDiscriminatedUnion handler      |
-| `Expected object, received string`         | BaseTool.zodTypeToJsonSchema missing case  |
-| Works in CLI, fails in Claude Desktop      | Schema falls through to `{type: "string"}` |
+| Symptom                                    | Cause                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| Claude sends JSON string instead of object | Missing `oneOf` in the tool's `inputSchema` override                   |
+| `Expected object, received string`         | `inputSchema` override wasn't hand-crafted for the discriminated union |
+| Works in CLI, fails in Claude Desktop      | Schema falls through to `{type: "string"}`                             |
 
-**Fix:** Add handler to `src/tools/base.ts:187`:
+**Fix:** There is no automatic Zod→JSON-Schema conversion — `get inputSchema()` in `src/tools/base.ts` throws if a
+subclass doesn't override it (grep for `must override inputSchema`). Hand-craft the `oneOf` variant in the tool's own
+`inputSchema` override; see CLAUDE.md's "Dual-Schema Architecture" section for the pattern:
 
 ```typescript
-if (schema instanceof z.ZodDiscriminatedUnion) {
-  return {
-    oneOf: schema._def.options.map((opt) => this.zodTypeToJsonSchema(opt)),
-    discriminator: { propertyName: schema._def.discriminator },
-  };
+{
+  oneOf: [
+    /* one JSON Schema per union member */
+  ],
+  discriminator: { propertyName: 'operation' }, // or whatever the union discriminates on
 }
 ```
 
@@ -31,18 +33,19 @@ should show `{oneOf: [...]}`, not `{type: "string"}`.
 
 ## Tags Not Working
 
-| Symptom                               | Solution                  |
-| ------------------------------------- | ------------------------- |
-| Tags in response but not in query     | Use `bridgeSetTags()`     |
-| Empty array when should have values   | JXA methods fail silently |
-| Tags saved but invisible in OmniFocus | Bridge required           |
+| Symptom                               | Solution                     |
+| ------------------------------------- | ---------------------------- |
+| Tags in response but not in query     | Assign via OmniJS `addTag()` |
+| Empty array when should have values   | JXA methods fail silently    |
+| Tags saved but invisible in OmniFocus | Bridge required              |
 
 ```javascript
 // ❌ JXA methods fail silently
 task.addTags(tags);
 
-// ✅ Bridge works
-bridgeSetTags(app, taskId, taskData.tags); // minimal-tag-bridge.ts:41
+// ✅ Bridge works — OmniJS addTag(), built by the AST tag mutation builders
+// (src/contracts/ast/mutation-script-builder.ts, src/contracts/ast/tag-mutation-script-builder.ts)
+task.addTag(tag); // inside evaluateJavascript
 ```
 
 ---
@@ -120,6 +123,7 @@ dueDate: '2025-03-15'; // Defaults to 5pm
 ```bash
 # ✅ Includes required clientInfo
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+# protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports (see package.json)
 ```
 
 ---
