@@ -328,14 +328,26 @@ async function runTest(): Promise<void> {
  * characters (spaces, non-ASCII) and symlinked paths, silently turning a
  * direct run into an exit-0 no-op. pathToFileURL handles encoding;
  * realpathSync resolves symlinks on the argv side.
+ *
+ * Duplicate of the canonical `scripts/lib/run-directly.ts` (kept local to avoid
+ * test-support importing from scripts/) — keep the logic in sync with it.
  */
 function isRunDirectly(): boolean {
-  if (!process.argv[1]) return false;
+  const entry = process.argv[1];
+  if (!entry) return false;
+  let resolved: string;
   try {
-    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
-  } catch {
-    return false;
+    resolved = realpathSync(entry);
+  } catch (err) {
+    // realpath can fail (dangling symlink, EACCES, virtual/bundled entry path).
+    // Fall back to comparing the unresolved path — deterministic like the old
+    // guard — instead of returning false, which would silently no-op a direct run.
+    console.error(
+      `[run-directly] realpathSync(${JSON.stringify(entry)}) failed (${String(err)}); comparing unresolved path`,
+    );
+    resolved = entry;
   }
+  return import.meta.url === pathToFileURL(resolved).href;
 }
 
 if (isRunDirectly()) {

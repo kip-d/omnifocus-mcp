@@ -15,10 +15,19 @@ import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 
 export function isRunDirectly(importMetaUrl: string): boolean {
-  if (!process.argv[1]) return false;
+  const entry = process.argv[1];
+  if (!entry) return false;
+  let resolved: string;
   try {
-    return importMetaUrl === pathToFileURL(realpathSync(process.argv[1])).href;
-  } catch {
-    return false;
+    resolved = realpathSync(entry);
+  } catch (err) {
+    // realpath can fail (dangling symlink, EACCES, virtual/bundled entry path).
+    // Fall back to comparing the unresolved path — deterministic like the old
+    // guard — instead of returning false, which would silently no-op a direct run.
+    console.error(
+      `[run-directly] realpathSync(${JSON.stringify(entry)}) failed (${String(err)}); comparing unresolved path`,
+    );
+    resolved = entry;
   }
+  return importMetaUrl === pathToFileURL(resolved).href;
 }
