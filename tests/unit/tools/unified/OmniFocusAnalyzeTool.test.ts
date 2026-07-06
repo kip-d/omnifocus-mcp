@@ -607,6 +607,25 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(source).not.toMatch(/Math\.min\(1000/);
       expect(source).not.toMatch(/analysisDepth === 'deep'/);
     });
+
+    it('OMN-208: caps data.tasks push independently of the full-population loop', async () => {
+      const fs = await import('fs');
+      const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
+      // Cap constant exists and is a bounded few-hundred figure, not full-DB size.
+      expect(source).toMatch(/const MAX_RAW_DATA_TASKS = 500;/);
+      // Push is gated on the running count vs the cap (cap-at-push, not slice-at-return).
+      expect(source).toMatch(/if \(rawDataTaskCount <= MAX_RAW_DATA_TASKS\)/);
+      // A truncation marker is set once the cap is exceeded, so a future consumer
+      // of includeRawData can tell the raw slice is partial.
+      expect(source).toMatch(/data\.tasksTruncated = true;/);
+      expect(source).toMatch(/data\.tasksOmittedCount = rawDataTaskCount > MAX_RAW_DATA_TASKS/);
+      // Critical invariant: the aggregate metrics loop must still iterate the FULL
+      // population — only the raw data.tasks echo is capped. OMN-200 removed the
+      // old 1000-task cap specifically so *Percentage metrics reflect the whole DB;
+      // this cap must not reintroduce that regression.
+      expect(source).toMatch(/const maxTasksToProcess = totalTasks;/);
+      expect(source).not.toMatch(/maxTasksToProcess = MAX_RAW_DATA_TASKS/);
+    });
   });
 
   // ==========================================================================
