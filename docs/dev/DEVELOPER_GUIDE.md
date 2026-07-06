@@ -202,6 +202,7 @@ Cache invalidates automatically on writes.
 ```bash
 # CLI test
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+# protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports (see package.json)
 
 # MCP Inspector
 npx @modelcontextprotocol/inspector dist/index.js
