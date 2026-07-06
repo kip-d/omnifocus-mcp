@@ -176,9 +176,6 @@ function resolveFieldsMode(
 }
 
 /**
- * Build the full task query: resolve mode, augment filters, inject fields, build script.
- */
-/**
  * OMN-19/OMN-223: a filter targeting specific items by name, text, or id is a
  * "narrow lookup" — the dashboard summary block is noise there and is suppressed.
  * Shared by the task and project paths so the rule has a single edit point.
@@ -189,6 +186,9 @@ function isNarrowLookupFilter(filter: { name?: unknown; text?: unknown; id?: unk
   return Boolean(filter.name || filter.text || filter.id);
 }
 
+/**
+ * Build the full task query: resolve mode, augment filters, inject fields, build script.
+ */
 function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
   if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
   const limit = compiled.limit || 25;
