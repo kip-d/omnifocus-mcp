@@ -273,3 +273,116 @@ describe('leniency #4 — mutation-field-alias (OMN-168)', () => {
     expect(r.applied).toEqual([]);
   });
 });
+
+describe('OMN-247 — leniencies must never rewrite the mutation discriminant', () => {
+  it('gate round 2: ABSENT outer target + nested data.target is NOT a contradiction — complete recovers (OMN-75 leniency)', () => {
+    // Pre-#247 this recovered (complete spreads data.target up); the first
+    // guard draft compared nested !== undefined and aborted. Absent means
+    // "fill from nested", never "conflict".
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'complete', data: { id: 't1', target: 'project' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    const m = (r.data as { mutation: Record<string, unknown> }).mutation;
+    expect(m.id).toBe('t1');
+    expect(m.target).toBe('project');
+    expect(r.applied).toEqual(['data-hoist-id']);
+  });
+
+  it('gate round 2: delete with a residual data field ABORTS recovery — never silently drops it (OMN-97 class)', () => {
+    const args = {
+      mutation: { operation: 'delete', target: 'task', data: { id: 't1', reason: 'duplicate-of-t2' } },
+    };
+    const original = WriteSchema.safeParse(args);
+    expect(original.success).toBe(false);
+
+    const r = parseWithNormalization(WriteSchema, args, 'omnifocus_write');
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+    expect(JSON.stringify(r.error!.issues)).toBe(JSON.stringify((original as z.SafeParseError<unknown>).error.issues));
+  });
+
+  it('the confirmed hijack: complete + nested data.operation:delete is NOT recovered as a delete', () => {
+    // /code-review 2026-07-07 verified trace: strict fails (complete has no
+    // `data`), the hoist copied the residual over the top level, and the
+    // flipped object passed the DELETE schema — task deleted instead of
+    // completed. The recovery must abort: conflicting dispatch keys mean the
+    // request's intent is ambiguous, so the ORIGINAL strict error stands.
+    const args = {
+      mutation: { operation: 'complete', target: 'task', data: { id: 't1', operation: 'delete' } },
+    };
+    const original = WriteSchema.safeParse(args);
+    expect(original.success).toBe(false);
+
+    const r = parseWithNormalization(WriteSchema, args, 'omnifocus_write');
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+    expect(JSON.stringify(r.error!.issues)).toBe(JSON.stringify((original as z.SafeParseError<unknown>).error.issues));
+  });
+
+  it('nested data.target conflicting with the outer target also aborts recovery', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'complete', target: 'task', data: { id: 't1', target: 'project' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
+
+  it('delete + conflicting nested data.operation aborts instead of silently dropping the conflict', () => {
+    // Pre-OMN-247 the delete branch dropped ALL residuals, so a nested
+    // operation:'complete' was silently discarded and the DELETE executed —
+    // the same ambiguity in the other direction.
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'delete', target: 'task', data: { id: 't1', operation: 'complete' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
+
+  it('a REDUNDANT echo of the outer discriminant is dropped and recovery proceeds', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'complete', target: 'task', data: { id: 't1', operation: 'complete' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual(['data-hoist-id']);
+    expect(r.data).toMatchObject({ mutation: { operation: 'complete', target: 'task', id: 't1' } });
+  });
+
+  it('legitimate complete residuals (completionDate) still hoist and spread', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          operation: 'complete',
+          target: 'task',
+          data: { id: 't1', completionDate: '2026-07-01 12:00' },
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual(['data-hoist-id']);
+    expect(r.data).toMatchObject({
+      mutation: { operation: 'complete', id: 't1', completionDate: '2026-07-01 12:00' },
+    });
+  });
+
+  it('update with an echoed data.operation recovers to changes WITHOUT the dispatch key', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'update', target: 'task', data: { id: 't1', operation: 'update', note: 'hi' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual(['data-hoist-id']);
+    expect(r.data).toMatchObject({ mutation: { operation: 'update', id: 't1', changes: { note: 'hi' } } });
+  });
+});
