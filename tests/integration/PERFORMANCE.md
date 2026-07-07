@@ -107,3 +107,27 @@ npx vitest tests/integration --run --reporter=json --outputFile.json=/tmp/pertes
 
 Because the wall is fixture-noise-dominated, **compare the per-class test-body subtotal on a quiet host** (check
 `loadavg`), not the raw wall. The id-read-back subtotal (~152 s post-OMN-185) is the most stable, attributable signal.
+
+### Profiling the fixture overhead itself (OMN-186 Phase 1)
+
+The test-body profile above cannot locate the ~400–490 s of non-test-body overhead — hooks aren't in vitest's per-test
+`duration`. The fixture profiler (`tests/integration/helpers/fixture-profiler.ts`) times the fixture-machinery leaf
+calls (`ensureSandboxFolder`, `fullCleanup`, shared-server init/reuse/shutdown) and appends one JSON line per call:
+
+```bash
+npm run build
+FIXTURE_PROFILE=1 npx vitest tests/integration --run
+# log: tests/integration/fixture-profile.jsonl (override with FIXTURE_PROFILE_LOG); delete between runs — it appends
+
+# per-op totals
+jq -s 'group_by(.op) | map({op: .[0].op, calls: length, total_s: ((map(.ms) | add) / 1000 | round)})' \
+  tests/integration/fixture-profile.jsonl
+
+# per-file totals (worst offenders first)
+jq -s 'group_by(.file) | map({file: .[0].file, total_s: ((map(.ms) | add) / 1000 | round)}) | sort_by(-.total_s)' \
+  tests/integration/fixture-profile.jsonl
+```
+
+Entries are `{file, hook, op, ms, at, failed?}`; `file` is `"(global)"` for globalSetup/globalTeardown calls. The flag
+off (default) is a pure pass-through — normal runs are untouched. This profile is the decision gate for OMN-186 Phase 2
+(per-run fixture epoch): proceed only if teardown-dominated.
