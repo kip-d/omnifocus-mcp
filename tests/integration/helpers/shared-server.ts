@@ -14,6 +14,7 @@
 
 import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
+import { profileFixture } from './fixture-profiler.js';
 
 let sharedClient: MCPTestClient | null = null;
 let initPromise: Promise<MCPTestClient> | null = null;
@@ -148,6 +149,14 @@ async function warmupOmniFocus(client: MCPTestClient): Promise<void> {
  * between test files.
  */
 export async function getSharedClient(): Promise<MCPTestClient> {
+  // OMN-186: first access pays server start + cache warm + OmniFocus warm;
+  // later per-file accesses pay a cache clear. Split ops so a profiled run
+  // (FIXTURE_PROFILE=1) can tell the one-time warm from the per-file cost.
+  const op = sharedClient || initPromise ? 'getSharedClient.reuse' : 'getSharedClient.init';
+  return profileFixture('beforeAll', op, getSharedClientImpl);
+}
+
+async function getSharedClientImpl(): Promise<MCPTestClient> {
   if (sharedClient) {
     // Clear cache between test file accesses to prevent pollution
     if (!isFirstAccess) {
@@ -180,15 +189,18 @@ export async function getSharedClient(): Promise<MCPTestClient> {
  * Shutdown the shared server (called by teardown script)
  */
 export async function shutdownSharedClient(): Promise<void> {
-  if (sharedClient) {
-    console.log('🧹 Shutting down shared MCP server...');
-    await sharedClient.thoroughCleanup();
-    await sharedClient.stop();
-    sharedClient = null;
-    initPromise = null;
-    isFirstAccess = true; // Reset for next test run
-    console.log('✅ Shared MCP server shutdown complete');
-  }
+  // OMN-186: end-of-run cost — profiled when FIXTURE_PROFILE=1
+  return profileFixture('globalTeardown', 'shutdownSharedClient', async () => {
+    if (sharedClient) {
+      console.log('🧹 Shutting down shared MCP server...');
+      await sharedClient.thoroughCleanup();
+      await sharedClient.stop();
+      sharedClient = null;
+      initPromise = null;
+      isFirstAccess = true; // Reset for next test run
+      console.log('✅ Shared MCP server shutdown complete');
+    }
+  });
 }
 
 /**

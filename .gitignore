@@ -54,3 +54,6 @@ docs/dev/integration-test-timing-baseline.json
 reports/mutation/
 .stryker-tmp/
 stryker.log
+
+# OMN-186 fixture-profiler output (FIXTURE_PROFILE=1 runs; machine-specific)
+tests/integration/fixture-profile.jsonl

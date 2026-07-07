@@ -13,6 +13,7 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { profileFixture } from './fixture-profiler.js';
 
 // OMN-147: args-array execFile (not shell `exec`) so the script is passed as an
 // argv element — no shell quoting to get wrong — and every spawn carries a child
@@ -148,6 +149,11 @@ export async function getSandboxInfo(): Promise<SandboxInfo> {
  * Create the sandbox folder if it doesn't exist
  */
 export async function ensureSandboxFolder(): Promise<string> {
+  // OMN-186: per-file setup cost — profiled when FIXTURE_PROFILE=1
+  return profileFixture('beforeAll', 'ensureSandboxFolder', ensureSandboxFolderImpl);
+}
+
+async function ensureSandboxFolderImpl(): Promise<string> {
   const info = await getSandboxInfo();
   if (info.exists && info.folderId) {
     return info.folderId;
@@ -670,6 +676,13 @@ async function deleteTestTags(): Promise<{ deleted: number; errors: string[] }> 
  * 7. Delete __test- tags (must be after tasks/projects so tags aren't referenced)
  */
 export async function fullCleanup(): Promise<CleanupReport> {
+  // OMN-186: per-file teardown cost (the suspected ~400-490s pool) — profiled
+  // when FIXTURE_PROFILE=1. Also fires from globalSetup/globalTeardown, where
+  // the profiler records hook 'global' instead of 'afterAll'.
+  return profileFixture('afterAll', 'fullCleanup', fullCleanupImpl);
+}
+
+async function fullCleanupImpl(): Promise<CleanupReport> {
   const startTime = Date.now();
   const report: CleanupReport = {
     inboxTasksDeleted: 0,
