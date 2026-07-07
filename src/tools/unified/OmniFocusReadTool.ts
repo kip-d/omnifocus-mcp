@@ -50,6 +50,7 @@ import {
   parseTasks,
   sortTasks,
   projectFields,
+  carryNoteTruncatedMarker,
   scoreForSmartSuggest,
   countTodayCategories,
   MODE_INJECTED_FIELDS,
@@ -143,13 +144,7 @@ export function projectFieldsOnResult(
         out[field] = project[field];
       }
     }
-    // OMN-245: noteTruncated is a marker RIDING the note field, not a field of
-    // its own — whenever the note is projected, the truncation marker must
-    // survive projection, or the advertised "truncated notes carry the flag"
-    // contract silently breaks for explicit-fields queries.
-    if ('note' in out && project.noteTruncated === true) {
-      out.noteTruncated = true;
-    }
+    carryNoteTruncatedMarker(project, out);
     return out;
   };
 

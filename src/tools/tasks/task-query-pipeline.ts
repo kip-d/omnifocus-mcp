@@ -302,6 +302,19 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * Project task fields based on user selection for performance optimization.
  * Always includes 'id' if any fields are selected.
  */
+/**
+ * OMN-244/OMN-245: noteTruncated is a marker RIDING the note field, not a
+ * field of its own — whenever `note` survives a post-hoc projection, the
+ * marker must survive with it (the #204 live-verify bug class). ONE carry
+ * rule shared by the task and project projection paths; change it here,
+ * never per call site.
+ */
+export function carryNoteTruncatedMarker(source: Record<string, unknown>, projected: Record<string, unknown>): void {
+  if ('note' in projected && source.noteTruncated === true) {
+    projected.noteTruncated = true;
+  }
+}
+
 export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): (OmniFocusTask | ProjectedTask)[] {
   if (!selectedFields || selectedFields.length === 0) {
     return tasks;
@@ -324,12 +337,7 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
       }
     });
 
-    // OMN-244: noteTruncated is a marker RIDING the note field, not a field of
-    // its own — whenever the note is projected, the truncation marker must
-    // survive projection (the #204 live-verify finding class, task side).
-    if ('note' in projectedTask && task.noteTruncated === true) {
-      (projectedTask as Record<string, unknown>).noteTruncated = true;
-    }
+    carryNoteTruncatedMarker(task as unknown as Record<string, unknown>, projectedTask as Record<string, unknown>);
 
     // OMN-241: return the honest partial shape — no `as OmniFocusTask` cast.
     // Callers that need a specific field beyond `id` must narrow (check
