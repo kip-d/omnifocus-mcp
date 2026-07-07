@@ -124,7 +124,7 @@ describe('buildUpdateProjectProgram — golden emission', () => {
   it('reviewInterval lowers via readModifyReassign with build-time unit conversion', () => {
     const weekly = emit({ reviewInterval: 7 });
     expect(weekly).toContain(
-      '{ const _rmr = proj.reviewInterval; if (_rmr) { _rmr.steps = 1; _rmr.unit = "weeks"; proj.reviewInterval = _rmr; } }',
+      '{ const _rmr = proj.reviewInterval; if (_rmr) { _rmr.steps = 1; _rmr.unit = "weeks"; proj.reviewInterval = _rmr; } else { _warnings.push("reviewInterval: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set"); } }',
     );
     expect(weekly).toContain('_warnings.push("reviewInterval"');
 
@@ -325,6 +325,38 @@ describe('emitted update-project program executes (vm)', () => {
     expect(sets).not.toContain('status'); // the throw fired before the recording line
   });
 
+  // OMN-136 fail-loud: the null-instance readModifyReassign case.
+  it('vm: update with reviewInterval on a project with NO interval instance warns and does not set (OMN-136)', () => {
+    const { proj, sets } = makeRecordingProject(); // stub reviewInterval getter → undefined
+    const program = emitProgram(buildUpdateProjectProgram({ projectId: 'p1', changes: { reviewInterval: 7 } }));
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => proj, Status: PROJECT_STATUS },
+    };
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(ProjectWriteResultSchema, parsed);
+    expect(parsed.updated).toBe(true); // best-effort: the update itself still succeeds
+    expect(parsed.warnings).toEqual([
+      'reviewInterval: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set',
+    ]);
+    expect(sets).not.toContain('reviewInterval');
+  });
+
+  it('vm: update with reviewInterval on a project WITH an instance mutates it and stays warning-free (OMN-136)', () => {
+    const { proj, sets } = makeRecordingProject();
+    (proj as { reviewInterval: unknown }).reviewInterval = { unit: 'months', steps: 1 };
+    const program = emitProgram(buildUpdateProjectProgram({ projectId: 'p1', changes: { reviewInterval: 14 } }));
+    const sandbox: Record<string, unknown> = {
+      Project: { byIdentifier: () => proj, Status: PROJECT_STATUS },
+    };
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expect(parsed.warnings).toEqual([]);
+    expect(sets).toContain('reviewInterval');
+    expect((proj as { reviewInterval: { unit: string; steps: number } }).reviewInterval).toEqual({
+      unit: 'weeks',
+      steps: 2,
+    });
+  });
+
   it('vm: rename-only happy path returns the read-back envelope with empty warnings', () => {
     const { proj } = makeRecordingProject();
     const program = emitProgram(buildUpdateProjectProgram({ projectId: 'p1', changes: { name: 'New name' } }));
@@ -361,6 +393,20 @@ describe('emitted update-project program executes (vm)', () => {
     expect(parsed.name).toBe('x'); // the other change persisted
     expect(parsed.warnings).toEqual(['folder: boom']);
     expect(sets).toContain('name');
+  });
+});
+
+// OMN-136 fail-loud: a readModifyReassign whose target instance is null used to
+// silently no-op AND report success (no else branch). Kip's 2026-07-06 decision:
+// write no-ops FAIL LOUD — the null-instance case records a labeled OMN-137
+// warning in the envelope instead of silent success. (vm-execution proofs live
+// in the vm describe above, where the recording stub is in scope.)
+describe('OMN-136 — reviewInterval null-instance is LOUD, not a silent skip', () => {
+  it('emission: the readModifyReassign block carries the labeled else-warning', () => {
+    const omnijs = emitProgram(buildUpdateProjectProgram({ projectId: 'p1', changes: { reviewInterval: 7 } }));
+    expect(omnijs).toContain(
+      'else { _warnings.push("reviewInterval: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set"); }',
+    );
   });
 });
 
