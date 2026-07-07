@@ -138,6 +138,37 @@ describe('emitted create-project program executes (vm)', () => {
     };
   }
 
+  // OMN-249 (coverage gap from the OMN-106 review): the reviewInterval branch
+  // was only string-asserted — execute it, both instance states, the way
+  // update-project.test.ts does post-OMN-136.
+  it('vm: create with reviewInterval on a stub WITH a default instance mutates it warning-free', () => {
+    const sandbox = makeSandbox();
+    (sandbox.Project as unknown as { prototype: Record<string, unknown> }).prototype.reviewInterval = undefined;
+    const withInstance = function (this: Record<string, unknown>, name: string) {
+      (sandbox.Project as unknown as (this: Record<string, unknown>, n: string) => void).call(this, name);
+      this.reviewInterval = { unit: 'weeks', steps: 1 };
+    };
+    const parsed = JSON.parse(
+      vm.runInNewContext(emitProgram(buildCreateProjectProgram({ name: 'P', reviewInterval: 14 })), {
+        ...sandbox,
+        Project: withInstance,
+      }) as string,
+    );
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.created).toBe(true);
+  });
+
+  it('vm: create with reviewInterval on a stub with NO instance records the OMN-136 warning', () => {
+    const sandbox = makeSandbox(); // ctor sets no reviewInterval → null-instance path
+    const parsed = JSON.parse(
+      vm.runInNewContext(emitProgram(buildCreateProjectProgram({ name: 'P', reviewInterval: 14 })), sandbox) as string,
+    );
+    expect(parsed.created).toBe(true);
+    expect(parsed.warnings).toEqual([
+      'reviewInterval: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set',
+    ]);
+  });
+
   it('vm: minimal create returns a ProjectWriteResultSchema-valid success envelope', () => {
     const program = emitProgram(buildCreateProjectProgram({ name: 'My Project' }));
     const sandbox = makeSandbox();
