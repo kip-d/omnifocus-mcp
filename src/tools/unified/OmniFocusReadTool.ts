@@ -50,6 +50,7 @@ import {
   parseTasks,
   sortTasks,
   projectFields,
+  carryNoteTruncatedMarker,
   scoreForSmartSuggest,
   countTodayCategories,
   MODE_INJECTED_FIELDS,
@@ -143,13 +144,7 @@ export function projectFieldsOnResult(
         out[field] = project[field];
       }
     }
-    // OMN-245: noteTruncated is a marker RIDING the note field, not a field of
-    // its own — whenever the note is projected, the truncation marker must
-    // survive projection, or the advertised "truncated notes carry the flag"
-    // contract silently breaks for explicit-fields queries.
-    if ('note' in out && project.noteTruncated === true) {
-      out.noteTruncated = true;
-    }
+    carryNoteTruncatedMarker(project, out);
     return out;
   };
 
@@ -347,7 +342,7 @@ FILTER OPERATORS:
 RESPONSE CONTROL:
 - Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available, hasNote)
 - details: true returns all fields with full notes
-- fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true; projects only: a truncated note carries a sibling noteTruncated: true — absent when the note was returned in full)
+- fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true; a truncated note carries a sibling noteTruncated: true — absent when the note was returned in full; applies to tasks and projects)
 - ID lookup always returns all fields with full notes
 - fields are type-specific; requesting a field of the other type (e.g. reviewInterval on tasks) returns a guided error
 - fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox, sequential
