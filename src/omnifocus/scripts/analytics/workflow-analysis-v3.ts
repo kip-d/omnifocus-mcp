@@ -205,8 +205,12 @@ export const WORKFLOW_ANALYSIS_V3 = `
               // Get dates
               const dueDate = task.dueDate;
               const deferDate = task.deferDate;
-              const creationDate = task.creationDate;
-              const modificationDate = task.modificationDate;
+              // OMN-251 (OMN-148 drift D17): added/modified are the OmniJS
+              // property names — the previous reads (task.creationDate /
+              // task.modificationDate, JXA names) were undefined here, so every
+              // taskAge was 0 and the avgAge>120 health penalty never fired.
+              const creationDate = task.added;
+              const modificationDate = task.modified;
 
               // Calculate overdue days
               let overdueDays = 0;
