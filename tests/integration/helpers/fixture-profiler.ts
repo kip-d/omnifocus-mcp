@@ -36,8 +36,12 @@ import { performance } from 'perf_hooks';
  * when the same leaf fires outside a test worker (setup-integration.ts's
  * globalSetup/globalTeardown also call fullCleanup), the recorded hook is
  * rewritten to 'global' since the per-file label would be wrong there.
+ *
+ * NOTE: this is the CALLER-side type. The `hook` field that lands in the
+ * JSONL is `FixtureHook | 'global'` (see the rewrite in profileFixture) —
+ * filter the log on 'beforeAll' | 'afterAll' | 'global' | 'globalTeardown'.
  */
-export type FixtureHook = 'beforeAll' | 'afterAll' | 'globalSetup' | 'globalTeardown';
+export type FixtureHook = 'beforeAll' | 'afterAll' | 'globalTeardown';
 
 export function fixtureProfilingEnabled(): boolean {
   return process.env.FIXTURE_PROFILE === '1';
@@ -66,13 +70,21 @@ function currentTestFile(): string {
   return '(global)';
 }
 
+let warnedWriteFailure = false;
+
 function record(entry: Record<string, unknown>): void {
   try {
     const path = logPath();
     mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
-  } catch {
-    // Profiling must never fail the fixture call it wraps.
+  } catch (err) {
+    // Profiling must never fail the fixture call it wraps — but a profiled
+    // run whose log can't be written must not finish looking successful
+    // (the whole run exists to produce this file), so warn once.
+    if (!warnedWriteFailure) {
+      warnedWriteFailure = true;
+      console.warn(`[fixture-profiler] failed to write ${logPath()}: ${String(err)} — profile data will be incomplete`);
+    }
   }
 }
 

@@ -7,7 +7,7 @@
  * non-test-body wall overhead actually goes. When the flag is off it must be
  * a pure pass-through — zero behavior change on normal runs.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync, readFileSync, rmSync, mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -106,16 +106,23 @@ describe('profileFixture', () => {
     expect(typeof entries[0].ms).toBe('number');
   });
 
-  it('never breaks the wrapped fn when the log path is unwritable', async () => {
+  it('never breaks the wrapped fn when the log path is unwritable, but warns once', async () => {
     process.env.FIXTURE_PROFILE = '1';
-    process.env.FIXTURE_PROFILE_LOG = join(logDir, 'no-such-dir', 'nested', 'profile.jsonl');
-    // mkdir of the parent is expected; point at a path whose parent is a FILE to force a write failure
+    // point at a path whose parent is a FILE so mkdir/append must fail
     process.env.FIXTURE_PROFILE_LOG = join(logPath, 'child.jsonl');
-    await profileFixture('beforeAll', 'ensureSandboxFolder', async () => {
-      // create logPath as a regular file so the nested path cannot be created
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
       const { writeFileSync } = await import('fs');
       writeFileSync(logPath, 'occupied');
-      return 'ok';
-    }).then((result) => expect(result).toBe('ok'));
+      const first = await profileFixture('beforeAll', 'ensureSandboxFolder', () => Promise.resolve('ok'));
+      expect(first).toBe('ok');
+      // second failing write must NOT warn again (warn-once)
+      const second = await profileFixture('beforeAll', 'ensureSandboxFolder', () => Promise.resolve('ok2'));
+      expect(second).toBe('ok2');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('[fixture-profiler]');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
