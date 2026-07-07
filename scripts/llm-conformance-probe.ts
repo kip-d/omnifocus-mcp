@@ -6,6 +6,15 @@
  * tool-calling, with NO fallback substitution and NO execution. This is the "support
  * contract" tool: a model that scores below the bar is below spec, not a server bug.
  *
+ * GATE RULE (OMN-168): when this probe gates a branch, compare against a SAME-DAY control
+ * run on main — NEVER against a recorded baseline number alone. The probed surface (tool
+ * descriptions, schemas, normalization) drifts with unrelated merges: on 2026-06-12 the
+ * published qwen baseline had silently drifted when #95 changed read-tool descriptions,
+ * and only a concurrent main control run stopped the branch being blamed for a
+ * pre-existing 5-point drop. Recorded scores (the suite-timing log, docs) are history,
+ * not a gate; re-baseline (docs/dev/SUITE_TIMING_LOG.md) after any merge touching the
+ * conformance surface.
+ *
  * Unlike tests/integration/real-llm-integration.test.ts (which has fallback maps that mask
  * model failures, and is gated/exploratory), this probe grades the model's RAW tool call:
  *   1. Present the REAL advertised tool schemas (pulled from the running server's

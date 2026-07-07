@@ -50,6 +50,23 @@ contention vs. a genuine slowdown. Metrics with no prior same-suite history are 
 tail -5 ~/.local/state/of-mcp-suite-timing/runs.jsonl | jq .
 ```
 
+## Conformance gate rule — same-day control, never a recorded number (OMN-168)
+
+Conformance **scores** are not drift-stable the way timing is: the probed surface (tool descriptions, schemas, the
+normalization layer) moves with unrelated merges, and the probe is documented as not bit-reproducible. On 2026-06-12 the
+published qwen2.5:7b baseline silently drifted when an unrelated PR changed read-tool description text; a branch gate
+comparing against the recorded number would have indicted the wrong commit. Only a concurrent control run on main showed
+the drop was pre-existing.
+
+The rule, when a branch gates on `npm run conformance`:
+
+1. Run the probe on the branch AND on same-day `main` (the control). Compare branch vs control, not branch vs a recorded
+   score.
+2. Re-baseline (`npm run baseline:conformance`) after any merge that touches the conformance surface — tool
+   descriptions, advertised schemas, or `src/tools/normalization/`.
+3. Treat any published score (including this file's historical table) as **history, not a bar** — the current support
+   bar is the latest recorded baseline row in the suite-timing log, valid only until the surface next moves.
+
 ---
 
 ## Historical seed rows (OMN-173, pre-JSONL — archived)
