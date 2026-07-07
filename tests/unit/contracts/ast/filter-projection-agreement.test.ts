@@ -18,7 +18,6 @@
  * 3. inbox ⟺ list agreement on the shared default exclusions.
  */
 
-import * as vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import {
   buildFilteredTasksScript,
@@ -27,98 +26,8 @@ import {
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 import { ACTIONABLE_STATUSES } from '../../../../src/contracts/ast/types.js';
-
-// ─── Sandbox stubs ───────────────────────────────────────────────────────────
-
-// Full status enum — the generated scripts reference these via property access.
-const Task = {
-  Status: {
-    Available: 'Available',
-    Blocked: 'Blocked',
-    Completed: 'Completed',
-    Dropped: 'Dropped',
-    DueSoon: 'DueSoon',
-    Next: 'Next',
-    Overdue: 'Overdue',
-  },
-} as const;
-
-type StatusName = keyof typeof Task.Status;
-
-interface StubTask {
-  id: { primaryKey: string };
-  name: string;
-  flagged: boolean;
-  completed: boolean;
-  taskStatus: string;
-  inInbox: boolean;
-  tags: unknown[];
-  dueDate: null;
-  deferDate: null;
-  containingProject: null;
-  project: null | { name: string };
-}
-
-function stubTask(name: string, overrides: Partial<StubTask> = {}): StubTask {
-  return {
-    id: { primaryKey: `id-${name}` },
-    name,
-    flagged: false,
-    completed: false,
-    taskStatus: Task.Status.Available,
-    inInbox: false,
-    tags: [],
-    dueDate: null,
-    deferDate: null,
-    containingProject: null,
-    project: null, // non-null = project root (OMN-153)
-    ...overrides,
-  };
-}
-
-/** Run a generated LIST/INBOX script (raw OmniJS IIFE) against stub collections. */
-function runListScript(
-  script: string,
-  tasks: StubTask[],
-): { tasks: Array<Record<string, unknown>>; count: number; total_matched: number } {
-  const sandbox: Record<string, unknown> = {
-    flattenedTasks: tasks,
-    inbox: tasks.filter((t) => t.inInbox),
-    Task,
-    JSON,
-    Date,
-  };
-  return JSON.parse(vm.runInNewContext(script, sandbox) as string) as {
-    tasks: Array<Record<string, unknown>>;
-    count: number;
-    total_matched: number;
-  };
-}
-
-/**
- * Run a generated COUNT script. Unlike the list script, count is JXA-wrapped:
- * `Application('OmniFocus').evaluateJavascript(<omnijs source>)`. The stub
- * routes evaluateJavascript back into the same sandbox, so the test exercises
- * the real bridge shape rather than fishing the inner source out with a regex.
- */
-function runCountScript(script: string, tasks: StubTask[]): { count: number; error?: boolean; message?: string } {
-  const sandbox: Record<string, unknown> = {
-    flattenedTasks: tasks,
-    inbox: tasks.filter((t) => t.inInbox),
-    Task,
-    JSON,
-    Date,
-  };
-  const context = vm.createContext(sandbox);
-  sandbox.Application = () => ({
-    evaluateJavascript: (src: string) => vm.runInContext(src, context),
-  });
-  return JSON.parse(vm.runInContext(script, context) as string) as {
-    count: number;
-    error?: boolean;
-    message?: string;
-  };
-}
+import { Task, stubTask, runListScript, runCountScript } from './omnijs-vm-fixture.js';
+import type { StubTask, StatusName } from './omnijs-vm-fixture.js';
 
 function ids(rows: Array<Record<string, unknown>>): string[] {
   return rows.map((r) => String(r.id)).sort();
