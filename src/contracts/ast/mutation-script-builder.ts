@@ -24,7 +24,7 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
-import { dispatchMutation, type MarkProjectReviewedInput } from './mutation/defs.js';
+import { dispatchMutation, type MarkProjectReviewedInput, type SetReviewScheduleInput } from './mutation/defs.js';
 import { emitProgram, wrapInLauncher } from './mutation/emitter.js';
 import { validateMutationProgram } from './mutation/validator.js';
 
@@ -711,6 +711,25 @@ export async function buildMarkProjectReviewedScript(
     operation: 'mark_reviewed',
     target: 'project',
     description: `Mark project reviewed: ${params.projectId}`,
+  };
+}
+
+/**
+ * Build a JXA script for the set-review-schedule batch mutation (OMN-106 PR-2).
+ * Emits from the mutation AST via 'set-review-schedule/project' dispatch — the
+ * legacy template ran with NO sandbox guard (OMN-119/120 bypass class); the
+ * guard pre-flights ALL ids before any update executes. Wire envelope
+ * unchanged (SET_SCHEDULE_TYPED_SCHEMA is the contract). Throws when neither
+ * reviewInterval nor nextReviewDate is provided (fail-loud, 2026-07-06).
+ */
+export async function buildSetReviewScheduleScript(params: SetReviewScheduleInput): Promise<GeneratedMutationScript> {
+  const program = await dispatchMutation('set-review-schedule/project', params);
+  validateMutationProgram(program);
+  return {
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
+    operation: 'set_review_schedule',
+    target: 'project',
+    description: `Set review schedule: ${params.projectIds.join(', ')}`,
   };
 }
 

@@ -41,9 +41,11 @@ import { ANALYZE_OVERDUE_V3 as ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/sc
 import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
-// OMN-106 PR-1: mark-reviewed now emits from the AST mutation pipeline (sandbox-guarded).
-import { buildMarkProjectReviewedScript } from '../../contracts/ast/mutation-script-builder.js';
-import { buildSetReviewScheduleScript } from '../../omnifocus/scripts/reviews.js';
+// OMN-106: review mutations emit from the AST mutation pipeline (sandbox-guarded).
+import {
+  buildMarkProjectReviewedScript,
+  buildSetReviewScheduleScript,
+} from '../../contracts/ast/mutation-script-builder.js';
 import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/projects-for-review.js';
 
 // Pure-JS analyzer imports (for pattern analysis)
@@ -3362,9 +3364,23 @@ SCOPE FILTERING:
     const projectId = compiled.params?.projectId;
     const brandedProjectIds = projectId ? [convertToProjectId(projectId)] : [];
 
+    // OMN-106 fail-loud (Kip 2026-07-06, with OMN-136): with neither an
+    // interval nor a date the legacy script reported per-project success with
+    // empty changes — a silent no-op. Refuse loudly before building.
+    if (!compiled.params?.reviewInterval && !compiled.params?.reviewDate) {
+      return createErrorResponseV2(
+        'manage_reviews',
+        'VALIDATION_ERROR',
+        'set_schedule requires reviewInterval and/or reviewDate — with neither there is nothing to set',
+        'Provide reviewInterval {unit, steps} and/or reviewDate',
+        { projectId },
+        timer.toMetadata(),
+      );
+    }
+
     // OMN-60: pass the requested interval through (was hardcoded null, which
     // made the entire reviewInterval path dead code).
-    const script = buildSetReviewScheduleScript({
+    const { script } = await buildSetReviewScheduleScript({
       projectIds: brandedProjectIds,
       reviewInterval: compiled.params?.reviewInterval ?? null,
       nextReviewDate: compiled.params?.reviewDate ?? null,
@@ -3397,43 +3413,25 @@ SCOPE FILTERING:
     });
   }
 
-  private async reviewsClearSchedule(
+  private reviewsClearSchedule(
     compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
     timer: OperationTimerV2,
-  ): Promise<StandardResponseV2<unknown>> {
+  ): StandardResponseV2<unknown> {
     const projectId = compiled.params?.projectId;
-    const brandedProjectIds = projectId ? [convertToProjectId(projectId)] : [];
 
-    const script = buildSetReviewScheduleScript({
-      projectIds: brandedProjectIds,
-      reviewInterval: null,
-      nextReviewDate: null,
-    });
-    const result = await this.execJson(script, SET_SCHEDULE_SCHEMA);
-
-    if (isScriptError(result)) {
-      return createErrorResponseV2(
-        'manage_reviews',
-        'SCRIPT_ERROR',
-        result.error || 'Script execution failed',
-        undefined,
-        result.details,
-        timer.toMetadata(),
-      );
-    }
-
-    this.cache.invalidate('projects');
-    this.cache.invalidate('reviews');
-
-    const envelope = result.data as unknown;
-    const parsedResult =
-      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
-
-    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
-      ...timer.toMetadata(),
-      operation: 'clear_schedule',
-      projects_updated: brandedProjectIds.length,
-      input_params: { projectId },
-    });
+    // OMN-106 fail-loud (Kip 2026-07-06, with OMN-136): the legacy path sent
+    // {reviewInterval:null, nextReviewDate:null}, which the script if-gated
+    // into a per-project SUCCESS with empty changes — nothing was ever cleared.
+    // OmniJS cannot construct or null a Project.ReviewInterval (OMN-41/OMN-58),
+    // so a clear cannot take effect through this seam; say so instead of lying.
+    return createErrorResponseV2(
+      'manage_reviews',
+      'UNSUPPORTED',
+      'clear_schedule cannot clear a review schedule: OmniJS cannot remove or null a project reviewInterval ' +
+        '(OMN-41/OMN-58). The previous behavior reported success without changing anything.',
+      'Set a different interval with set_schedule, or clear the review schedule in the OmniFocus app',
+      { projectId },
+      timer.toMetadata(),
+    );
   }
 }

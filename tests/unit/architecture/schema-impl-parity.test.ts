@@ -740,6 +740,10 @@ const BUILDER_INTERNAL_REFS = [
   // settable; the AST builder still lowers them.
   'reviewDate',
   'updateNextReviewDate',
+  // OMN-106 PR-2: set-review-schedule/project params — same analyze-schema
+  // provenance as reviewDate above (manage_reviews set_schedule).
+  'projectIds',
+  'nextReviewDate',
 ];
 
 // Strip comments before scanning the (checked-in, bounded) builder source:
