@@ -35,6 +35,7 @@ export interface OmniFocusTask {
   // projection cases in src/contracts/ast/script-builder.ts.
   isProjectRoot?: boolean; // OMN-153: true when task.project !== null (task IS a project root)
   hasNote?: boolean; // OMN-130: cheap presence marker, true when the task has non-empty note text
+  noteTruncated?: boolean; // OMN-244: present (true) only when the returned note was truncated
   plannedDate?: string | null; // OMN-62: OF 4.7+ planned date, ISO string, null when task has none
   repetitionRule?: RepetitionRuleData | null; // modern (v4.7+) repetition rule shape, null when task has none
   // Mode-injected fields: not selectable via TaskFieldEnum's `fields:[...]` (so

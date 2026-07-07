@@ -289,8 +289,11 @@ function generateFieldProjection(
         break;
       case 'note':
         if (noteTruncateLength && noteTruncateLength > 0) {
+          // OMN-244: when truncation fires, emit a sibling noteTruncated: true via
+          // conditional spread (mirrors the project projection's OMN-242 shape) —
+          // untruncated rows stay byte-identical (key absent).
           projections.push(
-            `note: (() => { const n = task.note || ""; return n.length > ${noteTruncateLength} ? n.substring(0, ${noteTruncateLength}) + "..." : n; })()`,
+            `...(() => { const n = task.note || ""; const truncated = n.length > ${noteTruncateLength}; return truncated ? { note: n.substring(0, ${noteTruncateLength}) + "...", noteTruncated: true } : { note: n }; })()`,
           );
         } else {
           projections.push('note: task.note || ""');

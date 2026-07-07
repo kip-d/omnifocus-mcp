@@ -324,6 +324,13 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
       }
     });
 
+    // OMN-244: noteTruncated is a marker RIDING the note field, not a field of
+    // its own — whenever the note is projected, the truncation marker must
+    // survive projection (the #204 live-verify finding class, task side).
+    if ('note' in projectedTask && task.noteTruncated === true) {
+      (projectedTask as Record<string, unknown>).noteTruncated = true;
+    }
+
     // OMN-241: return the honest partial shape — no `as OmniFocusTask` cast.
     // Callers that need a specific field beyond `id` must narrow (check
     // presence) rather than assume it's always populated.

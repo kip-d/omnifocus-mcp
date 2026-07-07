@@ -64,6 +64,10 @@ export const TaskRowSchema = z
     // OMN-207: action-group ordering, read-side parity with the write side
     // (OMN-198/206). Emitted by the `sequential` task projection case.
     sequential: z.boolean().optional(),
+    // OMN-244: truncation marker riding the note field (piggybacks on the
+    // 'note' projection case, not its own switch label — parity test allows
+    // it as the one extra key, mirroring the project row's OMN-242 entry).
+    noteTruncated: z.boolean().optional(),
   })
   .strict();
 

@@ -63,15 +63,18 @@ describe('TaskRowSchema ↔ generateFieldProjection switch-case parity', () => {
     const schemaKeys = new Set(Object.keys(TaskRowSchema.shape));
 
     const missingFromSchema = [...switchLabels].filter((k) => !schemaKeys.has(k));
-    const missingFromSwitch = [...schemaKeys].filter((k) => !switchLabels.has(k));
 
     expect(
       missingFromSchema,
       `Switch has case labels not in TaskRowSchema.shape: ${missingFromSchema.join(', ')}`,
     ).toEqual([]);
-    expect(missingFromSwitch, `TaskRowSchema.shape has keys not in switch: ${missingFromSwitch.join(', ')}`).toEqual(
-      [],
-    );
+
+    // The difference (schema keys NOT in the switch) must be exactly this one.
+    // noteTruncated (OMN-244) piggybacks on the 'note' case rather than being
+    // its own switch label — same shape as the project row's OMN-242 entry.
+    const expectedExtra = new Set(['noteTruncated']);
+    const actualExtra = new Set([...schemaKeys].filter((k) => !switchLabels.has(k)));
+    expect(actualExtra).toEqual(expectedExtra);
   });
 });
 
