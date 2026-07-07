@@ -1,0 +1,79 @@
+// tests/unit/omnifocus/scripts/analytics/productivity-terminal-states.test.ts
+// OMN-254 (OMN-148 drift D5) — productivity_stats availableTasks/overdueCount
+// must exclude DROPPED tasks (effective status, the OMN-187 predicate).
+// Pre-fix the loop filtered only on task.completed, so dropped tasks — and
+// tasks inside dropped/completed projects — counted as "available" and
+// "overdue": the three-terminal-states violation.
+import vm from 'node:vm';
+import { describe, it, expect } from 'vitest';
+import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
+import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
+
+const DAY = 24 * 60 * 60 * 1000;
+
+interface FakeTask {
+  completed: boolean;
+  taskStatus: string;
+  dueDate: Date | null;
+  deferDate: Date | null;
+  completionDate: Date | null;
+}
+
+function task(overrides: Partial<FakeTask>): FakeTask {
+  return {
+    completed: false,
+    taskStatus: 'available',
+    dueDate: null,
+    deferDate: null,
+    completionDate: null,
+    ...overrides,
+  };
+}
+
+function runScript(tasks: FakeTask[]): {
+  ok: boolean;
+  data: { summary: { totalTasks: number; completedTasks: number; availableTasks: number; overdueCount: number } };
+} {
+  const options = { period: 'week', includeProjectStats: false, includeTagStats: false };
+  const script = PRODUCTIVITY_STATS_SCRIPT_V3.replace('{{options}}', JSON.stringify(options));
+  const inner = {
+    flattenedTasks: tasks,
+    flattenedProjects: [],
+    flattenedTags: [],
+    Task: { Status: { Blocked: 'blocked', Dropped: 'dropped' } },
+    Project: { Status: { Active: 'active' } },
+    JSON,
+  };
+  const outer = {
+    Application: () => ({ evaluateJavascript: (src: string) => vm.runInNewContext(src, inner) }),
+    JSON,
+  };
+  return JSON.parse(vm.runInNewContext(script, outer) as string) as ReturnType<typeof runScript>;
+}
+
+describe('OMN-254 — three terminal states in productivity populations', () => {
+  it('a dropped task (even overdue) counts in NEITHER availableTasks NOR overdueCount', () => {
+    const parsed = runScript([
+      task({}), // genuinely available
+      task({ taskStatus: 'dropped', dueDate: new Date(Date.now() - 5 * DAY) }), // dropped AND past-due
+      task({ completed: true, completionDate: new Date() }),
+    ]);
+    expect(parsed.ok).toBe(true);
+    expect(PRODUCTIVITY_STATS_V3_SCHEMA.safeParse(parsed).success).toBe(true);
+    expect(parsed.data.summary.totalTasks).toBe(3); // whole-DB census unchanged
+    expect(parsed.data.summary.completedTasks).toBe(1);
+    // Pre-fix: available 2 (dropped counted), overdue 1 (dropped past-due counted).
+    expect(parsed.data.summary.availableTasks).toBe(1);
+    expect(parsed.data.summary.overdueCount).toBe(0);
+  });
+
+  it('an ACTIVE past-due task still counts overdue; blocked/deferred still excluded from available', () => {
+    const parsed = runScript([
+      task({ dueDate: new Date(Date.now() - 2 * DAY) }), // active + overdue
+      task({ taskStatus: 'blocked' }),
+      task({ deferDate: new Date(Date.now() + 5 * DAY) }), // future-deferred
+    ]);
+    expect(parsed.data.summary.overdueCount).toBe(1);
+    expect(parsed.data.summary.availableTasks).toBe(1);
+  });
+});
