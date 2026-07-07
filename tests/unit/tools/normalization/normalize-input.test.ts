@@ -209,3 +209,67 @@ describe('leniency #3 — data-hoist on non-create mutations (malformed-in → c
     expect(r.applied).toEqual([]);
   });
 });
+
+describe('leniency #4 — mutation-field-alias (OMN-168)', () => {
+  it('recovers the recorded qwen complete artifact: root {operation, target_id} (2026-06-12)', () => {
+    // Verbatim shape from the OMN-168 ticket: strict error was
+    // "mutation: Required; (root): Unrecognized key(s): 'operation', 'target_id'",
+    // which fully determines the root keys. Wrapper-lift alone left the lifted
+    // mutation failing strict on the field name; the alias closes it.
+    const r = parseWithNormalization(
+      WriteSchema,
+      { operation: 'complete', target_id: 'task-abc123' },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toContain('wrapper-lift');
+    expect(r.applied).toContain('mutation-field-alias');
+    expect(r.data).toMatchObject({ mutation: { operation: 'complete', id: 'task-abc123' } });
+  });
+
+  it('aliases target_id → id inside an already-wrapped mutation (no lift needed)', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'complete', target: 'task', target_id: 'task-xyz' } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual(['mutation-field-alias']);
+    expect(r.data).toMatchObject({ mutation: { operation: 'complete', target: 'task', id: 'task-xyz' } });
+  });
+
+  it('composes with data-hoist: update with data.target_id + residual fields', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      { operation: 'update', data: { target_id: 'task-42', note: 'hello' } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual(['wrapper-lift', 'mutation-field-alias', 'data-hoist-id']);
+    expect(r.data).toMatchObject({
+      mutation: { operation: 'update', id: 'task-42', changes: { note: 'hello' } },
+    });
+  });
+
+  it('collision-safe: both id and target_id present → leniency skipped, original error stands', () => {
+    const args = { mutation: { operation: 'complete', target: 'task', id: 'a', target_id: 'b' } };
+    const original = WriteSchema.safeParse(args);
+    expect(original.success).toBe(false);
+
+    const r = parseWithNormalization(WriteSchema, args, 'omnifocus_write');
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+    expect(JSON.stringify(r.error!.issues)).toBe(JSON.stringify((original as z.SafeParseError<unknown>).error.issues));
+  });
+
+  it('does NOT touch delete, where target_id is a native schema-level alias (OMN-71)', () => {
+    // Strict-first: this shape is already valid, so normalization never runs.
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'delete', target: 'task', target_id: 'del-1' } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toEqual([]);
+  });
+});
