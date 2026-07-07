@@ -145,19 +145,13 @@ function resolveProjectFlexible(target) {
   return null;
 }`;
 
-// Review-interval arithmetic, lifted VERBATIM from the legacy
-// mark-project-reviewed.ts template (OMN-106). Unit names are the canonical
-// OmniJS plurals (ReviewInterval.unit.name); unknown units fall back to weekly,
-// matching legacy behavior byte-for-byte.
-const calculateNextReviewDate = `
-function calculateNextReviewDate(reviewInterval, fromDate) {
-  if (!reviewInterval) {
-    return null;
-  }
-  var date = new Date(fromDate);
-  var unitName = reviewInterval.unit ? reviewInterval.unit.name : 'weeks';
-  var steps = reviewInterval.steps || 1;
-  switch (unitName) {
+// OMN-249: ONE review-date arithmetic body shared by both entry points below —
+// a future date-math fix (month-end clamping, leap years) lands once. Expects a
+// NORMALIZED plural unit (see normalizeReviewUnit); unknown falls back to
+// weekly (the legacy default both templates carried).
+const advanceDateByReviewUnit = `
+function advanceDateByReviewUnit(date, unit, steps) {
+  switch (unit) {
     case 'days':
       date.setDate(date.getDate() + steps);
       break;
@@ -174,6 +168,19 @@ function calculateNextReviewDate(reviewInterval, fromDate) {
       date.setDate(date.getDate() + (steps * 7));
   }
   return date;
+}`;
+
+// mark_reviewed entry point (OMN-106): thin adapter over the shared body,
+// reading the TYPED OmniJS instance dialect (reviewInterval.unit.name).
+// Wire behavior pinned by the mark-reviewed vm goldens + the OMN-249 parity
+// tests.
+const calculateNextReviewDate = `
+function calculateNextReviewDate(reviewInterval, fromDate) {
+  if (!reviewInterval) {
+    return null;
+  }
+  var unitName = reviewInterval.unit ? reviewInterval.unit.name : 'weeks';
+  return advanceDateByReviewUnit(new Date(fromDate), normalizeReviewUnit(unitName), reviewInterval.steps || 1);
 }`;
 
 // The mark-reviewed mutation body (OMN-106): sets lastReviewDate, optionally
@@ -221,36 +228,14 @@ function normalizeReviewUnit(unitString) {
   return unitMap[unitString.toLowerCase()] || 'weeks';
 }`;
 
-// Next-review arithmetic over the RAW spec object (unit may be singular —
-// legacy deliberately switches on the unnormalized unit; renamed from the
-// template's calculateNextReviewDate to avoid colliding with the
-// mark-reviewed snippet, whose signature reads the typed .unit.name).
+// set_schedule entry point (OMN-106 PR-2): thin adapter over the shared body,
+// reading the RAW spec dialect (unit may be singular; missing base date means
+// compute from NOW). Wire behavior pinned by the set-review-schedule vm
+// goldens + the OMN-249 parity tests.
 const calculateNextReviewFromSpec = `
 function calculateNextReviewFromSpec(interval, baseDate) {
   var date = baseDate ? new Date(baseDate) : new Date();
-  var unit = interval.unit || 'week';
-  var steps = interval.steps || 1;
-  switch (unit) {
-    case 'day':
-    case 'days':
-      date.setDate(date.getDate() + steps);
-      break;
-    case 'week':
-    case 'weeks':
-      date.setDate(date.getDate() + (steps * 7));
-      break;
-    case 'month':
-    case 'months':
-      date.setMonth(date.getMonth() + steps);
-      break;
-    case 'year':
-    case 'years':
-      date.setFullYear(date.getFullYear() + steps);
-      break;
-    default:
-      date.setDate(date.getDate() + (steps * 7));
-  }
-  return date;
+  return advanceDateByReviewUnit(date, normalizeReviewUnit(interval.unit || 'week'), interval.steps || 1);
 }`;
 
 // The per-project set-review-schedule body (OMN-106 PR-2), lifted from the
@@ -331,12 +316,20 @@ export const SNIPPETS: Record<string, Snippet> = {
   // segment instead of creating. Used by the assignTags 'remove' mode (OMN-128 slice 4).
   resolveTagByPath: { source: resolveTagByPath, deps: ['parseTagPath'] },
   resolveProjectFlexible: { source: resolveProjectFlexible, deps: [] },
-  // OMN-106: review-interval arithmetic + the mark-reviewed mutation body.
-  calculateNextReviewDate: { source: calculateNextReviewDate, deps: [] },
+  // OMN-249: the ONE shared review-date arithmetic body.
+  advanceDateByReviewUnit: { source: advanceDateByReviewUnit, deps: [] },
+  // OMN-106: review-interval entry points (thin adapters) + the mark-reviewed mutation body.
+  calculateNextReviewDate: {
+    source: calculateNextReviewDate,
+    deps: ['normalizeReviewUnit', 'advanceDateByReviewUnit'],
+  },
   applyMarkReviewed: { source: applyMarkReviewed, deps: ['calculateNextReviewDate'] },
   // OMN-106 PR-2: set-review-schedule batch body + its helpers.
   normalizeReviewUnit: { source: normalizeReviewUnit, deps: [] },
-  calculateNextReviewFromSpec: { source: calculateNextReviewFromSpec, deps: [] },
+  calculateNextReviewFromSpec: {
+    source: calculateNextReviewFromSpec,
+    deps: ['normalizeReviewUnit', 'advanceDateByReviewUnit'],
+  },
   applySetReviewSchedule: {
     source: applySetReviewSchedule,
     deps: ['normalizeReviewUnit', 'calculateNextReviewFromSpec'],
