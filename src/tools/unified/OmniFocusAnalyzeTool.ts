@@ -296,6 +296,8 @@ ANALYSIS TYPES:
 - manage_reviews: Project review operations
   params: { operation, projectId, reviewDate, reviewInterval }
   - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
+  - clear_schedule always returns UNSUPPORTED (OmniJS cannot remove a project reviewInterval —
+    OMN-41/OMN-58); set a different interval with set_schedule or clear it in the OmniFocus app
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
@@ -3176,7 +3178,7 @@ SCOPE FILTERING:
             'manage_reviews',
             'INVALID_OPERATION',
             `Unknown operation: ${String(operation)}`,
-            'Use one of: list_for_review, mark_reviewed, set_schedule, clear_schedule',
+            'Use one of: list_for_review, mark_reviewed, set_schedule (clear_schedule is unsupported — OMN-41/OMN-58)',
             { operation },
             timer.toMetadata(),
           );
