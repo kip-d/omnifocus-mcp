@@ -71,11 +71,17 @@ function currentTestFile(): string {
 }
 
 let warnedWriteFailure = false;
+// Ensure the log directory once per run, not per profiled call — the profiler
+// measures fixture overhead, so it must not add a syscall to every event.
+let logDirEnsured = false;
 
 function record(entry: Record<string, unknown>): void {
   try {
     const path = logPath();
-    mkdirSync(dirname(path), { recursive: true });
+    if (!logDirEnsured) {
+      mkdirSync(dirname(path), { recursive: true });
+      logDirEnsured = true;
+    }
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
   } catch (err) {
     // Profiling must never fail the fixture call it wraps — but a profiled
