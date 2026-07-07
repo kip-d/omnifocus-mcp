@@ -21,8 +21,8 @@
  * 12. ID-lookup (buildTaskByIdScript / details=true) always carries isProjectRoot in its projection
  */
 
-import * as vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
+import { stubTask, runListScript } from './omnijs-vm-fixture.js';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
@@ -187,35 +187,13 @@ describe('OMN-153: TaskRowSchema', () => {
 // =============================================================================
 
 describe('OMN-153: VM behavioral — project-root exclusion and isProjectRoot marker', () => {
-  // Minimal sandbox matching what the generated script touches.
-  // Task.Status is needed for the OMN-157 dropped-exclusion predicate.
-  const Task = { Status: { Dropped: 'Dropped', Active: 'Active' } };
-
-  const regularTask = (name: string) => ({
-    id: { primaryKey: `id-${name}` },
-    name,
-    flagged: false,
-    completed: false,
-    taskStatus: Task.Status.Active,
-    inInbox: false,
-    tags: [],
-    dueDate: null,
-    deferDate: null,
-    containingProject: null,
-    // project: null → NOT a project root (normal task)
-    project: null,
-  });
-
-  const rootTask = (name: string) => ({
-    ...regularTask(name),
-    // project: non-null → IS a project root (task.project !== null in OmniJS)
-    project: { name: 'MyProject' },
-  });
-
-  function runScript(script: string, tasks: unknown[]): { tasks: unknown[]; count: number; total_matched: number } {
-    const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON };
-    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
-  }
+  // Shared vm fixture (omnijs-vm-fixture.ts). The old local stub declared a
+  // status member that does not exist in the real OmniFocus enum — regular
+  // tasks just need any non-Dropped, non-Completed status, which the
+  // fixture's Available default is.
+  const regularTask = (name: string) => stubTask(name);
+  const rootTask = (name: string) => stubTask(name, { project: { name: 'MyProject' } });
+  const runScript = runListScript;
 
   it('default script: excludes the root row, returns only regular tasks', () => {
     const tasks = [regularTask('alpha'), regularTask('beta'), rootTask('ProjectRoot')];

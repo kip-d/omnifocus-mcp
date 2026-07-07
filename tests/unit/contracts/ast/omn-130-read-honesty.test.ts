@@ -16,8 +16,8 @@
  * artifact — not just the script text.
  */
 
-import * as vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
+import { Task, stubTask, runListScript } from './omnijs-vm-fixture.js';
 import { buildFilteredTasksScript, MINIMAL_FIELDS } from '../../../../src/contracts/ast/script-builder.js';
 import { TaskFieldEnum } from '../../../../src/tools/unified/schemas/read-schema.js';
 import { TaskRowSchema } from '../../../../src/omnifocus/script-response-schemas.js';
@@ -94,41 +94,10 @@ describe('OMN-130 Change 1: TaskRowSchema accepts hasNote', () => {
 // =============================================================================
 
 describe('OMN-130 Change 1: VM behavioral — hasNote projection', () => {
-  // Stub Task.Status for the OMN-157 dropped-exclusion predicate
-  const Task = {
-    Status: {
-      Dropped: 'Dropped',
-      Available: 'Available',
-      Blocked: 'Blocked',
-      DueSoon: 'DueSoon',
-      Next: 'Next',
-      Overdue: 'Overdue',
-    },
-  };
-
-  function makeTask(name: string, note: string | null, taskStatus = Task.Status.Available) {
-    return {
-      id: { primaryKey: `id-${name}` },
-      name,
-      flagged: false,
-      completed: false,
-      taskStatus,
-      inInbox: false,
-      tags: [],
-      dueDate: null,
-      deferDate: null,
-      containingProject: null,
-      project: null,
-      note,
-    };
-  }
-
-  function runScript(script: string, tasks: unknown[]): { tasks: Array<Record<string, unknown>> } {
-    const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON };
-    return JSON.parse(vm.runInNewContext(script, sandbox) as string) as {
-      tasks: Array<Record<string, unknown>>;
-    };
-  }
+  // Task.Status comes from the shared omnijs-vm-fixture — extend it THERE, not locally
+  const makeTask = (name: string, note: string | null, taskStatus: string = Task.Status.Available) =>
+    stubTask(name, { note, taskStatus });
+  const runScript = runListScript;
 
   it('hasNote is true when task has a non-empty note', () => {
     const tasks = [makeTask('alpha', 'some context here')];
@@ -214,40 +183,8 @@ describe('OMN-130 Change 3: available projection emits 4-status membership check
 // =============================================================================
 
 describe('OMN-130 Change 3: VM behavioral — available reflects 4-status set', () => {
-  const Task = {
-    Status: {
-      Dropped: 'Dropped',
-      Available: 'Available',
-      Blocked: 'Blocked',
-      DueSoon: 'DueSoon',
-      Next: 'Next',
-      Overdue: 'Overdue',
-    },
-  };
-
-  function makeTask(name: string, taskStatus: string) {
-    return {
-      id: { primaryKey: `id-${name}` },
-      name,
-      flagged: false,
-      completed: false,
-      taskStatus,
-      inInbox: false,
-      tags: [],
-      dueDate: null,
-      deferDate: null,
-      containingProject: null,
-      project: null,
-      note: null,
-    };
-  }
-
-  function runScript(script: string, tasks: unknown[]): { tasks: Array<Record<string, unknown>> } {
-    const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON };
-    return JSON.parse(vm.runInNewContext(script, sandbox) as string) as {
-      tasks: Array<Record<string, unknown>>;
-    };
-  }
+  const makeTask = (name: string, taskStatus: string) => stubTask(name, { taskStatus });
+  const runScript = runListScript;
 
   it('Overdue task: available=true, blocked=false', () => {
     const tasks = [makeTask('overdue', Task.Status.Overdue)];
