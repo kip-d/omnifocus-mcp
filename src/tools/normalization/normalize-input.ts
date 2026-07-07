@@ -97,6 +97,32 @@ function tryParseObjectString(s: string): Record<string, unknown> | undefined {
 }
 
 /**
+ * Leniency #4 worker: rename `target_id` → `id` inside a mutation object, and
+ * inside `mutation.data` (so the #3 hoist composes). Returns the rewritten
+ * mutation, or undefined when nothing was renamed. Collision-safe: a position
+ * carrying BOTH names is left untouched.
+ */
+function aliasMutationFields(m: Record<string, unknown>): Record<string, unknown> | undefined {
+  const newMutation: Record<string, unknown> = { ...m };
+  let aliased = false;
+  if (newMutation.target_id !== undefined && newMutation.id === undefined) {
+    newMutation.id = newMutation.target_id;
+    delete newMutation.target_id;
+    aliased = true;
+  }
+  if (isPlainObject(newMutation.data)) {
+    const d: Record<string, unknown> = { ...newMutation.data };
+    if (d.target_id !== undefined && d.id === undefined) {
+      d.id = d.target_id;
+      delete d.target_id;
+      newMutation.data = d;
+      aliased = true;
+    }
+  }
+  return aliased ? newMutation : undefined;
+}
+
+/**
  * Pure, side-effect-free transform: apply the bounded leniencies to `args`.
  * Returns the rewritten args plus the names of the leniencies applied (empty if
  * nothing was recognized as repairable).
@@ -126,43 +152,73 @@ function normalizeArgs(args: unknown, hint: NormalizationHint): { args: unknown;
     applied.push('wrapper-lift');
   }
 
+  // ── Leniency #4: mutation-field-alias (OMN-168) ────────────────────────────
+  // qwen-class models emit `target_id` where the mutation schema says `id`
+  // (recorded 2026-06-12 failure: root `{operation:'complete', target_id}` — #1
+  // lifts it, then strict re-validation dies on the field NAME). Rename
+  // `target_id` → `id` inside the mutation, and inside `mutation.data` so #3's
+  // hoist composes. Collision-safe: a position carrying BOTH names is left
+  // untouched (the original strict error stands). Runs after #1 (needs the
+  // wrapper present), before #3 (hoist keys off `data.id`). Note `delete`
+  // accepts `target_id` natively (OMN-71) and passes strict-first, so canonical
+  // delete payloads never reach this code.
+  if (hint.wrapperKey === 'mutation' && isPlainObject(current) && isPlainObject(current.mutation)) {
+    const aliasedMutation = aliasMutationFields(current.mutation);
+    if (aliasedMutation !== undefined) {
+      current = { ...current, mutation: aliasedMutation };
+      applied.push('mutation-field-alias');
+    }
+  }
+
   // ── Leniency #3: data-hoist on non-create mutations ────────────────────────
   // Small models nest `id` inside `data` on complete/update/delete (the create
   // shape) instead of placing it at the mutation level. Hoist `id` out of `data`;
   // for update, map any remaining `data` fields → `changes`; for complete/delete,
   // drop the emptied `data` (those operations don't carry it).
   if (hint.wrapperKey === 'mutation' && isPlainObject(current) && isPlainObject(current.mutation)) {
-    const m = current.mutation;
-    const op = m.operation;
-    if (
-      (op === 'complete' || op === 'update' || op === 'delete') &&
-      m.id === undefined &&
-      isPlainObject(m.data) &&
-      typeof m.data.id === 'string'
-    ) {
-      const data = { ...m.data };
-      const id = data.id as string;
-      delete data.id;
-      const newMutation: Record<string, unknown> = { ...m, id };
-      delete newMutation.data;
-      // Don't silently drop residual fields the model nested in `data` (OMN-97
-      // anti-pattern). update: remaining → `changes` (the canonical field name).
-      // complete: remaining (e.g. completionDate) are top-level fields, spread them
-      // up. delete: takes no other fields, so leftovers are dropped — strict
-      // re-validation would reject them anyway, leaving the original error intact.
-      if (Object.keys(data).length > 0) {
-        if (op === 'update') {
-          newMutation.changes = data;
-        } else if (op === 'complete') {
-          Object.assign(newMutation, data);
-        }
-      }
-      current = { ...current, mutation: newMutation };
+    const hoistedMutation = hoistDataId(current.mutation);
+    if (hoistedMutation !== undefined) {
+      current = { ...current, mutation: hoistedMutation };
       applied.push('data-hoist-id');
     }
   }
 
   return { args: current, applied };
+}
+
+/**
+ * Leniency #3 worker: hoist `data.id` to the mutation level on non-create
+ * operations. Returns the rewritten mutation, or undefined when the shape
+ * doesn't match.
+ */
+function hoistDataId(m: Record<string, unknown>): Record<string, unknown> | undefined {
+  const op = m.operation;
+  if (
+    (op !== 'complete' && op !== 'update' && op !== 'delete') ||
+    m.id !== undefined ||
+    !isPlainObject(m.data) ||
+    typeof m.data.id !== 'string'
+  ) {
+    return undefined;
+  }
+  const data = { ...m.data };
+  const id = data.id as string;
+  delete data.id;
+  const newMutation: Record<string, unknown> = { ...m, id };
+  delete newMutation.data;
+  // Don't silently drop residual fields the model nested in `data` (OMN-97
+  // anti-pattern). update: remaining → `changes` (the canonical field name).
+  // complete: remaining (e.g. completionDate) are top-level fields, spread them
+  // up. delete: takes no other fields, so leftovers are dropped — strict
+  // re-validation would reject them anyway, leaving the original error intact.
+  if (Object.keys(data).length > 0) {
+    if (op === 'update') {
+      newMutation.changes = data;
+    } else if (op === 'complete') {
+      Object.assign(newMutation, data);
+    }
+  }
+  return newMutation;
 }
 
 /**
