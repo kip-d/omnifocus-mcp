@@ -33,8 +33,15 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
       const now = new Date();
       const periodStart = new Date();
 
+      // OMN-250 (OMN-148 drift D4+D23): the switch matches the Zod enum
+      // (day|week|month) EXACTLY. 'day' = since midnight today (the old
+      // unreachable 'today' branch's semantics); the enum-unreachable
+      // today/quarter/year branches are deleted; an unknown period fails
+      // LOUD via the error envelope instead of silently producing a
+      // zero-length period (whose dailyAverage division emitted NaN → JSON
+      // null → strict schema rejection).
       switch(options.period) {
-        case 'today':
+        case 'day':
           periodStart.setHours(0, 0, 0, 0);
           break;
         case 'week':
@@ -45,14 +52,8 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           periodStart.setMonth(now.getMonth() - 1);
           periodStart.setHours(0, 0, 0, 0);
           break;
-        case 'quarter':
-          periodStart.setMonth(now.getMonth() - 3);
-          periodStart.setHours(0, 0, 0, 0);
-          break;
-        case 'year':
-          periodStart.setFullYear(now.getFullYear() - 1);
-          periodStart.setHours(0, 0, 0, 0);
-          break;
+        default:
+          throw new Error('Unknown period: ' + options.period);
       }
 
       const periodStartTime = periodStart.getTime();
