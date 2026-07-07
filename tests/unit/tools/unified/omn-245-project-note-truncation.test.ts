@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OmniFocusReadTool , projectFieldsOnResult } from '../../../../src/tools/unified/OmniFocusReadTool.js';
+import { OmniFocusReadTool, projectFieldsOnResult } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { NOTE_TRUNCATE_LENGTH } from '../../../../src/contracts/ast/script-builder.js';
 
