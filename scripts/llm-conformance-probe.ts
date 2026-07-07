@@ -555,9 +555,15 @@ function renderReport(reports: ModelReport[], timing: ProbeTiming): string {
       for (const f of failures) {
         lines.push(`- **${f.caseId}** (${f.outcome}${f.toolCalled ? ` · ${f.toolCalled}` : ''}):`);
         lines.push('');
-        lines.push('  ```json');
-        lines.push(`  ${f.rawArgs ?? ''}`);
-        lines.push('  ```');
+        // rawArgs is model-controlled and JSON never escapes backticks, so an
+        // embedded ``` would close a 3-backtick fence and corrupt the report.
+        // Size the fence one backtick longer than the longest run inside.
+        const raw = f.rawArgs ?? '';
+        const longestRun = raw.match(/`+/g)?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0;
+        const fence = '`'.repeat(Math.max(3, longestRun + 1));
+        lines.push(`  ${fence}json`);
+        lines.push(`  ${raw}`);
+        lines.push(`  ${fence}`);
       }
       lines.push('');
     }

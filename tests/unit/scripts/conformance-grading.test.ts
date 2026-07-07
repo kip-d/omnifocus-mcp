@@ -73,4 +73,11 @@ describe('serializeRawArgs', () => {
     cyclic.self = cyclic;
     expect(serializeRawArgs(cyclic)).toContain('unserializable');
   });
+
+  it('survives values JSON.stringify maps to undefined (argument-less tool calls)', () => {
+    // JSON.stringify(undefined) returns the VALUE undefined — without the
+    // String() fallback this threw on `.length` and killed the case's artifact.
+    expect(serializeRawArgs(undefined)).toBe('undefined');
+    expect(serializeRawArgs(() => {})).toContain('=>');
+  });
 });

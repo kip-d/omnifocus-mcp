@@ -55,7 +55,9 @@ export function serializeRawArgs(args: unknown): string {
     s = args;
   } else {
     try {
-      s = JSON.stringify(args);
+      // JSON.stringify(undefined) returns the VALUE undefined, not a string —
+      // fall back to String() so an argument-less tool call can't throw here.
+      s = JSON.stringify(args) ?? String(args);
     } catch (err) {
       return `[unserializable arguments: ${String(err)}]`;
     }
