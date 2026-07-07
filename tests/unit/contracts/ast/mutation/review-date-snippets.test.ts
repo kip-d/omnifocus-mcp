@@ -65,7 +65,27 @@ describe('OMN-249 — next-review-date path parity (typed instance vs raw spec)'
 });
 
 describe('OMN-249 — ONE shared arithmetic body', () => {
-  it('both emitted programs route through the shared advanceDateByReviewUnit snippet', () => {
+  /**
+   * Extract the full emitted text of a named function via brace counting.
+   * Containment/occurrence pins alone can't catch a variant arithmetic block
+   * reintroduced at one call site (gate finding, 2026-07-07) — only comparing
+   * the emitted bodies byte-for-byte proves both programs carry the SAME math.
+   */
+  function extractFunction(program: string, name: string): string {
+    const start = program.indexOf(`function ${name}(`);
+    expect(start).toBeGreaterThan(-1);
+    let i = program.indexOf('{', start);
+    let depth = 0;
+    do {
+      const ch = program[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      i++;
+    } while (depth > 0 && i < program.length);
+    return program.slice(start, i);
+  }
+
+  it('both emitted programs carry a byte-identical advanceDateByReviewUnit body, exactly once each', () => {
     const markReviewed = emitProgram(
       buildMarkProjectReviewedProgram({ projectId: 'p1', reviewDate: BASE, updateNextReviewDate: true }),
     );
@@ -76,11 +96,22 @@ describe('OMN-249 — ONE shared arithmetic body', () => {
         nextReviewDate: null,
       }),
     );
+
     for (const program of [markReviewed, setSchedule]) {
-      expect(program).toContain('function advanceDateByReviewUnit(');
+      // Exactly one definition per program — no shadow copy anywhere else.
+      const first = program.indexOf('function advanceDateByReviewUnit(');
+      expect(first).toBeGreaterThan(-1);
+      expect(program.indexOf('function advanceDateByReviewUnit(', first + 1)).toBe(-1);
+      // No stray date arithmetic outside the shared body: every setFullYear/
+      // setMonth/setDate mutation lives inside the extracted function.
+      const body = extractFunction(program, 'advanceDateByReviewUnit');
+      const outside = program.replace(body, '');
+      expect(outside).not.toMatch(/set(?:FullYear|Month|Date|Hours)\(/);
     }
-    // The duplicated switch is gone: exactly one arithmetic body per program.
-    expect(markReviewed.match(/setFullYear\(/g)).toHaveLength(1);
-    expect(setSchedule.match(/setFullYear\(/g)).toHaveLength(1);
+
+    // The load-bearing pin: the two call sites emit the SAME arithmetic.
+    expect(extractFunction(markReviewed, 'advanceDateByReviewUnit')).toBe(
+      extractFunction(setSchedule, 'advanceDateByReviewUnit'),
+    );
   });
 });
