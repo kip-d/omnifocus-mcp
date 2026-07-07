@@ -723,7 +723,7 @@ describe('buildUpdateProjectScript (OMN-128 AST emission)', () => {
 
     const program = extractOmniJsProgram(script);
     expect(program).toContain(
-      '{ const _rmr = proj.reviewInterval; if (_rmr) { _rmr.steps = 2; _rmr.unit = "weeks"; proj.reviewInterval = _rmr; } }',
+      '{ const _rmr = proj.reviewInterval; if (_rmr) { _rmr.steps = 2; _rmr.unit = "weeks"; proj.reviewInterval = _rmr; } else { _warnings.push("reviewInterval: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set"); } }',
     );
     expect(program).not.toContain('* 24 * 60 * 60');
     expect(program).not.toContain('new Project.ReviewInterval');

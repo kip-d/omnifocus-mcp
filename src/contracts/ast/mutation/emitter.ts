@@ -186,7 +186,16 @@ function emitSetProp(node: SetPropNode): string {
       return wrap(`${target}.${node.prop} = ${emitExpr(node.value as Expr)};`);
     case 'readModifyReassign': {
       const muts = (node.mutations ?? []).map((m) => `_rmr.${m.prop} = ${emitExpr(m.value)};`).join(' ');
-      return wrap(`{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } }`);
+      // OMN-136 fail-loud: a null target instance used to silently no-op AND
+      // report success (no else). OmniJS cannot construct the typed instance
+      // (OMN-41/OMN-58), so the value cannot be set — record a labeled OMN-137
+      // warning instead of staying quiet.
+      const nullWarning = `_warnings.push(${JSON.stringify(
+        `${node.label ?? node.prop}: no existing typed instance to modify — OmniJS cannot construct one (OMN-41/OMN-58); value not set`,
+      )});`;
+      return wrap(
+        `{ const _rmr = ${target}.${node.prop}; if (_rmr) { ${muts} ${target}.${node.prop} = _rmr; } else { ${nullWarning} } }`,
+      );
     }
     default: {
       const _x: never = node.strategy;
