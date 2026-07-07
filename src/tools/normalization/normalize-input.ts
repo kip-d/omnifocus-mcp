@@ -204,6 +204,19 @@ function hoistDataId(m: Record<string, unknown>): Record<string, unknown> | unde
   const data = { ...m.data };
   const id = data.id as string;
   delete data.id;
+  // OMN-247: a leniency must never rewrite dispatch. A nested operation/target
+  // that CONTRADICTS the outer value made `complete` execute as `delete` (the
+  // complete branch's spread copied it over the discriminant AFTER strict
+  // validation had already failed once) — and in the delete branch the drop
+  // silently discarded the same ambiguity. Conflicting dispatch keys abort the
+  // recovery entirely (the original strict error stands); a redundant echo of
+  // the same value is dropped so legitimate recoveries proceed.
+  for (const dispatchKey of ['operation', 'target'] as const) {
+    if (data[dispatchKey] !== undefined) {
+      if (data[dispatchKey] !== m[dispatchKey]) return undefined;
+      delete data[dispatchKey];
+    }
+  }
   const newMutation: Record<string, unknown> = { ...m, id };
   delete newMutation.data;
   // Don't silently drop residual fields the model nested in `data` (OMN-97
