@@ -143,6 +143,13 @@ export function projectFieldsOnResult(
         out[field] = project[field];
       }
     }
+    // OMN-245: noteTruncated is a marker RIDING the note field, not a field of
+    // its own — whenever the note is projected, the truncation marker must
+    // survive projection, or the advertised "truncated notes carry the flag"
+    // contract silently breaks for explicit-fields queries.
+    if ('note' in out && project.noteTruncated === true) {
+      out.noteTruncated = true;
+    }
     return out;
   };
 
@@ -822,6 +829,9 @@ PERFORMANCE:
    * OMN-40: project id-lookup fast path. Uses Project.byIdentifier() for O(1)
    * lookup, bypasses the projects-list cache (whose key did not include id), and
    * defensively verifies the returned project's id matches the request.
+   *
+   * OMN-245: deliberately NO note truncation here — an id-lookup is a targeted
+   * fetch, so the caller gets the full note (parity with the task details path).
    */
   private async executeProjectIdLookup(projectId: string, fields: string[], timer: OperationTimerV2): Promise<unknown> {
     const generated = buildProjectByIdScript(projectId, fields);
@@ -1002,8 +1012,15 @@ PERFORMANCE:
     // for the full option trade-off (explicit param vs heuristic vs slim mode).
     const isNarrowLookup = isNarrowLookupFilter(projectFilter);
 
-    // Build cache key
-    const cacheParams = { ...projectFilter, limit, includeStats };
+    // OMN-245: mirror the task path — list reads truncate notes unless
+    // details:true (the OMN-242 noteTruncated flag marks rows where it fired).
+    const noteTruncateLength = !compiled.details ? NOTE_TRUNCATE_LENGTH : undefined;
+
+    // Build cache key. noteTruncateLength MUST participate: a truncated
+    // (details:false) and full-note (details:true) list now compile different
+    // scripts, and a shared entry would serve truncated notes to a details:true
+    // caller (or vice versa).
+    const cacheParams = { ...projectFilter, limit, includeStats, noteTruncateLength };
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
@@ -1030,6 +1047,7 @@ PERFORMANCE:
       limit,
       includeStats,
       performanceMode: includeStats ? 'normal' : 'lite',
+      noteTruncateLength,
     });
 
     const result = await this.execJson(generatedScript.script, PROJECT_LIST_SCHEMA);
