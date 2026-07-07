@@ -174,6 +174,11 @@ describe('assignTags modes', () => {
     expect(emitted).toContain('removeTag');
   });
 
+  it('remove mode warns loudly on an unresolvable tag name (OMN-248, the OMN-136 fail-loud pattern)', () => {
+    const emitted = emitStmt(assignTags(ref('task'), json(['a']), 'removed', true, 'tags', 'remove'));
+    expect(emitted).toContain('else { _warnings.push("tags: tag not found — not removed: " + _tagName); }');
+  });
+
   it('validator rejects an unknown mode', () => {
     const node = assignTags(ref('task'), json(['a']), 'b');
     (node as unknown as { mode: unknown }).mode = 'merge';

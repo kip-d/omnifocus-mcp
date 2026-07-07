@@ -396,6 +396,38 @@ describe('emitted update-task program executes (vm)', () => {
     expect(sets).toContain('name');
   });
 
+  // OMN-248: remove mode used to drop unresolvable tag names with zero signal —
+  // success with warnings: [] while nothing was removed (the same silent-skip
+  // shape OMN-136 eliminated in readModifyReassign).
+  it('vm: remove mode with an unresolvable tag name records a labeled warning, update still succeeds', () => {
+    const { task, calls } = makeRecordingTask();
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { removeTags: ['no-such-tag'] } }));
+    const sandbox: Record<string, unknown> = {
+      Task: { byIdentifier: () => task },
+      flattenedTags: [], // nothing resolves
+      tags: [],
+    };
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.updated).toBe(true);
+    expect(parsed.warnings).toEqual(['tags: tag not found — not removed: no-such-tag']);
+    expect(calls).not.toContain('removeTag');
+  });
+
+  it('vm: remove mode with a resolvable tag removes it warning-free (happy path unchanged)', () => {
+    const { task, calls } = makeRecordingTask();
+    const existingTag = { name: 'real-tag' };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { removeTags: ['real-tag'] } }));
+    const sandbox: Record<string, unknown> = {
+      Task: { byIdentifier: () => task },
+      flattenedTags: [existingTag],
+      tags: [existingTag],
+    };
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+    expect(parsed.warnings).toEqual([]);
+    expect(calls).toContain('removeTag');
+  });
+
   it('vm: replace mode calls clearTags before addTag', () => {
     const { task, calls } = makeRecordingTask();
     const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { tags: ['__test-a'] } }));

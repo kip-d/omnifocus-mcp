@@ -225,14 +225,19 @@ function emitAssignTags(node: AssignTagsNode): string {
   if (mode === 'remove') {
     // resolve-only: parseTagPath + resolveTagByPath for path names (shared single-source
     // helpers — parseTagPath keeps its empty-segment validation), flattenedTags.find for
-    // leaf names. Missing tags are silently skipped (legacy update builder semantics).
+    // leaf names. OMN-248: an unresolvable name used to be silently skipped (legacy
+    // update builder semantics) — success with warnings: [] while nothing was removed.
+    // Same fail-loud pattern as OMN-136: record a labeled warning naming the tag.
+    // (add/replace have no analogous case: their loop CREATES missing tags.)
+    const missingPrefix = JSON.stringify((node.label ?? 'tags') + ': tag not found — not removed: ');
+    const missingWarning = `_warnings.push(${missingPrefix} + _tagName);`;
     loop = [
       `for (const _tagName of ${tags}) {`,
       '  var _segs = parseTagPath(_tagName);',
       '  var _tag;',
       '  if (_segs) { _tag = resolveTagByPath(_segs); }',
       '  else { _tag = flattenedTags.find(t => t.name === _tagName); }',
-      `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); }`,
+      `  if (_tag) { ${target}.removeTag(_tag); ${node.bind}.push(_tag.name); } else { ${missingWarning} }`,
       '}',
     ].join('\n');
   } else {
