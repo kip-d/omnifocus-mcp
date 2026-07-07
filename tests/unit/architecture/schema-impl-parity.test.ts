@@ -735,6 +735,11 @@ const BUILDER_INTERNAL_REFS = [
   'parentTagName',
   'newName',
   'targetTag',
+  // OMN-106: mark-reviewed/project params — the manage_reviews operation lives
+  // in the ANALYZE schema (AnalyzeSchema manage_reviews params), not a write
+  // settable; the AST builder still lowers them.
+  'reviewDate',
+  'updateNextReviewDate',
 ];
 
 // Strip comments before scanning the (checked-in, bounded) builder source:

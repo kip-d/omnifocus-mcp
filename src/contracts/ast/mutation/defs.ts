@@ -1388,6 +1388,62 @@ export function buildReparentTagProgram(data: TagReparentInput): Program {
 }
 
 // =============================================================================
+// MARK PROJECT REVIEWED LOWERING (OMN-106)
+// =============================================================================
+
+export interface MarkProjectReviewedInput {
+  /** Legacy tolerates null (script returned its not-found envelope for the literal 'null'). */
+  projectId: string | null;
+  reviewDate: string;
+  updateNextReviewDate: boolean;
+}
+
+/**
+ * Lower a mark-project-reviewed request (OMN-106 PR-1). Statement shape:
+ * strict id resolve -> loud not-found guard (legacy message text, part of the
+ * pinned wire contract) -> applyMarkReviewed snippet (sets lastReviewDate,
+ * advances nextReviewDate from the LIVE typed reviewInterval — the arithmetic
+ * must run inside OmniJS) -> legacy envelope {success, project, changes,
+ * message}, live read-back, unchanged wire shape (MARK_REVIEWED_TYPED_SCHEMA
+ * is the contract).
+ */
+export function buildMarkProjectReviewedProgram(data: MarkProjectReviewedInput): Program {
+  const _exhaustive: Record<keyof MarkProjectReviewedInput, true> = {
+    projectId: true,
+    reviewDate: true,
+    updateNextReviewDate: true,
+  };
+  void _exhaustive;
+
+  // String(null) === 'null' reproduces the legacy null-id behavior exactly:
+  // byIdentifier misses and the guard message names 'null'.
+  const idStr = String(data.projectId);
+  const statements: Stmt[] = [
+    resolveProjectById('proj', idStr),
+    guard('proj === null', {
+      error: json(true),
+      message: json(
+        `Project with ID '${idStr}' not found. Use 'list_projects' or 'projects_for_review' tools to see available projects.`,
+      ),
+    }),
+    // User data (the date string) enters via a json() bind, never via raw().
+    bind('reviewDateStr', json(data.reviewDate)),
+    // updateNextReviewDate is a build-time boolean — safe to inline in raw.
+    bind('changes', raw(`applyMarkReviewed(proj, reviewDateStr, ${data.updateNextReviewDate ? 'true' : 'false'})`)),
+    return_({
+      success: json(true),
+      // Builder-internal read-back expression — no user data (raw() trust model).
+      project: raw(
+        "{ id: proj.id.primaryKey, name: proj.name, lastReviewDate: proj.lastReviewDate ? proj.lastReviewDate.toISOString() : null, nextReviewDate: proj.nextReviewDate ? proj.nextReviewDate.toISOString() : null, reviewInterval: proj.reviewInterval ? { unit: proj.reviewInterval.unit ? proj.reviewInterval.unit.name : 'weeks', steps: proj.reviewInterval.steps || 1 } : null }",
+      ),
+      changes: ref('changes'),
+      message: raw('"Project \'" + proj.name + "\' marked as reviewed"'),
+    }),
+  ];
+  return { statements, context: 'mark_project_reviewed', snippetDeps: ['applyMarkReviewed'] };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -1493,6 +1549,13 @@ export const MUTATION_DEFS = {
     guard: (d) => validateTagMutation(d.tagName),
     build: buildUnparentTagProgram,
   } as MutationDef<TagUnparentInput>,
+  'mark-reviewed/project': {
+    // OMN-106: closes the sandbox-guard bypass — this mutation ran unguarded
+    // as a legacy template. null projectId skips the guard (fails loudly
+    // in-script with the legacy not-found envelope).
+    guard: (d) => (d.projectId ? validateProjectInSandbox(d.projectId, 'mark reviewed') : undefined),
+    build: buildMarkProjectReviewedProgram,
+  } as MutationDef<MarkProjectReviewedInput>,
   'reparent/tag': {
     // Spec §2.1: guard EVERY name the op touches — parent included when present.
     guard: (d) => {

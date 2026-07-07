@@ -24,7 +24,7 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
-import { dispatchMutation } from './mutation/defs.js';
+import { dispatchMutation, type MarkProjectReviewedInput } from './mutation/defs.js';
 import { emitProgram, wrapInLauncher } from './mutation/emitter.js';
 import { validateMutationProgram } from './mutation/validator.js';
 
@@ -691,6 +691,26 @@ export async function buildDeleteScript(target: MutationTarget, id: string): Pro
     operation: 'delete',
     target,
     description: `Delete ${target}: ${id}`,
+  };
+}
+
+/**
+ * Build a JXA script for marking a project reviewed (OMN-106 PR-1).
+ * Emits from the mutation AST via 'mark-reviewed/project' dispatch — the
+ * legacy template ran with NO sandbox guard (the OMN-119/120 bypass class);
+ * dispatchMutation closes that. Wire envelope unchanged
+ * (MARK_REVIEWED_TYPED_SCHEMA is the contract).
+ */
+export async function buildMarkProjectReviewedScript(
+  params: MarkProjectReviewedInput,
+): Promise<GeneratedMutationScript> {
+  const program = await dispatchMutation('mark-reviewed/project', params);
+  validateMutationProgram(program);
+  return {
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
+    operation: 'mark_reviewed',
+    target: 'project',
+    description: `Mark project reviewed: ${params.projectId}`,
   };
 }
 

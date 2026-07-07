@@ -41,7 +41,9 @@ import { ANALYZE_OVERDUE_V3 as ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/sc
 import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
-import { buildMarkProjectReviewedScript, buildSetReviewScheduleScript } from '../../omnifocus/scripts/reviews.js';
+// OMN-106 PR-1: mark-reviewed now emits from the AST mutation pipeline (sandbox-guarded).
+import { buildMarkProjectReviewedScript } from '../../contracts/ast/mutation-script-builder.js';
+import { buildSetReviewScheduleScript } from '../../omnifocus/scripts/reviews.js';
 import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/projects-for-review.js';
 
 // Pure-JS analyzer imports (for pattern analysis)
@@ -3318,7 +3320,7 @@ SCOPE FILTERING:
     const reviewDate = compiled.params?.reviewDate || new Date().toISOString();
     const brandedProjectId = projectId ? convertToProjectId(projectId) : undefined;
 
-    const script = buildMarkProjectReviewedScript({
+    const { script } = await buildMarkProjectReviewedScript({
       projectId: brandedProjectId ?? null,
       reviewDate,
       updateNextReviewDate: true,

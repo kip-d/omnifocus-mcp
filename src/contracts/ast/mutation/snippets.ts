@@ -145,6 +145,65 @@ function resolveProjectFlexible(target) {
   return null;
 }`;
 
+// Review-interval arithmetic, lifted VERBATIM from the legacy
+// mark-project-reviewed.ts template (OMN-106). Unit names are the canonical
+// OmniJS plurals (ReviewInterval.unit.name); unknown units fall back to weekly,
+// matching legacy behavior byte-for-byte.
+const calculateNextReviewDate = `
+function calculateNextReviewDate(reviewInterval, fromDate) {
+  if (!reviewInterval) {
+    return null;
+  }
+  var date = new Date(fromDate);
+  var unitName = reviewInterval.unit ? reviewInterval.unit.name : 'weeks';
+  var steps = reviewInterval.steps || 1;
+  switch (unitName) {
+    case 'days':
+      date.setDate(date.getDate() + steps);
+      break;
+    case 'weeks':
+      date.setDate(date.getDate() + (steps * 7));
+      break;
+    case 'months':
+      date.setMonth(date.getMonth() + steps);
+      break;
+    case 'years':
+      date.setFullYear(date.getFullYear() + steps);
+      break;
+    default:
+      date.setDate(date.getDate() + (steps * 7));
+  }
+  return date;
+}`;
+
+// The mark-reviewed mutation body (OMN-106): sets lastReviewDate, optionally
+// calculates + sets nextReviewDate from the project's LIVE typed
+// reviewInterval, and returns the legacy changes[] strings unchanged (they are
+// part of the pinned wire envelope).
+const applyMarkReviewed = `
+function applyMarkReviewed(project, reviewDateStr, updateNextReviewDate) {
+  var reviewDateTime = new Date(reviewDateStr);
+  project.lastReviewDate = reviewDateTime;
+  var changes = ["Last review date set to " + reviewDateStr];
+  if (updateNextReviewDate) {
+    var reviewInterval = project.reviewInterval;
+    if (reviewInterval) {
+      try {
+        var nextReviewDateValue = calculateNextReviewDate(reviewInterval, reviewDateTime);
+        if (nextReviewDateValue) {
+          project.nextReviewDate = nextReviewDateValue;
+          changes.push("Next review date calculated and set to " + nextReviewDateValue.toISOString());
+        }
+      } catch (calcError) {
+        changes.push("Warning: Could not calculate next review date: " + calcError.message);
+      }
+    } else {
+      changes.push("Note: No review interval set, next review date not calculated");
+    }
+  }
+  return changes;
+}`;
+
 export const SNIPPETS: Record<string, Snippet> = {
   parseFolderPath: { source: parseFolderPath, deps: [] },
   resolveFolderPath: { source: resolveFolderPath, deps: [] },
@@ -159,6 +218,9 @@ export const SNIPPETS: Record<string, Snippet> = {
   // segment instead of creating. Used by the assignTags 'remove' mode (OMN-128 slice 4).
   resolveTagByPath: { source: resolveTagByPath, deps: ['parseTagPath'] },
   resolveProjectFlexible: { source: resolveProjectFlexible, deps: [] },
+  // OMN-106: review-interval arithmetic + the mark-reviewed mutation body.
+  calculateNextReviewDate: { source: calculateNextReviewDate, deps: [] },
+  applyMarkReviewed: { source: applyMarkReviewed, deps: ['calculateNextReviewDate'] },
 };
 
 export function collectSnippets(keys: readonly string[]): string {

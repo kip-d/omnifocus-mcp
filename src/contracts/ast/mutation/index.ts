@@ -29,12 +29,14 @@ export {
   buildNestTagProgram,
   buildUnparentTagProgram,
   buildReparentTagProgram,
+  buildMarkProjectReviewedProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
   dispatchMutation,
 } from './defs.js';
 export type {
   TaskLoweringNames,
+  MarkProjectReviewedInput,
   BatchCreateTasksData,
   UpdateTaskInput,
   UpdateProjectInput,
