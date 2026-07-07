@@ -476,8 +476,11 @@ SCOPE FILTERING:
             ? projectStatsArray
             : Object.entries(projectStatsArray || {}).map(([name, data]) => ({
                 name,
+                // OMN-252 (OMN-148 drift D8): the script's map emits `completed`;
+                // this reshape read `completedCount` — always 0, so the "Most
+                // productive project" finding could never fire.
                 completedCount:
-                  data && typeof data === 'object' && 'completedCount' in data ? Number(data.completedCount) || 0 : 0,
+                  data && typeof data === 'object' && 'completed' in data ? Number(data.completed) || 0 : 0,
                 ...(data && typeof data === 'object' ? (data as Record<string, unknown>) : {}),
               })),
           tagStats: tagStatsArray,
