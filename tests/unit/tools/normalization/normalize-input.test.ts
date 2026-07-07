@@ -275,6 +275,35 @@ describe('leniency #4 — mutation-field-alias (OMN-168)', () => {
 });
 
 describe('OMN-247 — leniencies must never rewrite the mutation discriminant', () => {
+  it('gate round 2: ABSENT outer target + nested data.target is NOT a contradiction — complete recovers (OMN-75 leniency)', () => {
+    // Pre-#247 this recovered (complete spreads data.target up); the first
+    // guard draft compared nested !== undefined and aborted. Absent means
+    // "fill from nested", never "conflict".
+    const r = parseWithNormalization(
+      WriteSchema,
+      { mutation: { operation: 'complete', data: { id: 't1', target: 'project' } } },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    const m = (r.data as { mutation: Record<string, unknown> }).mutation;
+    expect(m.id).toBe('t1');
+    expect(m.target).toBe('project');
+    expect(r.applied).toEqual(['data-hoist-id']);
+  });
+
+  it('gate round 2: delete with a residual data field ABORTS recovery — never silently drops it (OMN-97 class)', () => {
+    const args = {
+      mutation: { operation: 'delete', target: 'task', data: { id: 't1', reason: 'duplicate-of-t2' } },
+    };
+    const original = WriteSchema.safeParse(args);
+    expect(original.success).toBe(false);
+
+    const r = parseWithNormalization(WriteSchema, args, 'omnifocus_write');
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+    expect(JSON.stringify(r.error!.issues)).toBe(JSON.stringify((original as z.SafeParseError<unknown>).error.issues));
+  });
+
   it('the confirmed hijack: complete + nested data.operation:delete is NOT recovered as a delete', () => {
     // /code-review 2026-07-07 verified trace: strict fails (complete has no
     // `data`), the hoist copied the residual over the top level, and the

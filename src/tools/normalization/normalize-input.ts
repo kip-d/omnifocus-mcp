@@ -212,23 +212,35 @@ function hoistDataId(m: Record<string, unknown>): Record<string, unknown> | unde
   // recovery entirely (the original strict error stands); a redundant echo of
   // the same value is dropped so legitimate recoveries proceed.
   for (const dispatchKey of ['operation', 'target'] as const) {
-    if (data[dispatchKey] !== undefined) {
-      if (data[dispatchKey] !== m[dispatchKey]) return undefined;
-      delete data[dispatchKey];
-    }
+    const nested = data[dispatchKey];
+    if (nested === undefined) continue;
+    const outer = m[dispatchKey];
+    // Gate round 2 (OMN-75): an ABSENT outer key is not a contradiction — the
+    // nested value is the model supplying it in the wrong place, and the
+    // per-op residual handling below restores the pre-OMN-247 recovery
+    // (complete spreads it up; update routes it to `changes`, which strict
+    // re-validation then adjudicates). Only a PRESENT-and-different outer
+    // value is a dispatch conflict.
+    if (outer === undefined) continue;
+    if (nested !== outer) return undefined;
+    delete data[dispatchKey];
   }
   const newMutation: Record<string, unknown> = { ...m, id };
   delete newMutation.data;
   // Don't silently drop residual fields the model nested in `data` (OMN-97
   // anti-pattern). update: remaining → `changes` (the canonical field name).
   // complete: remaining (e.g. completionDate) are top-level fields, spread them
-  // up. delete: takes no other fields, so leftovers are dropped — strict
-  // re-validation would reject them anyway, leaving the original error intact.
+  // up. delete: takes no other fields — gate round 2: leftovers ABORT the
+  // recovery (original strict error stands) instead of being silently dropped;
+  // the old comment claimed re-validation would catch them, but `data` was
+  // deleted before re-validation ever saw the leftovers.
   if (Object.keys(data).length > 0) {
     if (op === 'update') {
       newMutation.changes = data;
     } else if (op === 'complete') {
       Object.assign(newMutation, data);
+    } else {
+      return undefined;
     }
   }
   return newMutation;
