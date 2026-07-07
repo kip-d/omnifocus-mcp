@@ -158,6 +158,15 @@ export function projectFieldsOnResult(
   return { ...result, data: { ...data, projects: projected } };
 }
 
+/**
+ * One truncation policy for BOTH entity paths: list-style reads truncate
+ * notes unless the caller asked for details. Tasks and projects must never
+ * diverge on this — change it here, not per call site.
+ */
+function resolveNoteTruncateLength(details: boolean | undefined): number | undefined {
+  return !details ? NOTE_TRUNCATE_LENGTH : undefined;
+}
+
 // =============================================================================
 // TASK QUERY BUILDER
 // =============================================================================
@@ -255,10 +264,8 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
     scriptFields = [...scriptFields, 'available'];
   }
 
-  // Note truncation: apply when not in detail mode
-  // Truncate when using minimal fields OR when user explicitly requests note without details=true
-  const shouldTruncateNotes = !compiled.details;
-  const noteTruncateLength = shouldTruncateNotes ? NOTE_TRUNCATE_LENGTH : undefined;
+  // Note truncation: shared policy — see resolveNoteTruncateLength.
+  const noteTruncateLength = resolveNoteTruncateLength(compiled.details);
 
   // Only pass user-specified sort to the script builder (not mode default sorts).
   // Mode default sorts operate on small, already-filtered sets and stay as post-hoc.
@@ -1014,7 +1021,7 @@ PERFORMANCE:
 
     // OMN-245: mirror the task path — list reads truncate notes unless
     // details:true (the OMN-242 noteTruncated flag marks rows where it fired).
-    const noteTruncateLength = !compiled.details ? NOTE_TRUNCATE_LENGTH : undefined;
+    const noteTruncateLength = resolveNoteTruncateLength(compiled.details);
 
     // Build cache key. noteTruncateLength MUST participate: a truncated
     // (details:false) and full-note (details:true) list now compile different
