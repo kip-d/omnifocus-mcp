@@ -94,7 +94,7 @@ describe('OMN-130 Change 1: TaskRowSchema accepts hasNote', () => {
 // =============================================================================
 
 describe('OMN-130 Change 1: VM behavioral — hasNote projection', () => {
-  // Stub Task.Status for the OMN-157 dropped-exclusion predicate
+  // Task.Status comes from the shared omnijs-vm-fixture — extend it THERE, not locally
   const makeTask = (name: string, note: string | null, taskStatus: string = Task.Status.Available) =>
     stubTask(name, { note, taskStatus });
   const runScript = runListScript;
