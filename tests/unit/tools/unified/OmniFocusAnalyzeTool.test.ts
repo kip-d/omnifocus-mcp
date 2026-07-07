@@ -1499,26 +1499,43 @@ describe('OmniFocusAnalyzeTool', () => {
 
       expect(mockOmni.executeJson).toHaveBeenCalledTimes(1);
       const generatedScript = mockOmni.executeJson.mock.calls[0][0] as string;
-      expect(generatedScript).toContain('"reviewInterval":{"unit":"week","steps":2}');
+      // OMN-106: the AST launcher carries the OmniJS body as ONE JSON string
+      // literal, so the interval spec appears with escaped quotes.
+      expect(generatedScript).toContain('const intervalSpec = {\\"unit\\":\\"week\\",\\"steps\\":2};');
     });
 
-    it('passes reviewInterval: null when none is supplied (back-compat)', async () => {
+    it('FAIL LOUD (OMN-106): set_schedule with neither interval nor date refuses without executing', async () => {
+      // Replaces the pre-OMN-106 back-compat pin (reviewInterval:null passed
+      // through to a script that silently no-opped). Kip's 2026-07-06
+      // fail-loud decision: nothing to set means a VALIDATION_ERROR, and no
+      // script runs at all.
       mockCache.get.mockReturnValue(null);
-      mockOmni.executeJson.mockResolvedValue({
-        success: true,
-        data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
-      });
 
-      await tool.execute({
+      const result = (await tool.execute({
         analysis: {
           type: 'manage_reviews',
           params: { operation: 'set_schedule', projectId: 'p1' },
         },
-      });
+      })) as { success: boolean; error?: { code?: string } };
 
-      expect(mockOmni.executeJson).toHaveBeenCalledTimes(1);
-      const generatedScript = mockOmni.executeJson.mock.calls[0][0] as string;
-      expect(generatedScript).toContain('"reviewInterval":null');
+      expect(mockOmni.executeJson).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('FAIL LOUD (OMN-106): clear_schedule returns UNSUPPORTED without executing', async () => {
+      mockCache.get.mockReturnValue(null);
+
+      const result = (await tool.execute({
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'clear_schedule', projectId: 'p1' },
+        },
+      })) as { success: boolean; error?: { code?: string } };
+
+      expect(mockOmni.executeJson).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('UNSUPPORTED');
     });
   });
 });

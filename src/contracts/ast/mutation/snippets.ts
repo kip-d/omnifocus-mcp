@@ -204,6 +204,119 @@ function applyMarkReviewed(project, reviewDateStr, updateNextReviewDate) {
   return changes;
 }`;
 
+// Unit-string normalizer for set-review-schedule, lifted from the legacy
+// template (OMN-106 PR-2). Singular/plural map, unknown falls back to weeks.
+const normalizeReviewUnit = `
+function normalizeReviewUnit(unitString) {
+  var unitMap = {
+    'day': 'days',
+    'days': 'days',
+    'week': 'weeks',
+    'weeks': 'weeks',
+    'month': 'months',
+    'months': 'months',
+    'year': 'years',
+    'years': 'years'
+  };
+  return unitMap[unitString.toLowerCase()] || 'weeks';
+}`;
+
+// Next-review arithmetic over the RAW spec object (unit may be singular —
+// legacy deliberately switches on the unnormalized unit; renamed from the
+// template's calculateNextReviewDate to avoid colliding with the
+// mark-reviewed snippet, whose signature reads the typed .unit.name).
+const calculateNextReviewFromSpec = `
+function calculateNextReviewFromSpec(interval, baseDate) {
+  var date = baseDate ? new Date(baseDate) : new Date();
+  var unit = interval.unit || 'week';
+  var steps = interval.steps || 1;
+  switch (unit) {
+    case 'day':
+    case 'days':
+      date.setDate(date.getDate() + steps);
+      break;
+    case 'week':
+    case 'weeks':
+      date.setDate(date.getDate() + (steps * 7));
+      break;
+    case 'month':
+    case 'months':
+      date.setMonth(date.getMonth() + steps);
+      break;
+    case 'year':
+    case 'years':
+      date.setFullYear(date.getFullYear() + steps);
+      break;
+    default:
+      date.setDate(date.getDate() + (steps * 7));
+  }
+  return date;
+}`;
+
+// The per-project set-review-schedule body (OMN-106 PR-2), lifted from the
+// legacy template: strictly-typed reviewInterval read-modify-reassign
+// (OMN-41/58/60 — no existing instance means a LOUD per-item failure, OmniJS
+// cannot construct one), explicit vs from-now next-review date, read-back
+// echo of the PERSISTED interval. Mutates the shared results accumulator.
+const applySetReviewSchedule = `
+function applySetReviewSchedule(projectId, reviewInterval, nextReviewDateParam, results) {
+  var targetProject = Project.byIdentifier(projectId);
+  if (!targetProject) {
+    results.failed.push({
+      projectId: projectId,
+      error: "Project not found"
+    });
+    return;
+  }
+  try {
+    var changes = [];
+    if (reviewInterval) {
+      var unit = normalizeReviewUnit(reviewInterval.unit);
+      var steps = reviewInterval.steps || 1;
+      var ri = targetProject.reviewInterval;
+      if (ri) {
+        ri.steps = steps;
+        ri.unit = unit;
+        targetProject.reviewInterval = ri;
+        changes.push("Review interval set to every " + steps + " " + unit);
+      } else {
+        results.failed.push({
+          projectId: projectId,
+          projectName: targetProject.name,
+          error: "Project has no existing reviewInterval instance to modify; OmniJS cannot construct one (OMN-41/OMN-58)"
+        });
+        return;
+      }
+    }
+    var calculatedNextReviewDate = null;
+    if (nextReviewDateParam) {
+      calculatedNextReviewDate = new Date(nextReviewDateParam);
+      targetProject.nextReviewDate = calculatedNextReviewDate;
+      changes.push("Next review date set to " + nextReviewDateParam);
+    } else if (reviewInterval) {
+      calculatedNextReviewDate = calculateNextReviewFromSpec(reviewInterval);
+      targetProject.nextReviewDate = calculatedNextReviewDate;
+      changes.push("Next review date calculated and set to " + calculatedNextReviewDate.toISOString());
+    }
+    results.successful.push({
+      projectId: projectId,
+      projectName: targetProject.name,
+      changes: changes,
+      reviewInterval: (function() {
+        var ri2 = targetProject.reviewInterval;
+        return ri2 ? { unit: ri2.unit, steps: ri2.steps } : null;
+      })(),
+      nextReviewDate: calculatedNextReviewDate ? calculatedNextReviewDate.toISOString() : null
+    });
+  } catch (updateError) {
+    results.failed.push({
+      projectId: projectId,
+      projectName: targetProject.name,
+      error: "Failed to update: " + updateError.message
+    });
+  }
+}`;
+
 export const SNIPPETS: Record<string, Snippet> = {
   parseFolderPath: { source: parseFolderPath, deps: [] },
   resolveFolderPath: { source: resolveFolderPath, deps: [] },
@@ -221,6 +334,13 @@ export const SNIPPETS: Record<string, Snippet> = {
   // OMN-106: review-interval arithmetic + the mark-reviewed mutation body.
   calculateNextReviewDate: { source: calculateNextReviewDate, deps: [] },
   applyMarkReviewed: { source: applyMarkReviewed, deps: ['calculateNextReviewDate'] },
+  // OMN-106 PR-2: set-review-schedule batch body + its helpers.
+  normalizeReviewUnit: { source: normalizeReviewUnit, deps: [] },
+  calculateNextReviewFromSpec: { source: calculateNextReviewFromSpec, deps: [] },
+  applySetReviewSchedule: {
+    source: applySetReviewSchedule,
+    deps: ['normalizeReviewUnit', 'calculateNextReviewFromSpec'],
+  },
 };
 
 export function collectSnippets(keys: readonly string[]): string {

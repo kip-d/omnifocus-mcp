@@ -1444,6 +1444,86 @@ export function buildMarkProjectReviewedProgram(data: MarkProjectReviewedInput):
 }
 
 // =============================================================================
+// SET REVIEW SCHEDULE LOWERING (OMN-106 PR-2)
+// =============================================================================
+
+export interface ReviewIntervalSpecInput {
+  unit: string;
+  steps: number;
+}
+
+export interface SetReviewScheduleInput {
+  projectIds: string[];
+  reviewInterval: ReviewIntervalSpecInput | null;
+  nextReviewDate: string | null;
+}
+
+/**
+ * Lower a set-review-schedule batch request (OMN-106 PR-2). The per-project
+ * body (typed reviewInterval read-modify-reassign with the OMN-58 loud
+ * no-instance failure, explicit vs from-now next-review date, persisted-value
+ * read-back) lives in the applySetReviewSchedule snippet; the program binds
+ * user data via json(), iterates in builder-internal raw code, and returns the
+ * legacy batch envelope {success, results, message} unchanged
+ * (SET_SCHEDULE_TYPED_SCHEMA is the contract).
+ *
+ * Fail-loud (Kip 2026-07-06, with OMN-136): a request with NEITHER
+ * reviewInterval NOR nextReviewDate throws at build time — the legacy script
+ * silently reported per-project success with empty changes (the clear_schedule
+ * silent no-op class).
+ */
+export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Program {
+  const _exhaustive: Record<keyof SetReviewScheduleInput, true> = {
+    projectIds: true,
+    reviewInterval: true,
+    nextReviewDate: true,
+  };
+  void _exhaustive;
+
+  if (!data.reviewInterval && !data.nextReviewDate) {
+    throw new Error(
+      'set_review_schedule requires reviewInterval or nextReviewDate — with neither there is nothing to set ' +
+        '(the legacy script silently no-opped; OMN-106/OMN-136 fail-loud decision, 2026-07-06)',
+    );
+  }
+
+  const statements: Stmt[] = [
+    // User data enters via json() binds, never raw interpolation.
+    bind('pids', json(data.projectIds)),
+    bind('intervalSpec', json(data.reviewInterval)),
+    bind('nextReviewDateParam', json(data.nextReviewDate)),
+    // total_requested is a build-time count (legacy computed the same value in-script).
+    bind(
+      'results',
+      raw(
+        `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
+      ),
+    ),
+    guard('pids.length === 0', {
+      success: json(false),
+      error: json(true),
+      message: json('No project IDs provided'),
+      results: ref('results'),
+    }),
+    bind(
+      'applied',
+      raw(
+        '(function () { for (var i = 0; i < pids.length; i++) { applySetReviewSchedule(pids[i], intervalSpec, nextReviewDateParam, results); } ' +
+          'results.summary.successful_count = results.successful.length; results.summary.failed_count = results.failed.length; return true; })()',
+      ),
+    ),
+    return_({
+      success: json(true),
+      results: ref('results'),
+      message: raw(
+        '"Batch review schedule update completed: " + results.summary.successful_count + " successful, " + results.summary.failed_count + " failed"',
+      ),
+    }),
+  ];
+  return { statements, context: 'set_review_schedule', snippetDeps: ['applySetReviewSchedule'] };
+}
+
+// =============================================================================
 // GUARDED DISPATCH (OMN-119/120 non-bypass)
 // =============================================================================
 
@@ -1549,6 +1629,14 @@ export const MUTATION_DEFS = {
     guard: (d) => validateTagMutation(d.tagName),
     build: buildUnparentTagProgram,
   } as MutationDef<TagUnparentInput>,
+  'set-review-schedule/project': {
+    // OMN-106 PR-2: closes the sandbox-guard bypass for this batch mutation.
+    // ALL ids pre-flight before any update executes (mirrors bulk_delete).
+    guard: async (d) => {
+      await Promise.all(d.projectIds.map((id) => validateProjectInSandbox(id, 'set review schedule')));
+    },
+    build: buildSetReviewScheduleProgram,
+  } as MutationDef<SetReviewScheduleInput>,
   'mark-reviewed/project': {
     // OMN-106: closes the sandbox-guard bypass — this mutation ran unguarded
     // as a legacy template. null projectId skips the guard (fails loudly
