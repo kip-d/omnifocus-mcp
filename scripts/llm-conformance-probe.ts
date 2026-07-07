@@ -44,14 +44,14 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { writeFileSync } from 'fs';
 import { performance } from 'perf_hooks';
-import { Ollama, type Tool, type ToolCall } from 'ollama';
+import { Ollama, type Tool } from 'ollama';
 import { isLocalhostOllamaHost, resolveNumCtx } from './lib/ollama-lifecycle.js';
 import type { ZodTypeAny } from 'zod';
+import { gradeToolCall, type CaseResult, type ConformanceCase, type Outcome } from './lib/conformance-grading.js';
 import { ReadSchema } from '../src/tools/unified/schemas/read-schema.js';
 import { WriteSchema } from '../src/tools/unified/schemas/write-schema.js';
 import { AnalyzeSchema } from '../src/tools/unified/schemas/analyze-schema.js';
 import { SystemToolSchema } from '../src/tools/system/SystemTool.js';
-import { parseWithNormalization } from '../src/tools/normalization/normalize-input.js';
 
 // ── Grading config ──────────────────────────────────────────────────────────
 
@@ -62,14 +62,6 @@ const SCHEMA_BY_TOOL: Record<string, ZodTypeAny> = {
   omnifocus_analyze: AnalyzeSchema,
   system: SystemToolSchema,
 };
-
-interface ConformanceCase {
-  id: string;
-  prompt: string;
-  /** Tool name(s) that count as a correct selection for this intent. */
-  expect: string[];
-  note: string;
-}
 
 /**
  * Representative requests across the tool surface. A handful are deliberately
@@ -324,53 +316,6 @@ async function unloadModel(ollama: Ollama, model: string): Promise<void> {
 
 // ── Grading ─────────────────────────────────────────────────────────────────
 
-type Outcome = 'pass' | 'no_tool_call' | 'wrong_tool' | 'schema_invalid' | 'model_error';
-
-interface CaseResult {
-  caseId: string;
-  outcome: Outcome;
-  toolCalled?: string;
-  /** Top Zod issues (path + message) when schema_invalid. */
-  issues?: string[];
-  /** OMN-122: leniencies the normalize-then-strict layer applied to make this pass. */
-  normalizedVia?: string[];
-  detail?: string;
-}
-
-function gradeToolCall(c: ConformanceCase, call: ToolCall | undefined): CaseResult {
-  if (!call) return { caseId: c.id, outcome: 'no_tool_call' };
-  const name = call.function.name;
-  if (!c.expect.includes(name)) {
-    return { caseId: c.id, outcome: 'wrong_tool', toolCalled: name };
-  }
-  const schema = SCHEMA_BY_TOOL[name];
-  if (!schema) return { caseId: c.id, outcome: 'wrong_tool', toolCalled: name, detail: 'no schema registered' };
-
-  // Ollama returns arguments as a parsed object; tolerate a stringified payload too.
-  let args: unknown = call.function.arguments;
-  if (typeof args === 'string') {
-    try {
-      args = JSON.parse(args);
-    } catch {
-      return { caseId: c.id, outcome: 'schema_invalid', toolCalled: name, issues: ['arguments not valid JSON'] };
-    }
-  }
-  // OMN-122: grade against the server's REAL front door — strict schema first, then
-  // the normalize-then-strict layer. A pass that needed normalization is still a pass
-  // (the server would accept it), and we record which leniencies were load-bearing.
-  const result = parseWithNormalization(schema, args, name);
-  if (result.success) {
-    return {
-      caseId: c.id,
-      outcome: 'pass',
-      toolCalled: name,
-      normalizedVia: result.applied.length ? result.applied : undefined,
-    };
-  }
-  const issues = result.error!.issues.slice(0, 4).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
-  return { caseId: c.id, outcome: 'schema_invalid', toolCalled: name, issues };
-}
-
 // ── Per-model run ────────────────────────────────────────────────────────────
 
 /** Per-model timing (OMN-173). All values in milliseconds. */
@@ -425,7 +370,7 @@ async function probeModel(ollama: Ollama, model: string, tools: Tool[], numCtx: 
         firstCase = false;
       }
       const call = res.message.tool_calls?.[0];
-      const graded = gradeToolCall(c, call);
+      const graded = gradeToolCall(c, call, SCHEMA_BY_TOOL);
       results.push(graded);
       process.stderr.write(`${graded.outcome}${graded.toolCalled ? ` (${graded.toolCalled})` : ''}\n`);
     } catch (err) {
@@ -481,6 +426,19 @@ function buildTimingArtifact(reports: ModelReport[], timing: ProbeTiming) {
         elapsedMs: r.timing ? Math.round(r.timing.elapsedMs) : null,
         loadMs: r.timing ? Math.round(r.timing.loadMs) : null,
         caseExecMs: r.timing ? Math.round(r.timing.caseExecMs) : null,
+        // OMN-246: raw failing tool-call args ride along in the machine
+        // artifact so baseline:conformance runs capture them automatically.
+        // Additive — the consumer (record-suite-timing) reads known fields
+        // and gates only on the schema tag.
+        failures: r.results
+          .filter((x) => x.outcome !== 'pass')
+          .map((x) => ({
+            caseId: x.caseId,
+            outcome: x.outcome,
+            toolCalled: x.toolCalled ?? null,
+            issues: x.issues ?? null,
+            rawArgs: x.rawArgs ?? null,
+          })),
       };
     }),
   };
@@ -582,6 +540,24 @@ function renderReport(reports: ModelReport[], timing: ProbeTiming): string {
       lines.push('');
       for (const [name, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
         lines.push(`- (${n}×) ${name}`);
+      }
+      lines.push('');
+    }
+
+    // OMN-246: failure ARTIFACTS — the raw tool-call arguments for every
+    // non-pass case, fenced so the payload survives verbatim. This is what
+    // makes a failure diagnosable later (issue strings underdetermine the
+    // shape — the OMN-168 lesson).
+    const failures = r.results.filter((x) => x.rawArgs !== undefined);
+    if (failures.length) {
+      lines.push(`### ${r.model} — failure artifacts (raw tool-call arguments)`);
+      lines.push('');
+      for (const f of failures) {
+        lines.push(`- **${f.caseId}** (${f.outcome}${f.toolCalled ? ` · ${f.toolCalled}` : ''}):`);
+        lines.push('');
+        lines.push('  ```json');
+        lines.push(`  ${f.rawArgs ?? ''}`);
+        lines.push('  ```');
       }
       lines.push('');
     }
