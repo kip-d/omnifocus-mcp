@@ -523,6 +523,7 @@ SCOPE FILTERING:
     overview: {
       totalTasks: number;
       completedTasks: number;
+      availableTasks: number;
       completionRate: number;
       activeProjects: number;
       overdueCount: number;
@@ -534,6 +535,7 @@ SCOPE FILTERING:
     interface ScriptOverview {
       totalTasks?: number;
       completedTasks?: number;
+      availableTasks?: number;
       completionRate?: number;
       activeProjects?: number;
       overdueCount?: number;
@@ -555,7 +557,14 @@ SCOPE FILTERING:
       actualData = result;
     }
 
-    const empty = { totalTasks: 0, completedTasks: 0, completionRate: 0, activeProjects: 0, overdueCount: 0 };
+    const empty = {
+      totalTasks: 0,
+      completedTasks: 0,
+      availableTasks: 0,
+      completionRate: 0,
+      activeProjects: 0,
+      overdueCount: 0,
+    };
     if (!actualData || typeof actualData !== 'object' || !('summary' in actualData)) {
       return { overview: empty, projectStatsArray: [], tagStatsArray: {}, insights: [] };
     }
@@ -566,6 +575,10 @@ SCOPE FILTERING:
       overview: {
         totalTasks: summary.totalTasks || 0,
         completedTasks: summary.completedTasks || 0,
+        // OMN-254 surfacing (/code-review of #209/#211/#213): the script's
+        // terminal-state-corrected available count was computed but never
+        // copied into the response.
+        availableTasks: summary.availableTasks || 0,
         completionRate: summary.completionRate || 0,
         activeProjects: summary.activeProjects || 0,
         overdueCount: summary.overdueCount || 0,

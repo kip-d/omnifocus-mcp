@@ -225,6 +225,32 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.stats.overview.activeProjects).toBe(12);
     });
 
+    it('includes availableTasks in response when script returns it (OMN-254 surfacing)', async () => {
+      // /code-review of PRs #209/#211/#213: the script computes the
+      // terminal-state-corrected summary.availableTasks, but the overview
+      // reshape silently dropped it — the fixed count never reached the client.
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 100,
+          completedTasks: 80,
+          availableTasks: 15,
+          completionRate: 0.8,
+          activeProjects: 5,
+          overdueCount: 5,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.stats.overview.availableTasks).toBe(15);
+    });
+
     it('does not produce contradictory recommendations', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
