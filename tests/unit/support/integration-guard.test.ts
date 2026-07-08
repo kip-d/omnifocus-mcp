@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   acquireIntegrationLock,
+  isIntegrationLockLive,
   releaseIntegrationLock,
   startOrphanWatchdog,
   startWorkerOrphanGuard,
@@ -166,5 +167,48 @@ describe('startWorkerOrphanGuard (forked-worker gate)', () => {
     expect(stop).toBeTypeOf('function');
     vi.advanceTimersByTime(250);
     expect(onOrphan).toHaveBeenCalledTimes(1);
+  });
+});
+
+// OMN-186 Phase 2: read-only liveness probe — "is an integration run in
+// flight right now?" The lock's lifetime IS the fixture epoch, so per-file
+// fullCleanup calls use this to decide scoped vs full mode. Must never
+// mutate the lock (that's acquire/release's job).
+describe('isIntegrationLockLive', () => {
+  let dir: string;
+  let lockPath: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omn186-'));
+    lockPath = path.join(dir, 'integration.lock');
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('false when no lock file exists', () => {
+    expect(isIntegrationLockLive({ lockPath })).toBe(false);
+  });
+
+  it('true when the lock holder is alive', () => {
+    fs.writeFileSync(lockPath, '12345');
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true })).toBe(true);
+  });
+
+  it('false when the lock holder is dead (crashed run must not scope later cleanups)', () => {
+    fs.writeFileSync(lockPath, '12345');
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => false })).toBe(false);
+  });
+
+  it('false on garbage lock content', () => {
+    fs.writeFileSync(lockPath, 'not-a-pid');
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true })).toBe(false);
+  });
+
+  it('never mutates the lock file', () => {
+    fs.writeFileSync(lockPath, '12345');
+    isIntegrationLockLive({ lockPath, isPidAlive: () => false });
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe('12345');
   });
 });

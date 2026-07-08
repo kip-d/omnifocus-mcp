@@ -98,7 +98,9 @@ async function runApply(): Promise<never> {
   console.log('');
 
   try {
-    const report: CleanupReport = await fullCleanup();
+    // OMN-186 Phase 2: explicit full — a manual purge must never scope down,
+    // even if an integration run's lock happens to be live.
+    const report: CleanupReport = await fullCleanup({ scope: 'full' });
 
     console.log('Cleanup Complete!');
     console.log('-'.repeat(40));

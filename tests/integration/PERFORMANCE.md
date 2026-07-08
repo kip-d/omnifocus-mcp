@@ -131,3 +131,18 @@ jq -s 'group_by(.file) | map({file: .[0].file, total_s: ((map(.ms) | add) / 1000
 Entries are `{file, hook, op, ms, at, failed?}`; `file` is `"(global)"` for globalSetup/globalTeardown calls. The flag
 off (default) is a pure pass-through — normal runs are untouched. This profile is the decision gate for OMN-186 Phase 2
 (per-run fixture epoch): proceed only if teardown-dominated.
+
+### Per-run fixture epoch (OMN-186 Phase 2)
+
+The Phase-1 profile (2026-07-08, quiet host, 525 s wall) confirmed teardown dominance: `fullCleanup` was 134 s of the
+~216 s fixture overhead — 15 per-file `afterAll` sweeps averaging ~7.3 s, each paying two whole-DB everywhere-scans plus
+a sandbox-folder delete the next file's `ensureSandboxFolder` had to undo.
+
+Phase 2 scopes those per-file sweeps. The OMN-143 single-instance lock's lifetime is the run's fixture epoch: while the
+lock is held by a live PID, `fullCleanup()` (default `scope: 'auto'`) runs **scoped** — inbox tasks, sandbox projects,
+sandbox subfolders, and test tags only (4 `osascript` calls instead of 7), keeping the sandbox folder alive across
+files. The everywhere-scans and folder delete run in the ONE explicit `fullCleanup({ scope: 'full' })` sweep in
+`globalTeardown`, and `globalSetup`'s explicit full sweep remains the prior-run orphan hunt (crash recovery). The
+post-run `scanForFixtures` fail-loud check is unchanged. Manual purges (`npm run test:cleanup -- --apply`) pass explicit
+full and never scope down. In profiler logs the scoped sweeps record op `fullCleanup.scoped`, so before/after
+aggregations can split the modes.

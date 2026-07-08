@@ -60,7 +60,9 @@ export async function setup() {
   console.log('[Integration Setup] Running startup cleanup sweep...');
 
   try {
-    const report = await fullCleanup();
+    // OMN-186 Phase 2: explicit full — the lock acquired above would make an
+    // 'auto' sweep resolve scoped, but this IS the prior-epoch orphan hunt.
+    const report = await fullCleanup({ scope: 'full' });
 
     const totalCleaned = report.inboxTasksDeleted + report.projectsDeleted + report.foldersDeleted + report.tagsDeleted;
 
@@ -99,7 +101,11 @@ export async function teardown() {
   console.log('[Integration Teardown] Running final cleanup sweep...');
 
   try {
-    const report = await fullCleanup();
+    // OMN-186 Phase 2: THE one full end-of-run sweep — per-file sweeps ran
+    // scoped (no everywhere-scans, sandbox folder kept), so this catches
+    // escapees and deletes the folder; scanForFixtures below still fails
+    // loud on anything left.
+    const report = await fullCleanup({ scope: 'full' });
 
     const totalCleaned = report.inboxTasksDeleted + report.projectsDeleted + report.foldersDeleted + report.tagsDeleted;
 

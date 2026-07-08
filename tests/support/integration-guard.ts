@@ -105,6 +105,32 @@ export function acquireIntegrationLock(
 }
 
 /**
+ * OMN-186 Phase 2: read-only probe — is an integration run in flight right
+ * now? True only when the lock file exists, holds a valid PID, and that PID
+ * is alive. The lock's lifetime IS the per-run fixture epoch: per-file
+ * fullCleanup calls use this to run in scoped mode mid-run (see
+ * sandbox-manager.ts), and a crashed run's stale lock must read as NOT live
+ * so later manual cleanups stay full-sweep. Never mutates the lock.
+ */
+export function isIntegrationLockLive(
+  opts: {
+    lockPath?: string;
+    isPidAlive?: (pid: number) => boolean;
+  } = {},
+): boolean {
+  const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
+  const isAlive = opts.isPidAlive ?? pidIsAlive;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8').trim();
+  } catch {
+    return false; // no lock (or unreadable) — no run in flight
+  }
+  const holder = Number.parseInt(raw, 10);
+  return Number.isFinite(holder) && holder > 0 && isAlive(holder);
+}
+
+/**
  * Release ONLY if the lock still contains our PID — never delete a lock a
  * later run legitimately reclaimed (e.g. after we were SIGKILLed and restarted).
  */
