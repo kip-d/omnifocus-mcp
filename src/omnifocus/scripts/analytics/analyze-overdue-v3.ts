@@ -21,7 +21,7 @@
  * - Pattern insights and recommendations
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const ANALYZE_OVERDUE_V3 = `
   (() => {
@@ -44,6 +44,7 @@ export const ANALYZE_OVERDUE_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
+          ${TERMINAL_STATUS_HELPER}
           const nowTime = \${nowTime};
           const maxTasks = \${maxTasks};
           const includeRecentlyCompleted = \${includeRecentlyCompleted};
@@ -86,8 +87,7 @@ export const ANALYZE_OVERDUE_V3 = `
               // a dropped/completed project counts as terminal, the right universe for
               // "% of active tasks overdue".
               const activeStatus = task.taskStatus;
-              const isActive =
-                activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped;
+              const isActive = !isTerminalStatus(activeStatus);
               if (isActive) {
                 totalActive++;
               }

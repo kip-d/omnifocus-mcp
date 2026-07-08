@@ -24,7 +24,7 @@ export function runAnalyticsScript(
     flattenedTasks: db.flattenedTasks ?? [],
     flattenedProjects: db.flattenedProjects ?? [],
     flattenedTags: db.flattenedTags ?? [],
-    Task: { Status: { Blocked: 'blocked', Completed: 'completed', Dropped: 'dropped' } },
+    Task: { Status: { Available: 'available', Blocked: 'blocked', Completed: 'completed', Dropped: 'dropped' } },
     Project: { Status: { Active: 'active' } },
     JSON,
   };

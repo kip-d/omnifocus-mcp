@@ -5,10 +5,10 @@
 // capped first-100 (DB order), so with >100 overdue the true global max could
 // be missed. The detail arrays stay capped (payload size) — the OMN-187
 // contract: caps gate DETAIL, never aggregates.
-import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { ANALYZE_OVERDUE_V3 } from '../../../../../src/omnifocus/scripts/analytics/analyze-overdue-v3.js';
 import { OVERDUE_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
+import { runAnalyticsScript } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -32,17 +32,9 @@ function runScript(tasks: Array<Record<string, unknown>>): {
   };
 } {
   const options = { limit: 100, includeRecentlyCompleted: true, groupBy: 'project' };
-  const script = ANALYZE_OVERDUE_V3.replace('{{options}}', JSON.stringify(options));
-  const inner = {
+  return runAnalyticsScript(ANALYZE_OVERDUE_V3, options, {
     flattenedTasks: tasks,
-    Task: { Status: { Completed: 'completed', Dropped: 'dropped', Blocked: 'blocked', Available: 'available' } },
-    JSON,
-  };
-  const outer = {
-    Application: () => ({ evaluateJavascript: (src: string) => vm.runInNewContext(src, inner) }),
-    JSON,
-  };
-  return JSON.parse(vm.runInNewContext(script, outer) as string) as ReturnType<typeof runScript>;
+  }) as ReturnType<typeof runScript>;
 }
 
 describe('OMN-253 — summary.mostOverdue is full-population', () => {
