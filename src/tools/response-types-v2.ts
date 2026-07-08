@@ -34,6 +34,19 @@ export interface OverdueAnalysisDataV2 {
       overduePercentage: number;
       averageDaysOverdue: number;
       oldestOverdueDate: string;
+      // OMN-253: the true full-population most-overdue task, tracked uncapped in
+      // the script — NOT necessarily overdueTasks[0] below (that array stays
+      // capped to maxTasks for payload size, so its head can miss the true max).
+      mostOverdue: {
+        id: string;
+        name: string;
+        dueDate: string;
+        daysOverdue: number;
+        project: string;
+        tags: string[];
+        blocked: boolean;
+        isNext: boolean;
+      } | null;
     };
     overdueTasks: Array<{
       id: string;

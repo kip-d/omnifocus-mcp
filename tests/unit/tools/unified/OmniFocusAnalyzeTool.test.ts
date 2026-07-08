@@ -509,6 +509,81 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.groupedAnalysis.high.count).toBe(1);
     });
 
+    it('surfaces summary.mostOverdue from the script, not just the capped detail-array head (OMN-253)', async () => {
+      // /code-review of #210/#212: the script's summary.mostOverdue is the TRUE
+      // full-population max (OMN-253), tracked separately from the maxTasks-capped
+      // groupedByUrgency detail rows. Simulate the >100-overdue scenario: the true
+      // max ('the-global-max', 400 days) never made it into groupedByUrgency
+      // (beyond the detail cap), so the flattened overdueTasks head is a lesser
+      // task — the tool must still surface the script's own mostOverdue field.
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+
+      const cappedHead = {
+        id: 't2',
+        name: 'Capped head',
+        dueDate: '2025-11-20T17:00:00.000Z',
+        daysOverdue: 8,
+        project: 'Work',
+        tags: [],
+        blocked: false,
+        isNext: true,
+      };
+      const globalMax = {
+        id: 'the-global-max',
+        name: 'Beyond the cap',
+        dueDate: '2025-01-01T17:00:00.000Z',
+        daysOverdue: 400,
+        project: 'Work',
+        tags: [],
+        blocked: false,
+        isNext: true,
+      };
+
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            summary: {
+              totalOverdue: 150,
+              blockedCount: 0,
+              unblockedCount: 150,
+              blockedPercentage: 0,
+              avgDaysOverdue: 10,
+              overduePercentage: 40,
+              totalActive: 375,
+              oldestOverdueDate: '2025-01-01T17:00:00.000Z',
+              mostOverdue: globalMax,
+            },
+            insights: [],
+            // globalMax is NOT in the capped detail buckets — it's beyond maxTasks.
+            groupedByUrgency: { critical: [], high: [cappedHead], medium: [], low: [] },
+            projectBottlenecks: [],
+            metadata: {
+              generated_at: '2026-06-16T10:00:00.000Z',
+              method: 'omnijs_v3_single_bridge',
+              optimization: 'omnijs_v3',
+              query_time_ms: 800,
+              tasksAnalyzed: 1,
+              note: 'All analysis calculated in single OmniJS bridge call',
+            },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'overdue_analysis' },
+      });
+
+      expect(res.success).toBe(true);
+      // The flattened detail array's head is the lesser, capped task...
+      expect(res.data.stats.overdueTasks[0].id).toBe('t2');
+      // ...but summary.mostOverdue is still the true full-population max.
+      expect(res.data.stats.summary.mostOverdue?.id).toBe('the-global-max');
+      expect(res.data.stats.summary.mostOverdue?.daysOverdue).toBe(400);
+    });
+
     it('coalesces a null oldestOverdueDate to an empty string (OMN-187, no overdue tasks)', async () => {
       // When there are zero overdue tasks the v3 script emits oldestOverdueDate: null;
       // the tool must coalesce it to '' (OverdueAnalysisDataV2 types it as a string).

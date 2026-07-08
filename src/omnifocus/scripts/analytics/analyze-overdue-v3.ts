@@ -60,8 +60,11 @@ export const ANALYZE_OVERDUE_V3 = `
           // project/tags/blocked/isNext for a task. One definition means a
           // field-derivation change (e.g. the Inbox fallback) is one edit —
           // /code-review of #210/#212 flagged the prior copy-paste as drift risk.
-          function buildOverdueRecord(task, daysOverdue, dueDate, activeStatus) {
-            const blocked = activeStatus === Task.Status.Blocked;
+          // blocked is passed in (not re-derived from activeStatus) so there is
+          // exactly one "is this task blocked" computation per task — /code-review
+          // of #210/#212 flagged the prior internal re-derivation as a duplicate
+          // that could silently diverge from the loop's own isBlocked.
+          function buildOverdueRecord(task, daysOverdue, dueDate, activeStatus, blocked) {
             const taskTags = task.tags || [];
             const tags = [];
             taskTags.forEach(tag => {
@@ -156,34 +159,31 @@ export const ANALYZE_OVERDUE_V3 = `
 
               // Next action / tags / project: reuse the cached activeStatus
               // (OMN-187 — no re-read).
-              const overdueTask = buildOverdueRecord(task, daysOverdue, dueDate, activeStatus);
-              const taskName = overdueTask.name;
-              const projectName = overdueTask.project;
-              const tags = overdueTask.tags;
+              const overdueTask = buildOverdueRecord(task, daysOverdue, dueDate, activeStatus, isBlocked);
 
               overdueTasks.push(overdueTask);
 
               // Track blocked overdue tasks
               if (isBlocked) {
                 // Track project bottlenecks
-                if (projectName !== 'Inbox') {
-                  if (!projectBottlenecks[projectName]) {
-                    projectBottlenecks[projectName] = {
+                if (overdueTask.project !== 'Inbox') {
+                  if (!projectBottlenecks[overdueTask.project]) {
+                    projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
                       blockedCount: 0,
                       tasks: []
                     };
                   }
-                  projectBottlenecks[projectName].blockedCount++;
-                  projectBottlenecks[projectName].count++;
-                  projectBottlenecks[projectName].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[projectName].tasks.push(taskName);
+                  projectBottlenecks[overdueTask.project].blockedCount++;
+                  projectBottlenecks[overdueTask.project].count++;
+                  projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
+                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
 
                 // Track tag bottlenecks
-                for (let i = 0; i < tags.length; i++) {
-                  const tag = tags[i];
+                for (let i = 0; i < overdueTask.tags.length; i++) {
+                  const tag = overdueTask.tags[i];
                   if (!tagBottlenecks[tag]) {
                     tagBottlenecks[tag] = {
                       count: 0,
@@ -192,22 +192,22 @@ export const ANALYZE_OVERDUE_V3 = `
                     };
                   }
                   tagBottlenecks[tag].blockedCount++;
-                  tagBottlenecks[tag].tasks.push(taskName);
+                  tagBottlenecks[tag].tasks.push(overdueTask.name);
                 }
               } else {
                 // Track non-blocked overdue in projects
-                if (projectName !== 'Inbox') {
-                  if (!projectBottlenecks[projectName]) {
-                    projectBottlenecks[projectName] = {
+                if (overdueTask.project !== 'Inbox') {
+                  if (!projectBottlenecks[overdueTask.project]) {
+                    projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
                       blockedCount: 0,
                       tasks: []
                     };
                   }
-                  projectBottlenecks[projectName].count++;
-                  projectBottlenecks[projectName].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[projectName].tasks.push(taskName);
+                  projectBottlenecks[overdueTask.project].count++;
+                  projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
+                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
               }
 
@@ -225,11 +225,13 @@ export const ANALYZE_OVERDUE_V3 = `
           let mostOverdueRecord = null;
           if (mostOverdueTaskRef) {
             try {
+              const moActiveStatus = mostOverdueTaskRef.taskStatus;
               mostOverdueRecord = buildOverdueRecord(
                 mostOverdueTaskRef,
                 mostOverdueDays,
                 mostOverdueDue,
-                mostOverdueTaskRef.taskStatus
+                moActiveStatus,
+                moActiveStatus === Task.Status.Blocked
               );
             } catch (e) {
               // /code-review: falling back to overdueTasks[0] here would silently
