@@ -101,21 +101,17 @@ export const ANALYZE_OVERDUE_V3 = `
           let blockedOverdueCount = 0;
           let oldestDueTime = Infinity;
           let oldestDueISO = null;
-          // OMN-253: the most-overdue candidate is tracked UNCAPPED during the
-          // full iteration (same pattern as oldestDueTime) — selecting it from
-          // the capped detail rows missed the true max with >100 overdue.
-          // Strict > keeps the FIRST max in DB order (same tie semantics as
-          // the old stable sort head). The record is built AFTER the loop so
-          // per-task cost stays flat.
-          let mostOverdueDays = -1;
-          let mostOverdueTaskRef = null;
-          let mostOverdueDue = null;
-          // Captured alongside mostOverdueTaskRef below (NOT re-derived from
-          // mostOverdueTaskRef.taskStatus after the loop) — /code-review of
-          // #210/#212: a post-loop re-read/re-derive is the exact duplicate-
-          // computation pattern buildOverdueRecord's blocked param exists to avoid.
-          let mostOverdueActiveStatus = null;
-          let mostOverdueBlocked = false;
+          // OMN-253: the top MOST_OVERDUE_CANDIDATES candidates are tracked
+          // UNCAPPED during the full iteration (same pattern as oldestDueTime) —
+          // selecting from the maxTasks-capped detail rows missed the true max
+          // with >100 overdue. Keeping a short ranked list (not just the single
+          // max) lets the post-loop record build fall back to the next-highest
+          // candidate if the top one's record throws (a corrupted single task
+          // must not suppress the whole mostOverdue field — /code-review of
+          // #210/#212). Insertion-sorted descending by daysOverdue; ties keep
+          // the FIRST in DB order (stable, matches the old sort-head semantics).
+          const MOST_OVERDUE_CANDIDATES = 5;
+          const mostOverdueTop = [];
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
@@ -152,12 +148,26 @@ export const ANALYZE_OVERDUE_V3 = `
                 oldestDueTime = dueDateTime;
                 oldestDueISO = dueDate.toISOString();
               }
-              if (daysOverdue > mostOverdueDays) {
-                mostOverdueDays = daysOverdue;
-                mostOverdueTaskRef = task;
-                mostOverdueDue = dueDate;
-                mostOverdueActiveStatus = activeStatus;
-                mostOverdueBlocked = isBlocked;
+              // Maintain the top-K ranked list: insert if there's room, or if
+              // this task outranks the current lowest-ranked candidate.
+              if (
+                mostOverdueTop.length < MOST_OVERDUE_CANDIDATES ||
+                daysOverdue > mostOverdueTop[mostOverdueTop.length - 1].daysOverdue
+              ) {
+                let insertAt = mostOverdueTop.length;
+                while (insertAt > 0 && mostOverdueTop[insertAt - 1].daysOverdue < daysOverdue) {
+                  insertAt--;
+                }
+                mostOverdueTop.splice(insertAt, 0, {
+                  task: task,
+                  daysOverdue: daysOverdue,
+                  dueDate: dueDate,
+                  activeStatus: activeStatus,
+                  blocked: isBlocked
+                });
+                if (mostOverdueTop.length > MOST_OVERDUE_CANDIDATES) {
+                  mostOverdueTop.length = MOST_OVERDUE_CANDIDATES;
+                }
               }
 
               // Per-task DETAIL recording is capped for payload size — the summary
@@ -227,25 +237,28 @@ export const ANALYZE_OVERDUE_V3 = `
           // Sort overdue tasks by days overdue
           overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-          // OMN-253: build the full-population mostOverdue record once, from
-          // the ref tracked above, via the SAME builder the per-task loop uses
-          // (see buildOverdueRecord above — /code-review of #210/#212).
+          // OMN-253: build the full-population mostOverdue record from the
+          // ranked candidates tracked above, via the SAME builder the per-task
+          // loop uses (see buildOverdueRecord above). Try the true max first;
+          // if ITS record throws (e.g. corrupted tags/id), fall back through
+          // the next-ranked candidates rather than either (a) silently reviving
+          // the pre-fix capped-head bug this ticket exists to close, or (b)
+          // suppressing the whole field over one bad task — /code-review of
+          // #210/#212. Only if every ranked candidate throws does this stay null.
           let mostOverdueRecord = null;
-          if (mostOverdueTaskRef) {
+          for (let i = 0; i < mostOverdueTop.length; i++) {
+            const candidate = mostOverdueTop[i];
             try {
               mostOverdueRecord = buildOverdueRecord(
-                mostOverdueTaskRef,
-                mostOverdueDays,
-                mostOverdueDue,
-                mostOverdueActiveStatus,
-                mostOverdueBlocked
+                candidate.task,
+                candidate.daysOverdue,
+                candidate.dueDate,
+                candidate.activeStatus,
+                candidate.blocked
               );
+              break;
             } catch (e) {
-              // /code-review: falling back to overdueTasks[0] here would silently
-              // revive the pre-fix capped-head bug this ticket exists to close.
-              // Fail honest instead — null is a truthful "couldn't build it",
-              // not a plausible-looking wrong answer.
-              mostOverdueRecord = null;
+              // Try the next-ranked candidate.
             }
           }
 

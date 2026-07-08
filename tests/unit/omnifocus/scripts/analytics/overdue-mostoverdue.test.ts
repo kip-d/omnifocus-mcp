@@ -5,6 +5,11 @@
 // capped first-100 (DB order), so with >100 overdue the true global max could
 // be missed. The detail arrays stay capped (payload size) — the OMN-187
 // contract: caps gate DETAIL, never aggregates.
+//
+// /code-review of #210/#212 (resolved by Kip): if the top-ranked candidate's
+// record build throws, mostOverdue falls back through a short ranked list of
+// runner-up candidates (also tracked uncapped) rather than either reviving
+// the DB-order capped-head bug or going straight to null over one bad task.
 import { describe, it, expect } from 'vitest';
 import { ANALYZE_OVERDUE_V3 } from '../../../../../src/omnifocus/scripts/analytics/analyze-overdue-v3.js';
 import { OVERDUE_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
@@ -84,17 +89,41 @@ describe('OMN-253 — summary.mostOverdue is full-population', () => {
     expect(parsed.data.summary.totalOverdue).toBe(0);
   });
 
-  it('fails honest (null) rather than reviving the capped-head bug when the global-max record build throws', () => {
-    // /code-review of #210/#212: catching a record-build failure and falling
-    // back to overdueTasks[0] would silently revive the exact capped-head bug
-    // OMN-253 fixes. A throw building the TRUE-max task's record must surface
-    // as mostOverdue: null (an honest "couldn't build it"), never a
-    // plausible-but-wrong capped answer.
+  it('falls back to the next-highest task when the true global-max record build throws', () => {
+    // Kip's call (/code-review of #210/#212, resolving the reviewed tradeoff):
+    // a single corrupted task must not suppress the whole mostOverdue field —
+    // fall back through the ranked candidates rather than reviving the
+    // pre-fix capped-head bug (which selected from DB order, not rank) OR
+    // going straight to null over one bad task.
     const tasks = [makeOverdueTask('a', 3), makeOverdueTask('b', 12), makeBadIdTask(400)];
     const parsed = runScript(tasks);
     expect(parsed.ok).toBe(true);
     expect(OVERDUE_ANALYSIS_V3_SCHEMA.safeParse(parsed).success).toBe(true);
     expect(parsed.data.summary.totalOverdue).toBe(3); // full-population count unaffected
-    expect(parsed.data.summary.mostOverdue).toBeNull(); // NOT 'b' (the capped head)
+    expect(parsed.data.summary.mostOverdue?.id).toBe('b'); // next-highest RANKED candidate
+    expect(parsed.data.summary.mostOverdue?.daysOverdue).toBe(12);
+  });
+
+  it('falls back past MULTIPLE unbuildable top candidates to the first one that builds', () => {
+    const tasks = [
+      makeOverdueTask('a', 3),
+      makeBadIdTask(500),
+      makeBadIdTask(400),
+      makeBadIdTask(300),
+      makeOverdueTask('b', 12),
+    ];
+    const parsed = runScript(tasks);
+    expect(parsed.data.summary.mostOverdue?.id).toBe('b');
+    expect(parsed.data.summary.mostOverdue?.daysOverdue).toBe(12);
+  });
+
+  it('stays null (fully honest) only when every ranked candidate is unbuildable', () => {
+    // All 5 tracked candidate slots are corrupted — no real task to fall back
+    // to. Still never reverts to a DB-order capped-head guess.
+    const tasks = Array.from({ length: 5 }, (_, i) => makeBadIdTask(100 - i));
+    const parsed = runScript(tasks);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.summary.totalOverdue).toBe(5);
+    expect(parsed.data.summary.mostOverdue).toBeNull();
   });
 });
