@@ -23,6 +23,18 @@ function makeOverdueTask(id: string, daysOverdue: number): Record<string, unknow
   };
 }
 
+function makeBadIdTask(daysOverdue: number): Record<string, unknown> {
+  // No `id` — task.id.primaryKey throws inside the record builder, simulating
+  // a record-build failure for the task holding the true global max.
+  return {
+    name: 'Bad ID task',
+    taskStatus: 'available',
+    dueDate: new Date(Date.now() - daysOverdue * DAY - 60_000),
+    containingProject: { name: 'Fixture Project' },
+    tags: [],
+  };
+}
+
 function runScript(tasks: Array<Record<string, unknown>>): {
   ok: boolean;
   data: {
@@ -70,5 +82,19 @@ describe('OMN-253 — summary.mostOverdue is full-population', () => {
     const parsed = runScript([]);
     expect(parsed.data.summary.mostOverdue).toBeNull();
     expect(parsed.data.summary.totalOverdue).toBe(0);
+  });
+
+  it('fails honest (null) rather than reviving the capped-head bug when the global-max record build throws', () => {
+    // /code-review of #210/#212: catching a record-build failure and falling
+    // back to overdueTasks[0] would silently revive the exact capped-head bug
+    // OMN-253 fixes. A throw building the TRUE-max task's record must surface
+    // as mostOverdue: null (an honest "couldn't build it"), never a
+    // plausible-but-wrong capped answer.
+    const tasks = [makeOverdueTask('a', 3), makeOverdueTask('b', 12), makeBadIdTask(400)];
+    const parsed = runScript(tasks);
+    expect(parsed.ok).toBe(true);
+    expect(OVERDUE_ANALYSIS_V3_SCHEMA.safeParse(parsed).success).toBe(true);
+    expect(parsed.data.summary.totalOverdue).toBe(3); // full-population count unaffected
+    expect(parsed.data.summary.mostOverdue).toBeNull(); // NOT 'b' (the capped head)
   });
 });

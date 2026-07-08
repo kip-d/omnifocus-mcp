@@ -55,6 +55,37 @@ export const ANALYZE_OVERDUE_V3 = `
           const projectBottlenecks = {};
           const tagBottlenecks = {};
 
+          // Shared shape-builder: the per-task loop below and the post-loop
+          // mostOverdue step (OMN-253) both need id/name/dueDate/daysOverdue/
+          // project/tags/blocked/isNext for a task. One definition means a
+          // field-derivation change (e.g. the Inbox fallback) is one edit —
+          // /code-review of #210/#212 flagged the prior copy-paste as drift risk.
+          function buildOverdueRecord(task, daysOverdue, dueDate, activeStatus) {
+            const blocked = activeStatus === Task.Status.Blocked;
+            const taskTags = task.tags || [];
+            const tags = [];
+            taskTags.forEach(tag => {
+              try {
+                const tagName = tag.name;
+                if (tagName) tags.push(tagName);
+              } catch (e) {
+                // Skip invalid tags
+              }
+            });
+            const project = task.containingProject;
+            const projectName = project ? (project.name || 'No Project') : 'Inbox';
+            return {
+              id: task.id.primaryKey || 'unknown',
+              name: task.name || 'Unnamed Task',
+              dueDate: dueDate.toISOString(),
+              daysOverdue: daysOverdue,
+              project: projectName,
+              tags: tags,
+              blocked: blocked,
+              isNext: !blocked && activeStatus === Task.Status.Available
+            };
+          }
+
           let tasksProcessed = 0;
           let totalActive = 0;
           // OMN-187: full-population overdue aggregates. The maxTasks cap below limits
@@ -123,38 +154,12 @@ export const ANALYZE_OVERDUE_V3 = `
               if (tasksProcessed >= maxTasks) return;
               tasksProcessed++;
 
-              const taskId = task.id.primaryKey || 'unknown';
-              const taskName = task.name || 'Unnamed Task';
-
-              // Next action: reuse the cached activeStatus (OMN-187 — no re-read).
-              const isNext = !isBlocked && activeStatus === Task.Status.Available;
-
-              // Get project information
-              const project = task.containingProject;
-              const projectName = project ? (project.name || 'No Project') : 'Inbox';
-
-              // Get tags
-              const taskTags = task.tags || [];
-              const tags = [];
-              taskTags.forEach(tag => {
-                try {
-                  const tagName = tag.name;
-                  if (tagName) tags.push(tagName);
-                } catch (e) {
-                  // Skip invalid tags
-                }
-              });
-
-              const overdueTask = {
-                id: taskId,
-                name: taskName,
-                dueDate: dueDate.toISOString(),
-                daysOverdue: daysOverdue,
-                project: projectName,
-                tags: tags,
-                blocked: isBlocked,
-                isNext: isNext
-              };
+              // Next action / tags / project: reuse the cached activeStatus
+              // (OMN-187 — no re-read).
+              const overdueTask = buildOverdueRecord(task, daysOverdue, dueDate, activeStatus);
+              const taskName = overdueTask.name;
+              const projectName = overdueTask.project;
+              const tags = overdueTask.tags;
 
               overdueTasks.push(overdueTask);
 
@@ -215,29 +220,23 @@ export const ANALYZE_OVERDUE_V3 = `
           overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
           // OMN-253: build the full-population mostOverdue record once, from
-          // the ref tracked above (field logic mirrors the detail-row shape).
+          // the ref tracked above, via the SAME builder the per-task loop uses
+          // (see buildOverdueRecord above — /code-review of #210/#212).
           let mostOverdueRecord = null;
           if (mostOverdueTaskRef) {
             try {
-              const moTags = [];
-              (mostOverdueTaskRef.tags || []).forEach(tag => {
-                try { if (tag.name) moTags.push(tag.name); } catch (e) {}
-              });
-              const moProject = mostOverdueTaskRef.containingProject;
-              const moBlocked = mostOverdueTaskRef.taskStatus === Task.Status.Blocked;
-              mostOverdueRecord = {
-                id: mostOverdueTaskRef.id.primaryKey || 'unknown',
-                name: mostOverdueTaskRef.name || 'Unnamed Task',
-                dueDate: mostOverdueDue.toISOString(),
-                daysOverdue: mostOverdueDays,
-                project: moProject ? (moProject.name || 'No Project') : 'Inbox',
-                tags: moTags,
-                blocked: moBlocked,
-                isNext: !moBlocked && mostOverdueTaskRef.taskStatus === Task.Status.Available
-              };
+              mostOverdueRecord = buildOverdueRecord(
+                mostOverdueTaskRef,
+                mostOverdueDays,
+                mostOverdueDue,
+                mostOverdueTaskRef.taskStatus
+              );
             } catch (e) {
-              // Fall back to the capped head if the record build throws.
-              mostOverdueRecord = overdueTasks[0] || null;
+              // /code-review: falling back to overdueTasks[0] here would silently
+              // revive the pre-fix capped-head bug this ticket exists to close.
+              // Fail honest instead — null is a truthful "couldn't build it",
+              // not a plausible-looking wrong answer.
+              mostOverdueRecord = null;
             }
           }
 
