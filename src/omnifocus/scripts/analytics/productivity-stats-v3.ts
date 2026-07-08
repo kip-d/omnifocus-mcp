@@ -18,7 +18,7 @@
  * Pattern based on: task-velocity.ts, list-tags.ts
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -66,6 +66,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
       // Build comprehensive OmniJS script for ALL statistics in one bridge call
       const statsScript = \`
         (() => {
+          ${TERMINAL_STATUS_HELPER}
           const periodStartTime = \${periodStartTime};
           const nowTime = \${nowTime};
           const includeProjectStats = \${includeProjectStats};
@@ -106,7 +107,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                 // available nor the overdue population. totalTasks stays the
                 // whole-DB census; completedTasks stays task.completed.
                 const status = task.taskStatus;
-                if (status !== Task.Status.Dropped) {
+                if (!isTerminalStatus(status)) {
                   // Check if available (not blocked, not deferred)
                   const blocked = status === Task.Status.Blocked;
                   const deferDate = task.deferDate;

@@ -56,6 +56,20 @@ describe('OMN-254 — three terminal states in productivity populations', () => 
     expect(parsed.data.summary.overdueCount).toBe(0);
   });
 
+  it('a task in a COMPLETED project (own .completed false, effective status Completed) counts in NEITHER population', () => {
+    // /code-review of this PR: the guard excluded only Dropped, but the OMN-187
+    // effective-status predicate is two-sided — a live task inside a completed
+    // project resolves to taskStatus Completed and is just as terminal.
+    const parsed = runScript([
+      task({}), // genuinely available
+      task({ taskStatus: 'completed', dueDate: new Date(Date.now() - 5 * DAY) }), // in a completed project, past-due
+    ]);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.summary.completedTasks).toBe(0); // own .completed stays false
+    expect(parsed.data.summary.availableTasks).toBe(1);
+    expect(parsed.data.summary.overdueCount).toBe(0);
+  });
+
   it('an ACTIVE past-due task still counts overdue; blocked/deferred still excluded from available', () => {
     const parsed = runScript([
       task({ dueDate: new Date(Date.now() - 2 * DAY) }), // active + overdue
