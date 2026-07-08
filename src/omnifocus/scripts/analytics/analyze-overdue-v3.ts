@@ -21,7 +21,7 @@
  * - Pattern insights and recommendations
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const ANALYZE_OVERDUE_V3 = `
   (() => {
@@ -44,6 +44,7 @@ export const ANALYZE_OVERDUE_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
+          ${TERMINAL_STATUS_HELPER}
           const nowTime = \${nowTime};
           const maxTasks = \${maxTasks};
           const includeRecentlyCompleted = \${includeRecentlyCompleted};
@@ -53,6 +54,40 @@ export const ANALYZE_OVERDUE_V3 = `
           const overdueTasks = [];
           const projectBottlenecks = {};
           const tagBottlenecks = {};
+
+          // Shared shape-builder: the per-task loop below and the post-loop
+          // mostOverdue step (OMN-253) both need id/name/dueDate/daysOverdue/
+          // project/tags/blocked/isNext for a task. One definition means a
+          // field-derivation change (e.g. the Inbox fallback) is one edit —
+          // /code-review of #210/#212 flagged the prior copy-paste as drift risk.
+          // blocked is passed in (not re-derived from activeStatus) so there is
+          // exactly one "is this task blocked" computation per task — /code-review
+          // of #210/#212 flagged the prior internal re-derivation as a duplicate
+          // that could silently diverge from the loop's own isBlocked.
+          function buildOverdueRecord(task, daysOverdue, dueDate, activeStatus, blocked) {
+            const taskTags = task.tags || [];
+            const tags = [];
+            taskTags.forEach(tag => {
+              try {
+                const tagName = tag.name;
+                if (tagName) tags.push(tagName);
+              } catch (e) {
+                // Skip invalid tags
+              }
+            });
+            const project = task.containingProject;
+            const projectName = project ? (project.name || 'No Project') : 'Inbox';
+            return {
+              id: task.id.primaryKey || 'unknown',
+              name: task.name || 'Unnamed Task',
+              dueDate: dueDate.toISOString(),
+              daysOverdue: daysOverdue,
+              project: projectName,
+              tags: tags,
+              blocked: blocked,
+              isNext: !blocked && activeStatus === Task.Status.Available
+            };
+          }
 
           let tasksProcessed = 0;
           let totalActive = 0;
@@ -66,6 +101,17 @@ export const ANALYZE_OVERDUE_V3 = `
           let blockedOverdueCount = 0;
           let oldestDueTime = Infinity;
           let oldestDueISO = null;
+          // OMN-253: the top MOST_OVERDUE_CANDIDATES candidates are tracked
+          // UNCAPPED during the full iteration (same pattern as oldestDueTime) —
+          // selecting from the maxTasks-capped detail rows missed the true max
+          // with >100 overdue. Keeping a short ranked list (not just the single
+          // max) lets the post-loop record build fall back to the next-highest
+          // candidate if the top one's record throws (a corrupted single task
+          // must not suppress the whole mostOverdue field — /code-review of
+          // #210/#212). Insertion-sorted descending by daysOverdue; ties keep
+          // the FIRST in DB order (stable, matches the old sort-head semantics).
+          const MOST_OVERDUE_CANDIDATES = 5;
+          const mostOverdueTop = [];
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
@@ -77,8 +123,7 @@ export const ANALYZE_OVERDUE_V3 = `
               // a dropped/completed project counts as terminal, the right universe for
               // "% of active tasks overdue".
               const activeStatus = task.taskStatus;
-              const isActive =
-                activeStatus !== Task.Status.Completed && activeStatus !== Task.Status.Dropped;
+              const isActive = !isTerminalStatus(activeStatus);
               if (isActive) {
                 totalActive++;
               }
@@ -103,68 +148,60 @@ export const ANALYZE_OVERDUE_V3 = `
                 oldestDueTime = dueDateTime;
                 oldestDueISO = dueDate.toISOString();
               }
+              // Maintain the top-K ranked list: insert if there's room, or if
+              // this task outranks the current lowest-ranked candidate.
+              if (
+                mostOverdueTop.length < MOST_OVERDUE_CANDIDATES ||
+                daysOverdue > mostOverdueTop[mostOverdueTop.length - 1].daysOverdue
+              ) {
+                let insertAt = mostOverdueTop.length;
+                while (insertAt > 0 && mostOverdueTop[insertAt - 1].daysOverdue < daysOverdue) {
+                  insertAt--;
+                }
+                mostOverdueTop.splice(insertAt, 0, {
+                  task: task,
+                  daysOverdue: daysOverdue,
+                  dueDate: dueDate,
+                  activeStatus: activeStatus,
+                  blocked: isBlocked
+                });
+                if (mostOverdueTop.length > MOST_OVERDUE_CANDIDATES) {
+                  mostOverdueTop.length = MOST_OVERDUE_CANDIDATES;
+                }
+              }
 
               // Per-task DETAIL recording is capped for payload size — the summary
               // aggregates above are already complete.
               if (tasksProcessed >= maxTasks) return;
               tasksProcessed++;
 
-              const taskId = task.id.primaryKey || 'unknown';
-              const taskName = task.name || 'Unnamed Task';
-
-              // Next action: reuse the cached activeStatus (OMN-187 — no re-read).
-              const isNext = !isBlocked && activeStatus === Task.Status.Available;
-
-              // Get project information
-              const project = task.containingProject;
-              const projectName = project ? (project.name || 'No Project') : 'Inbox';
-
-              // Get tags
-              const taskTags = task.tags || [];
-              const tags = [];
-              taskTags.forEach(tag => {
-                try {
-                  const tagName = tag.name;
-                  if (tagName) tags.push(tagName);
-                } catch (e) {
-                  // Skip invalid tags
-                }
-              });
-
-              const overdueTask = {
-                id: taskId,
-                name: taskName,
-                dueDate: dueDate.toISOString(),
-                daysOverdue: daysOverdue,
-                project: projectName,
-                tags: tags,
-                blocked: isBlocked,
-                isNext: isNext
-              };
+              // Next action / tags / project: reuse the cached activeStatus
+              // (OMN-187 — no re-read).
+              const overdueTask = buildOverdueRecord(task, daysOverdue, dueDate, activeStatus, isBlocked);
 
               overdueTasks.push(overdueTask);
 
               // Track blocked overdue tasks
               if (isBlocked) {
                 // Track project bottlenecks
-                if (projectName !== 'Inbox') {
-                  if (!projectBottlenecks[projectName]) {
-                    projectBottlenecks[projectName] = {
+                if (overdueTask.project !== 'Inbox') {
+                  if (!projectBottlenecks[overdueTask.project]) {
+                    projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
                       blockedCount: 0,
                       tasks: []
                     };
                   }
-                  projectBottlenecks[projectName].blockedCount++;
-                  projectBottlenecks[projectName].count++;
-                  projectBottlenecks[projectName].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[projectName].tasks.push(taskName);
+                  projectBottlenecks[overdueTask.project].blockedCount++;
+                  projectBottlenecks[overdueTask.project].count++;
+                  projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
+                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
 
                 // Track tag bottlenecks
-                for (let i = 0; i < tags.length; i++) {
-                  const tag = tags[i];
+                for (let i = 0; i < overdueTask.tags.length; i++) {
+                  const tag = overdueTask.tags[i];
                   if (!tagBottlenecks[tag]) {
                     tagBottlenecks[tag] = {
                       count: 0,
@@ -173,22 +210,22 @@ export const ANALYZE_OVERDUE_V3 = `
                     };
                   }
                   tagBottlenecks[tag].blockedCount++;
-                  tagBottlenecks[tag].tasks.push(taskName);
+                  tagBottlenecks[tag].tasks.push(overdueTask.name);
                 }
               } else {
                 // Track non-blocked overdue in projects
-                if (projectName !== 'Inbox') {
-                  if (!projectBottlenecks[projectName]) {
-                    projectBottlenecks[projectName] = {
+                if (overdueTask.project !== 'Inbox') {
+                  if (!projectBottlenecks[overdueTask.project]) {
+                    projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
                       blockedCount: 0,
                       tasks: []
                     };
                   }
-                  projectBottlenecks[projectName].count++;
-                  projectBottlenecks[projectName].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[projectName].tasks.push(taskName);
+                  projectBottlenecks[overdueTask.project].count++;
+                  projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
+                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
               }
 
@@ -199,6 +236,31 @@ export const ANALYZE_OVERDUE_V3 = `
 
           // Sort overdue tasks by days overdue
           overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+          // OMN-253: build the full-population mostOverdue record from the
+          // ranked candidates tracked above, via the SAME builder the per-task
+          // loop uses (see buildOverdueRecord above). Try the true max first;
+          // if ITS record throws (e.g. corrupted tags/id), fall back through
+          // the next-ranked candidates rather than either (a) silently reviving
+          // the pre-fix capped-head bug this ticket exists to close, or (b)
+          // suppressing the whole field over one bad task — /code-review of
+          // #210/#212. Only if every ranked candidate throws does this stay null.
+          let mostOverdueRecord = null;
+          for (let i = 0; i < mostOverdueTop.length; i++) {
+            const candidate = mostOverdueTop[i];
+            try {
+              mostOverdueRecord = buildOverdueRecord(
+                candidate.task,
+                candidate.daysOverdue,
+                candidate.dueDate,
+                candidate.activeStatus,
+                candidate.blocked
+              );
+              break;
+            } catch (e) {
+              // Try the next-ranked candidate.
+            }
+          }
 
           // Calculate statistics from the FULL-POPULATION counters (uncapped), not the
           // capped overdueTasks detail array — see the loop above (OMN-187).
@@ -286,7 +348,7 @@ export const ANALYZE_OVERDUE_V3 = `
             avgDaysOverdue: avgDaysOverdue,
             overduePercentage: overduePercentage,
             oldestOverdueDate: oldestDueISO,
-            mostOverdue: overdueTasks[0] || null,
+            mostOverdue: mostOverdueRecord,
             insights: insights,
             groupedByUrgency: groupedByUrgency,
             projectBottlenecks: projectList.slice(0, 5),

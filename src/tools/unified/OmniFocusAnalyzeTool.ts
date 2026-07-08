@@ -935,6 +935,10 @@ SCOPE FILTERING:
             // OMN-187: exact oldest due date computed over the full population in the
             // script (not derived from the capped mostOverdue sample).
             oldestOverdueDate: summary.oldestOverdueDate ?? '',
+            // OMN-253 surfacing (/code-review of #210/#212): the script computes
+            // the true full-population most-overdue task, but it was silently
+            // dropped here — allOverdue[0] below is only the capped-detail head.
+            mostOverdue: summary.mostOverdue ?? null,
           },
           overdueTasks: allOverdue.map((task) => ({
             id: task.id,

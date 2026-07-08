@@ -2,8 +2,9 @@
 // Shared harness for the two-layer JXA→OmniJS analytics scripts: the outer JXA
 // layer calls Application().evaluateJavascript(src), which we replay in a second
 // vm context holding the fake OmniJS globals (flattenedTasks, Task.Status, …).
-// Keep this file BYTE-IDENTICAL across PR branches that add it — identical
-// add/add resolves cleanly at merge time.
+// Established on main (OMN-250/OMN-254) — edit normally; the earlier
+// "keep byte-identical" note only applied while #209/#213 were both adding
+// this file concurrently and no longer holds now that it's a shared file.
 import vm from 'node:vm';
 
 export interface FakeDatabase {
@@ -24,7 +25,7 @@ export function runAnalyticsScript(
     flattenedTasks: db.flattenedTasks ?? [],
     flattenedProjects: db.flattenedProjects ?? [],
     flattenedTags: db.flattenedTags ?? [],
-    Task: { Status: { Blocked: 'blocked', Completed: 'completed', Dropped: 'dropped' } },
+    Task: { Status: { Available: 'available', Blocked: 'blocked', Completed: 'completed', Dropped: 'dropped' } },
     Project: { Status: { Active: 'active' } },
     JSON,
   };
