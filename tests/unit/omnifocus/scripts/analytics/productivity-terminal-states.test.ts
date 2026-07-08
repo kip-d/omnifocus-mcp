@@ -4,10 +4,10 @@
 // Pre-fix the loop filtered only on task.completed, so dropped tasks — and
 // tasks inside dropped/completed projects — counted as "available" and
 // "overdue": the three-terminal-states violation.
-import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
+import { runAnalyticsScript } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -35,20 +35,9 @@ function runScript(tasks: FakeTask[]): {
   data: { summary: { totalTasks: number; completedTasks: number; availableTasks: number; overdueCount: number } };
 } {
   const options = { period: 'week', includeProjectStats: false, includeTagStats: false };
-  const script = PRODUCTIVITY_STATS_SCRIPT_V3.replace('{{options}}', JSON.stringify(options));
-  const inner = {
+  return runAnalyticsScript(PRODUCTIVITY_STATS_SCRIPT_V3, options, {
     flattenedTasks: tasks,
-    flattenedProjects: [],
-    flattenedTags: [],
-    Task: { Status: { Blocked: 'blocked', Dropped: 'dropped' } },
-    Project: { Status: { Active: 'active' } },
-    JSON,
-  };
-  const outer = {
-    Application: () => ({ evaluateJavascript: (src: string) => vm.runInNewContext(src, inner) }),
-    JSON,
-  };
-  return JSON.parse(vm.runInNewContext(script, outer) as string) as ReturnType<typeof runScript>;
+  }) as ReturnType<typeof runScript>;
 }
 
 describe('OMN-254 — three terminal states in productivity populations', () => {
