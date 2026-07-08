@@ -4,10 +4,10 @@
 // `task.creationDate`/`task.modificationDate` (JXA names, undefined in OmniJS),
 // so every taskAge was 0 and the avgAge>120 project-health penalty never fired
 // — the OMN-142 silent-metric-death class.
-import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { WORKFLOW_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
+import { runAnalyticsScript } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -58,8 +58,7 @@ function runScript(tasks: FakeTask[]): {
     maxInsights: 15,
     includeRawData: false,
   };
-  const script = WORKFLOW_ANALYSIS_V3.replace('{{options}}', JSON.stringify(options));
-  const inner = {
+  return runAnalyticsScript(WORKFLOW_ANALYSIS_V3, options, {
     flattenedTasks: tasks,
     flattenedProjects: [
       {
@@ -67,14 +66,7 @@ function runScript(tasks: FakeTask[]): {
         rootTask: { numberOfTasks: tasks.length, numberOfAvailableTasks: tasks.length, numberOfCompletedTasks: 0 },
       },
     ],
-    Task: { Status: { Blocked: 'blocked', Available: 'available' } },
-    JSON,
-  };
-  const outer = {
-    Application: () => ({ evaluateJavascript: (src: string) => vm.runInNewContext(src, inner) }),
-    JSON,
-  };
-  return JSON.parse(vm.runInNewContext(script, outer) as string) as ReturnType<typeof runScript>;
+  }) as ReturnType<typeof runScript>;
 }
 
 describe('OMN-251 — taskAge reads the real OmniJS date properties', () => {
