@@ -110,6 +110,12 @@ export const ANALYZE_OVERDUE_V3 = `
           let mostOverdueDays = -1;
           let mostOverdueTaskRef = null;
           let mostOverdueDue = null;
+          // Captured alongside mostOverdueTaskRef below (NOT re-derived from
+          // mostOverdueTaskRef.taskStatus after the loop) — /code-review of
+          // #210/#212: a post-loop re-read/re-derive is the exact duplicate-
+          // computation pattern buildOverdueRecord's blocked param exists to avoid.
+          let mostOverdueActiveStatus = null;
+          let mostOverdueBlocked = false;
 
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
@@ -150,6 +156,8 @@ export const ANALYZE_OVERDUE_V3 = `
                 mostOverdueDays = daysOverdue;
                 mostOverdueTaskRef = task;
                 mostOverdueDue = dueDate;
+                mostOverdueActiveStatus = activeStatus;
+                mostOverdueBlocked = isBlocked;
               }
 
               // Per-task DETAIL recording is capped for payload size — the summary
@@ -225,13 +233,12 @@ export const ANALYZE_OVERDUE_V3 = `
           let mostOverdueRecord = null;
           if (mostOverdueTaskRef) {
             try {
-              const moActiveStatus = mostOverdueTaskRef.taskStatus;
               mostOverdueRecord = buildOverdueRecord(
                 mostOverdueTaskRef,
                 mostOverdueDays,
                 mostOverdueDue,
-                moActiveStatus,
-                moActiveStatus === Task.Status.Blocked
+                mostOverdueActiveStatus,
+                mostOverdueBlocked
               );
             } catch (e) {
               // /code-review: falling back to overdueTasks[0] here would silently
