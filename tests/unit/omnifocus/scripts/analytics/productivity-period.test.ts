@@ -2,28 +2,15 @@
 // OMN-250 (OMN-148 drift D4+D23) — the productivity_stats period vocabulary is
 // reconciled: every value the Zod enum can send has a switch case, and a value
 // with no case fails LOUD (error envelope), never NaN→null→schema-rejection.
-import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
 import { AnalyzeSchema } from '../../../../../src/tools/unified/schemas/analyze-schema.js';
+import { runAnalyticsScript } from './run-analytics-script.js';
 
 /** Execute the two-layer JXA→OmniJS script against an empty fake database. */
 function runScript(options: Record<string, unknown>): unknown {
-  const script = PRODUCTIVITY_STATS_SCRIPT_V3.replace('{{options}}', JSON.stringify(options));
-  const inner = {
-    flattenedTasks: [],
-    flattenedProjects: [],
-    flattenedTags: [],
-    Task: { Status: { Blocked: 'blocked' } },
-    Project: { Status: { Active: 'active' } },
-    JSON,
-  };
-  const outer = {
-    Application: () => ({ evaluateJavascript: (src: string) => vm.runInNewContext(src, inner) }),
-    JSON,
-  };
-  return JSON.parse(vm.runInNewContext(script, outer) as string);
+  return runAnalyticsScript(PRODUCTIVITY_STATS_SCRIPT_V3, options);
 }
 
 /** Mirror the script's daysInPeriod arithmetic: ceil((now − midnight(now − backDays))/86400000).
