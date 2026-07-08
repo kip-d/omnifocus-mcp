@@ -18,7 +18,7 @@
  * Pattern based on: task-velocity.ts, list-tags.ts
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -67,6 +67,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
       // Build comprehensive OmniJS script for ALL statistics in one bridge call
       const statsScript = \`
         (() => {
+          ${TERMINAL_STATUS_HELPER}
           const periodStartTime = \${periodStartTime};
           const nowTime = \${nowTime};
           const includeProjectStats = \${includeProjectStats};
@@ -101,19 +102,27 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                   }
                 }
               } else {
-                // Check if available (not blocked, not deferred)
-                const blocked = task.taskStatus === Task.Status.Blocked;
-                const deferDate = task.deferDate;
-                const isDeferred = deferDate && deferDate.getTime() > nowTime;
+                // OMN-254 (OMN-148 drift D5): effective status (the OMN-187
+                // predicate) — a DROPPED task, or a task inside a dropped/
+                // completed project, is terminal and belongs in neither the
+                // available nor the overdue population. totalTasks stays the
+                // whole-DB census; completedTasks stays task.completed.
+                const status = task.taskStatus;
+                if (!isTerminalStatus(status)) {
+                  // Check if available (not blocked, not deferred)
+                  const blocked = status === Task.Status.Blocked;
+                  const deferDate = task.deferDate;
+                  const isDeferred = deferDate && deferDate.getTime() > nowTime;
 
-                if (!blocked && !isDeferred) {
-                  totalAvailable++;
-                }
+                  if (!blocked && !isDeferred) {
+                    totalAvailable++;
+                  }
 
-                // Check if overdue (has due date in the past)
-                const dueDate = task.dueDate;
-                if (dueDate && dueDate.getTime() < nowTime) {
-                  overdueCount++;
+                  // Check if overdue (has due date in the past)
+                  const dueDate = task.dueDate;
+                  if (dueDate && dueDate.getTime() < nowTime) {
+                    overdueCount++;
+                  }
                 }
               }
             } catch (e) {

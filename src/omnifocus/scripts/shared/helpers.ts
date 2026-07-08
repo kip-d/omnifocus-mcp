@@ -188,6 +188,20 @@ export function round1(n: number): number {
 }
 
 /**
+ * OmniJS-only helper (references `task.taskStatus` / `Task.Status`, which exist
+ * only inside evaluateJavascript) — inject into the INNER OmniJS script via
+ * template-literal interpolation.
+ *
+ * Defines `isTerminalStatus(status)` — the OMN-187 effective-status predicate.
+ * A task is terminal when its effective status is Dropped OR Completed; the
+ * Completed half covers tasks whose own `completed` flag is false but whose
+ * containing project is dropped/completed. Both halves are required — keeping
+ * one definition here means a terminal-state change is one edit (OMN-254).
+ */
+export const TERMINAL_STATUS_HELPER =
+  'function isTerminalStatus(status) { return status === Task.Status.Dropped || status === Task.Status.Completed; }';
+
+/**
  * Helper to extract project validation
  */
 export const PROJECT_VALIDATION = `
