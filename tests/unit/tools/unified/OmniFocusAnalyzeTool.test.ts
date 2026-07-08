@@ -110,6 +110,38 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(Array.isArray(res.summary.key_findings)).toBe(true);
     });
 
+    it('surfaces the most productive project from the script map (OMN-252)', async () => {
+      // OMN-148 drift D8: the map→array reshape read `completedCount`, but the
+      // script emits `completed` — every row got completedCount: 0 and the
+      // "Most productive project" finding could never fire.
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 50,
+          completedTasks: 9,
+          completionRate: 0.18,
+          activeProjects: 2,
+          overdueCount: 0,
+        },
+        projectStats: {
+          Alpha: { total: 10, completed: 7, available: 2, completionRate: '70.0', status: 'active' },
+          Beta: { total: 10, completed: 2, available: 5, completionRate: '20.0', status: 'active' },
+        },
+        tagStats: {},
+        insights: [],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats', params: { groupBy: 'week' } },
+      });
+
+      expect(res.success).toBe(true);
+      const alpha = res.data.stats.projectStats.find((p: { name: string }) => p.name === 'Alpha');
+      expect(alpha.completedCount).toBe(7);
+      expect(res.summary.key_findings).toContain('Most productive project: Alpha (7 completed)');
+    });
+
     it('caches results after execution', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
@@ -191,6 +223,32 @@ describe('OmniFocusAnalyzeTool', () => {
 
       expect(res.success).toBe(true);
       expect(res.data.stats.overview.activeProjects).toBe(12);
+    });
+
+    it('includes availableTasks in response when script returns it (OMN-254 surfacing)', async () => {
+      // /code-review of PRs #209/#211/#213: the script computes the
+      // terminal-state-corrected summary.availableTasks, but the overview
+      // reshape silently dropped it — the fixed count never reached the client.
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 100,
+          completedTasks: 80,
+          availableTasks: 15,
+          completionRate: 0.8,
+          activeProjects: 5,
+          overdueCount: 5,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.stats.overview.availableTasks).toBe(15);
     });
 
     it('does not produce contradictory recommendations', async () => {
