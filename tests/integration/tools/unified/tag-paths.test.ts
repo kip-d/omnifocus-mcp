@@ -308,7 +308,7 @@ describe('OMN-128 slice 6: live tag mutation paths (AST lowerings, persisted rea
 
     // 5. OMN-46 fixture-leak guard: osascript-driven whole-DB sweep of
     //    __TEST__/__test- residue (no server needed).
-    const report = await fullCleanup();
+    const report = await fullCleanup({ scope: 'full' });
     expect(report.errors, `sandbox cleanup errors (fixture leak): ${JSON.stringify(report.errors)}`).toHaveLength(0);
     if (sweepError !== undefined) throw sweepError;
   }, 180000);

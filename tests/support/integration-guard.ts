@@ -40,6 +40,12 @@ export function pidIsAlive(pid: number): boolean {
   }
 }
 
+/** Parses lock-file content into a valid holder PID, or undefined if missing/garbage. */
+function parseLockPid(raw: string): number | undefined {
+  const pid = Number.parseInt(raw, 10);
+  return Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
 export function acquireIntegrationLock(
   opts: {
     lockPath?: string;
@@ -76,10 +82,9 @@ export function acquireIntegrationLock(
       raw = fs.readFileSync(lockPath, 'utf8').trim();
     }
   }
-  const holder = Number.parseInt(raw, 10);
-  const holderValid = Number.isFinite(holder) && holder > 0;
+  const holder = parseLockPid(raw);
 
-  if (holderValid && isAlive(holder)) {
+  if (holder !== undefined && isAlive(holder)) {
     return { acquired: false, holderPid: holder };
   }
 
@@ -98,10 +103,36 @@ export function acquireIntegrationLock(
     fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
   } catch (e) {
     if ((e as { code?: string }).code !== 'EEXIST') throw e;
-    const winner = Number.parseInt(fs.readFileSync(lockPath, 'utf8').trim(), 10);
-    return { acquired: false, ...(Number.isFinite(winner) && winner > 0 ? { holderPid: winner } : {}) };
+    const winner = parseLockPid(fs.readFileSync(lockPath, 'utf8').trim());
+    return { acquired: false, ...(winner !== undefined ? { holderPid: winner } : {}) };
   }
-  return { acquired: true, stale: true, ...(holderValid ? { holderPid: holder } : {}) };
+  return { acquired: true, stale: true, ...(holder !== undefined ? { holderPid: holder } : {}) };
+}
+
+/**
+ * OMN-186 Phase 2: read-only probe — is an integration run in flight right
+ * now? True only when the lock file exists, holds a valid PID, and that PID
+ * is alive. The lock's lifetime IS the per-run fixture epoch: per-file
+ * fullCleanup calls use this to run in scoped mode mid-run (see
+ * sandbox-manager.ts), and a crashed run's stale lock must read as NOT live
+ * so later manual cleanups stay full-sweep. Never mutates the lock.
+ */
+export function isIntegrationLockLive(
+  opts: {
+    lockPath?: string;
+    isPidAlive?: (pid: number) => boolean;
+  } = {},
+): boolean {
+  const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
+  const isAlive = opts.isPidAlive ?? pidIsAlive;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8').trim();
+  } catch {
+    return false; // no lock (or unreadable) — no run in flight
+  }
+  const holder = parseLockPid(raw);
+  return holder !== undefined && isAlive(holder);
 }
 
 /**

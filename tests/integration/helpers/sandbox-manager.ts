@@ -14,6 +14,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { profileFixture } from './fixture-profiler.js';
+import { isIntegrationLockLive } from '../../support/integration-guard.js';
 
 // OMN-147: args-array execFile (not shell `exec`) so the script is passed as an
 // argv element — no shell quoting to get wrong — and every spawn carries a child
@@ -665,24 +666,60 @@ async function deleteTestTags(): Promise<{ deleted: number; errors: string[] }> 
 // =============================================================================
 
 /**
+ * OMN-186 Phase 2: how much of the sweep to run.
+ *
+ * - `'full'`  — all 7 steps, unconditionally. globalSetup/globalTeardown and
+ *   the manual purge script pass this explicitly.
+ * - `'auto'`  (default) — full UNLESS an integration run is currently live
+ *   (the OMN-143 lock is held by a live PID), in which case the sweep runs
+ *   `'scoped'`: only the steps inter-file isolation needs (inbox tasks,
+ *   sandbox projects, sandbox subfolders, test tags). The two whole-DB
+ *   everywhere-scans and the sandbox-folder delete are deferred to the ONE
+ *   explicit full sweep in globalTeardown — the FIXTURE_PROFILE=1 run
+ *   attributed 109s of wall to 15 per-file full sweeps paying them each time.
+ *
+ * The run's lock lifetime IS the fixture epoch: a crashed run leaves a dead
+ * PID in the lock, which reads as not-live, so post-crash cleanups are full.
+ */
+export type CleanupScope = 'full' | 'auto';
+
+/** Pure mode resolution — exported for unit pinning. */
+export function resolveCleanupMode(scope: CleanupScope, runLive: boolean): 'full' | 'scoped' {
+  return scope === 'full' || !runLive ? 'full' : 'scoped';
+}
+
+/**
  * Full cleanup of all test data in the correct order.
  * Order matters due to OmniFocus constraints:
  * 1. Delete __TEST__ inbox tasks first
  * 2. Delete projects in sandbox (cascades to their tasks)
  * 3. Delete sub-folders (bottom-up)
- * 4. Delete sandbox folder itself
- * 5. Delete orphaned __TEST__ tasks anywhere (catches tasks that escaped sandbox)
- * 6. Delete orphaned test projects (catches projects that escaped sandbox)
+ * 4. Delete sandbox folder itself                                  [full only]
+ * 5. Delete orphaned __TEST__ tasks anywhere (escaped the sandbox) [full only]
+ * 6. Delete orphaned test projects (escaped the sandbox)           [full only]
  * 7. Delete __test- tags (must be after tasks/projects so tags aren't referenced)
+ *
+ * Scoped mode (per-file sweeps during a live run — see CleanupScope) skips
+ * 4-6: escapee hunting waits for globalTeardown's full sweep (whose
+ * scanForFixtures still fails loud on anything left), and keeping the sandbox
+ * folder alive across files makes the next file's ensureSandboxFolder a
+ * lookup instead of a recreate.
  */
-export async function fullCleanup(): Promise<CleanupReport> {
-  // OMN-186: per-file teardown cost (the suspected ~400-490s pool) — profiled
-  // when FIXTURE_PROFILE=1. Also fires from globalSetup/globalTeardown, where
-  // the profiler records hook 'global' instead of 'afterAll'.
-  return profileFixture('afterAll', 'fullCleanup', fullCleanupImpl);
+export async function fullCleanup(
+  options: { scope?: CleanupScope; isRunLive?: () => boolean } = {},
+): Promise<CleanupReport> {
+  const isRunLive = options.isRunLive ?? isIntegrationLockLive;
+  const mode = resolveCleanupMode(options.scope ?? 'auto', isRunLive());
+  // OMN-186: per-file teardown cost — profiled when FIXTURE_PROFILE=1, with
+  // distinct op names so before/after aggregations can split the modes. Also
+  // fires from globalSetup/globalTeardown, where the profiler records hook
+  // 'global' instead of 'afterAll'.
+  return profileFixture('afterAll', mode === 'scoped' ? 'fullCleanup.scoped' : 'fullCleanup', () =>
+    fullCleanupImpl(mode),
+  );
 }
 
-async function fullCleanupImpl(): Promise<CleanupReport> {
+async function fullCleanupImpl(mode: 'full' | 'scoped'): Promise<CleanupReport> {
   const startTime = Date.now();
   const report: CleanupReport = {
     inboxTasksDeleted: 0,
@@ -722,36 +759,40 @@ async function fullCleanupImpl(): Promise<CleanupReport> {
     report.errors.push(`Subfolders: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // Step 4: Delete sandbox folder itself
-  try {
-    const folderResult = await deleteSandboxFolder();
-    if (folderResult.deleted) {
-      report.foldersDeleted++;
-    } else if (folderResult.error && !folderResult.error.includes('not found')) {
-      report.errors.push(`Sandbox folder: ${folderResult.error}`);
+  // Steps 4-6 run in full mode only — scoped per-file sweeps defer folder
+  // deletion and the whole-DB escapee scans to globalTeardown's full sweep.
+  if (mode === 'full') {
+    // Step 4: Delete sandbox folder itself
+    try {
+      const folderResult = await deleteSandboxFolder();
+      if (folderResult.deleted) {
+        report.foldersDeleted++;
+      } else if (folderResult.error && !folderResult.error.includes('not found')) {
+        report.errors.push(`Sandbox folder: ${folderResult.error}`);
+      }
+    } catch (error) {
+      report.errors.push(`Sandbox folder: ${error instanceof Error ? error.message : String(error)}`);
     }
-  } catch (error) {
-    report.errors.push(`Sandbox folder: ${error instanceof Error ? error.message : String(error)}`);
-  }
 
-  // Step 5: Delete orphaned __TEST__ tasks anywhere in OmniFocus
-  // This catches tasks that ended up in projects like "Miscellaneous" instead of sandbox
-  try {
-    const orphanedResult = await deleteTestTasksEverywhere();
-    report.orphanedTasksDeleted = orphanedResult.deleted;
-    report.errors.push(...orphanedResult.errors);
-  } catch (error) {
-    report.errors.push(`Orphaned tasks: ${error instanceof Error ? error.message : String(error)}`);
-  }
+    // Step 5: Delete orphaned __TEST__ tasks anywhere in OmniFocus
+    // This catches tasks that ended up in projects like "Miscellaneous" instead of sandbox
+    try {
+      const orphanedResult = await deleteTestTasksEverywhere();
+      report.orphanedTasksDeleted = orphanedResult.deleted;
+      report.errors.push(...orphanedResult.errors);
+    } catch (error) {
+      report.errors.push(`Orphaned tasks: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
-  // Step 6: Delete orphaned test projects that escaped the sandbox folder
-  // Safety net for interrupted test runs or folder assignment failures
-  try {
-    const orphanedProjectsResult = await deleteOrphanedProjects();
-    report.orphanedProjectsDeleted = orphanedProjectsResult.deleted;
-    report.errors.push(...orphanedProjectsResult.errors);
-  } catch (error) {
-    report.errors.push(`Orphaned projects: ${error instanceof Error ? error.message : String(error)}`);
+    // Step 6: Delete orphaned test projects that escaped the sandbox folder
+    // Safety net for interrupted test runs or folder assignment failures
+    try {
+      const orphanedProjectsResult = await deleteOrphanedProjects();
+      report.orphanedProjectsDeleted = orphanedProjectsResult.deleted;
+      report.errors.push(...orphanedProjectsResult.errors);
+    } catch (error) {
+      report.errors.push(`Orphaned projects: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Step 7: Delete test tags (must be after all task/project deletions)

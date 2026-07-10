@@ -238,7 +238,7 @@ describe('OMN-138: live update paths (task + project, persisted read-backs)', ()
     // 3. OMN-46 fixture-leak guard: osascript-driven whole-DB sweep of
     //    __TEST__/__test- residue (no server needed) — also removes the
     //    subfolder and tag fixtures, which have no per-id delete op.
-    const report = await fullCleanup();
+    const report = await fullCleanup({ scope: 'full' });
     expect(report.errors, `sandbox cleanup errors (fixture leak): ${JSON.stringify(report.errors)}`).toHaveLength(0);
     if (sweepError !== undefined) throw sweepError;
   }, 120000);
