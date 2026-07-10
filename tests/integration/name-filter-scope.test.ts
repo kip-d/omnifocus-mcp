@@ -150,7 +150,7 @@ d('OMN-142: name filter is name-scoped (never matches notes)', () => {
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup({ scope: 'full' });
+    await fullCleanup();
     await client.thoroughCleanup();
   });
 

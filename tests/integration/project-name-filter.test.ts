@@ -115,7 +115,7 @@ d('OMN-224: tasks project-by-name filter resolves real projects', () => {
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup({ scope: 'full' });
+    await fullCleanup();
     await client.thoroughCleanup();
   });
 
@@ -224,7 +224,7 @@ d('OMN-224: a dropped same-named project does not shadow the active one', () => 
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup({ scope: 'full' });
+    await fullCleanup();
     await client.thoroughCleanup();
   });
 

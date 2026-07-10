@@ -73,7 +73,7 @@ d('Batch Operations Integration (Unified API)', () => {
 
   afterAll(async () => {
     // Cleanup all test data via sandbox manager
-    await fullCleanup({ scope: 'full' });
+    await fullCleanup();
     await client.thoroughCleanup();
   });
 

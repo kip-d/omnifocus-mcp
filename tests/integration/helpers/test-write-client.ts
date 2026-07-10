@@ -386,7 +386,7 @@ export class TestWriteClient {
    * Call this in afterAll().
    */
   async cleanup(): Promise<CleanupReport> {
-    const report = await fullCleanup({ scope: 'full' });
+    const report = await fullCleanup();
 
     // Reset tracking
     this.createdProjectIds = [];
