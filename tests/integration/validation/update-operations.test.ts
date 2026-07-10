@@ -53,7 +53,7 @@ describe('Update Operations - Read-Back Validation', () => {
     }
 
     // Full cleanup sweep for any remaining test data
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
 
     // Don't stop server - globalTeardown handles shared server cleanup
   });

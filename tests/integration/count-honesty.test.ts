@@ -163,7 +163,7 @@ d('OMN-154: count-honesty contract (C11 shape)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
   }, 120_000);
 
   // ---------------------------------------------------------------------------

@@ -86,7 +86,7 @@ d('OMN-126: project-scoped dedup detects a real existing task', () => {
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
     await client.thoroughCleanup();
   });
 
@@ -166,7 +166,7 @@ d('OMN-126: a case-mismatched project name still dedups (canonicalization)', () 
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
     await client.thoroughCleanup();
   });
 
@@ -205,7 +205,7 @@ d('OMN-126: an empty-string project dedups against the inbox', () => {
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
     await client.thoroughCleanup();
   });
 
@@ -270,7 +270,7 @@ d('OMN-126: same-named projects — dedup aggregates across all of them', () => 
   }, 120000);
 
   afterAll(async () => {
-    await fullCleanup();
+    await fullCleanup({ scope: 'full' });
     await client.thoroughCleanup();
   });
 

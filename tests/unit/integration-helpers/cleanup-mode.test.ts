@@ -1,7 +1,7 @@
 /**
  * OMN-186 Phase 2 — per-run fixture epoch: fullCleanup cleanup-mode gating.
  *
- * Kip's FIXTURE_PROFILE=1 run attributed 134s of the 216s fixture overhead to
+ * Kip's FIXTURE_PROFILE=1 run attributed 109s of the 216s fixture overhead to
  * 15 per-file `fullCleanup()` afterAll sweeps, each paying two whole-DB
  * everywhere-scans (orphaned tasks, orphaned projects) plus a sandbox-folder
  * delete/recreate that the next file's ensureSandboxFolder must undo. Phase 2
