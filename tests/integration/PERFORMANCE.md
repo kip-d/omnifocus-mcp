@@ -138,11 +138,15 @@ The Phase-1 profile (2026-07-08, quiet host, 525 s wall) confirmed teardown domi
 ~216 s fixture overhead — 15 per-file `afterAll` sweeps averaging ~7.3 s, each paying two whole-DB everywhere-scans plus
 a sandbox-folder delete the next file's `ensureSandboxFolder` had to undo.
 
-Phase 2 scopes those per-file sweeps. The OMN-143 single-instance lock's lifetime is the run's fixture epoch: while the
-lock is held by a live PID, `fullCleanup()` (default `scope: 'auto'`) runs **scoped** — inbox tasks, sandbox projects,
-sandbox subfolders, and test tags only (4 `osascript` calls instead of 7), keeping the sandbox folder alive across
-files. The everywhere-scans and folder delete run in the ONE explicit `fullCleanup({ scope: 'full' })` sweep in
-`globalTeardown`, and `globalSetup`'s explicit full sweep remains the prior-run orphan hunt (crash recovery). The
-post-run `scanForFixtures` fail-loud check is unchanged. Manual purges (`npm run test:cleanup -- --apply`) pass explicit
-full and never scope down. In profiler logs the scoped sweeps record op `fullCleanup.scoped`, so before/after
-aggregations can split the modes.
+Phase 2 scopes 10 of those 15 per-file sweeps — the ordinary best-effort teardown calls that never inspect the returned
+report. The OMN-143 single-instance lock's lifetime is the run's fixture epoch: while the lock is held by a live PID,
+`fullCleanup()` (default `scope: 'auto'`) runs **scoped** — inbox tasks, sandbox projects, sandbox subfolders, and test
+tags only (4 `osascript` calls instead of 7), keeping the sandbox folder alive across files. The everywhere-scans and
+folder delete run in the ONE explicit `fullCleanup({ scope: 'full' })` sweep in `globalTeardown`, and `globalSetup`'s
+explicit full sweep remains the prior-run orphan hunt (crash recovery). The remaining 5 sweeps — the OMN-46 fixture-leak
+GUARD tests under `tests/integration/tools/unified/` that assert `report.errors` to catch whole-DB residue as a
+regression guard — stay pinned to `scope: 'full'` and pay the full 7-call cost every time, since scoping them down would
+make their own correctness assertion vacuous. The post-run `scanForFixtures` fail-loud check is unchanged. Manual purges
+(`npm run test:cleanup -- --apply`) pass explicit full and never scope down. In profiler logs the scoped sweeps record
+op `fullCleanup.scoped`, so before/after aggregations can split the modes — expect the ~109 s baseline to drop by
+roughly 10/15 of the scoped sweeps' savings, not the full amount.
