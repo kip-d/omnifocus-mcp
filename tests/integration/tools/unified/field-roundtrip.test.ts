@@ -208,7 +208,7 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
     // whole sandbox — projects, subfolders, tags — and reports per-item
     // failures in `errors`. Assert OUTSIDE any try/catch so a real leak fails
     // the suite loud instead of being swallowed.
-    const report = await fullCleanup();
+    const report = await fullCleanup({ scope: 'full' });
     expect(report.errors, `sandbox cleanup errors (fixture leak): ${JSON.stringify(report.errors)}`).toHaveLength(0);
   }, 120000);
 

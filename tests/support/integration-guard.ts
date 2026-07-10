@@ -40,6 +40,12 @@ export function pidIsAlive(pid: number): boolean {
   }
 }
 
+/** Parses lock-file content into a valid holder PID, or undefined if missing/garbage. */
+function parseLockPid(raw: string): number | undefined {
+  const pid = Number.parseInt(raw, 10);
+  return Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
 export function acquireIntegrationLock(
   opts: {
     lockPath?: string;
@@ -76,10 +82,9 @@ export function acquireIntegrationLock(
       raw = fs.readFileSync(lockPath, 'utf8').trim();
     }
   }
-  const holder = Number.parseInt(raw, 10);
-  const holderValid = Number.isFinite(holder) && holder > 0;
+  const holder = parseLockPid(raw);
 
-  if (holderValid && isAlive(holder)) {
+  if (holder !== undefined && isAlive(holder)) {
     return { acquired: false, holderPid: holder };
   }
 
@@ -98,10 +103,10 @@ export function acquireIntegrationLock(
     fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
   } catch (e) {
     if ((e as { code?: string }).code !== 'EEXIST') throw e;
-    const winner = Number.parseInt(fs.readFileSync(lockPath, 'utf8').trim(), 10);
-    return { acquired: false, ...(Number.isFinite(winner) && winner > 0 ? { holderPid: winner } : {}) };
+    const winner = parseLockPid(fs.readFileSync(lockPath, 'utf8').trim());
+    return { acquired: false, ...(winner !== undefined ? { holderPid: winner } : {}) };
   }
-  return { acquired: true, stale: true, ...(holderValid ? { holderPid: holder } : {}) };
+  return { acquired: true, stale: true, ...(holder !== undefined ? { holderPid: holder } : {}) };
 }
 
 /**
@@ -126,8 +131,8 @@ export function isIntegrationLockLive(
   } catch {
     return false; // no lock (or unreadable) — no run in flight
   }
-  const holder = Number.parseInt(raw, 10);
-  return Number.isFinite(holder) && holder > 0 && isAlive(holder);
+  const holder = parseLockPid(raw);
+  return holder !== undefined && isAlive(holder);
 }
 
 /**

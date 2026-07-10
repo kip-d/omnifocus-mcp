@@ -134,7 +134,7 @@ off (default) is a pure pass-through — normal runs are untouched. This profile
 
 ### Per-run fixture epoch (OMN-186 Phase 2)
 
-The Phase-1 profile (2026-07-08, quiet host, 525 s wall) confirmed teardown dominance: `fullCleanup` was 134 s of the
+The Phase-1 profile (2026-07-08, quiet host, 525 s wall) confirmed teardown dominance: `fullCleanup` was 109 s of the
 ~216 s fixture overhead — 15 per-file `afterAll` sweeps averaging ~7.3 s, each paying two whole-DB everywhere-scans plus
 a sandbox-folder delete the next file's `ensureSandboxFolder` had to undo.
 
