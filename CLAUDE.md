@@ -134,7 +134,6 @@ pipeline — other docs should link here rather than restate it.
 
 - **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
 - **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
-- **Build before running:** `npm run build`
 - **Run integration tests** before considering features complete
 
 ## Documentation
@@ -200,11 +199,6 @@ process.stdin.on('end', async () => {
 ## Quick Reference
 
 ```bash
-# Build & Test
-npm run build                    # Required before running
-npm run test:unit                # (counts vary; run it)
-npm run test:integration         # (counts vary; run it — use npm, not bun)
-
 # MCP Testing
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
 # protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports
@@ -220,12 +214,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | Transport        | stdio (stdin/stdout)                                                         |
 | SDK              | see `package.json` → `@modelcontextprotocol/sdk`                             |
 | Response Format  | `{ content: [{ type: 'text', text: JSON.stringify(result) }] }`              |
-
-## Project Structure
-
-- `src/omnifocus/` - OmniAutomation integration via JXA
-- `src/tools/` - MCP tools
-- `src/cache/` - TTL-based caching (5m tasks, 5m projects, 10m tags, 1h analytics)
 
 ## Git Workflow
 
