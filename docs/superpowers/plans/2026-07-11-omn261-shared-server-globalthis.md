@@ -472,6 +472,271 @@ git commit -m "fix(OMN-261): share the MCP server across integration files via g
 
 ---
 
+### Task 3b: Deterministic shutdown via a PID file (added after Task 4's first run exposed the `beforeExit` gap)
+
+**Why:** Task 4's first live run showed `getSharedClient.init`/`reuse` working exactly as designed (1 init, 16 reuses),
+but the `beforeExit` hook from Task 3 never fired — no shutdown log line, and one real orphaned `dist/index.js` process
+(PPID 1, reparented to launchd) appeared that wasn't in the before-snapshot. Investigation (read-only, all claims
+confirmed against actual source, not guessed):
+
+- `node_modules/tinypool/dist/index.js`'s `ProcessWorker.terminate()` tears down a `forks`-pool worker with an
+  **external** `this.process.kill()` (default SIGTERM) from tinypool's own pool process, falling back to SIGKILL after
+  1000ms if the worker hasn't died — NOT a `process.exit()` call from inside the worker.
+- `node_modules/vitest/dist/worker.js` only registers a `SIGTERM` handler inside the worker when Node's own profiling
+  flags (`--prof`, `--cpu-prof`, etc.) are present — unrelated to our own `FIXTURE_PROFILE=1` env var convention. Our
+  real runs set no such flags, so **no handler is registered for the incoming SIGTERM at all**, meaning Node's default
+  disposition (immediate termination, no more JS runs) applies. Neither `'exit'` nor `'beforeExit'` fires — this isn't a
+  "wrong event name" bug, the worker process gets **zero** JS-level teardown opportunity under real suite runs.
+- The orphaned MCP server (`dist/index.js`, a _grandchild_ of tinypool's pool process — child of the worker fork, not of
+  tinypool directly) is NOT killed when its immediate parent (the worker fork) dies; grandchildren reparent to `launchd`
+  (`PPID 1`) instead. It eventually exits on its own once the worker fork's death closes every fd it held, including the
+  stdin pipe into the server — the server's own `process.stdin.on('end'/'close', ...)` handler (`src/index.ts`, the same
+  convention CLAUDE.md documents) then calls `gracefulExit()` → `process.exit(0)`. That's why it eventually died with no
+  `🧹 Shutting down shared MCP server...` line: that string only exists in `shared-server.ts`, which never got to run.
+  The delay before that happens is OS pipe-teardown timing, not something in this repo's control.
+
+**Conclusion:** no hook registered _inside_ the worker fork process can be relied on for this. This repo already solves
+an equivalent problem — a PID recorded in a durable file, liveness-checked from a **different** process — for the
+OMN-143 integration lock (`tests/support/integration-guard.ts`'s `DEFAULT_LOCK_PATH`/`pidIsAlive`). Reuse that exact
+pattern instead of a new one: `globalTeardown` (which reliably runs once, in the orchestrator process, after the whole
+worker-fork phase ends — see Task 3's own rationale) reads a PID file written at spawn time and sends a prompt
+`SIGTERM`. This sidesteps the worker-teardown mechanism entirely; it doesn't matter whether tinypool SIGTERMs, SIGKILLs,
+or does anything else to the worker, because the kill now happens from a process that isn't the worker.
+
+Keep the existing `beforeExit` hook from Task 3 as harmless defense-in-depth (it costs nothing and might fire under some
+other invocation this repo doesn't currently exercise, e.g. a profiling run) — the PID-file mechanism below becomes the
+primary, guaranteed path.
+
+**Files:**
+
+- Modify: `tests/integration/helpers/mcp-test-client.ts` (expose the spawned child's PID)
+- Modify: `tests/integration/helpers/shared-server.ts` (record the PID at spawn; export the kill function)
+- Modify: `tests/support/setup-integration.ts` (call the kill function from both `setup()` and `teardown()`)
+- Create: `tests/unit/integration-helpers/shared-server-pid-file.test.ts`
+
+- [ ] **Step 1: Expose the child's PID from `MCPTestClient`**
+
+In `tests/integration/helpers/mcp-test-client.ts`, add this accessor near the top of the class (it already has a
+`transport` field — see the `private readonly transport: StdioJsonRpcTransport;` declaration):
+
+```typescript
+  /** PID of the spawned server child process, once `startServer()` has run. */
+  get pid(): number | undefined {
+    return this.transport.child.pid;
+  }
+```
+
+(`StdioJsonRpcTransport` already exposes `get child(): ChildProcess` for exactly this kind of use — see
+`tests/integration/helpers/stdio-jsonrpc-transport.ts`.)
+
+- [ ] **Step 2: Write the failing unit test for the PID-file kill function**
+
+`tests/unit/integration-helpers/shared-server-pid-file.test.ts`:
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+describe('killOrphanedSharedServer', () => {
+  let dir: string;
+  let pidFilePath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'omn261-pidfile-'));
+    pidFilePath = join(dir, 'shared-server.pid');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('does nothing when no PID file exists', async () => {
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    expect(() =>
+      killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true,
+        kill: () => {
+          throw new Error('should not be called');
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('sends SIGTERM to a live PID and removes the file', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    const killed: Array<{ pid: number; signal: string }> = [];
+    killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: (pid) => pid === 4242,
+      kill: (pid, signal) => killed.push({ pid, signal }),
+    });
+
+    expect(killed).toEqual([{ pid: 4242, signal: 'SIGTERM' }]);
+    expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  it('removes the file but does not kill when the recorded PID is no longer alive', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => false,
+      kill: () => {
+        throw new Error('should not be called');
+      },
+    });
+
+    expect(existsSync(pidFilePath)).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 3: Run the test to verify it fails**
+
+Run: `npx vitest tests/unit/integration-helpers/shared-server-pid-file.test.ts --run` Expected: FAIL —
+`killOrphanedSharedServer` is not exported from `shared-server.ts` yet.
+
+- [ ] **Step 4: Implement PID recording + the kill function in `shared-server.ts`**
+
+Add near the top of `tests/integration/helpers/shared-server.ts` (alongside the existing imports):
+
+```typescript
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { pidIsAlive } from '../../support/integration-guard.js';
+
+// OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
+// DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
+// exit hook can be relied on to shut this down.
+const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
+
+function recordSharedServerPid(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    mkdirSync(path.dirname(SHARED_SERVER_PID_PATH), { recursive: true });
+    writeFileSync(SHARED_SERVER_PID_PATH, String(pid), 'utf-8');
+  } catch {
+    // Best-effort — losing this only loses the deterministic-cleanup path,
+    // not correctness of the suite itself.
+  }
+}
+
+/**
+ * OMN-261: call from a DIFFERENT process than the one that spawned the
+ * server (e.g. globalTeardown) — see Task 3b for why no hook registered
+ * inside the vitest worker fork process can be relied on here.
+ */
+export function killOrphanedSharedServer(
+  opts: {
+    pidFilePath?: string;
+    isPidAlive?: (pid: number) => boolean;
+    kill?: (pid: number, signal: string) => void;
+  } = {},
+): void {
+  const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
+  const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
+
+  let raw: string;
+  try {
+    raw = readFileSync(pidFilePath, 'utf-8').trim();
+  } catch {
+    return; // no PID file — nothing to do
+  }
+  try {
+    unlinkSync(pidFilePath);
+  } catch {
+    /* already gone — fine, we still act on what we read */
+  }
+
+  const pid = Number.parseInt(raw, 10);
+  if (!Number.isFinite(pid) || pid <= 0) return;
+  if (!isAlive(pid)) return;
+  try {
+    kill(pid, 'SIGTERM');
+  } catch {
+    /* gone between the liveness check and the kill; harmless */
+  }
+}
+```
+
+Then, inside `getSharedClientImpl`'s init branch (from Task 3 Step 2), right after `await client.startServer();`, add:
+
+```typescript
+recordSharedServerPid(client.pid);
+```
+
+- [ ] **Step 5: Run the test to verify it passes**
+
+Run: `npx vitest tests/unit/integration-helpers/shared-server-pid-file.test.ts --run` Expected: PASS (all three cases)
+
+- [ ] **Step 6: Wire the kill into `setup-integration.ts`**
+
+In `tests/support/setup-integration.ts`, add the import:
+
+```typescript
+import { killOrphanedSharedServer } from '../integration/helpers/shared-server.js';
+```
+
+Call it defensively in `setup()`, right before the existing `fullCleanup({ scope: 'full' })` prior-run orphan hunt (same
+"clean up whatever a crashed prior run left behind" spirit):
+
+```typescript
+// OMN-261: a crashed prior run may have left its shared server's PID file
+// behind with the process still alive (or, more likely, already dead) —
+// clear it before this run starts its own.
+killOrphanedSharedServer();
+```
+
+And replace the comment Task 3 Step 4 left in `teardown()`:
+
+```typescript
+// OMN-261: shared-client shutdown no longer lives here — globalTeardown
+// runs in a separate OS process from the worker fork that owns the real
+// client, so this call could never reach it (confirmed dead at 1 call/0s
+// in the 2026-07-08 profile). shared-server.ts now registers its own
+// process.once('beforeExit', ...) hook inside the worker fork itself.
+```
+
+with:
+
+```typescript
+// OMN-261: the beforeExit hook shared-server.ts registers inside the
+// worker fork is defense-in-depth only — investigation confirmed Vitest's
+// forks-pool teardown (an external SIGTERM/SIGKILL from tinypool, no
+// in-worker signal handler for non-profiling runs) gives the worker zero
+// JS-level teardown opportunity, so beforeExit realistically never fires.
+// This PID-file kill runs from THIS process instead, which always executes
+// regardless of how the worker fork itself was torn down.
+killOrphanedSharedServer();
+```
+
+- [ ] **Step 7: Build and run the full unit suite**
+
+Run: `npm run build && npm run test:unit` Expected: build clean, all unit tests PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add tests/integration/helpers/mcp-test-client.ts tests/integration/helpers/shared-server.ts tests/support/setup-integration.ts tests/unit/integration-helpers/shared-server-pid-file.test.ts
+git commit -m "fix(OMN-261): deterministic shared-server shutdown via a PID file, not an in-worker exit hook"
+```
+
+**Do not re-run Task 4's full live verification yet** — OMN-261 is on hold pending OMN-262 (the dedup-cache regression
+Task 4's first run exposed). Stop after this commit and report back; Task 4 gets re-run once OMN-262 is resolved and
+this fix is already in place.
+
+---
+
 ### Task 4: Supervised full-suite verification
 
 **Files:** none (verification only)
