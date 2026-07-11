@@ -15,10 +15,27 @@
 import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
+import { getGlobalSlot } from './global-singleton.js';
 
-let sharedClient: MCPTestClient | null = null;
-let initPromise: Promise<MCPTestClient> | null = null;
-let isFirstAccess = true;
+interface SharedServerState {
+  client: MCPTestClient | null;
+  initPromise: Promise<MCPTestClient> | null;
+  isFirstAccess: boolean;
+  shutdownHookRegistered: boolean;
+}
+
+// OMN-261: module-scope `let` bindings reset on every test file under
+// vitest's default per-file isolation, even inside the single OS process
+// `singleFork:true` guarantees — defeating the "one server per run" design
+// this file's docstring already describes. globalThis survives the reset.
+function getState(): SharedServerState {
+  return getGlobalSlot<SharedServerState>('shared-server-state', () => ({
+    client: null,
+    initPromise: null,
+    isFirstAccess: true,
+    shutdownHookRegistered: false,
+  }));
+}
 
 /**
  * Warm up OmniFocus + the JXA script execution path inside the spawned MCP server.
@@ -149,55 +166,79 @@ async function warmupOmniFocus(client: MCPTestClient): Promise<void> {
  * between test files.
  */
 export async function getSharedClient(): Promise<MCPTestClient> {
-  // OMN-186: first access pays server start + cache warm + OmniFocus warm;
-  // later per-file accesses pay a cache clear. Split ops so a profiled run
-  // (FIXTURE_PROFILE=1) can tell the one-time warm from the per-file cost.
-  const op = sharedClient || initPromise ? 'getSharedClient.reuse' : 'getSharedClient.init';
+  // OMN-186/OMN-261: first access pays server start + cache warm + OmniFocus
+  // warm; later accesses (now genuinely cross-file, via the global slot) pay
+  // a cache clear. Split ops so a profiled run (FIXTURE_PROFILE=1) can tell
+  // the one-time warm from the per-file cost.
+  const state = getState();
+  const op = state.client || state.initPromise ? 'getSharedClient.reuse' : 'getSharedClient.init';
   return profileFixture('beforeAll', op, getSharedClientImpl);
 }
 
 async function getSharedClientImpl(): Promise<MCPTestClient> {
-  if (sharedClient) {
+  const state = getState();
+
+  if (state.client) {
     // Clear cache between test file accesses to prevent pollution
-    if (!isFirstAccess) {
-      await sharedClient.clearCache();
+    if (!state.isFirstAccess) {
+      await state.client.clearCache();
     }
-    isFirstAccess = false;
-    return sharedClient;
+    state.isFirstAccess = false;
+    return state.client;
   }
 
   // Prevent race conditions if multiple tests start simultaneously
-  if (initPromise) {
-    return initPromise;
+  if (state.initPromise) {
+    return state.initPromise;
   }
 
-  initPromise = (async () => {
+  state.initPromise = (async () => {
     console.log('🚀 Starting shared MCP server for integration tests (with cache warming)...');
-    sharedClient = new MCPTestClient({ enableCacheWarming: true });
-    await sharedClient.startServer();
+    const client = new MCPTestClient({ enableCacheWarming: true });
+    state.client = client;
+    await client.startServer();
     console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
-    await warmupOmniFocus(sharedClient);
+    await warmupOmniFocus(client);
     console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
-    isFirstAccess = false; // First access complete
-    return sharedClient;
+    state.isFirstAccess = false; // First access complete
+    registerShutdownHook();
+    return client;
   })();
 
-  return initPromise;
+  return state.initPromise;
+}
+
+// OMN-261: setup-integration.ts's globalTeardown runs in a separate OS
+// process from the worker fork that actually owns this client — its call to
+// shutdownSharedClient() can never reach `state.client` there (confirmed:
+// the 2026-07-08 profiler logged that call at 1 call/0s, impossible for a
+// real IPC-round-trip shutdown). Register a real in-process graceful
+// shutdown instead, once, the first time a client is created.
+function registerShutdownHook(): void {
+  const state = getState();
+  if (state.shutdownHookRegistered) return;
+  state.shutdownHookRegistered = true;
+  process.once('beforeExit', () => {
+    void shutdownSharedClient();
+  });
 }
 
 /**
  * Shutdown the shared server (called by teardown script)
  */
 export async function shutdownSharedClient(): Promise<void> {
-  // OMN-186: end-of-run cost — profiled when FIXTURE_PROFILE=1
+  // OMN-186/OMN-261: real end-of-run cost now (called from the beforeExit
+  // hook inside the actual worker-fork process) — profiled when
+  // FIXTURE_PROFILE=1.
   return profileFixture('globalTeardown', 'shutdownSharedClient', async () => {
-    if (sharedClient) {
+    const state = getState();
+    if (state.client) {
       console.log('🧹 Shutting down shared MCP server...');
-      await sharedClient.thoroughCleanup();
-      await sharedClient.stop();
-      sharedClient = null;
-      initPromise = null;
-      isFirstAccess = true; // Reset for next test run
+      await state.client.thoroughCleanup();
+      await state.client.stop();
+      state.client = null;
+      state.initPromise = null;
+      state.isFirstAccess = true; // Reset for next test run
       console.log('✅ Shared MCP server shutdown complete');
     }
   });
@@ -207,8 +248,9 @@ export async function shutdownSharedClient(): Promise<void> {
  * Export for tests that want synchronous access (after initialization)
  */
 export function getSharedClientSync(): MCPTestClient {
-  if (!sharedClient) {
+  const state = getState();
+  if (!state.client) {
     throw new Error('Shared MCP client not initialized. Call getSharedClient() first.');
   }
-  return sharedClient;
+  return state.client;
 }

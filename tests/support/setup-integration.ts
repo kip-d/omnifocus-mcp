@@ -14,7 +14,6 @@
  * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
-import { shutdownSharedClient } from '../integration/helpers/shared-server.js';
 import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
 import {
   acquireIntegrationLock,
@@ -162,8 +161,11 @@ export async function teardown() {
     console.warn('[Integration Teardown] Post-cleanup scan failed:', error);
   }
 
-  // Shutdown shared client
-  await shutdownSharedClient();
+  // OMN-261: shared-client shutdown no longer lives here — globalTeardown
+  // runs in a separate OS process from the worker fork that owns the real
+  // client, so this call could never reach it (confirmed dead at 1 call/0s
+  // in the 2026-07-08 profile). shared-server.ts now registers its own
+  // process.once('beforeExit', ...) hook inside the worker fork itself.
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.
   stopOrphanWatchdog?.();
