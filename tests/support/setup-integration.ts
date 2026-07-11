@@ -15,6 +15,7 @@
  */
 
 import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
+import { killOrphanedSharedServer } from '../integration/helpers/shared-server.js';
 import {
   acquireIntegrationLock,
   DEFAULT_LOCK_PATH,
@@ -57,6 +58,11 @@ export async function setup() {
   stopOrphanWatchdog = startOrphanWatchdog();
 
   console.log('[Integration Setup] Running startup cleanup sweep...');
+
+  // OMN-261: a crashed prior run may have left its shared server's PID file
+  // behind with the process still alive (or, more likely, already dead) —
+  // clear it before this run starts its own.
+  killOrphanedSharedServer();
 
   try {
     // OMN-186 Phase 2: explicit full — the lock acquired above would make an
@@ -161,11 +167,14 @@ export async function teardown() {
     console.warn('[Integration Teardown] Post-cleanup scan failed:', error);
   }
 
-  // OMN-261: shared-client shutdown no longer lives here — globalTeardown
-  // runs in a separate OS process from the worker fork that owns the real
-  // client, so this call could never reach it (confirmed dead at 1 call/0s
-  // in the 2026-07-08 profile). shared-server.ts now registers its own
-  // process.once('beforeExit', ...) hook inside the worker fork itself.
+  // OMN-261: the beforeExit hook shared-server.ts registers inside the
+  // worker fork is defense-in-depth only — investigation confirmed Vitest's
+  // forks-pool teardown (an external SIGTERM/SIGKILL from tinypool, no
+  // in-worker signal handler for non-profiling runs) gives the worker zero
+  // JS-level teardown opportunity, so beforeExit realistically never fires.
+  // This PID-file kill runs from THIS process instead, which always executes
+  // regardless of how the worker fork itself was torn down.
+  killOrphanedSharedServer();
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.
   stopOrphanWatchdog?.();

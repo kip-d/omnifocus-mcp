@@ -59,6 +59,11 @@ export class MCPTestClient {
   private sessionId: string = generateSessionId(); // Unique session tag for efficient cleanup
   private options: MCPTestClientOptions;
 
+  /** PID of the spawned server child process, once `startServer()` has run. */
+  get pid(): number | undefined {
+    return this.transport.child.pid;
+  }
+
   private cleanupMetrics: CleanupMetrics = {
     startTime: 0,
     operations: 0,

@@ -12,10 +12,68 @@
  * test pollution. This ensures each test file starts with a fresh cache state.
  */
 
+import { mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
+import { pidIsAlive } from '../../support/integration-guard.js';
+
+// OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
+// DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
+// exit hook can be relied on to shut this down.
+const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
+
+function recordSharedServerPid(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    mkdirSync(path.dirname(SHARED_SERVER_PID_PATH), { recursive: true });
+    writeFileSync(SHARED_SERVER_PID_PATH, String(pid), 'utf-8');
+  } catch {
+    // Best-effort — losing this only loses the deterministic-cleanup path,
+    // not correctness of the suite itself.
+  }
+}
+
+/**
+ * OMN-261: call from a DIFFERENT process than the one that spawned the
+ * server (e.g. globalTeardown) — see Task 3b for why no hook registered
+ * inside the vitest worker fork process can be relied on here.
+ */
+export function killOrphanedSharedServer(
+  opts: {
+    pidFilePath?: string;
+    isPidAlive?: (pid: number) => boolean;
+    kill?: (pid: number, signal: string) => void;
+  } = {},
+): void {
+  const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
+  const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
+
+  let raw: string;
+  try {
+    raw = readFileSync(pidFilePath, 'utf-8').trim();
+  } catch {
+    return; // no PID file — nothing to do
+  }
+  try {
+    unlinkSync(pidFilePath);
+  } catch {
+    /* already gone — fine, we still act on what we read */
+  }
+
+  const pid = Number.parseInt(raw, 10);
+  if (!Number.isFinite(pid) || pid <= 0) return;
+  if (!isAlive(pid)) return;
+  try {
+    kill(pid, 'SIGTERM');
+  } catch {
+    /* gone between the liveness check and the kill; harmless */
+  }
+}
 
 interface SharedServerState {
   client: MCPTestClient | null;
@@ -197,6 +255,7 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
     const client = new MCPTestClient({ enableCacheWarming: true });
     state.client = client;
     await client.startServer();
+    recordSharedServerPid(client.pid);
     console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
     await warmupOmniFocus(client);
     console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
