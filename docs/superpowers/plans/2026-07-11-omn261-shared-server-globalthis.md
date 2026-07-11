@@ -42,93 +42,93 @@ no test-file edits. Do not implement `isolate: false` as part of this plan.
 
 **Files:**
 
-- Create: `tests/integration/_diagnostics/module-isolation-probe-a.test.ts`
-- Create: `tests/integration/_diagnostics/module-isolation-probe-b.test.ts`
-- Create: `tests/integration/_diagnostics/module-isolation-probe-z-verify.test.ts`
+- Create: `tests/integration/_diagnostics/module-isolation-probe-1.test.ts`
+- Create: `tests/integration/_diagnostics/module-isolation-probe-2.test.ts`
 
 This proves — empirically, against the _real_ integration-suite vitest config (`pool:'forks'`, `singleFork:true`), not a
 simulation — that module-scope state resets per file while `globalThis` does not. It's a permanent regression pin: if a
 future vitest upgrade or config change alters this behavior, this test fails loudly instead of silently reintroducing
-the per-file-respawn bug. Order-independent (doesn't assume file A runs before B).
+the per-file-respawn bug.
 
-- [ ] **Step 1: Write the three probe files**
+**Design note (revised 2026-07-11 after a real flake was caught during implementation):** the first draft of this task
+used a third `-z-verify` file whose name was chosen to sort after `-a`/`-b`, assuming vitest's default file-discovery
+order runs it last. That assumption is false in practice: vitest 3.2.4's default `BaseSequencer` persists a per-file
+pass/fail/duration cache (`node_modules/.vite/vitest/**/results.json`) and reorders files by it on every run after the
+first — independent of filename. Confirmed directly: cold cache → 3/3 pass in name order; any warm-cache rerun →
+deterministic failure with the verify file's `beforeAll` running before file B's. The fix below eliminates the ordering
+dependency entirely instead of working around the cache (`--no-cache` isn't viable for a permanent pin that runs as part
+of the normal `vitest tests/integration --run` invocation) or falling back to `vi.resetModules()` (that would duplicate
+Task 2's unit-level proof and lose the point of this task, which is proving the behavior against the _real_ multi-file
+suite execution, not a simulation within one file).
 
-`tests/integration/_diagnostics/module-isolation-probe-a.test.ts`:
+Two probe files, no separate verify file. Each does the SAME thing: assert its own module-scope state is fresh
+(order-independent — true for every file regardless of when it runs), then record a globalThis observation. Whichever
+file happens to run _last_ — tracked via a shared counter, not filename — does the aggregate cross-file assertion. This
+is correct no matter what vitest's sequencer decides, and self-checks: if two files ever ran with any lost-update race
+(they can't, under `singleFork:true`'s single OS process with synchronous same-tick increments, but the assertion would
+catch it if that ever changed), the aggregate values wouldn't come out as the expected `[0, 1]`.
 
-```typescript
-import { describe, it, beforeAll } from 'vitest';
+- [ ] **Step 1: Write the two probe files**
 
-// OMN-261: proves vitest's per-file module isolation (default `isolate: true`
-// for the `forks` pool) resets this file's own module-scope state, while
-// globalThis survives across files in the same singleFork process. See
-// module-isolation-probe-z-verify.test.ts for the assertions — this file and
-// -b.test.ts only record observations, since file execution order isn't
-// guaranteed by the vitest API.
-let moduleScopeCounter = 0;
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __omn261ProbeCounter: number | undefined;
-  // eslint-disable-next-line no-var
-  var __omn261ProbeResults:
-    | Array<{ file: string; moduleScopeSeenBefore: number; globalThisSeenBefore: number }>
-    | undefined;
-}
-
-describe('module isolation probe (file a)', () => {
-  let moduleScopeSeenBefore = -1;
-  let globalThisSeenBefore = -1;
-
-  beforeAll(() => {
-    moduleScopeSeenBefore = moduleScopeCounter;
-    moduleScopeCounter++;
-    globalThisSeenBefore = globalThis.__omn261ProbeCounter ?? 0;
-    globalThis.__omn261ProbeCounter = globalThisSeenBefore + 1;
-    globalThis.__omn261ProbeResults ??= [];
-    globalThis.__omn261ProbeResults.push({ file: 'a', moduleScopeSeenBefore, globalThisSeenBefore });
-  });
-
-  it('records its observation', () => {
-    // Assertion lives in the -z-verify file; this just needs to run.
-  });
-});
-```
-
-`tests/integration/_diagnostics/module-isolation-probe-b.test.ts` — identical to `-a.test.ts` except `file: 'b'` in the
-pushed result and the describe label says `(file b)`.
-
-`tests/integration/_diagnostics/module-isolation-probe-z-verify.test.ts`:
+`tests/integration/_diagnostics/module-isolation-probe-1.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
 
-// OMN-261: named `-z-` to sort after -a and -b in vitest's default file
-// discovery order. Verifies the CROSS-FILE behavior both probes recorded.
-describe('module isolation probe (verification)', () => {
-  it('module-scope state resets per file; globalThis state persists across files', () => {
-    const results = globalThis.__omn261ProbeResults ?? [];
-    expect(results).toHaveLength(2);
+// OMN-261: proves vitest's per-file module isolation (default `isolate: true`
+// for the `forks` pool) resets this file's own module-scope state, while
+// globalThis survives across files in the same singleFork process.
+//
+// Order-independent by design: vitest's default sequencer reorders files by a
+// persisted pass/fail/duration cache, NOT file name, so this can't assume
+// "file 1 runs before file 2". Whichever of the TWO probe files happens to
+// run last does the aggregate assertion, tracked via a shared counter.
+const TOTAL_PROBE_FILES = 2;
 
-    // Every file saw a FRESH module-scope counter (proves isolate:true resets
-    // top-level `let` bindings per file, even under singleFork:true).
-    for (const r of results) {
-      expect(r.moduleScopeSeenBefore).toBe(0);
+let moduleScopeCounter = 0;
+
+declare global {
+  var __omn261ProbeCounter: number | undefined;
+  var __omn261ProbeSeenValues: number[] | undefined;
+  var __omn261ProbeFilesRun: number | undefined;
+}
+
+describe('module isolation probe (file 1)', () => {
+  it('sees fresh module-scope state; records a persistent globalThis observation', () => {
+    const moduleScopeSeenBefore = moduleScopeCounter;
+    moduleScopeCounter++;
+    // Order-independent: EVERY file starts with a fresh module-scope binding
+    // if isolate:true is in effect, regardless of which file runs first.
+    expect(moduleScopeSeenBefore).toBe(0);
+
+    const globalThisSeenBefore = globalThis.__omn261ProbeCounter ?? 0;
+    globalThis.__omn261ProbeCounter = globalThisSeenBefore + 1;
+    globalThis.__omn261ProbeSeenValues ??= [];
+    globalThis.__omn261ProbeSeenValues.push(globalThisSeenBefore);
+
+    globalThis.__omn261ProbeFilesRun = (globalThis.__omn261ProbeFilesRun ?? 0) + 1;
+    if (globalThis.__omn261ProbeFilesRun === TOTAL_PROBE_FILES) {
+      // Whichever file happens to run last (by vitest's sequencer) verifies
+      // the aggregate: both files must have seen DIFFERENT globalThis values
+      // (0 and 1, in some order) — proof that globalThis persisted across
+      // the per-file module-scope reset.
+      const seen = [...globalThis.__omn261ProbeSeenValues].sort((x, y) => x - y);
+      expect(seen).toEqual([0, 1]);
     }
-
-    // The two files' globalThis-seen-before values are {0, 1} in SOME order —
-    // proves one file saw the OTHER file's increment (globalThis persists
-    // across the per-file module reset).
-    const globalThisSeen = results.map((r) => r.globalThisSeenBefore).sort();
-    expect(globalThisSeen).toEqual([0, 1]);
   });
 });
 ```
 
-- [ ] **Step 2: Run the three probe files together to confirm they pass**
+`tests/integration/_diagnostics/module-isolation-probe-2.test.ts` — byte-for-byte identical except the `describe` label
+reads `'module isolation probe (file 2)'`.
 
-Run: `npm run build && npx vitest tests/integration/_diagnostics --run` Expected: 3 files, 3 tests, all PASS. If the
-verify assertions fail, STOP — the root-cause hypothesis is wrong and Task 2's fix premise is invalid; report back
-instead of proceeding.
+- [ ] **Step 2: Run the two probe files together to confirm they pass, repeatedly (to rule out the cache-reordering
+      flake)**
+
+Run: `npm run build && npx vitest tests/integration/_diagnostics --run` three times in a row (warm cache on the 2nd/3rd
+runs — this is the condition that exposed the original flake). Expected: 2 files, 2 tests, all PASS, every time. If any
+run fails, STOP — the root-cause hypothesis is wrong and Task 2's fix premise is invalid; report back instead of
+proceeding.
 
 - [ ] **Step 3: Commit**
 
