@@ -167,6 +167,8 @@ describe('server entrypoint', () => {
     process.stdin.removeAllListeners('close');
     process.stdout.removeAllListeners('error');
     process.stderr.removeAllListeners('error');
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
   });
 
   it('connects the transport before cache warming completes (OMN-228)', async () => {
@@ -331,6 +333,62 @@ describe('server entrypoint', () => {
 
       lastRegisteredPendingOps?.add(deferred.promise);
       (process.stdin as any).emit('end');
+      expect(serverCloseMock).not.toHaveBeenCalled();
+
+      deferred.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('waits for pending operations on SIGTERM before exiting (OMN-261 review)', async () => {
+    // Previously stdio mode registered no SIGTERM handler at all, so an
+    // external SIGTERM (e.g. a test harness killing this process directly)
+    // hit Node's default disposition — immediate termination, no drain of
+    // pendingOperations — instead of the same graceful path stdin-close uses.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+
+      lastRegisteredPendingOps?.add(deferred.promise);
+      process.emit('SIGTERM');
+      expect(serverCloseMock).not.toHaveBeenCalled();
+
+      deferred.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('waits for pending operations on SIGINT before exiting (OMN-261 review)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+
+      lastRegisteredPendingOps?.add(deferred.promise);
+      process.emit('SIGINT');
       expect(serverCloseMock).not.toHaveBeenCalled();
 
       deferred.resolve();

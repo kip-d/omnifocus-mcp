@@ -167,13 +167,12 @@ export async function teardown() {
     console.warn('[Integration Teardown] Post-cleanup scan failed:', error);
   }
 
-  // OMN-261: the beforeExit hook shared-server.ts registers inside the
-  // worker fork is defense-in-depth only — investigation confirmed Vitest's
-  // forks-pool teardown (an external SIGTERM/SIGKILL from tinypool, no
-  // in-worker signal handler for non-profiling runs) gives the worker zero
-  // JS-level teardown opportunity, so beforeExit realistically never fires.
-  // This PID-file kill runs from THIS process instead, which always executes
-  // regardless of how the worker fork itself was torn down.
+  // OMN-261: the worker fork that owns the shared client gets zero JS-level
+  // teardown opportunity under Vitest's forks-pool teardown (an external
+  // SIGTERM/SIGKILL from tinypool, no in-worker signal handler for
+  // non-profiling runs — see shared-server.ts's shutdownSharedClient
+  // docstring). This PID-file kill runs from THIS process instead, which
+  // always executes regardless of how the worker fork itself was torn down.
   killOrphanedSharedServer();
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.

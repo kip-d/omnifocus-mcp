@@ -267,6 +267,20 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
     }
   });
 
+  // OMN-261 review: stdio mode previously handled only stdin closure and
+  // EPIPE as exit triggers — an external SIGTERM (e.g. a test harness or
+  // process manager killing this process directly) hit Node's default
+  // disposition (immediate termination, no drain of pendingOperations) with
+  // no application code running. Route both through the same gracefulExit
+  // path the other triggers already use.
+  process.on('SIGTERM', () => {
+    gracefulExit('SIGTERM received');
+  });
+
+  process.on('SIGINT', () => {
+    gracefulExit('SIGINT received');
+  });
+
   await stdioServer.connect(transport);
   startupTimer.mark('ready');
   logger.info(startupTimer.summary('stdio'));

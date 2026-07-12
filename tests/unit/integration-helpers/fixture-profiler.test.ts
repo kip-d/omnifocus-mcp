@@ -125,4 +125,39 @@ describe('profileFixture', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('remembers warnedWriteFailure across a module reset (OMN-261 review: same vitest per-file isolation bug fixed elsewhere)', async () => {
+    // warnedWriteFailure/logDirEnsured used to be plain module-scope `let`
+    // bindings — the exact pattern OMN-261 diagnosed and fixed for
+    // shared-server.ts, left unconverted here. vi.resetModules() simulates
+    // vitest's per-file module-registry reset; the warn-once guard must
+    // still hold across the reset-reimported module instance, proving this
+    // state now lives on globalThis rather than resetting per file.
+    process.env.FIXTURE_PROFILE = '1';
+    process.env.FIXTURE_PROFILE_LOG = join(logPath, 'child.jsonl'); // parent is a FILE, so every write fails
+    const { writeFileSync } = await import('fs');
+    writeFileSync(logPath, 'occupied');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Reset the shared globalThis slot — an earlier test in this same file
+    // ("warns once") already flipped warnedWriteFailure to true there, and
+    // (unlike module-scope `let`) that state now outlives this test's own
+    // vi.resetModules() call below, so it must be cleared explicitly first.
+    delete (globalThis as unknown as Record<symbol, unknown>)[Symbol.for('omnifocus-mcp:fixture-profiler-state')];
+
+    try {
+      const mod1 = await import('../../../tests/integration/helpers/fixture-profiler.js');
+      await mod1.profileFixture('beforeAll', 'first', () => Promise.resolve('a'));
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      vi.resetModules();
+      const mod2 = await import('../../../tests/integration/helpers/fixture-profiler.js');
+      await mod2.profileFixture('beforeAll', 'second', () => Promise.resolve('b'));
+
+      // Still 1, not 2 — the reset-reimported module instance saw
+      // warnedWriteFailure already true via the shared globalThis slot.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

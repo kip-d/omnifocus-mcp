@@ -33,8 +33,8 @@ export function recordSharedServerPid(pid: number | undefined, pidFilePath: stri
     writeFileSync(pidFilePath, String(pid), 'utf-8');
   } catch (error) {
     // OMN-261 review: silent failure here defeats the only shutdown path
-    // that's actually load-bearing (the beforeExit hook realistically never
-    // fires — see registerShutdownHook). Losing this doesn't break suite
+    // that's actually load-bearing (killOrphanedSharedServer, called from
+    // globalTeardown — see below). Losing this doesn't break suite
     // correctness, but it must be visible, not silent.
     console.warn(
       `[shared-server] Failed to record shared-server PID ${pid} at ${pidFilePath} — deterministic shutdown cleanup will not run for this process:`,
@@ -85,7 +85,6 @@ interface SharedServerState {
   client: MCPTestClient | null;
   initPromise: Promise<MCPTestClient> | null;
   isFirstAccess: boolean;
-  shutdownHookRegistered: boolean;
 }
 
 // OMN-261: module-scope `let` bindings reset on every test file under
@@ -97,7 +96,6 @@ function getState(): SharedServerState {
     client: null,
     initPromise: null,
     isFirstAccess: true,
-    shutdownHookRegistered: false,
   }));
 }
 
@@ -267,7 +265,6 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
       await warmupOmniFocus(client);
       console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
       state.isFirstAccess = false; // First access complete
-      registerShutdownHook();
       return client;
     } catch (error) {
       // OMN-261 review: state is now genuinely shared across the whole run
@@ -286,28 +283,28 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
   return state.initPromise;
 }
 
-// OMN-261: setup-integration.ts's globalTeardown runs in a separate OS
-// process from the worker fork that actually owns this client — its call to
-// shutdownSharedClient() can never reach `state.client` there (confirmed:
-// the 2026-07-08 profiler logged that call at 1 call/0s, impossible for a
-// real IPC-round-trip shutdown). Register a real in-process graceful
-// shutdown instead, once, the first time a client is created.
-function registerShutdownHook(): void {
-  const state = getState();
-  if (state.shutdownHookRegistered) return;
-  state.shutdownHookRegistered = true;
-  process.once('beforeExit', () => {
-    void shutdownSharedClient();
-  });
-}
-
 /**
- * Shutdown the shared server (called by teardown script)
+ * Gracefully shut down the shared server: drains via thoroughCleanup() (an
+ * ID-based bulk delete of everything this client created) then stops the
+ * process.
+ *
+ * OMN-261 review: this function currently has NO automatic caller. It used
+ * to be wired to a `process.once('beforeExit', ...)` hook, but that hook was
+ * removed after investigation confirmed it realistically never fires under
+ * a real `vitest --run` (Vitest's forks-pool teardown is an external
+ * SIGTERM/SIGKILL from tinypool with no in-worker signal handler registered
+ * outside Node's profiling flags — see git history for the investigation).
+ * The actual load-bearing cleanup path is killOrphanedSharedServer() below,
+ * called from globalTeardown — but that runs in a SEPARATE OS process from
+ * the one holding `state.client`, so it can only send a blunt SIGTERM, not
+ * invoke this function's graceful ID-based cleanup. Whether/how to wire
+ * graceful cleanup back in (e.g. from the last test file's own afterAll) is
+ * tracked in OMN-263 — kept here as a tested, reusable unit rather than
+ * deleted outright, since fullCleanup()'s prefix-based scan is a coarser
+ * safety net, not a replacement for ID-based cleanup.
  */
 export async function shutdownSharedClient(): Promise<void> {
-  // OMN-186/OMN-261: real end-of-run cost now (called from the beforeExit
-  // hook inside the actual worker-fork process) — profiled when
-  // FIXTURE_PROFILE=1.
+  // OMN-186: profiled when FIXTURE_PROFILE=1, for whenever this is invoked.
   return profileFixture('globalTeardown', 'shutdownSharedClient', async () => {
     const state = getState();
     if (state.client) {

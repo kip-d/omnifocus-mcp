@@ -176,12 +176,14 @@ Fix: move the three pieces of state onto a `globalThis`-keyed slot (`tests/integ
 the one thing per-file module isolation does not reset within a single OS process. Zero test-file edits, same invariant
 OMN-186 held to.
 
-Shutdown is two-layered. A `process.once('beforeExit', ...)` hook inside the worker fork is defense-in-depth only —
-investigation found it realistically never fires under a real `vitest --run`, since tinypool's
-`ProcessWorker .terminate()` SIGTERMs the worker externally and no in-worker signal handler is registered outside Node's
-own profiling flags. The load-bearing mechanism is a PID-file kill (`killOrphanedSharedServer`, mirroring the OMN-143
-lock's PID-in-a-file pattern) called from `globalTeardown` — a different process than the one that spawned the server —
-plus defensively at the start of the next run, in case a crashed prior run left its server alive.
+Shutdown is a PID-file kill (`killOrphanedSharedServer`, mirroring the OMN-143 lock's PID-in-a-file pattern) called from
+`globalTeardown` — a different process than the one that spawned the server — plus defensively at the start of the next
+run, in case a crashed prior run left its server alive. An earlier design also registered a
+`process.once('beforeExit', ...)` hook inside the worker fork as a second layer, but investigation found it
+realistically never fires under a real `vitest --run` (tinypool's `ProcessWorker.terminate()` SIGTERMs the worker
+externally, no in-worker signal handler registered outside Node's own profiling flags) — it was removed as confirmed
+dead code (`/code-review high` finding, 2026-07-12). `shutdownSharedClient()`'s graceful, ID-based cleanup
+(`thoroughCleanup()`) is kept as a tested, reusable unit but currently has no automatic caller — tracked in OMN-263.
 
 **Call-count delta:**
 
@@ -203,9 +205,9 @@ figure, and is called out as such rather than presented as data.
   passed 9/9 clean, and the subsequent full clean re-run passed 202/202.)
 - Zero orphaned `dist/index.js` processes: before/after `pgrep -fl 'dist/index.js'` snapshots were byte-identical across
   every run.
-- `shutdownSharedClient` shows zero entries in `fixture-profile.jsonl` in every run — expected, per the
-  `beforeExit`-never-fires finding above. The PID-file path is invisible to this profiler (it runs from a different
-  process) but is confirmed working by the zero-orphan-process result.
+- `shutdownSharedClient` shows zero entries in `fixture-profile.jsonl` in every run — expected, since it currently has
+  no automatic caller (see above). The PID-file path is invisible to this profiler (it runs from a different process)
+  but is confirmed working by the zero-orphan-process result.
 - As with OMN-186, raw suite wall is not the tracked metric here — this is a correctness/resource-leak fix (spawning 13
   servers instead of 1 wasted OS processes and OmniFocus warm-up time, but the suite was already fixture-noise-dominated
   per the TL;DR above, so wall-clock delta is not a reliable signal for this change either).
