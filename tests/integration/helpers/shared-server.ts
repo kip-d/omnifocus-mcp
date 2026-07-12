@@ -92,10 +92,13 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  *
  * OMN-263: before signaling the PID this reads from the file, verifies its
  * command line looks like our spawned server (`commandMatchesPid` against
- * `dist/index.js`) — plain `isPidAlive` can't tell "still our orphan" apart
- * from "OS reassigned this PID number to something unrelated after our
- * orphan already exited." See integration-guard.ts's `commandMatchesPid` for
- * the shared identity-check primitive (also used by the OMN-143 lock).
+ * mcp-test-client.ts's resolved absolute `SERVER_PATH` — NOT a bare
+ * `dist/index.js` substring, which couldn't distinguish this checkout's
+ * server from an unrelated one, e.g. a real production server) — plain
+ * `isPidAlive` can't tell "still our orphan" apart from "OS reassigned this
+ * PID number to something unrelated after our orphan already exited." See
+ * integration-guard.ts's `commandMatchesPid` for the shared identity-check
+ * primitive (also used by the OMN-143 lock).
  *
  * By default, polls after sending SIGTERM so callers can rely on the orphan
  * actually being gone (or log a warning that it wasn't) before touching
