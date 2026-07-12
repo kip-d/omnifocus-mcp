@@ -150,3 +150,52 @@ make their own correctness assertion vacuous. The post-run `scanForFixtures` fai
 (`npm run test:cleanup -- --apply`) pass explicit full and never scope down. In profiler logs the scoped sweeps record
 op `fullCleanup.scoped`, so before/after aggregations can split the modes — expect the ~109 s baseline to drop by
 roughly 10/15 of the scoped sweeps' savings, not the full amount.
+
+## Cross-file shared server via globalThis (OMN-261)
+
+Before this fix, `shared-server.ts`'s module-scope `let sharedClient`/`initPromise`/`isFirstAccess` bindings reset on
+every test file under vitest's default per-file `isolate: true` (the `forks` pool default) — independent of
+`singleFork: true`, which only guarantees one OS process, not one module registry. So despite the file's own docstring
+describing "one server per run," 13 of the suite's 17 `getSharedClient()` call sites each spawned and warmed a brand-new
+MCP server + OmniFocus cache from scratch; the only reuse came from a second call within the same file
+(`4 = (4-1) + (2-1)`, the two files that call it twice). Root cause is confirmed by a permanent regression-pinning test
+(`tests/integration/_diagnostics/module-isolation-probe-*.test.ts`) that proves the isolation behavior against the real
+integration-suite vitest config, not a simulation.
+
+Fix: move the three pieces of state onto a `globalThis`-keyed slot (`tests/integration/helpers/global-singleton.ts`) —
+the one thing per-file module isolation does not reset within a single OS process. Zero test-file edits, same invariant
+OMN-186 held to.
+
+Shutdown is two-layered. A `process.once('beforeExit', ...)` hook inside the worker fork is defense-in-depth only —
+investigation found it realistically never fires under a real `vitest --run`, since tinypool's
+`ProcessWorker .terminate()` SIGTERMs the worker externally and no in-worker signal handler is registered outside Node's
+own profiling flags. The load-bearing mechanism is a PID-file kill (`killOrphanedSharedServer`, mirroring the OMN-143
+lock's PID-in-a-file pattern) called from `globalTeardown` — a different process than the one that spawned the server —
+plus defensively at the start of the next run, in case a crashed prior run left its server alive.
+
+**Call-count delta:**
+
+|                                      | `getSharedClient.init` | `getSharedClient.reuse` |
+| ------------------------------------ | ---------------------- | ----------------------- |
+| Before (2026-07-11 profile)          | 13                     | 4                       |
+| After (2026-07-12 profile, this fix) | 1                      | 16                      |
+
+**Total-seconds:** post-fix, the single init totaled ~11–12 s across two verification runs (11.22 s and 11.52 s),
+consistent with the file's documented ~13 s cache-warm cost. The pre-fix total-seconds for the 13 inits was never
+separately recorded — only the call count was profiled on 2026-07-11 — so there's no measured before/after total-seconds
+delta to report here; a same-cost-per-init extrapolation (13 × ~11.5 s ≈ 150 s) is a plausible estimate, not a measured
+figure, and is called out as such rather than presented as data.
+
+**Verification (2026-07-12, live suite against real OmniFocus, `FIXTURE_PROFILE=1`):**
+
+- 202 tests total, 0 failures, 22 pending, on a clean re-run. (An earlier same-day run hit 1 isolated failure in
+  `update-operations.test.ts`, fully explained by an OmniFocus app crash mid-run — an isolated re-run of just that file
+  passed 9/9 clean, and the subsequent full clean re-run passed 202/202.)
+- Zero orphaned `dist/index.js` processes: before/after `pgrep -fl 'dist/index.js'` snapshots were byte-identical across
+  every run.
+- `shutdownSharedClient` shows zero entries in `fixture-profile.jsonl` in every run — expected, per the
+  `beforeExit`-never-fires finding above. The PID-file path is invisible to this profiler (it runs from a different
+  process) but is confirmed working by the zero-orphan-process result.
+- As with OMN-186, raw suite wall is not the tracked metric here — this is a correctness/resource-leak fix (spawning 13
+  servers instead of 1 wasted OS processes and OmniFocus warm-up time, but the suite was already fixture-noise-dominated
+  per the TL;DR above, so wall-clock delta is not a reliable signal for this change either).
