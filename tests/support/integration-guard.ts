@@ -41,7 +41,7 @@ export function pidIsAlive(pid: number): boolean {
 }
 
 /** Parses lock-file content into a valid holder PID, or undefined if missing/garbage. */
-function parseLockPid(raw: string): number | undefined {
+export function parseLockPid(raw: string): number | undefined {
   const pid = Number.parseInt(raw, 10);
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
 }

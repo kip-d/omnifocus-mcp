@@ -19,15 +19,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { RUN_ID_GLOBAL_KEY } from '../../integration/helpers/run-id.js';
+import { RUN_ID_SLOT_KEY } from '../../integration/helpers/run-id.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../../integration/helpers/sandbox-manager.js';
+import { clearGlobalSlot } from '../../integration/helpers/global-singleton.js';
 
 // Imported (not duplicated as a string literal) so this can never drift out
-// of sync with the real key run-id.ts caches RUN_ID under — Symbol.for(key)
-// is idempotent from the global symbol registry, so this stays valid even
-// after vi.resetModules() re-evaluates run-id.ts's module bindings.
+// of sync with the real slot run-id.ts caches RUN_ID under.
 function clearGlobalRunId(): void {
-  delete (globalThis as unknown as Record<symbol, unknown>)[RUN_ID_GLOBAL_KEY];
+  clearGlobalSlot(RUN_ID_SLOT_KEY);
 }
 
 // Reset the runId module before each test so each block starts clean.

@@ -14,8 +14,8 @@
  * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
-import { shutdownSharedClient } from '../integration/helpers/shared-server.js';
 import { fullCleanup, scanForFixtures } from '../integration/helpers/sandbox-manager.js';
+import { killOrphanedSharedServer } from '../integration/helpers/shared-server.js';
 import {
   acquireIntegrationLock,
   DEFAULT_LOCK_PATH,
@@ -58,6 +58,13 @@ export async function setup() {
   stopOrphanWatchdog = startOrphanWatchdog();
 
   console.log('[Integration Setup] Running startup cleanup sweep...');
+
+  // OMN-261: a crashed prior run may have left its shared server's PID file
+  // behind with the process still alive (or, more likely, already dead) —
+  // clear it before this run starts its own. Awaited: killOrphanedSharedServer
+  // polls until the orphan is confirmed gone (or times out) so the sweep
+  // below doesn't drive OmniFocus concurrently with a still-exiting orphan.
+  await killOrphanedSharedServer();
 
   try {
     // OMN-186 Phase 2: explicit full — the lock acquired above would make an
@@ -162,8 +169,18 @@ export async function teardown() {
     console.warn('[Integration Teardown] Post-cleanup scan failed:', error);
   }
 
-  // Shutdown shared client
-  await shutdownSharedClient();
+  // OMN-261: the worker fork that owns the shared client gets zero JS-level
+  // teardown opportunity under Vitest's forks-pool teardown (an external
+  // SIGTERM/SIGKILL from tinypool, no in-worker signal handler for
+  // non-profiling runs — see shared-server.ts's shutdownSharedClient
+  // docstring). This PID-file kill runs from THIS process instead, which
+  // always executes regardless of how the worker fork itself was torn down.
+  // `waitForExit: false`: nothing OmniFocus-related follows this call
+  // (teardown is nearly done), so there's no race to protect against — and
+  // waiting would just produce a false-alarm "didn't exit" warning on a
+  // zombie awaiting reap by the worker fork, which this process can never
+  // observe (see killOrphanedSharedServer's docstring).
+  await killOrphanedSharedServer({ waitForExit: false });
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.
   stopOrphanWatchdog?.();

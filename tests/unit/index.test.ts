@@ -167,6 +167,8 @@ describe('server entrypoint', () => {
     process.stdin.removeAllListeners('close');
     process.stdout.removeAllListeners('error');
     process.stderr.removeAllListeners('error');
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
   });
 
   it('connects the transport before cache warming completes (OMN-228)', async () => {
@@ -339,6 +341,159 @@ describe('server entrypoint', () => {
       expect(serverCloseMock).toHaveBeenCalledTimes(1);
       expect(exitSpy).toHaveBeenCalledWith(0);
     } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('waits for pending operations on SIGTERM before exiting (OMN-261 review)', async () => {
+    // Previously stdio mode registered no SIGTERM handler at all, so an
+    // external SIGTERM (e.g. a test harness killing this process directly)
+    // hit Node's default disposition — immediate termination, no drain of
+    // pendingOperations — instead of the same graceful path stdin-close uses.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+
+      lastRegisteredPendingOps?.add(deferred.promise);
+      process.emit('SIGTERM');
+      expect(serverCloseMock).not.toHaveBeenCalled();
+
+      deferred.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('waits for pending operations on SIGINT before exiting (OMN-261 review)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+
+      lastRegisteredPendingOps?.add(deferred.promise);
+      process.emit('SIGINT');
+      expect(serverCloseMock).not.toHaveBeenCalled();
+
+      deferred.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('force-exits if pending operations never drain within the SIGTERM/SIGINT timeout (OMN-261 review)', async () => {
+    // A hung osascript/JXA call (e.g. blocked on an OmniFocus permission
+    // dialog) must not make the process permanently unkillable — the signal
+    // handlers bound the drain wait and force-exit if it's exceeded, unlike
+    // the unbounded stdin-close/EPIPE paths.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const neverResolves = new Promise<void>(() => {});
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(neverResolves);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000);
+
+      // Forcing exit must still attempt a bounded close() — CLAUDE.md's
+      // MCP-lifecycle rule requires closing before exit to flush any
+      // already-computed response — it just can't wait on it unboundedly
+      // (that unbounded wait is exactly what's being forced past here).
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      vi.useRealTimers();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('force-exits after a bounded grace period even if close() itself hangs (OMN-261 review)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const neverResolves = new Promise<void>(() => {});
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    serverCloseMock.mockImplementationOnce(() => new Promise<void>(() => {}));
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(neverResolves);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000); // main drain timeout fires, close() called but hangs
+      await vi.advanceTimersByTimeAsync(1000); // belt-and-suspenders grace timer fires
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      vi.useRealTimers();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('does not double-close or exit 0 when the drain finishes just after the force-exit committed (OMN-261 review)', async () => {
+    // The force-exit timer and the (un-cancellable) gracefulExit drain both
+    // continue running; a shared exitCommitted guard must ensure only the
+    // first path to commit closes the server and picks the exit code, so a
+    // drain that blew its bounded deadline can't still report a clean exit 0.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(deferred.promise);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000); // force timer commits: close() + exit(1)
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+
+      // Drain now finishes, AFTER the forced exit already committed. The
+      // guard must make gracefulExit's own commitExit(0) a no-op.
+      deferred.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).not.toHaveBeenCalledWith(0);
+    } finally {
+      vi.useRealTimers();
       exitSpy.mockRestore();
     }
   });

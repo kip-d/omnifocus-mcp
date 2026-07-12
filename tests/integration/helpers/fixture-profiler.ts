@@ -29,6 +29,7 @@
 import { appendFileSync, mkdirSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { performance } from 'perf_hooks';
+import { getGlobalSlot } from './global-singleton.js';
 
 /**
  * Where in the vitest lifecycle the profiled call runs (best-effort label).
@@ -70,25 +71,48 @@ function currentTestFile(): string {
   return '(global)';
 }
 
-let warnedWriteFailure = false;
-// Ensure the log directory once per run, not per profiled call — the profiler
-// measures fixture overhead, so it must not add a syscall to every event.
-let logDirEnsured = false;
+interface FixtureProfilerState {
+  warnedWriteFailure: boolean;
+  // Ensure the log directory once per run, not per profiled call — the
+  // profiler measures fixture overhead, so it must not add a syscall to
+  // every event.
+  logDirEnsured: boolean;
+}
+
+// Exported so tests that clear this slot in beforeEach import the real key
+// rather than re-typing the literal (OMN-261 review — same drift-safety as
+// SHARED_SERVER_STATE_SLOT / RUN_ID_SLOT_KEY).
+export const FIXTURE_PROFILER_STATE_SLOT = 'fixture-profiler-state';
+
+// OMN-261 review: module-scope `let` bindings here had the SAME per-file
+// vitest isolation bug OMN-261 diagnosed and fixed for shared-server.ts's
+// state (isolate:true resets top-level bindings per file even under
+// singleFork:true) — converted to the same globalThis-keyed slot so "once
+// per run" is actually once per run, not once per file. The warn-once guard
+// is deliberately run-scoped: its job is a single "profile data is
+// incomplete, distrust this run's log" signal, not a per-file failure count.
+function getProfilerState(): FixtureProfilerState {
+  return getGlobalSlot<FixtureProfilerState>(FIXTURE_PROFILER_STATE_SLOT, () => ({
+    warnedWriteFailure: false,
+    logDirEnsured: false,
+  }));
+}
 
 function record(entry: Record<string, unknown>): void {
+  const state = getProfilerState();
   try {
     const path = logPath();
-    if (!logDirEnsured) {
+    if (!state.logDirEnsured) {
       mkdirSync(dirname(path), { recursive: true });
-      logDirEnsured = true;
+      state.logDirEnsured = true;
     }
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
   } catch (err) {
     // Profiling must never fail the fixture call it wraps — but a profiled
     // run whose log can't be written must not finish looking successful
     // (the whole run exists to produce this file), so warn once.
-    if (!warnedWriteFailure) {
-      warnedWriteFailure = true;
+    if (!state.warnedWriteFailure) {
+      state.warnedWriteFailure = true;
       console.warn(`[fixture-profiler] failed to write ${logPath()}: ${String(err)} — profile data will be incomplete`);
     }
   }

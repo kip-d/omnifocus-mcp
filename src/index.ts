@@ -206,6 +206,34 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
 
   const transport = new StdioServerTransport();
 
+  // OMN-261 review: a single guard so exactly ONE shutdown path commits to
+  // closing + exiting. Multiple triggers can now race — a signal-driven
+  // force-exit timer (below) and the un-cancellable gracefulExit drain it
+  // raced, repeated signals, or a signal arriving mid stdin-close — and
+  // without this each could independently reach stdioServer.close()/
+  // process.exit(): double-closing the transport and exiting with
+  // contradictory codes (a drain that blew its bounded deadline could still
+  // report 0). Whichever path reaches commitExit first wins; the rest no-op.
+  // The check+set is synchronous, so on JS's single thread there is no
+  // interleaving window between the guard and the claim.
+  let exitCommitted = false;
+  const commitExit = async (code: number) => {
+    if (exitCommitted) return;
+    exitCommitted = true;
+
+    // Close server connection cleanly, allowing transport to flush responses.
+    // Wrapped: on an EPIPE-triggered exit the pipe is already dead and the
+    // flush may itself throw — that must not prevent the exit.
+    logger.info('Closing server connection...');
+    try {
+      await stdioServer.close();
+    } catch (error) {
+      logger.warn('Server close failed during shutdown (continuing to exit):', error);
+    }
+
+    process.exit(code);
+  };
+
   // Handle stdin closure for proper MCP lifecycle compliance
   // Wait for pending operations before exiting
   const gracefulExit = async (reason: string) => {
@@ -221,18 +249,8 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
       }
     }
 
-    // Close server connection cleanly, allowing transport to flush responses.
-    // Wrapped: on an EPIPE-triggered exit the pipe is already dead and the
-    // flush may itself throw — that must not prevent the exit.
-    logger.info('Closing server connection...');
-    try {
-      await stdioServer.close();
-    } catch (error) {
-      logger.warn('Server close failed during shutdown (continuing to exit):', error);
-    }
-
     logger.info('Exiting gracefully per MCP specification');
-    process.exit(0);
+    await commitExit(0);
   };
 
   process.stdin.on('end', () => {
@@ -265,6 +283,61 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
       console.error('stderr error:', err);
       process.exit(1);
     }
+  });
+
+  // OMN-261 review: stdio mode previously handled only stdin closure and
+  // EPIPE as exit triggers — an external SIGTERM (e.g. a test harness or
+  // process manager killing this process directly) hit Node's default
+  // disposition (immediate termination, no drain of pendingOperations) with
+  // no application code running. Route both through the same gracefulExit
+  // path the other triggers already use.
+  //
+  // Unlike the stdin/EPIPE triggers, a signal-driven exit must be bounded:
+  // a caller sending SIGTERM (e.g. killOrphanedSharedServer in the
+  // integration test harness) fires-and-forgets, with no fallback SIGKILL —
+  // if gracefulExit's unbounded await on pendingOperations never resolves
+  // (a hung osascript/JXA call blocked on an OmniFocus dialog), the process
+  // would never exit and become a permanent, unreapable orphan.
+  const SIGNAL_EXIT_TIMEOUT_MS = 5000;
+  // OMN-261 review: forcing exit must not skip stdioServer.close() outright —
+  // this repo's own MCP-lifecycle rule (CLAUDE.md) requires closing before
+  // exit so any already-computed response gets flushed. Give close() a short,
+  // separately-bounded grace period rather than the unbounded wait
+  // gracefulExit gives it normally (that unbounded wait is exactly what
+  // we're forcing past here).
+  const FORCE_CLOSE_GRACE_MS = 1000;
+  const gracefulExitOnSignal = (reason: string) => {
+    const forceExitTimer = setTimeout(() => {
+      // Claim the shared guard synchronously: if the drain's commitExit(0)
+      // already committed, don't also force — and if it hasn't, block it from
+      // committing 0 after we've decided to force 1.
+      if (exitCommitted) return;
+      exitCommitted = true;
+      logger.warn(`${reason}: pending operations did not drain within ${SIGNAL_EXIT_TIMEOUT_MS}ms, forcing exit`);
+      // Deliberately NOT commitExit(): that awaits close() unboundedly, which
+      // is exactly the wait we're forcing past. Give close() its own bounded
+      // grace instead so CLAUDE.md's "close before exit" rule is still honored
+      // on a best-effort basis.
+      void stdioServer
+        .close()
+        .catch((error) => {
+          logger.warn('Server close failed during forced shutdown (continuing to exit):', error);
+        })
+        .finally(() => process.exit(1));
+      // Belt-and-suspenders: if close() itself hangs, don't let the forced
+      // exit become unbounded again.
+      setTimeout(() => process.exit(1), FORCE_CLOSE_GRACE_MS).unref();
+    }, SIGNAL_EXIT_TIMEOUT_MS);
+    forceExitTimer.unref();
+    void gracefulExit(reason).finally(() => clearTimeout(forceExitTimer));
+  };
+
+  process.on('SIGTERM', () => {
+    gracefulExitOnSignal('SIGTERM received');
+  });
+
+  process.on('SIGINT', () => {
+    gracefulExitOnSignal('SIGINT received');
   });
 
   await stdioServer.connect(transport);

@@ -11,7 +11,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync, readFileSync, rmSync, mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { profileFixture, fixtureProfilingEnabled } from '../../../tests/integration/helpers/fixture-profiler.js';
+import {
+  profileFixture,
+  fixtureProfilingEnabled,
+  FIXTURE_PROFILER_STATE_SLOT,
+} from '../../../tests/integration/helpers/fixture-profiler.js';
+import { clearGlobalSlot } from '../../../tests/integration/helpers/global-singleton.js';
 
 let logDir: string;
 let logPath: string;
@@ -121,6 +126,41 @@ describe('profileFixture', () => {
       expect(second).toBe('ok2');
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(String(warnSpy.mock.calls[0][0])).toContain('[fixture-profiler]');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('remembers warnedWriteFailure across a module reset (OMN-261 review: same vitest per-file isolation bug fixed elsewhere)', async () => {
+    // warnedWriteFailure/logDirEnsured used to be plain module-scope `let`
+    // bindings — the exact pattern OMN-261 diagnosed and fixed for
+    // shared-server.ts, left unconverted here. vi.resetModules() simulates
+    // vitest's per-file module-registry reset; the warn-once guard must
+    // still hold across the reset-reimported module instance, proving this
+    // state now lives on globalThis rather than resetting per file.
+    process.env.FIXTURE_PROFILE = '1';
+    process.env.FIXTURE_PROFILE_LOG = join(logPath, 'child.jsonl'); // parent is a FILE, so every write fails
+    const { writeFileSync } = await import('fs');
+    writeFileSync(logPath, 'occupied');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Reset the shared globalThis slot — an earlier test in this same file
+    // ("warns once") already flipped warnedWriteFailure to true there, and
+    // (unlike module-scope `let`) that state now outlives this test's own
+    // vi.resetModules() call below, so it must be cleared explicitly first.
+    clearGlobalSlot(FIXTURE_PROFILER_STATE_SLOT);
+
+    try {
+      const mod1 = await import('../../../tests/integration/helpers/fixture-profiler.js');
+      await mod1.profileFixture('beforeAll', 'first', () => Promise.resolve('a'));
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      vi.resetModules();
+      const mod2 = await import('../../../tests/integration/helpers/fixture-profiler.js');
+      await mod2.profileFixture('beforeAll', 'second', () => Promise.resolve('b'));
+
+      // Still 1, not 2 — the reset-reimported module instance saw
+      // warnedWriteFailure already true via the shared globalThis slot.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
     } finally {
       warnSpy.mockRestore();
     }

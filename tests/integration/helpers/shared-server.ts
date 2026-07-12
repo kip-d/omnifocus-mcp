@@ -12,13 +12,176 @@
  * test pollution. This ensures each test file starts with a fresh cache state.
  */
 
+import { mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
+import { getGlobalSlot } from './global-singleton.js';
+import { pidIsAlive, parseLockPid } from '../../support/integration-guard.js';
 
-let sharedClient: MCPTestClient | null = null;
-let initPromise: Promise<MCPTestClient> | null = null;
-let isFirstAccess = true;
+// OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
+// DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
+// exit hook can be relied on to shut this down.
+const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
+
+export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
+  if (pid === undefined) return;
+  try {
+    mkdirSync(path.dirname(pidFilePath), { recursive: true });
+    writeFileSync(pidFilePath, String(pid), 'utf-8');
+  } catch (error) {
+    // OMN-261 review: silent failure here defeats the only shutdown path
+    // that's actually load-bearing (killOrphanedSharedServer, called from
+    // globalTeardown — see below). Losing this doesn't break suite
+    // correctness, but it must be visible, not silent.
+    console.warn(
+      `[shared-server] Failed to record shared-server PID ${pid} at ${pidFilePath} — deterministic shutdown cleanup will not run for this process:`,
+      error,
+    );
+  }
+}
+
+// OMN-261 review: src/index.ts's SIGTERM handler can legitimately take up to
+// its own SIGNAL_EXIT_TIMEOUT_MS (5s) draining pending operations, plus
+// FORCE_CLOSE_GRACE_MS (1s) attempting a bounded server.close(), before it
+// is guaranteed to have called process.exit() — a 6s worst case. REAP_TIMEOUT_MS
+// gives real margin over that for signal delivery / OS scheduling latency,
+// not just enough to match it.
+const REAP_TIMEOUT_MS = 8000;
+const REAP_POLL_INTERVAL_MS = 100;
+// OMN-261 review: if SIGTERM doesn't land within REAP_TIMEOUT_MS (e.g. the
+// server is wedged on a hung osascript/OmniFocus dialog — src/index.ts's own
+// handler names this), escalate to an unignorable SIGKILL and give it this
+// much longer to be reaped before giving up. The transport.close() path this
+// PID-file mechanism replaced had exactly this SIGTERM→SIGKILL escalation
+// bound; dropping to SIGTERM-only would let a wedged prior-run orphan keep
+// driving OmniFocus during setup()'s fullCleanup sweep.
+const SIGKILL_REAP_TIMEOUT_MS = 2000;
+
+/**
+ * OMN-261: call from a DIFFERENT process than the one that spawned the
+ * server (e.g. globalTeardown) — see Task 3b for why no hook registered
+ * inside the vitest worker fork process can be relied on here.
+ *
+ * By default, polls after sending SIGTERM so callers can rely on the orphan
+ * actually being gone (or log a warning that it wasn't) before touching
+ * OmniFocus themselves — a fire-and-forget kill left a window where both the
+ * dying orphan and the caller's own cleanup sweep could drive OmniFocus at
+ * once. This matters for setup()'s startup sweep, which runs fullCleanup()
+ * right after.
+ *
+ * When waiting, this escalates SIGTERM → SIGKILL if the process outlives
+ * REAP_TIMEOUT_MS, matching the SIGTERM+SIGKILL bound the transport.close()
+ * path had before this PID-file mechanism replaced it.
+ *
+ * Pass `waitForExit: false` when nothing OmniFocus-related follows the call
+ * (e.g. teardown()'s final, nothing-left-to-protect kill) — polling there
+ * doesn't just cost time, it produces a FALSE ALARM: `pidIsAlive`
+ * (`kill(pid, 0)`) can't distinguish "still executing" from "already called
+ * process.exit(), now a zombie awaiting reap by its real parent" (the vitest
+ * worker fork that spawned it — a different process from the one calling
+ * killOrphanedSharedServer here, which can never observe that reap). A real
+ * run hit exactly this: the warning fired on a normal, non-hung shutdown,
+ * at a point where nothing was actually at risk. The tradeoff is that this
+ * path sends only SIGTERM with no SIGKILL escalation; a process wedged AT
+ * teardown is left for the OS to reap when the run's process tree exits,
+ * which is acceptable because (unlike setup) nothing here runs OmniFocus
+ * cleanup afterward that a lingering orphan could corrupt.
+ */
+export async function killOrphanedSharedServer(
+  opts: {
+    pidFilePath?: string;
+    isPidAlive?: (pid: number) => boolean;
+    kill?: (pid: number, signal: string) => void;
+    reapTimeoutMs?: number;
+    reapPollIntervalMs?: number;
+    sigkillReapTimeoutMs?: number;
+    waitForExit?: boolean;
+  } = {},
+): Promise<void> {
+  const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
+  const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
+  const reapTimeoutMs = opts.reapTimeoutMs ?? REAP_TIMEOUT_MS;
+  const reapPollIntervalMs = opts.reapPollIntervalMs ?? REAP_POLL_INTERVAL_MS;
+  const sigkillReapTimeoutMs = opts.sigkillReapTimeoutMs ?? SIGKILL_REAP_TIMEOUT_MS;
+  const waitForExit = opts.waitForExit ?? true;
+
+  let raw: string;
+  try {
+    raw = readFileSync(pidFilePath, 'utf-8').trim();
+  } catch {
+    return; // no PID file — nothing to do
+  }
+  try {
+    unlinkSync(pidFilePath);
+  } catch {
+    /* already gone — fine, we still act on what we read */
+  }
+
+  const pid = parseLockPid(raw);
+  if (pid === undefined) return;
+  if (!isAlive(pid)) return;
+  try {
+    kill(pid, 'SIGTERM');
+  } catch {
+    /* gone between the liveness check and the kill; harmless */
+    return;
+  }
+
+  if (!waitForExit) return;
+
+  const deadline = Date.now() + reapTimeoutMs;
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, reapPollIntervalMs));
+  }
+  if (!isAlive(pid)) return;
+
+  // SIGTERM didn't land within the budget — escalate to SIGKILL, which the
+  // process cannot ignore, then give it a shorter window to actually die.
+  try {
+    kill(pid, 'SIGKILL');
+  } catch {
+    /* died between the check and the escalation; fine */
+    return;
+  }
+  const killDeadline = Date.now() + sigkillReapTimeoutMs;
+  while (isAlive(pid) && Date.now() < killDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, reapPollIntervalMs));
+  }
+  if (isAlive(pid)) {
+    console.warn(
+      `[shared-server] Orphaned server PID ${pid} survived SIGTERM+SIGKILL within ` +
+        `${reapTimeoutMs + sigkillReapTimeoutMs}ms — proceeding with cleanup anyway; ` +
+        'it may still be driving OmniFocus concurrently.',
+    );
+  }
+}
+
+interface SharedServerState {
+  client: MCPTestClient | null;
+  initPromise: Promise<MCPTestClient> | null;
+  isFirstAccess: boolean;
+}
+
+// Exported so tests that clear this slot in beforeEach import the real key
+// rather than re-typing the literal — the same drift-safety the RUN_ID_SLOT_KEY
+// export gives run-id.ts (OMN-261 review).
+export const SHARED_SERVER_STATE_SLOT = 'shared-server-state';
+
+// OMN-261: module-scope `let` bindings reset on every test file under
+// vitest's default per-file isolation, even inside the single OS process
+// `singleFork:true` guarantees — defeating the "one server per run" design
+// this file's docstring already describes. globalThis survives the reset.
+function getState(): SharedServerState {
+  return getGlobalSlot<SharedServerState>(SHARED_SERVER_STATE_SLOT, () => ({
+    client: null,
+    initPromise: null,
+    isFirstAccess: true,
+  }));
+}
 
 /**
  * Warm up OmniFocus + the JXA script execution path inside the spawned MCP server.
@@ -149,55 +312,129 @@ async function warmupOmniFocus(client: MCPTestClient): Promise<void> {
  * between test files.
  */
 export async function getSharedClient(): Promise<MCPTestClient> {
-  // OMN-186: first access pays server start + cache warm + OmniFocus warm;
-  // later per-file accesses pay a cache clear. Split ops so a profiled run
-  // (FIXTURE_PROFILE=1) can tell the one-time warm from the per-file cost.
-  const op = sharedClient || initPromise ? 'getSharedClient.reuse' : 'getSharedClient.init';
+  // OMN-186/OMN-261: first access pays server start + cache warm + OmniFocus
+  // warm; later accesses (now genuinely cross-file, via the global slot) pay
+  // a cache clear. Split ops so a profiled run (FIXTURE_PROFILE=1) can tell
+  // the one-time warm from the per-file cost.
+  const state = getState();
+  const op = state.client || state.initPromise ? 'getSharedClient.reuse' : 'getSharedClient.init';
   return profileFixture('beforeAll', op, getSharedClientImpl);
 }
 
 async function getSharedClientImpl(): Promise<MCPTestClient> {
-  if (sharedClient) {
+  const state = getState();
+
+  if (state.client) {
     // Clear cache between test file accesses to prevent pollution
-    if (!isFirstAccess) {
-      await sharedClient.clearCache();
+    if (!state.isFirstAccess) {
+      await state.client.clearCache();
     }
-    isFirstAccess = false;
-    return sharedClient;
+    state.isFirstAccess = false;
+    return state.client;
   }
 
   // Prevent race conditions if multiple tests start simultaneously
-  if (initPromise) {
-    return initPromise;
+  if (state.initPromise) {
+    return state.initPromise;
   }
 
-  initPromise = (async () => {
+  state.initPromise = (async () => {
     console.log('🚀 Starting shared MCP server for integration tests (with cache warming)...');
-    sharedClient = new MCPTestClient({ enableCacheWarming: true });
-    await sharedClient.startServer();
-    console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
-    await warmupOmniFocus(sharedClient);
-    console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
-    isFirstAccess = false; // First access complete
-    return sharedClient;
+    const client = new MCPTestClient({ enableCacheWarming: true });
+    try {
+      await client.startServer();
+      recordSharedServerPid(client.pid);
+      console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
+      await warmupOmniFocus(client);
+      console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
+      // OMN-261 review: publish state.client ONLY once the client is fully
+      // ready — startServer() AND warmupOmniFocus() both done. The read-path
+      // fast check at the top (`if (state.client)`) does not await
+      // state.initPromise, so any earlier publish let a concurrent caller in
+      // the startServer-done-but-warmup-pending window take that fast path and
+      // receive a client that (a) wasn't warmed yet, and (b) this init's own
+      // catch block below would then stop() on a warmup failure — handing the
+      // concurrent caller a killed-child client instead of the clean
+      // "not initialized, retry via initPromise" behavior. Keeping state.client
+      // null for the whole init keeps every concurrent caller on initPromise.
+      state.client = client;
+      state.isFirstAccess = false; // First access complete
+      return client;
+    } catch (error) {
+      // OMN-261 review: state is now genuinely shared across the whole run
+      // (that's this file's entire point), so a cold-OmniFocus/init failure
+      // must not permanently poison every subsequent file's getSharedClient()
+      // call — reset so the NEXT call gets a fresh attempt instead of
+      // inheriting this broken client/rejected promise forever.
+      //
+      // If startServer() already succeeded (warmupOmniFocus is what threw),
+      // stop the live child now rather than leaning on the PID file: the
+      // NEXT getSharedClient() call overwrites recordSharedServerPid's PID
+      // file with the new client's PID before killOrphanedSharedServer ever
+      // runs, permanently losing the only reference to this orphan.
+      const orphanPid = client.pid;
+      if (orphanPid !== undefined) {
+        try {
+          await client.stop();
+        } catch (stopError) {
+          // OMN-261 review: graceful stop() (transport.close) failed, so the
+          // child may still be alive — and since the PID file is about to be
+          // overwritten by the next retry, this is the last reference to it.
+          // Escalate to an unignorable SIGKILL rather than leak an untracked
+          // stray that can still drive OmniFocus.
+          console.warn(
+            `[shared-server] Graceful stop failed after init failure; escalating to SIGKILL for PID ${orphanPid}:`,
+            stopError,
+          );
+          try {
+            process.kill(orphanPid, 'SIGKILL');
+          } catch {
+            /* already dead between stop() failing and here — fine */
+          }
+        }
+      }
+      state.client = null;
+      state.initPromise = null;
+      throw error;
+    }
   })();
 
-  return initPromise;
+  return state.initPromise;
 }
 
 /**
- * Shutdown the shared server (called by teardown script)
+ * Gracefully shut down the shared server: drains via thoroughCleanup() (an
+ * ID-based bulk delete of everything this client created) then stops the
+ * process.
+ *
+ * OMN-261 review: this function currently has NO automatic caller. It used
+ * to be wired to a `process.once('beforeExit', ...)` hook, but that hook was
+ * removed after investigation confirmed it realistically never fires under
+ * a real `vitest --run` (Vitest's forks-pool teardown is an external
+ * SIGTERM/SIGKILL from tinypool with no in-worker signal handler registered
+ * outside Node's profiling flags — see git history for the investigation).
+ * The actual load-bearing cleanup path is killOrphanedSharedServer() below,
+ * called from globalTeardown — but that runs in a SEPARATE OS process from
+ * the one holding `state.client`, so it can only send a blunt SIGTERM, not
+ * invoke this function's graceful ID-based cleanup. Whether/how to wire
+ * graceful cleanup back in (e.g. from the last test file's own afterAll) is
+ * tracked in OMN-264 — kept here as a reusable unit rather than deleted
+ * outright, since fullCleanup()'s prefix-based scan is a coarser safety net,
+ * not a replacement for ID-based cleanup. It is covered by
+ * shared-server-init-failure.test.ts ('shutdownSharedClient …') so it can't
+ * bit-rot silently while it waits for a caller.
  */
 export async function shutdownSharedClient(): Promise<void> {
-  // OMN-186: end-of-run cost — profiled when FIXTURE_PROFILE=1
+  // OMN-186: profiled when FIXTURE_PROFILE=1, for whenever this is invoked.
   return profileFixture('globalTeardown', 'shutdownSharedClient', async () => {
-    if (sharedClient) {
+    const state = getState();
+    if (state.client) {
       console.log('🧹 Shutting down shared MCP server...');
-      await sharedClient.thoroughCleanup();
-      await sharedClient.stop();
-      sharedClient = null;
-      initPromise = null;
-      isFirstAccess = true; // Reset for next test run
+      await state.client.thoroughCleanup();
+      await state.client.stop();
+      state.client = null;
+      state.initPromise = null;
+      state.isFirstAccess = true; // Reset for next test run
       console.log('✅ Shared MCP server shutdown complete');
     }
   });
@@ -207,8 +444,9 @@ export async function shutdownSharedClient(): Promise<void> {
  * Export for tests that want synchronous access (after initialization)
  */
 export function getSharedClientSync(): MCPTestClient {
-  if (!sharedClient) {
+  const state = getState();
+  if (!state.client) {
     throw new Error('Shared MCP client not initialized. Call getSharedClient() first.');
   }
-  return sharedClient;
+  return state.client;
 }
