@@ -12,7 +12,12 @@
  * Both helpers are dependency-injected so unit tests can drive them without
  * real PIDs, real lock contention, or real process exits.
  */
-import { execFileSync } from 'node:child_process';
+// OMN-263 code-review follow-up: bare specifier (not 'node:child_process'),
+// matching this codebase's established, tested-mockable convention (see
+// src/utils/version.ts + tests/unit/utils/version.test.ts) — vitest's
+// vi.mock('child_process', ...) does not reliably intercept a source import
+// written as 'node:child_process', even though Node resolves both the same.
+import { execFileSync } from 'child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -100,6 +105,32 @@ export function commandMatchesPid(
   return command.includes(expectedCommandSubstring);
 }
 
+/**
+ * OMN-263 code-review follow-up: the default `verifyPidIdentity` for
+ * acquireIntegrationLock/isIntegrationLockLive. A process is trivially,
+ * unconditionally itself — when `holderPid === process.pid`, the caller IS
+ * the process asking "is this PID still a legitimate lock holder," so no `ps`
+ * shellout is needed (or even meaningful) to answer it. This isn't a
+ * weakening of the check: PID reuse is a question about a DIFFERENT process
+ * having inherited a dead process's number, which cannot apply to asking
+ * whether you are yourself.
+ *
+ * This matters beyond micro-optimization: isIntegrationLockLive is called
+ * from sandbox-manager.ts's fullCleanup() on nearly every integration test
+ * file's afterAll teardown (and unconditionally, even when scope:'full'
+ * already ignores the result — see resolveCleanupMode's short-circuit) — and
+ * in that call path `holderPid` is virtually always the CURRENT run's own
+ * PID, checking its own still-held lock. Without this shortcut, the
+ * `commandMatchesPid` default would shell out to `ps` on nearly every
+ * teardown across the suite; this makes that path free again for the common
+ * case, while still doing the real check for the genuine cross-process case
+ * (a stale lock file naming a since-reused PID).
+ */
+function verifyLockHolderIdentity(holderPid: number): boolean | undefined {
+  if (holderPid === process.pid) return true;
+  return commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING);
+}
+
 export function acquireIntegrationLock(
   opts: {
     lockPath?: string;
@@ -111,8 +142,7 @@ export function acquireIntegrationLock(
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
   const pid = opts.pid ?? process.pid;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
-  const verifyIdentity =
-    opts.verifyPidIdentity ?? ((holderPid: number) => commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING));
+  const verifyIdentity = opts.verifyPidIdentity ?? verifyLockHolderIdentity;
 
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
 
@@ -197,8 +227,7 @@ export function isIntegrationLockLive(
 ): boolean {
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
-  const verifyIdentity =
-    opts.verifyPidIdentity ?? ((holderPid: number) => commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING));
+  const verifyIdentity = opts.verifyPidIdentity ?? verifyLockHolderIdentity;
   let raw: string;
   try {
     raw = fs.readFileSync(lockPath, 'utf8').trim();
