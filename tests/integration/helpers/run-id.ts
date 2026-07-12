@@ -62,11 +62,21 @@ import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
  *
  * Format: `<base36(Date.now())>-<6 hex chars>`.
  */
+// Exported (not inlined) so run-id.test.ts's globalThis-clearing helper —
+// which simulates a genuinely separate process, since vi.resetModules()
+// alone no longer changes RUN_ID — imports the real key instead of
+// duplicating the string, which would otherwise be free to drift out of
+// sync with this one and silently clear the wrong slot.
+export const RUN_ID_GLOBAL_KEY = Symbol.for('omnifocus-mcp:integration-test-run-id');
+
 function getOrCreateRunId(): string {
-  const key = Symbol.for('omnifocus-mcp:integration-test-run-id');
-  const store = globalThis as unknown as Record<symbol, string>;
-  store[key] ??= `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
-  return store[key];
+  // `| undefined` keeps the `??=` guard's necessity visible to the type
+  // system — a plain `string` type would let a future refactor "simplify"
+  // this into a bare read that compiles fine but returns undefined on a
+  // fresh process.
+  const store = globalThis as unknown as Record<symbol, string | undefined>;
+  store[RUN_ID_GLOBAL_KEY] ??= `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+  return store[RUN_ID_GLOBAL_KEY];
 }
 
 export const RUN_ID: string = getOrCreateRunId();

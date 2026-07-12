@@ -19,10 +19,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { RUN_ID_GLOBAL_KEY } from '../../integration/helpers/run-id.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../../integration/helpers/sandbox-manager.js';
 
-const RUN_ID_GLOBAL_KEY = Symbol.for('omnifocus-mcp:integration-test-run-id');
-
+// Imported (not duplicated as a string literal) so this can never drift out
+// of sync with the real key run-id.ts caches RUN_ID under — Symbol.for(key)
+// is idempotent from the global symbol registry, so this stays valid even
+// after vi.resetModules() re-evaluates run-id.ts's module bindings.
 function clearGlobalRunId(): void {
   delete (globalThis as unknown as Record<symbol, unknown>)[RUN_ID_GLOBAL_KEY];
 }
