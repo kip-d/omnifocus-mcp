@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const startServerMock = vi.fn();
 const stopMock = vi.fn();
-const thoroughCleanupMock = vi.fn();
 const defaultCallToolImpl = (tool: string, args: unknown) => {
   if (tool === 'omnifocus_read') {
     return { success: true, data: { tasks: [] } };
@@ -34,7 +33,6 @@ vi.mock('../../integration/helpers/mcp-test-client.js', () => {
         },
         clearCache: vi.fn().mockResolvedValue(undefined),
         stop: stopMock,
-        thoroughCleanup: thoroughCleanupMock,
         callTool: callToolMock,
       };
       return instance;
@@ -53,7 +51,6 @@ describe('getSharedClient init-failure recovery', () => {
     vi.resetModules();
     startServerMock.mockReset();
     stopMock.mockReset().mockResolvedValue(undefined);
-    thoroughCleanupMock.mockReset().mockResolvedValue(undefined);
     callToolMock.mockReset().mockImplementation(defaultCallToolImpl);
     const { clearGlobalSlot } = await import('../../integration/helpers/global-singleton.js');
     const { SHARED_SERVER_STATE_SLOT } = await import('../../integration/helpers/shared-server.js');
@@ -190,29 +187,5 @@ describe('getSharedClient init-failure recovery', () => {
 
     expect(clientB).toBe(clientA);
     expect(startServerMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('shutdownSharedClient thoroughCleanup()s then stop()s the live client and resets state for the next run', async () => {
-    startServerMock.mockResolvedValue(undefined);
-    const mod = await import('../../integration/helpers/shared-server.js');
-
-    const client = await mod.getSharedClient();
-    expect(client).toBeDefined();
-
-    await mod.shutdownSharedClient();
-
-    // ID-based cleanup runs BEFORE the process is stopped, and state is reset
-    // so a subsequent getSharedClient() starts a fresh server.
-    expect(thoroughCleanupMock).toHaveBeenCalledTimes(1);
-    expect(stopMock).toHaveBeenCalledTimes(1);
-    expect(() => mod.getSharedClientSync()).toThrow(/not initialized/i);
-  });
-
-  it('shutdownSharedClient is a no-op when no shared client is active', async () => {
-    const mod = await import('../../integration/helpers/shared-server.js');
-
-    await expect(mod.shutdownSharedClient()).resolves.toBeUndefined();
-    expect(thoroughCleanupMock).not.toHaveBeenCalled();
-    expect(stopMock).not.toHaveBeenCalled();
   });
 });

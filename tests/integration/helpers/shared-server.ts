@@ -65,6 +65,28 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  * server (e.g. globalTeardown) — see Task 3b for why no hook registered
  * inside the vitest worker fork process can be relied on here.
  *
+ * OMN-264: this SIGTERM is the ONLY shutdown path — there is deliberately no
+ * in-process graceful drain (an earlier `shutdownSharedClient()`, ID-based
+ * bulk-delete via `thoroughCleanup()`, was removed). It's provably redundant:
+ * `thoroughCleanup()` only bulk-deletes the client's own tracked
+ * task/project IDs (it explicitly skips tag cleanup for performance), while
+ * `setup-integration.ts`'s `teardown()` unconditionally runs
+ * `fullCleanup({scope:'full'})` + `scanForFixtures()` before this function is
+ * even called — a whole-DB, prefix/location-based sweep (`__TEST__` tasks,
+ * sandbox-folder projects, `__test-` tags, orphan escapees) that requires no
+ * knowledge of which IDs the shared client created, so it catches everything
+ * ID-based cleanup would have and more (orphans, tags). Since the shared
+ * client only ever needs draining once per run anyway, wiring the ID-based
+ * path back in would only add a second, strictly weaker sweep at the same
+ * point in the run — not a safety improvement.
+ *
+ * By default, polls after sending SIGTERM so callers can rely on the orphan
+ * actually being gone (or log a warning that it wasn't) before touching
+ * OmniFocus themselves — a fire-and-forget kill left a window where both the
+ * dying orphan and the caller's own cleanup sweep could drive OmniFocus at
+ * once. This matters for setup()'s startup sweep, which runs fullCleanup()
+ * right after.
+ *
  * By default, polls after sending SIGTERM so callers can rely on the orphan
  * actually being gone (or log a warning that it wasn't) before touching
  * OmniFocus themselves — a fire-and-forget kill left a window where both the
@@ -400,44 +422,6 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
   })();
 
   return state.initPromise;
-}
-
-/**
- * Gracefully shut down the shared server: drains via thoroughCleanup() (an
- * ID-based bulk delete of everything this client created) then stops the
- * process.
- *
- * OMN-261 review: this function currently has NO automatic caller. It used
- * to be wired to a `process.once('beforeExit', ...)` hook, but that hook was
- * removed after investigation confirmed it realistically never fires under
- * a real `vitest --run` (Vitest's forks-pool teardown is an external
- * SIGTERM/SIGKILL from tinypool with no in-worker signal handler registered
- * outside Node's profiling flags — see git history for the investigation).
- * The actual load-bearing cleanup path is killOrphanedSharedServer() below,
- * called from globalTeardown — but that runs in a SEPARATE OS process from
- * the one holding `state.client`, so it can only send a blunt SIGTERM, not
- * invoke this function's graceful ID-based cleanup. Whether/how to wire
- * graceful cleanup back in (e.g. from the last test file's own afterAll) is
- * tracked in OMN-264 — kept here as a reusable unit rather than deleted
- * outright, since fullCleanup()'s prefix-based scan is a coarser safety net,
- * not a replacement for ID-based cleanup. It is covered by
- * shared-server-init-failure.test.ts ('shutdownSharedClient …') so it can't
- * bit-rot silently while it waits for a caller.
- */
-export async function shutdownSharedClient(): Promise<void> {
-  // OMN-186: profiled when FIXTURE_PROFILE=1, for whenever this is invoked.
-  return profileFixture('globalTeardown', 'shutdownSharedClient', async () => {
-    const state = getState();
-    if (state.client) {
-      console.log('🧹 Shutting down shared MCP server...');
-      await state.client.thoroughCleanup();
-      await state.client.stop();
-      state.client = null;
-      state.initPromise = null;
-      state.isFirstAccess = true; // Reset for next test run
-      console.log('✅ Shared MCP server shutdown complete');
-    }
-  });
 }
 
 /**
