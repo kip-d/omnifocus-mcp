@@ -87,13 +87,6 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  * once. This matters for setup()'s startup sweep, which runs fullCleanup()
  * right after.
  *
- * By default, polls after sending SIGTERM so callers can rely on the orphan
- * actually being gone (or log a warning that it wasn't) before touching
- * OmniFocus themselves — a fire-and-forget kill left a window where both the
- * dying orphan and the caller's own cleanup sweep could drive OmniFocus at
- * once. This matters for setup()'s startup sweep, which runs fullCleanup()
- * right after.
- *
  * When waiting, this escalates SIGTERM → SIGKILL if the process outlives
  * REAP_TIMEOUT_MS, matching the SIGTERM+SIGKILL bound the transport.close()
  * path had before this PID-file mechanism replaced it.

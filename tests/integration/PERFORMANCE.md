@@ -182,12 +182,12 @@ run, in case a crashed prior run left its server alive. An earlier design also r
 `process.once('beforeExit', ...)` hook inside the worker fork as a second layer, but investigation found it
 realistically never fires under a real `vitest --run` (tinypool's `ProcessWorker.terminate()` SIGTERMs the worker
 externally, no in-worker signal handler registered outside Node's own profiling flags) — it was removed as confirmed
-dead code (`/code-review high` finding, 2026-07-12). This orphaned `shutdownSharedClient()` (its ID-based graceful
-cleanup via `thoroughCleanup()`), which was then removed too (OMN-264, 2026-07-12): `thoroughCleanup()` only
-bulk-deletes the client's own tracked task/project IDs and explicitly skips tag cleanup for performance, while
-`teardown()` already unconditionally runs `fullCleanup({scope:'full'})` + `scanForFixtures()` — a whole-DB,
-prefix/location-based sweep — before `killOrphanedSharedServer` is even called. That sweep catches everything the
-ID-based cleanup would have (plus tags and escaped orphans) regardless of whether the shared client's own tracking
+dead code (`/code-review high` finding, 2026-07-12). Removing that hook orphaned `shutdownSharedClient()` (its ID-based
+graceful cleanup via `thoroughCleanup()`) — that function was then removed too (OMN-264, 2026-07-12).
+`thoroughCleanup()` only bulk-deletes the client's own tracked task/project IDs and explicitly skips tag cleanup for
+performance, while `teardown()` already unconditionally runs `fullCleanup({scope:'full'})` + `scanForFixtures()` — a
+whole-DB, prefix/location-based sweep — before `killOrphanedSharedServer` is even called. That sweep catches everything
+the ID-based cleanup would have (plus tags and escaped orphans) regardless of whether the shared client's own tracking
 arrays were ever drained, so the removed function was provably redundant rather than merely unwired.
 
 **Call-count delta:**
