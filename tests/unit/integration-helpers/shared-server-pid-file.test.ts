@@ -51,23 +51,57 @@ describe('killOrphanedSharedServer', () => {
     expect(existsSync(pidFilePath)).toBe(false);
   });
 
-  it('warns instead of hanging when the PID outlives the reap timeout', async () => {
+  it('escalates to SIGKILL when SIGTERM does not land within the reap timeout', async () => {
     const fs = await import('fs');
     fs.writeFileSync(pidFilePath, '4242', 'utf-8');
     const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     try {
+      const killed: string[] = [];
+      let alive = true;
       await killOrphanedSharedServer({
         pidFilePath,
-        isPidAlive: () => true, // never reports dead
-        kill: () => {},
+        // survives SIGTERM, dies on SIGKILL
+        isPidAlive: () => alive,
+        kill: (_pid, signal) => {
+          killed.push(signal);
+          if (signal === 'SIGKILL') alive = false;
+        },
         reapTimeoutMs: 30,
+        sigkillReapTimeoutMs: 30,
         reapPollIntervalMs: 5,
       });
 
+      expect(killed).toEqual(['SIGTERM', 'SIGKILL']);
+      // it actually died on SIGKILL, so no leftover warning
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('warns instead of hanging when the PID survives even SIGKILL', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const killed: string[] = [];
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true, // never reports dead, even after SIGKILL
+        kill: (_pid, signal) => killed.push(signal),
+        reapTimeoutMs: 30,
+        sigkillReapTimeoutMs: 30,
+        reapPollIntervalMs: 5,
+      });
+
+      expect(killed).toEqual(['SIGTERM', 'SIGKILL']);
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+      expect(String(warnSpy.mock.calls[0][0])).toContain('SIGKILL');
     } finally {
       warnSpy.mockRestore();
     }

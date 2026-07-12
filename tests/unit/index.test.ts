@@ -459,4 +459,42 @@ describe('server entrypoint', () => {
       exitSpy.mockRestore();
     }
   });
+
+  it('does not double-close or exit 0 when the drain finishes just after the force-exit committed (OMN-261 review)', async () => {
+    // The force-exit timer and the (un-cancellable) gracefulExit drain both
+    // continue running; a shared exitCommitted guard must ensure only the
+    // first path to commit closes the server and picks the exit code, so a
+    // drain that blew its bounded deadline can't still report a clean exit 0.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const deferred = createDeferred<void>();
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(deferred.promise);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000); // force timer commits: close() + exit(1)
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+
+      // Drain now finishes, AFTER the forced exit already committed. The
+      // guard must make gracefulExit's own commitExit(0) a no-op.
+      deferred.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).not.toHaveBeenCalledWith(0);
+    } finally {
+      vi.useRealTimers();
+      exitSpy.mockRestore();
+    }
+  });
 });

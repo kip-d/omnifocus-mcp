@@ -11,7 +11,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync, readFileSync, rmSync, mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { profileFixture, fixtureProfilingEnabled } from '../../../tests/integration/helpers/fixture-profiler.js';
+import {
+  profileFixture,
+  fixtureProfilingEnabled,
+  FIXTURE_PROFILER_STATE_SLOT,
+} from '../../../tests/integration/helpers/fixture-profiler.js';
 import { clearGlobalSlot } from '../../../tests/integration/helpers/global-singleton.js';
 
 let logDir: string;
@@ -143,7 +147,7 @@ describe('profileFixture', () => {
     // ("warns once") already flipped warnedWriteFailure to true there, and
     // (unlike module-scope `let`) that state now outlives this test's own
     // vi.resetModules() call below, so it must be cleared explicitly first.
-    clearGlobalSlot('fixture-profiler-state');
+    clearGlobalSlot(FIXTURE_PROFILER_STATE_SLOT);
 
     try {
       const mod1 = await import('../../../tests/integration/helpers/fixture-profiler.js');

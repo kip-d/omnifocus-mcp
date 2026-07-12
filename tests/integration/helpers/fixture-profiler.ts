@@ -79,13 +79,20 @@ interface FixtureProfilerState {
   logDirEnsured: boolean;
 }
 
+// Exported so tests that clear this slot in beforeEach import the real key
+// rather than re-typing the literal (OMN-261 review — same drift-safety as
+// SHARED_SERVER_STATE_SLOT / RUN_ID_SLOT_KEY).
+export const FIXTURE_PROFILER_STATE_SLOT = 'fixture-profiler-state';
+
 // OMN-261 review: module-scope `let` bindings here had the SAME per-file
 // vitest isolation bug OMN-261 diagnosed and fixed for shared-server.ts's
 // state (isolate:true resets top-level bindings per file even under
 // singleFork:true) — converted to the same globalThis-keyed slot so "once
-// per run" is actually once per run, not once per file.
+// per run" is actually once per run, not once per file. The warn-once guard
+// is deliberately run-scoped: its job is a single "profile data is
+// incomplete, distrust this run's log" signal, not a per-file failure count.
 function getProfilerState(): FixtureProfilerState {
-  return getGlobalSlot<FixtureProfilerState>('fixture-profiler-state', () => ({
+  return getGlobalSlot<FixtureProfilerState>(FIXTURE_PROFILER_STATE_SLOT, () => ({
     warnedWriteFailure: false,
     logDirEnsured: false,
   }));

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const startServerMock = vi.fn();
 const stopMock = vi.fn();
+const thoroughCleanupMock = vi.fn();
 const defaultCallToolImpl = (tool: string, args: unknown) => {
   if (tool === 'omnifocus_read') {
     return { success: true, data: { tasks: [] } };
@@ -33,7 +34,7 @@ vi.mock('../../integration/helpers/mcp-test-client.js', () => {
         },
         clearCache: vi.fn().mockResolvedValue(undefined),
         stop: stopMock,
-        thoroughCleanup: vi.fn().mockResolvedValue(undefined),
+        thoroughCleanup: thoroughCleanupMock,
         callTool: callToolMock,
       };
       return instance;
@@ -44,16 +45,18 @@ vi.mock('../../integration/helpers/mcp-test-client.js', () => {
 // OMN-261 review: the shared-server state lives on a globalThis-keyed slot
 // (see global-singleton.ts) specifically so it survives vitest's per-file
 // module reset — which means it does NOT reset between tests in THIS file
-// on its own. Clear it manually so each test starts fresh.
-const SHARED_SERVER_STATE_SLOT = 'shared-server-state';
-
+// on its own. Clear it manually so each test starts fresh. Import the slot
+// key from the module under test rather than re-typing the literal, so a
+// rename can't silently make clearGlobalSlot a no-op.
 describe('getSharedClient init-failure recovery', () => {
   beforeEach(async () => {
     vi.resetModules();
     startServerMock.mockReset();
     stopMock.mockReset().mockResolvedValue(undefined);
+    thoroughCleanupMock.mockReset().mockResolvedValue(undefined);
     callToolMock.mockReset().mockImplementation(defaultCallToolImpl);
     const { clearGlobalSlot } = await import('../../integration/helpers/global-singleton.js');
+    const { SHARED_SERVER_STATE_SLOT } = await import('../../integration/helpers/shared-server.js');
     clearGlobalSlot(SHARED_SERVER_STATE_SLOT);
   });
 
@@ -140,5 +143,76 @@ describe('getSharedClient init-failure recovery', () => {
 
     expect(clientB).toBe(clientA);
     expect(startServerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second call that arrives during the warmup window does not reuse the not-yet-warmed client', async () => {
+    startServerMock.mockResolvedValue(undefined);
+    // Block warmupOmniFocus's phase-1 read so the FIRST init parks in the
+    // startServer-resolved-but-warmup-pending state. resolveRead being set is
+    // our signal that we've reached that window.
+    let resolveRead: (() => void) | undefined;
+    callToolMock.mockImplementation((tool: string, args: unknown) => {
+      if (tool === 'omnifocus_read') {
+        return new Promise((resolve) => {
+          resolveRead = () => resolve({ success: true, data: { tasks: [] } });
+        });
+      }
+      return defaultCallToolImpl(tool, args);
+    });
+
+    const { getSharedClient } = await import('../../integration/helpers/shared-server.js');
+
+    const first = getSharedClient();
+
+    // Wait until the first init has actually reached the warmup window
+    // (startServer resolved, phase-1 read pending). The SECOND call must
+    // arrive HERE — not synchronously before startServer resolves — for this
+    // to exercise the window: publishing state.client before warmup lets this
+    // late arrival take the `if (state.client)` reuse fast-path.
+    while (!resolveRead) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    let secondResolved = false;
+    const second = getSharedClient().then((client) => {
+      secondResolved = true;
+      return client;
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    // Fixed: state.client is still null through warmup, so `second` is parked
+    // on initPromise. Buggy: `second` reused the un-warmed client and already
+    // resolved.
+    expect(secondResolved).toBe(false);
+
+    resolveRead();
+    const [clientA, clientB] = await Promise.all([first, second]);
+
+    expect(clientB).toBe(clientA);
+    expect(startServerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shutdownSharedClient thoroughCleanup()s then stop()s the live client and resets state for the next run', async () => {
+    startServerMock.mockResolvedValue(undefined);
+    const mod = await import('../../integration/helpers/shared-server.js');
+
+    const client = await mod.getSharedClient();
+    expect(client).toBeDefined();
+
+    await mod.shutdownSharedClient();
+
+    // ID-based cleanup runs BEFORE the process is stopped, and state is reset
+    // so a subsequent getSharedClient() starts a fresh server.
+    expect(thoroughCleanupMock).toHaveBeenCalledTimes(1);
+    expect(stopMock).toHaveBeenCalledTimes(1);
+    expect(() => mod.getSharedClientSync()).toThrow(/not initialized/i);
+  });
+
+  it('shutdownSharedClient is a no-op when no shared client is active', async () => {
+    const mod = await import('../../integration/helpers/shared-server.js');
+
+    await expect(mod.shutdownSharedClient()).resolves.toBeUndefined();
+    expect(thoroughCleanupMock).not.toHaveBeenCalled();
+    expect(stopMock).not.toHaveBeenCalled();
   });
 });
