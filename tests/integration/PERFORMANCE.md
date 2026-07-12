@@ -183,7 +183,7 @@ run, in case a crashed prior run left its server alive. An earlier design also r
 realistically never fires under a real `vitest --run` (tinypool's `ProcessWorker.terminate()` SIGTERMs the worker
 externally, no in-worker signal handler registered outside Node's own profiling flags) — it was removed as confirmed
 dead code (`/code-review high` finding, 2026-07-12). `shutdownSharedClient()`'s graceful, ID-based cleanup
-(`thoroughCleanup()`) is kept as a tested, reusable unit but currently has no automatic caller — tracked in OMN-263.
+(`thoroughCleanup()`) is kept as a tested, reusable unit but currently has no automatic caller — tracked in OMN-264.
 
 **Call-count delta:**
 

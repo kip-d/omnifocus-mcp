@@ -299,7 +299,7 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
  * the one holding `state.client`, so it can only send a blunt SIGTERM, not
  * invoke this function's graceful ID-based cleanup. Whether/how to wire
  * graceful cleanup back in (e.g. from the last test file's own afterAll) is
- * tracked in OMN-263 — kept here as a tested, reusable unit rather than
+ * tracked in OMN-264 — kept here as a tested, reusable unit rather than
  * deleted outright, since fullCleanup()'s prefix-based scan is a coarser
  * safety net, not a replacement for ID-based cleanup.
  */
