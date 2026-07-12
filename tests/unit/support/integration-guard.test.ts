@@ -13,6 +13,8 @@ import {
   startOrphanWatchdog,
   startWorkerOrphanGuard,
   pidIsAlive,
+  commandMatchesPid,
+  getProcessCommand,
 } from '../../support/integration-guard.js';
 
 describe('acquireIntegrationLock / releaseIntegrationLock', () => {
@@ -36,7 +38,15 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
 
   it('refuses when a LIVE holder owns the lock, reporting the holder PID', () => {
     acquireIntegrationLock({ lockPath, pid: 11111 });
-    const res = acquireIntegrationLock({ lockPath, pid: 22222, isPidAlive: () => true });
+    // OMN-263: verifyPidIdentity mocked true (confirmed match) so this test
+    // stays fully dependency-injected — it must not shell out to the real
+    // `ps` binary for a fake PID.
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 22222,
+      isPidAlive: () => true,
+      verifyPidIdentity: () => true,
+    });
     expect(res).toEqual({ acquired: false, holderPid: 11111 });
     // the holder's lock is untouched
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('11111');
@@ -80,6 +90,55 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
     releaseIntegrationLock({ lockPath, pid: 11111 });
     const res = acquireIntegrationLock({ lockPath, pid: 22222 });
     expect(res).toEqual({ acquired: true });
+  });
+});
+
+// OMN-263: bare `isPidAlive` can't distinguish "this PID is still the real
+// lock holder" from "the OS reassigned this PID number to an unrelated
+// process after the real holder died without releasing the lock." These
+// drive verifyPidIdentity directly (never the real `ps` binary).
+describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', () => {
+  let dir: string;
+  let lockPath: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omn263-acquire-'));
+    lockPath = path.join(dir, 'integration.lock');
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a CONFIRMED identity mismatch (alive PID, wrong command) is treated as stale and reclaimed', () => {
+    acquireIntegrationLock({ lockPath, pid: 11111 });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = acquireIntegrationLock({
+        lockPath,
+        pid: 22222,
+        isPidAlive: () => true, // OS says the PID is alive...
+        verifyPidIdentity: () => false, // ...but it's confirmed NOT our lock holder (PID reuse)
+      });
+      expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
+      expect(fs.readFileSync(lockPath, 'utf8')).toBe('22222');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('11111');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('an UNVERIFIABLE identity (ps could not confirm either way) preserves the pre-OMN-263 behavior: refuse', () => {
+    acquireIntegrationLock({ lockPath, pid: 11111 });
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 22222,
+      isPidAlive: () => true,
+      verifyPidIdentity: () => undefined, // could not check — must NOT be treated as a mismatch
+    });
+    expect(res).toEqual({ acquired: false, holderPid: 11111 });
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe('11111');
   });
 });
 
@@ -193,7 +252,9 @@ describe('isIntegrationLockLive', () => {
 
   it('true when the lock holder is alive', () => {
     fs.writeFileSync(lockPath, '12345');
-    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true })).toBe(true);
+    // OMN-263: verifyPidIdentity mocked true — see the matching note in the
+    // acquireIntegrationLock test above.
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity: () => true })).toBe(true);
   });
 
   it('false when the lock holder is dead (crashed run must not scope later cleanups)', () => {
@@ -210,5 +271,50 @@ describe('isIntegrationLockLive', () => {
     fs.writeFileSync(lockPath, '12345');
     isIntegrationLockLive({ lockPath, isPidAlive: () => false });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('12345');
+  });
+
+  it('OMN-263: false on a CONFIRMED identity mismatch (alive PID, wrong command) — the real holder is gone', () => {
+    fs.writeFileSync(lockPath, '12345');
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity: () => false })).toBe(false);
+  });
+
+  it('OMN-263: an UNVERIFIABLE identity preserves the pre-OMN-263 "alive == live" behavior', () => {
+    fs.writeFileSync(lockPath, '12345');
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity: () => undefined })).toBe(true);
+  });
+});
+
+// OMN-263: the shared identity-check primitive both call sites (the OMN-143
+// lock above, and shared-server.ts's killOrphanedSharedServer) build on.
+describe('commandMatchesPid', () => {
+  it('true when the command contains the expected substring', () => {
+    expect(commandMatchesPid(4242, 'vitest', { getProcessCommand: () => '/usr/bin/node vitest run' })).toBe(true);
+  });
+
+  it('false when the command does not contain the expected substring — a confirmed mismatch', () => {
+    expect(commandMatchesPid(4242, 'vitest', { getProcessCommand: () => 'node dist/index.js' })).toBe(false);
+  });
+
+  it('undefined when the command could not be read — "could not verify", not a guess', () => {
+    expect(commandMatchesPid(4242, 'vitest', { getProcessCommand: () => undefined })).toBeUndefined();
+  });
+});
+
+describe('getProcessCommand', () => {
+  it('finds a real command line for the current process (live ps invocation, no mock)', () => {
+    // Unlike every other test in this file, this deliberately exercises the
+    // REAL `ps` binary — the one place a live OS check is the point, mirroring
+    // pidIsAlive's own "true for the current process" test above. node's own
+    // executable path is a stable, guaranteed-present substring regardless of
+    // how the test runner invoked this process (vitest, an IDE runner, etc).
+    const command = getProcessCommand(process.pid);
+    expect(command).toBeDefined();
+    expect(command).toContain('node');
+  });
+
+  it('undefined for a PID that does not exist', () => {
+    // Near the macOS pid_max ceiling — overwhelmingly unlikely to exist; see
+    // the identical rationale on pidIsAlive's test above.
+    expect(getProcessCommand(99999998)).toBeUndefined();
   });
 });

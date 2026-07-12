@@ -19,12 +19,17 @@ import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
-import { pidIsAlive, parseLockPid } from '../../support/integration-guard.js';
+import { pidIsAlive, parseLockPid, commandMatchesPid } from '../../support/integration-guard.js';
 
 // OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
 // DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
+
+// OMN-263: substring expected in `ps`'s command-line output for the process
+// this file spawns and later signals — see stdio-jsonrpc-transport.ts's
+// `spawn('node', [serverPath], ...)`, where serverPath is './dist/index.js'.
+const SHARED_SERVER_COMMAND_SUBSTRING = 'dist/index.js';
 
 export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
   if (pid === undefined) return;
@@ -80,6 +85,13 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  * path back in would only add a second, strictly weaker sweep at the same
  * point in the run — not a safety improvement.
  *
+ * OMN-263: before signaling the PID this reads from the file, verifies its
+ * command line looks like our spawned server (`commandMatchesPid` against
+ * `dist/index.js`) — plain `isPidAlive` can't tell "still our orphan" apart
+ * from "OS reassigned this PID number to something unrelated after our
+ * orphan already exited." See integration-guard.ts's `commandMatchesPid` for
+ * the shared identity-check primitive (also used by the OMN-143 lock).
+ *
  * By default, polls after sending SIGTERM so callers can rely on the orphan
  * actually being gone (or log a warning that it wasn't) before touching
  * OmniFocus themselves — a fire-and-forget kill left a window where both the
@@ -109,6 +121,7 @@ export async function killOrphanedSharedServer(
   opts: {
     pidFilePath?: string;
     isPidAlive?: (pid: number) => boolean;
+    verifyPidIdentity?: (pid: number) => boolean | undefined;
     kill?: (pid: number, signal: string) => void;
     reapTimeoutMs?: number;
     reapPollIntervalMs?: number;
@@ -118,6 +131,8 @@ export async function killOrphanedSharedServer(
 ): Promise<void> {
   const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const verifyIdentity =
+    opts.verifyPidIdentity ?? ((pid: number) => commandMatchesPid(pid, SHARED_SERVER_COMMAND_SUBSTRING));
   const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
   const reapTimeoutMs = opts.reapTimeoutMs ?? REAP_TIMEOUT_MS;
   const reapPollIntervalMs = opts.reapPollIntervalMs ?? REAP_POLL_INTERVAL_MS;
@@ -139,6 +154,22 @@ export async function killOrphanedSharedServer(
   const pid = parseLockPid(raw);
   if (pid === undefined) return;
   if (!isAlive(pid)) return;
+
+  // OMN-263: confirm this PID is plausibly OUR spawned server before
+  // signaling it — the OS can reassign a dead process's PID number to
+  // something unrelated (worst case, a long-running `dist/index.js`
+  // production server, since that's the same command this file spawns).
+  // Unverifiable (ps failed) falls through to the pre-OMN-263 behavior
+  // (proceed with the kill) rather than newly refusing to clean up a real
+  // orphan; only a CONFIRMED mismatch skips the kill.
+  if (verifyIdentity(pid) === false) {
+    console.warn(
+      `[shared-server] PID ${pid} from ${pidFilePath} is alive but its command line doesn't look like our ` +
+        'spawned server (OMN-263 PID-reuse check) — skipping SIGTERM to avoid signaling an unrelated process.',
+    );
+    return;
+  }
+
   try {
     kill(pid, 'SIGTERM');
   } catch {

@@ -39,6 +39,9 @@ describe('killOrphanedSharedServer', () => {
     await killOrphanedSharedServer({
       pidFilePath,
       isPidAlive: (pid) => pid === 4242 && alive,
+      // OMN-263: confirmed-match mock, so this stays fully dependency-injected
+      // rather than shelling out to the real `ps` binary for a fake PID.
+      verifyPidIdentity: () => true,
       kill: (pid, signal) => {
         killed.push({ pid, signal });
         alive = false; // simulate the process dying right after SIGTERM
@@ -64,6 +67,7 @@ describe('killOrphanedSharedServer', () => {
         pidFilePath,
         // survives SIGTERM, dies on SIGKILL
         isPidAlive: () => alive,
+        verifyPidIdentity: () => true,
         kill: (_pid, signal) => {
           killed.push(signal);
           if (signal === 'SIGKILL') alive = false;
@@ -92,6 +96,7 @@ describe('killOrphanedSharedServer', () => {
       await killOrphanedSharedServer({
         pidFilePath,
         isPidAlive: () => true, // never reports dead, even after SIGKILL
+        verifyPidIdentity: () => true,
         kill: (_pid, signal) => killed.push(signal),
         reapTimeoutMs: 30,
         sigkillReapTimeoutMs: 30,
@@ -118,6 +123,7 @@ describe('killOrphanedSharedServer', () => {
       await killOrphanedSharedServer({
         pidFilePath,
         isPidAlive: () => true, // stays "alive" throughout — would trigger the timeout warning if polled
+        verifyPidIdentity: () => true,
         kill: (pid, signal) => killed.push({ pid, signal }),
         waitForExit: false,
         reapTimeoutMs: 60_000, // would make the test hang if the poll ran anyway
@@ -144,6 +150,57 @@ describe('killOrphanedSharedServer', () => {
     });
 
     expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  // OMN-263: bare `isPidAlive` can't distinguish "still our orphaned server"
+  // from "the OS reassigned this PID number to an unrelated process" (worst
+  // case, a long-running production `dist/index.js` server, since that's the
+  // same command this file spawns).
+  it('a CONFIRMED identity mismatch (alive PID, wrong command) skips the kill and warns', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true, // OS says the PID is alive...
+        verifyPidIdentity: () => false, // ...but confirmed NOT our spawned server (PID reuse)
+        kill: () => {
+          throw new Error('should not be called — identity mismatch must skip the kill');
+        },
+      });
+
+      // the PID file is still removed (it's stale either way) — only the kill is skipped.
+      expect(existsSync(pidFilePath)).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('an UNVERIFIABLE identity (ps could not confirm either way) preserves the pre-OMN-263 behavior: kill proceeds', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    const killed: Array<{ pid: number; signal: string }> = [];
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: () => undefined, // could not check — must NOT be treated as a mismatch
+      kill: (pid, signal) => {
+        killed.push({ pid, signal });
+        alive = false;
+      },
+      reapTimeoutMs: 200,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(killed).toEqual([{ pid: 4242, signal: 'SIGTERM' }]);
   });
 });
 

@@ -12,11 +12,20 @@
  * Both helpers are dependency-injected so unit tests can drive them without
  * real PIDs, real lock contention, or real process exits.
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 export const DEFAULT_LOCK_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'integration.lock');
+
+// OMN-263: substring expected in `ps`'s command-line output for the process
+// that legitimately holds this lock — the vitest orchestrator process
+// running an integration suite. This is the ONLY context acquireIntegrationLock
+// is ever called from in this repo (vitest.config.ts gates `globalSetup` off
+// for unit-only runs), so "vitest" in the command line is a reliable check,
+// not a guess.
+const LOCK_HOLDER_COMMAND_SUBSTRING = 'vitest';
 
 export interface LockResult {
   acquired: boolean;
@@ -46,16 +55,64 @@ export function parseLockPid(raw: string): number | undefined {
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
 }
 
+/**
+ * OMN-263: reads a live process's command line via `ps` (macOS — this
+ * repo's only real target; both call sites of this module require OmniFocus,
+ * which is Mac-only, or run alongside it). Returns undefined if the process
+ * is gone or `ps` itself fails, so callers can distinguish "confirmed not a
+ * match" from "couldn't check" instead of the two being conflated.
+ */
+export function getProcessCommand(pid: number): string | undefined {
+  try {
+    // stdio: pipe stdout (what we read), swallow stderr — `ps` writes a
+    // diagnostic there for a PID it rejects outright (e.g. out of range),
+    // which is an expected outcome here, not something to surface.
+    const out = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const trimmed = out.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * OMN-263: does the live process at `pid` look like the one that actually
+ * holds this lock/PID file, or did the OS reassign that PID number to an
+ * unrelated process after the real holder exited without cleaning up?
+ * `pidIsAlive` (bare `kill(pid, 0)`) cannot distinguish these — this checks
+ * the process's command line for `expectedCommandSubstring` instead.
+ *
+ * Returns undefined ("could not verify") rather than guessing when the
+ * command can't be read, so callers pick their own safe fallback for that
+ * case instead of this function silently choosing one for them.
+ */
+export function commandMatchesPid(
+  pid: number,
+  expectedCommandSubstring: string,
+  opts: { getProcessCommand?: (pid: number) => string | undefined } = {},
+): boolean | undefined {
+  const getCommand = opts.getProcessCommand ?? getProcessCommand;
+  const command = getCommand(pid);
+  if (command === undefined) return undefined;
+  return command.includes(expectedCommandSubstring);
+}
+
 export function acquireIntegrationLock(
   opts: {
     lockPath?: string;
     pid?: number;
     isPidAlive?: (pid: number) => boolean;
+    verifyPidIdentity?: (pid: number) => boolean | undefined;
   } = {},
 ): LockResult {
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
   const pid = opts.pid ?? process.pid;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const verifyIdentity =
+    opts.verifyPidIdentity ?? ((holderPid: number) => commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING));
 
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
 
@@ -85,10 +142,24 @@ export function acquireIntegrationLock(
   const holder = parseLockPid(raw);
 
   if (holder !== undefined && isAlive(holder)) {
-    return { acquired: false, holderPid: holder };
+    // OMN-263: bare liveness can't distinguish "this PID is still our lock
+    // holder" from "the OS reassigned this PID number to an unrelated
+    // process after the real holder died without releasing the lock."
+    // Unverifiable (ps failed, or the process exited in the gap between the
+    // liveness check above and here) falls through to the pre-OMN-263
+    // behavior — refuse — rather than newly reclaiming a lock that might
+    // still be live; only a CONFIRMED mismatch treats the holder as gone.
+    const identity = verifyIdentity(holder);
+    if (identity !== false) {
+      return { acquired: false, holderPid: holder };
+    }
+    console.warn(
+      `[Integration Guard] Lock at ${lockPath} names PID ${holder}, which is alive but its command line doesn't ` +
+        'look like a vitest process (OMN-263 PID-reuse check) — treating the lock as stale rather than trusting bare liveness.',
+    );
   }
 
-  // Dead holder or garbage content → stale lock. Unlink-then-recreate so the
+  // Dead holder, garbage content, or confirmed PID reuse (OMN-263) → stale lock. Unlink-then-recreate so the
   // atomic `wx` decides between concurrent reclaimers in all but a
   // sub-millisecond unlink/create interleaving (a strictly narrower residue
   // than plain overwrite; closing it fully needs flock/link(2) — not worth
@@ -121,10 +192,13 @@ export function isIntegrationLockLive(
   opts: {
     lockPath?: string;
     isPidAlive?: (pid: number) => boolean;
+    verifyPidIdentity?: (pid: number) => boolean | undefined;
   } = {},
 ): boolean {
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
+  const verifyIdentity =
+    opts.verifyPidIdentity ?? ((holderPid: number) => commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING));
   let raw: string;
   try {
     raw = fs.readFileSync(lockPath, 'utf8').trim();
@@ -132,7 +206,12 @@ export function isIntegrationLockLive(
     return false; // no lock (or unreadable) — no run in flight
   }
   const holder = parseLockPid(raw);
-  return holder !== undefined && isAlive(holder);
+  if (holder === undefined || !isAlive(holder)) return false;
+  // OMN-263: same PID-reuse discrimination as acquireIntegrationLock — a
+  // confirmed identity mismatch means the real holder is gone even though
+  // its old PID number happens to be alive again; unverifiable preserves the
+  // pre-OMN-263 "alive == live" behavior.
+  return verifyIdentity(holder) !== false;
 }
 
 /**
