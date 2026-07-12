@@ -26,14 +26,20 @@ import { pidIsAlive } from '../../support/integration-guard.js';
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
-function recordSharedServerPid(pid: number | undefined): void {
+export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
   if (pid === undefined) return;
   try {
-    mkdirSync(path.dirname(SHARED_SERVER_PID_PATH), { recursive: true });
-    writeFileSync(SHARED_SERVER_PID_PATH, String(pid), 'utf-8');
-  } catch {
-    // Best-effort — losing this only loses the deterministic-cleanup path,
-    // not correctness of the suite itself.
+    mkdirSync(path.dirname(pidFilePath), { recursive: true });
+    writeFileSync(pidFilePath, String(pid), 'utf-8');
+  } catch (error) {
+    // OMN-261 review: silent failure here defeats the only shutdown path
+    // that's actually load-bearing (the beforeExit hook realistically never
+    // fires — see registerShutdownHook). Losing this doesn't break suite
+    // correctness, but it must be visible, not silent.
+    console.warn(
+      `[shared-server] Failed to record shared-server PID ${pid} at ${pidFilePath} — deterministic shutdown cleanup will not run for this process:`,
+      error,
+    );
   }
 }
 
@@ -253,15 +259,28 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
   state.initPromise = (async () => {
     console.log('🚀 Starting shared MCP server for integration tests (with cache warming)...');
     const client = new MCPTestClient({ enableCacheWarming: true });
-    state.client = client;
-    await client.startServer();
-    recordSharedServerPid(client.pid);
-    console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
-    await warmupOmniFocus(client);
-    console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
-    state.isFirstAccess = false; // First access complete
-    registerShutdownHook();
-    return client;
+    try {
+      state.client = client;
+      await client.startServer();
+      recordSharedServerPid(client.pid);
+      console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
+      await warmupOmniFocus(client);
+      console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');
+      state.isFirstAccess = false; // First access complete
+      registerShutdownHook();
+      return client;
+    } catch (error) {
+      // OMN-261 review: state is now genuinely shared across the whole run
+      // (that's this file's entire point), so a cold-OmniFocus/init failure
+      // must not permanently poison every subsequent file's getSharedClient()
+      // call — reset so the NEXT call gets a fresh attempt instead of
+      // inheriting this broken client/rejected promise forever. The PID file
+      // (if recordSharedServerPid already ran) still lets
+      // killOrphanedSharedServer reap the partially-started process.
+      state.client = null;
+      state.initPromise = null;
+      throw error;
+    }
   })();
 
   return state.initPromise;
