@@ -273,12 +273,29 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
   // disposition (immediate termination, no drain of pendingOperations) with
   // no application code running. Route both through the same gracefulExit
   // path the other triggers already use.
+  //
+  // Unlike the stdin/EPIPE triggers, a signal-driven exit must be bounded:
+  // a caller sending SIGTERM (e.g. killOrphanedSharedServer in the
+  // integration test harness) fires-and-forgets, with no fallback SIGKILL —
+  // if gracefulExit's unbounded await on pendingOperations never resolves
+  // (a hung osascript/JXA call blocked on an OmniFocus dialog), the process
+  // would never exit and become a permanent, unreapable orphan.
+  const SIGNAL_EXIT_TIMEOUT_MS = 5000;
+  const gracefulExitOnSignal = (reason: string) => {
+    const forceExitTimer = setTimeout(() => {
+      logger.warn(`${reason}: pending operations did not drain within ${SIGNAL_EXIT_TIMEOUT_MS}ms, forcing exit`);
+      process.exit(1);
+    }, SIGNAL_EXIT_TIMEOUT_MS);
+    forceExitTimer.unref();
+    void gracefulExit(reason).finally(() => clearTimeout(forceExitTimer));
+  };
+
   process.on('SIGTERM', () => {
-    gracefulExit('SIGTERM received');
+    gracefulExitOnSignal('SIGTERM received');
   });
 
   process.on('SIGINT', () => {
-    gracefulExit('SIGINT received');
+    gracefulExitOnSignal('SIGINT received');
   });
 
   await stdioServer.connect(transport);

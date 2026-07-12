@@ -400,4 +400,33 @@ describe('server entrypoint', () => {
       exitSpy.mockRestore();
     }
   });
+
+  it('force-exits if pending operations never drain within the SIGTERM/SIGINT timeout (OMN-261 review)', async () => {
+    // A hung osascript/JXA call (e.g. blocked on an OmniFocus permission
+    // dialog) must not make the process permanently unkillable — the signal
+    // handlers bound the drain wait and force-exit if it's exceeded, unlike
+    // the unbounded stdin-close/EPIPE paths.
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const neverResolves = new Promise<void>(() => {});
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(neverResolves);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(serverCloseMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      exitSpy.mockRestore();
+    }
+  });
 });

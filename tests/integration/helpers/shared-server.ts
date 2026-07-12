@@ -19,7 +19,7 @@ import { MCPTestClient } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
-import { pidIsAlive } from '../../support/integration-guard.js';
+import { pidIsAlive, parseLockPid } from '../../support/integration-guard.js';
 
 // OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
 // DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
@@ -71,8 +71,8 @@ export function killOrphanedSharedServer(
     /* already gone — fine, we still act on what we read */
   }
 
-  const pid = Number.parseInt(raw, 10);
-  if (!Number.isFinite(pid) || pid <= 0) return;
+  const pid = parseLockPid(raw);
+  if (pid === undefined) return;
   if (!isAlive(pid)) return;
   try {
     kill(pid, 'SIGTERM');
@@ -271,9 +271,20 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
       // (that's this file's entire point), so a cold-OmniFocus/init failure
       // must not permanently poison every subsequent file's getSharedClient()
       // call — reset so the NEXT call gets a fresh attempt instead of
-      // inheriting this broken client/rejected promise forever. The PID file
-      // (if recordSharedServerPid already ran) still lets
-      // killOrphanedSharedServer reap the partially-started process.
+      // inheriting this broken client/rejected promise forever.
+      //
+      // If startServer() already succeeded (warmupOmniFocus is what threw),
+      // stop the live child now rather than leaning on the PID file: the
+      // NEXT getSharedClient() call overwrites recordSharedServerPid's PID
+      // file with the new client's PID before killOrphanedSharedServer ever
+      // runs, permanently losing the only reference to this orphan.
+      if (client.pid !== undefined) {
+        try {
+          await client.stop();
+        } catch (stopError) {
+          console.warn('[shared-server] Failed to stop client after init failure:', stopError);
+        }
+      }
       state.client = null;
       state.initPromise = null;
       throw error;
