@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { MCPTestClient } from './mcp-test-client.js';
+import { MCPTestClient, SERVER_PATH } from './mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
@@ -26,10 +26,15 @@ import { pidIsAlive, parseLockPid, commandMatchesPid } from '../../support/integ
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
-// OMN-263: substring expected in `ps`'s command-line output for the process
-// this file spawns and later signals — see stdio-jsonrpc-transport.ts's
-// `spawn('node', [serverPath], ...)`, where serverPath is './dist/index.js'.
-const SHARED_SERVER_COMMAND_SUBSTRING = 'dist/index.js';
+// OMN-263 code-review follow-up: this MUST be mcp-test-client.ts's resolved
+// absolute SERVER_PATH, not a bare 'dist/index.js' substring — the original
+// substring matched ANY `node .../dist/index.js` process, including a real
+// production OmniFocus MCP server (e.g. one launched by Claude Desktop from a
+// different install directory), which defeated the entire point of this
+// identity check on PID reuse. An absolute, checkout-specific path can't
+// collide with a different install directory. See mcp-test-client.ts's
+// SERVER_PATH docstring for the full rationale.
+const SHARED_SERVER_COMMAND_SUBSTRING = SERVER_PATH;
 
 export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
   if (pid === undefined) return;

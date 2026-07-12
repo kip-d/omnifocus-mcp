@@ -1,8 +1,23 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from './run-id.js';
 import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
 
 export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
+
+// OMN-263 code-review follow-up: MUST be this checkout's absolute path, not a
+// bare relative './dist/index.js' — shared-server.ts's killOrphanedSharedServer
+// matches a live orphan's `ps` command line against this exact string to
+// confirm identity before signaling it. A relative path (or a bare
+// 'dist/index.js' substring) can't distinguish this checkout's spawned test
+// server from an unrelated `node dist/index.js` process — worst case, a real
+// production OmniFocus MCP server (e.g. one launched by Claude Desktop from
+// a different install directory) that happens to reuse the same PID after
+// this checkout's server crashed uncleanly. An absolute, checkout-specific
+// path can't collide with a different install directory.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const SERVER_PATH = join(REPO_ROOT, 'dist', 'index.js');
 
 /**
  * OMN-84: per-run sentinel tag attached to every fixture created via
@@ -109,7 +124,7 @@ export class MCPTestClient {
     }
 
     this.transport = new StdioJsonRpcTransport({
-      serverPath: './dist/index.js',
+      serverPath: SERVER_PATH,
       spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env },
     });
   }

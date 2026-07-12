@@ -19,6 +19,11 @@ const callToolMock = vi.fn().mockImplementation(defaultCallToolImpl);
 
 vi.mock('../../integration/helpers/mcp-test-client.js', () => {
   return {
+    // OMN-263 code-review follow-up: shared-server.ts reads SERVER_PATH at
+    // module-init time (for its identity-check substring) — this mock must
+    // export something, or importing shared-server.ts throws before any
+    // test in this file can run.
+    SERVER_PATH: '/mock/dist/index.js',
     // pid mirrors the real MCPTestClient: undefined until startServer()
     // actually spawns the child, so tests can distinguish "startServer
     // itself rejected" (pid stays undefined) from "startServer succeeded but
