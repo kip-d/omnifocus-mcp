@@ -132,6 +132,16 @@ Entries are `{file, hook, op, ms, at, failed?}`; `file` is `"(global)"` for glob
 off (default) is a pure pass-through — normal runs are untouched. This profile is the decision gate for OMN-186 Phase 2
 (per-run fixture epoch): proceed only if teardown-dominated.
 
+**Supervising a live run:** `--reporter=json` alone goes nearly silent on stdout — it buffers per-test output into the
+JSON file instead of streaming it, so a healthy multi-minute run and a genuinely hung one look identical from the
+outside (2026-07-12: this cost a false "it's hung" call and a near-kill of a live suite mid-OMN-261-verification). Stack
+a second reporter for a continuous liveness signal without losing the machine-readable output:
+
+```bash
+FIXTURE_PROFILE=1 npx vitest tests/integration --run --reporter=dot --reporter=json --outputFile.json=/tmp/pertest.json
+# `dot` is low-noise (one character per test); use `default` instead for per-test names if the extra log volume is fine
+```
+
 ### Per-run fixture epoch (OMN-186 Phase 2)
 
 The Phase-1 profile (2026-07-08, quiet host, 525 s wall) confirmed teardown dominance: `fullCleanup` was 109 s of the
