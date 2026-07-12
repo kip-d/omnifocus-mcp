@@ -182,8 +182,13 @@ run, in case a crashed prior run left its server alive. An earlier design also r
 `process.once('beforeExit', ...)` hook inside the worker fork as a second layer, but investigation found it
 realistically never fires under a real `vitest --run` (tinypool's `ProcessWorker.terminate()` SIGTERMs the worker
 externally, no in-worker signal handler registered outside Node's own profiling flags) — it was removed as confirmed
-dead code (`/code-review high` finding, 2026-07-12). `shutdownSharedClient()`'s graceful, ID-based cleanup
-(`thoroughCleanup()`) is kept as a tested, reusable unit but currently has no automatic caller — tracked in OMN-264.
+dead code (`/code-review high` finding, 2026-07-12). Removing that hook orphaned `shutdownSharedClient()` (its ID-based
+graceful cleanup via `thoroughCleanup()`) — that function was then removed too (OMN-264, 2026-07-12).
+`thoroughCleanup()` only bulk-deletes the client's own tracked task/project IDs and explicitly skips tag cleanup for
+performance, while `teardown()` already unconditionally runs `fullCleanup({scope:'full'})` + `scanForFixtures()` — a
+whole-DB, prefix/location-based sweep — before `killOrphanedSharedServer` is even called. That sweep catches everything
+the ID-based cleanup would have (plus tags and escaped orphans) regardless of whether the shared client's own tracking
+arrays were ever drained, so the removed function was provably redundant rather than merely unwired.
 
 **Call-count delta:**
 
@@ -205,9 +210,10 @@ figure, and is called out as such rather than presented as data.
   passed 9/9 clean, and the subsequent full clean re-run passed 202/202.)
 - Zero orphaned `dist/index.js` processes: before/after `pgrep -fl 'dist/index.js'` snapshots were byte-identical across
   every run.
-- `shutdownSharedClient` shows zero entries in `fixture-profile.jsonl` in every run — expected, since it currently has
-  no automatic caller (see above). The PID-file path is invisible to this profiler (it runs from a different process)
-  but is confirmed working by the zero-orphan-process result.
+- `shutdownSharedClient` showed zero entries in `fixture-profile.jsonl` in every run at the time of this verification —
+  expected, since it had no automatic caller (see above); it was subsequently removed (OMN-264). The PID-file path is
+  invisible to this profiler (it runs from a different process) but is confirmed working by the zero-orphan-process
+  result.
 - As with OMN-186, raw suite wall is not the tracked metric here — this is a correctness/resource-leak fix (spawning 13
   servers instead of 1 wasted OS processes and OmniFocus warm-up time, but the suite was already fixture-noise-dominated
   per the TL;DR above, so wall-clock delta is not a reliable signal for this change either).

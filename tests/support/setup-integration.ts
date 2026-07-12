@@ -172,8 +172,9 @@ export async function teardown() {
   // OMN-261: the worker fork that owns the shared client gets zero JS-level
   // teardown opportunity under Vitest's forks-pool teardown (an external
   // SIGTERM/SIGKILL from tinypool, no in-worker signal handler for
-  // non-profiling runs — see shared-server.ts's shutdownSharedClient
-  // docstring). This PID-file kill runs from THIS process instead, which
+  // non-profiling runs — see killOrphanedSharedServer's docstring, including
+  // its OMN-264 note on why there's no in-process graceful drain either).
+  // This PID-file kill runs from THIS process instead, which
   // always executes regardless of how the worker fork itself was torn down.
   // `waitForExit: false`: nothing OmniFocus-related follows this call
   // (teardown is nearly done), so there's no race to protect against — and
