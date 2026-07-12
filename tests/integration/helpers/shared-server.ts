@@ -43,21 +43,53 @@ export function recordSharedServerPid(pid: number | undefined, pidFilePath: stri
   }
 }
 
+// OMN-261 review: src/index.ts's SIGTERM handler can legitimately take up to
+// its own SIGNAL_EXIT_TIMEOUT_MS (5s) draining pending operations, plus
+// FORCE_CLOSE_GRACE_MS (1s) attempting a bounded server.close(), before it
+// is guaranteed to have called process.exit() — a 6s worst case. REAP_TIMEOUT_MS
+// gives real margin over that for signal delivery / OS scheduling latency,
+// not just enough to match it.
+const REAP_TIMEOUT_MS = 8000;
+const REAP_POLL_INTERVAL_MS = 100;
+
 /**
  * OMN-261: call from a DIFFERENT process than the one that spawned the
  * server (e.g. globalTeardown) — see Task 3b for why no hook registered
  * inside the vitest worker fork process can be relied on here.
+ *
+ * By default, polls after sending SIGTERM so callers can rely on the orphan
+ * actually being gone (or log a warning that it wasn't) before touching
+ * OmniFocus themselves — a fire-and-forget kill left a window where both the
+ * dying orphan and the caller's own cleanup sweep could drive OmniFocus at
+ * once. This matters for setup()'s startup sweep, which runs fullCleanup()
+ * right after.
+ *
+ * Pass `waitForExit: false` when nothing OmniFocus-related follows the call
+ * (e.g. teardown()'s final, nothing-left-to-protect kill) — polling there
+ * doesn't just cost time, it produces a FALSE ALARM: `pidIsAlive`
+ * (`kill(pid, 0)`) can't distinguish "still executing" from "already called
+ * process.exit(), now a zombie awaiting reap by its real parent" (the vitest
+ * worker fork that spawned it — a different process from the one calling
+ * killOrphanedSharedServer here, which can never observe that reap). A real
+ * run hit exactly this: the warning fired on a normal, non-hung shutdown,
+ * at a point where nothing was actually at risk.
  */
-export function killOrphanedSharedServer(
+export async function killOrphanedSharedServer(
   opts: {
     pidFilePath?: string;
     isPidAlive?: (pid: number) => boolean;
     kill?: (pid: number, signal: string) => void;
+    reapTimeoutMs?: number;
+    reapPollIntervalMs?: number;
+    waitForExit?: boolean;
   } = {},
-): void {
+): Promise<void> {
   const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
   const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
+  const reapTimeoutMs = opts.reapTimeoutMs ?? REAP_TIMEOUT_MS;
+  const reapPollIntervalMs = opts.reapPollIntervalMs ?? REAP_POLL_INTERVAL_MS;
+  const waitForExit = opts.waitForExit ?? true;
 
   let raw: string;
   try {
@@ -78,6 +110,20 @@ export function killOrphanedSharedServer(
     kill(pid, 'SIGTERM');
   } catch {
     /* gone between the liveness check and the kill; harmless */
+    return;
+  }
+
+  if (!waitForExit) return;
+
+  const deadline = Date.now() + reapTimeoutMs;
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, reapPollIntervalMs));
+  }
+  if (isAlive(pid)) {
+    console.warn(
+      `[shared-server] Orphaned server PID ${pid} did not exit within ${reapTimeoutMs}ms of SIGTERM — ` +
+        'proceeding with cleanup anyway; it may still be driving OmniFocus concurrently.',
+    );
   }
 }
 
@@ -258,8 +304,13 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
     console.log('🚀 Starting shared MCP server for integration tests (with cache warming)...');
     const client = new MCPTestClient({ enableCacheWarming: true });
     try {
-      state.client = client;
+      // OMN-261 review: publish state.client only once startServer() has
+      // actually resolved — publishing it earlier let a concurrent caller's
+      // synchronous `if (state.client)` check (above) see a non-null client
+      // and skip the `state.initPromise` wait entirely, handing back a
+      // client whose transport/child process hadn't finished starting.
       await client.startServer();
+      state.client = client;
       recordSharedServerPid(client.pid);
       console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
       await warmupOmniFocus(client);

@@ -281,10 +281,25 @@ async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<v
   // (a hung osascript/JXA call blocked on an OmniFocus dialog), the process
   // would never exit and become a permanent, unreapable orphan.
   const SIGNAL_EXIT_TIMEOUT_MS = 5000;
+  // OMN-261 review: forcing exit must not skip stdioServer.close() outright —
+  // this repo's own MCP-lifecycle rule (CLAUDE.md) requires closing before
+  // exit so any already-computed response gets flushed. Give close() a short,
+  // separately-bounded grace period rather than the unbounded wait
+  // gracefulExit gives it normally (that unbounded wait is exactly what
+  // we're forcing past here).
+  const FORCE_CLOSE_GRACE_MS = 1000;
   const gracefulExitOnSignal = (reason: string) => {
     const forceExitTimer = setTimeout(() => {
       logger.warn(`${reason}: pending operations did not drain within ${SIGNAL_EXIT_TIMEOUT_MS}ms, forcing exit`);
-      process.exit(1);
+      void stdioServer
+        .close()
+        .catch((error) => {
+          logger.warn('Server close failed during forced shutdown (continuing to exit):', error);
+        })
+        .finally(() => process.exit(1));
+      // Belt-and-suspenders: if close() itself hangs, don't let the forced
+      // exit become unbounded again.
+      setTimeout(() => process.exit(1), FORCE_CLOSE_GRACE_MS).unref();
     }, SIGNAL_EXIT_TIMEOUT_MS);
     forceExitTimer.unref();
     void gracefulExit(reason).finally(() => clearTimeout(forceExitTimer));

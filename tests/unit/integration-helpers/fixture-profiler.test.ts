@@ -12,6 +12,7 @@ import { existsSync, readFileSync, rmSync, mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { profileFixture, fixtureProfilingEnabled } from '../../../tests/integration/helpers/fixture-profiler.js';
+import { clearGlobalSlot } from '../../../tests/integration/helpers/global-singleton.js';
 
 let logDir: string;
 let logPath: string;
@@ -142,7 +143,7 @@ describe('profileFixture', () => {
     // ("warns once") already flipped warnedWriteFailure to true there, and
     // (unlike module-scope `let`) that state now outlives this test's own
     // vi.resetModules() call below, so it must be cleared explicitly first.
-    delete (globalThis as unknown as Record<symbol, unknown>)[Symbol.for('omnifocus-mcp:fixture-profiler-state')];
+    clearGlobalSlot('fixture-profiler-state');
 
     try {
       const mod1 = await import('../../../tests/integration/helpers/fixture-profiler.js');

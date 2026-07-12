@@ -61,8 +61,10 @@ export async function setup() {
 
   // OMN-261: a crashed prior run may have left its shared server's PID file
   // behind with the process still alive (or, more likely, already dead) —
-  // clear it before this run starts its own.
-  killOrphanedSharedServer();
+  // clear it before this run starts its own. Awaited: killOrphanedSharedServer
+  // polls until the orphan is confirmed gone (or times out) so the sweep
+  // below doesn't drive OmniFocus concurrently with a still-exiting orphan.
+  await killOrphanedSharedServer();
 
   try {
     // OMN-186 Phase 2: explicit full — the lock acquired above would make an
@@ -173,7 +175,12 @@ export async function teardown() {
   // non-profiling runs — see shared-server.ts's shutdownSharedClient
   // docstring). This PID-file kill runs from THIS process instead, which
   // always executes regardless of how the worker fork itself was torn down.
-  killOrphanedSharedServer();
+  // `waitForExit: false`: nothing OmniFocus-related follows this call
+  // (teardown is nearly done), so there's no race to protect against — and
+  // waiting would just produce a false-alarm "didn't exit" warning on a
+  // zombie awaiting reap by the worker fork, which this process can never
+  // observe (see killOrphanedSharedServer's docstring).
+  await killOrphanedSharedServer({ waitForExit: false });
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.
   stopOrphanWatchdog?.();

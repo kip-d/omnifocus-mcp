@@ -422,8 +422,38 @@ describe('server entrypoint', () => {
       process.emit('SIGTERM');
       await vi.advanceTimersByTimeAsync(5000);
 
+      // Forcing exit must still attempt a bounded close() — CLAUDE.md's
+      // MCP-lifecycle rule requires closing before exit to flush any
+      // already-computed response — it just can't wait on it unboundedly
+      // (that unbounded wait is exactly what's being forced past here).
+      expect(serverCloseMock).toHaveBeenCalledTimes(1);
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(serverCloseMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('force-exits after a bounded grace period even if close() itself hangs (OMN-261 review)', async () => {
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    const neverResolves = new Promise<void>(() => {});
+    registerToolsMock.mockImplementation((_server, _cache, pendingOps: Set<Promise<unknown>>) => {
+      lastRegisteredPendingOps = pendingOps;
+    });
+    serverCloseMock.mockImplementationOnce(() => new Promise<void>(() => {}));
+    const { runServer } = await importEntry();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    try {
+      await runServer();
+      lastRegisteredPendingOps?.add(neverResolves);
+
+      vi.useFakeTimers();
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000); // main drain timeout fires, close() called but hangs
+      await vi.advanceTimersByTimeAsync(1000); // belt-and-suspenders grace timer fires
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
       vi.useRealTimers();
       exitSpy.mockRestore();

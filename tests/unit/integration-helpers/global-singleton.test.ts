@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('getGlobalSlot', () => {
   const KEY = 'unit-test-probe';
-  const globalKey = Symbol.for(`omnifocus-mcp:${KEY}`);
 
-  beforeEach(() => {
-    delete (globalThis as unknown as Record<symbol, unknown>)[globalKey];
+  beforeEach(async () => {
+    const { clearGlobalSlot } = await import('../../integration/helpers/global-singleton.js');
+    clearGlobalSlot(KEY);
   });
 
   it('returns the same instance on repeated calls, ignoring the factory after first creation', async () => {

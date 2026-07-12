@@ -18,7 +18,7 @@ describe('killOrphanedSharedServer', () => {
 
   it('does nothing when no PID file exists', async () => {
     const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
-    expect(() =>
+    await expect(
       killOrphanedSharedServer({
         pidFilePath,
         isPidAlive: () => true,
@@ -26,23 +26,74 @@ describe('killOrphanedSharedServer', () => {
           throw new Error('should not be called');
         },
       }),
-    ).not.toThrow();
+    ).resolves.not.toThrow();
   });
 
-  it('sends SIGTERM to a live PID and removes the file', async () => {
+  it('sends SIGTERM to a live PID, removes the file, and polls until it reports dead', async () => {
     const fs = await import('fs');
     fs.writeFileSync(pidFilePath, '4242', 'utf-8');
     const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
 
     const killed: Array<{ pid: number; signal: string }> = [];
-    killOrphanedSharedServer({
+    let alive = true;
+    await killOrphanedSharedServer({
       pidFilePath,
-      isPidAlive: (pid) => pid === 4242,
-      kill: (pid, signal) => killed.push({ pid, signal }),
+      isPidAlive: (pid) => pid === 4242 && alive,
+      kill: (pid, signal) => {
+        killed.push({ pid, signal });
+        alive = false; // simulate the process dying right after SIGTERM
+      },
+      reapTimeoutMs: 200,
+      reapPollIntervalMs: 5,
     });
 
     expect(killed).toEqual([{ pid: 4242, signal: 'SIGTERM' }]);
     expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  it('warns instead of hanging when the PID outlives the reap timeout', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true, // never reports dead
+        kill: () => {},
+        reapTimeoutMs: 30,
+        reapPollIntervalMs: 5,
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('waitForExit: false sends SIGTERM and returns immediately without polling or warning', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const killed: Array<{ pid: number; signal: string }> = [];
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true, // stays "alive" throughout — would trigger the timeout warning if polled
+        kill: (pid, signal) => killed.push({ pid, signal }),
+        waitForExit: false,
+        reapTimeoutMs: 60_000, // would make the test hang if the poll ran anyway
+      });
+
+      expect(killed).toEqual([{ pid: 4242, signal: 'SIGTERM' }]);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('removes the file but does not kill when the recorded PID is no longer alive', async () => {
@@ -50,7 +101,7 @@ describe('killOrphanedSharedServer', () => {
     fs.writeFileSync(pidFilePath, '4242', 'utf-8');
     const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
 
-    killOrphanedSharedServer({
+    await killOrphanedSharedServer({
       pidFilePath,
       isPidAlive: () => false,
       kill: () => {

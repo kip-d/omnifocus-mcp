@@ -36,6 +36,7 @@
 import { randomBytes } from 'crypto';
 
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
+import { getGlobalSlot } from './global-singleton.js';
 
 /**
  * Process-scoped run identifier, cached on `globalThis` rather than a plain
@@ -56,30 +57,25 @@ import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
  * exactly what made the OMN-126 empty-string-project dedup test intermittently
  * fail (OMN-262): the dedup CODE was never wrong, the fixture name just no
  * longer matched what the test asserted against. `globalThis` is the one
- * thing per-file isolation does not reset, so caching here — rather than
- * importing a shared helper module, to keep this fix independent of any
- * unmerged shared-client work — makes RUN_ID genuinely process-scoped again.
+ * thing per-file isolation does not reset, so caching here makes RUN_ID
+ * genuinely process-scoped again — via global-singleton.ts's getGlobalSlot,
+ * the same shared mechanism shared-server.ts and fixture-profiler.ts use for
+ * the identical problem. (OMN-261 review: this used to hand-roll its own
+ * globalThis-Symbol slot to stay independent of that then-unmerged work;
+ * both land in the same PR now, so the independence no longer buys anything
+ * and only risked drifting out of sync with the shared implementation.)
  *
  * Format: `<base36(Date.now())>-<6 hex chars>`.
  */
-// Exported (not inlined) so run-id.test.ts's globalThis-clearing helper —
-// which simulates a genuinely separate process, since vi.resetModules()
-// alone no longer changes RUN_ID — imports the real key instead of
-// duplicating the string, which would otherwise be free to drift out of
-// sync with this one and silently clear the wrong slot.
-export const RUN_ID_GLOBAL_KEY = Symbol.for('omnifocus-mcp:integration-test-run-id');
+// Exported so run-id.test.ts's globalThis-clearing helper (which simulates a
+// genuinely separate process) can pass the real slot name to
+// global-singleton.ts's clearGlobalSlot() instead of duplicating it.
+export const RUN_ID_SLOT_KEY = 'integration-test-run-id';
 
-function getOrCreateRunId(): string {
-  // `| undefined` keeps the `??=` guard's necessity visible to the type
-  // system — a plain `string` type would let a future refactor "simplify"
-  // this into a bare read that compiles fine but returns undefined on a
-  // fresh process.
-  const store = globalThis as unknown as Record<symbol, string | undefined>;
-  store[RUN_ID_GLOBAL_KEY] ??= `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
-  return store[RUN_ID_GLOBAL_KEY];
-}
-
-export const RUN_ID: string = getOrCreateRunId();
+export const RUN_ID: string = getGlobalSlot(
+  RUN_ID_SLOT_KEY,
+  () => `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`,
+);
 
 /**
  * Per-run inbox-task / project name prefix: `__TEST__-<runId>-`.

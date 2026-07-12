@@ -45,15 +45,16 @@ vi.mock('../../integration/helpers/mcp-test-client.js', () => {
 // (see global-singleton.ts) specifically so it survives vitest's per-file
 // module reset — which means it does NOT reset between tests in THIS file
 // on its own. Clear it manually so each test starts fresh.
-const SHARED_SERVER_STATE_KEY = Symbol.for('omnifocus-mcp:shared-server-state');
+const SHARED_SERVER_STATE_SLOT = 'shared-server-state';
 
 describe('getSharedClient init-failure recovery', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     startServerMock.mockReset();
     stopMock.mockReset().mockResolvedValue(undefined);
     callToolMock.mockReset().mockImplementation(defaultCallToolImpl);
-    delete (globalThis as unknown as Record<symbol, unknown>)[SHARED_SERVER_STATE_KEY];
+    const { clearGlobalSlot } = await import('../../integration/helpers/global-singleton.js');
+    clearGlobalSlot(SHARED_SERVER_STATE_SLOT);
   });
 
   it('resets shared state after an init failure so the next call retries fresh instead of inheriting the broken client forever', async () => {
@@ -102,5 +103,42 @@ describe('getSharedClient init-failure recovery', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('a second concurrent call waits for the same in-flight startServer() instead of reusing an unstarted client', async () => {
+    let resolveStartServer!: () => void;
+    startServerMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStartServer = resolve;
+        }),
+    );
+
+    const { getSharedClient } = await import('../../integration/helpers/shared-server.js');
+
+    let secondResolved = false;
+    const first = getSharedClient();
+    const second = getSharedClient().then((client) => {
+      secondResolved = true;
+      return client;
+    });
+
+    // OMN-261 review: before the fix, state.client was published BEFORE
+    // startServer() resolved, so this second call's synchronous
+    // `if (state.client)` check took the "reuse" branch immediately and
+    // returned the not-yet-started client here, instead of waiting on
+    // `state.initPromise` like this first call is. Flush via a macrotask
+    // (not just a couple of microtask ticks) so this is robust regardless of
+    // how many promise-chain links sit between the reuse branch and here —
+    // a microtask-only flush passed even against the buggy ordering because
+    // it didn't wait out the whole chain.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(secondResolved).toBe(false);
+
+    resolveStartServer();
+    const [clientA, clientB] = await Promise.all([first, second]);
+
+    expect(clientB).toBe(clientA);
+    expect(startServerMock).toHaveBeenCalledTimes(1);
   });
 });

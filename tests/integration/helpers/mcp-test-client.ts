@@ -59,9 +59,18 @@ export class MCPTestClient {
   private sessionId: string = generateSessionId(); // Unique session tag for efficient cleanup
   private options: MCPTestClientOptions;
 
-  /** PID of the spawned server child process, once `startServer()` has run. */
+  /**
+   * PID of the spawned server child process, once `startServer()` has run.
+   * `undefined` (not throwing) if the transport never got that far — e.g.
+   * startServer() itself rejected before spawning — so callers can safely
+   * probe this from a catch block without their own try/catch.
+   */
   get pid(): number | undefined {
-    return this.transport.child.pid;
+    try {
+      return this.transport.child.pid;
+    } catch {
+      return undefined;
+    }
   }
 
   private cleanupMetrics: CleanupMetrics = {
