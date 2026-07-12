@@ -2,30 +2,53 @@
  * OMN-84 — per-runId fixture-name uniqueness regression.
  *
  * The whole point of `RUN_ID` and `runScopedName` / `runScopedTag` is that
- * two integration-test processes (or two re-runs of the same process)
- * cannot collide on a fixture name even if they happen to produce
- * overlapping suffixes (`Completed_1`, `TestBatch_Simple`, `RT_renamed`,
- * etc.). The runId is the discriminator.
+ * two integration-test processes cannot collide on a fixture name even if
+ * they happen to produce overlapping suffixes (`Completed_1`,
+ * `TestBatch_Simple`, `RT_renamed`, etc.). The runId is the discriminator.
  *
- * These tests simulate distinct runs by importing the runId module fresh
- * via `vi.resetModules()` and asserting that names produced in run A do
- * NOT collide with names produced in run B for the same suffix. The
- * generic-prefix safety net (OMN-83 contract) is also verified — runId
- * scoping must NOT break the underlying `__TEST__` / `__test-` startsWith
- * contract that drives the cross-run sweep.
+ * Uniqueness must hold ACROSS OS processes (RUN_ID collide check) while
+ * STABILITY must hold WITHIN one process, even across vitest's per-file
+ * module reloads (OMN-262 — see run-id.ts's `getOrCreateRunId` doc comment).
+ * `vi.resetModules()` alone simulates the latter (same process, same
+ * `globalThis`, fresh ES-module bindings — exactly what vitest does between
+ * test files); it can no longer be used to simulate "a different run", since
+ * that's precisely the drift OMN-262 closed. `loadRunIdModuleAsNewRun()`
+ * below additionally clears the `globalThis` slot RUN_ID is cached under, to
+ * accurately simulate a genuinely separate process.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { RUN_ID_GLOBAL_KEY } from '../../integration/helpers/run-id.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../../integration/helpers/sandbox-manager.js';
 
-// Reset the runId module before each test so each block sees a fresh RUN_ID.
+// Imported (not duplicated as a string literal) so this can never drift out
+// of sync with the real key run-id.ts caches RUN_ID under — Symbol.for(key)
+// is idempotent from the global symbol registry, so this stays valid even
+// after vi.resetModules() re-evaluates run-id.ts's module bindings.
+function clearGlobalRunId(): void {
+  delete (globalThis as unknown as Record<symbol, unknown>)[RUN_ID_GLOBAL_KEY];
+}
+
+// Reset the runId module before each test so each block starts clean.
 beforeEach(() => {
   vi.resetModules();
+  clearGlobalRunId();
 });
 
 async function loadRunIdModule() {
-  // Dynamic import after resetModules() → fresh RUN_ID per call.
+  // Dynamic import after resetModules() → fresh ES-module bindings, but
+  // RUN_ID itself is cached on globalThis (OMN-262), so this alone does NOT
+  // change RUN_ID within the same process — matching real vitest per-file
+  // module isolation under a shared, long-lived MCP client (OMN-261).
+  return await import('../../integration/helpers/run-id.js');
+}
+
+// Simulates a genuinely different integration-test PROCESS: clears both the
+// module cache and the globalThis slot RUN_ID is cached under.
+async function loadRunIdModuleAsNewRun() {
+  vi.resetModules();
+  clearGlobalRunId();
   return await import('../../integration/helpers/run-id.js');
 }
 
@@ -43,6 +66,20 @@ describe('RUN_ID format (OMN-84)', () => {
 
   it('is stable within a process load (same import returns same id)', async () => {
     const a = await loadRunIdModule();
+    const b = await import('../../integration/helpers/run-id.js');
+    expect(b.RUN_ID).toBe(a.RUN_ID);
+  });
+
+  it('OMN-262: is stable across a simulated per-file module reload within the same process', async () => {
+    // vitest's default per-file isolation resets ES-module top-level bindings
+    // between test files even under a single forked OS process
+    // (pool:'forks', singleFork:true) — vi.resetModules() alone reproduces
+    // that. Before OMN-262, RUN_ID was a plain module-level const, so this
+    // reload silently produced a DIFFERENT id, which corrupted fixture names
+    // once a long-lived MCPTestClient became genuinely shared across files
+    // (OMN-261) — see run-id.ts's getOrCreateRunId doc comment.
+    const a = await loadRunIdModule();
+    vi.resetModules();
     const b = await import('../../integration/helpers/run-id.js');
     expect(b.RUN_ID).toBe(a.RUN_ID);
   });
@@ -120,13 +157,13 @@ describe('isCurrentRunName / isCurrentRunTagName (OMN-84)', () => {
 });
 
 describe('Two simulated runs do not collide on overlapping suffixes (OMN-84 acceptance)', () => {
-  // The canonical OMN-84 acceptance test: two simulated runs (different RUN_IDs)
-  // produce the same suffix; their names must NOT collide.
+  // The canonical OMN-84 acceptance test: two simulated runs (different RUN_IDs,
+  // i.e. different processes — see loadRunIdModuleAsNewRun) produce the same
+  // suffix; their names must NOT collide.
 
   it('two distinct runs produce different RUN_IDs', async () => {
     const runA = await loadRunIdModule();
-    vi.resetModules();
-    const runB = await import('../../integration/helpers/run-id.js');
+    const runB = await loadRunIdModuleAsNewRun();
     // RUN_IDs include `Date.now().toString(36)` plus 6 hex chars of randomness
     // → vanishingly unlikely to collide even at sub-ms intervals.
     expect(runB.RUN_ID).not.toBe(runA.RUN_ID);
@@ -135,8 +172,7 @@ describe('Two simulated runs do not collide on overlapping suffixes (OMN-84 acce
   it('two runs produce non-colliding task names for the same suffix', async () => {
     const runA = await loadRunIdModule();
     const nameA = runA.runScopedName('Completed_1');
-    vi.resetModules();
-    const runB = await import('../../integration/helpers/run-id.js');
+    const runB = await loadRunIdModuleAsNewRun();
     const nameB = runB.runScopedName('Completed_1');
     expect(nameA).not.toBe(nameB);
     // Each is still attributable to its own run.
@@ -150,8 +186,7 @@ describe('Two simulated runs do not collide on overlapping suffixes (OMN-84 acce
   it('two runs produce non-colliding tag names for the same suffix', async () => {
     const runA = await loadRunIdModule();
     const tagA = runA.runScopedTag('rt');
-    vi.resetModules();
-    const runB = await import('../../integration/helpers/run-id.js');
+    const runB = await loadRunIdModuleAsNewRun();
     const tagB = runB.runScopedTag('rt');
     expect(tagA).not.toBe(tagB);
     expect(runA.isCurrentRunTagName(tagA)).toBe(true);
@@ -170,8 +205,7 @@ describe('Two simulated runs do not collide on overlapping suffixes (OMN-84 acce
     expect(nameA.startsWith(TEST_INBOX_PREFIX)).toBe(true);
     expect(tagA.startsWith(TEST_TAG_PREFIX)).toBe(true);
 
-    vi.resetModules();
-    const runB = await import('../../integration/helpers/run-id.js');
+    const runB = await loadRunIdModuleAsNewRun();
     const nameB = runB.runScopedName('SomeTask');
     const tagB = runB.runScopedTag('some-tag');
     expect(nameB.startsWith(TEST_INBOX_PREFIX)).toBe(true);

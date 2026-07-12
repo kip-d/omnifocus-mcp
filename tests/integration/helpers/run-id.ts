@@ -9,8 +9,8 @@
  *  3. The generic-prefix sweep (`__TEST__`/`__test-`) remains the safety net
  *     for prior-run residue from crashed runs that predate this contract.
  *
- * The id is generated once per process and is process-scoped — every test
- * file in the same vitest run sees the same `RUN_ID`. Generation:
+ * The id is process-scoped — every test file in the same vitest run must see
+ * the same `RUN_ID`. Generation:
  *
  *   `<base36 millis>-<6 hex bytes>`
  *
@@ -38,11 +38,48 @@ import { randomBytes } from 'crypto';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 
 /**
- * Process-scoped run identifier. Generated once at module load.
+ * Process-scoped run identifier, cached on `globalThis` rather than a plain
+ * module-level `const`. Vitest's default `isolate: true` resets every test
+ * file's ES-module top-level bindings to a fresh instance — even under
+ * `pool:'forks', poolOptions.forks.singleFork:true` (one OS process, but one
+ * module registry per file) — so a plain `const` here silently re-generates
+ * a NEW id per file, contradicting the "every file sees the same RUN_ID"
+ * contract above. That drift was invisible as long as each file also got its
+ * own fresh `MCPTestClient`/MCP server; it stopped being invisible once a
+ * long-lived client became genuinely shared across files (OMN-261), whose
+ * `createTestTask()`/`createTestProject()` closures capture the RUN_ID of
+ * whichever file happened to instantiate the client first. A later file
+ * passing an already-prefixed name (built from ITS OWN `runScopedName()`,
+ * i.e. a different RUN_ID) into that stale closure fails the
+ * `name.startsWith(RUN_NAME_PREFIX)` fast path and falls through to
+ * re-prefixing, corrupting the name into a DOUBLE run-id prefix — this is
+ * exactly what made the OMN-126 empty-string-project dedup test intermittently
+ * fail (OMN-262): the dedup CODE was never wrong, the fixture name just no
+ * longer matched what the test asserted against. `globalThis` is the one
+ * thing per-file isolation does not reset, so caching here — rather than
+ * importing a shared helper module, to keep this fix independent of any
+ * unmerged shared-client work — makes RUN_ID genuinely process-scoped again.
  *
  * Format: `<base36(Date.now())>-<6 hex chars>`.
  */
-export const RUN_ID: string = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+// Exported (not inlined) so run-id.test.ts's globalThis-clearing helper —
+// which simulates a genuinely separate process, since vi.resetModules()
+// alone no longer changes RUN_ID — imports the real key instead of
+// duplicating the string, which would otherwise be free to drift out of
+// sync with this one and silently clear the wrong slot.
+export const RUN_ID_GLOBAL_KEY = Symbol.for('omnifocus-mcp:integration-test-run-id');
+
+function getOrCreateRunId(): string {
+  // `| undefined` keeps the `??=` guard's necessity visible to the type
+  // system — a plain `string` type would let a future refactor "simplify"
+  // this into a bare read that compiles fine but returns undefined on a
+  // fresh process.
+  const store = globalThis as unknown as Record<symbol, string | undefined>;
+  store[RUN_ID_GLOBAL_KEY] ??= `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+  return store[RUN_ID_GLOBAL_KEY];
+}
+
+export const RUN_ID: string = getOrCreateRunId();
 
 /**
  * Per-run inbox-task / project name prefix: `__TEST__-<runId>-`.
