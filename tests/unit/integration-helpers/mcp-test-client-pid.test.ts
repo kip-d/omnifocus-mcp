@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isAbsolute } from 'node:path';
-import { MCPTestClient, SERVER_PATH } from '../../integration/helpers/mcp-test-client.js';
+import { MCPTestClient } from '../../integration/helpers/mcp-test-client.js';
+import { SERVER_PATH } from '../../integration/helpers/server-path.js';
 
 describe('MCPTestClient.pid', () => {
   it('returns undefined (does not throw) before startServer() has spawned a child', () => {

@@ -15,7 +15,8 @@
 import { mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { MCPTestClient, SERVER_PATH } from './mcp-test-client.js';
+import { MCPTestClient } from './mcp-test-client.js';
+import { SERVER_PATH } from './server-path.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
@@ -26,14 +27,15 @@ import { pidIsAlive, parseLockPid, commandMatchesPid } from '../../support/integ
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
-// OMN-263 code-review follow-up: this MUST be mcp-test-client.ts's resolved
-// absolute SERVER_PATH, not a bare 'dist/index.js' substring — the original
-// substring matched ANY `node .../dist/index.js` process, including a real
-// production OmniFocus MCP server (e.g. one launched by Claude Desktop from a
-// different install directory), which defeated the entire point of this
-// identity check on PID reuse. An absolute, checkout-specific path can't
-// collide with a different install directory. See mcp-test-client.ts's
-// SERVER_PATH docstring for the full rationale.
+// OMN-263 code-review follow-up: this MUST be the shared resolved absolute
+// SERVER_PATH, not a bare 'dist/index.js' substring — the original substring
+// matched ANY `node .../dist/index.js` process, including a real production
+// OmniFocus MCP server (e.g. one launched by Claude Desktop from a different
+// install directory), which defeated the entire point of this identity check
+// on PID reuse. An absolute, checkout-specific path can't collide with a
+// different install directory — and importing the SAME constant the spawn
+// side uses (see server-path.ts) means the identity check can never drift
+// from what was actually spawned.
 const SHARED_SERVER_COMMAND_SUBSTRING = SERVER_PATH;
 
 export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
@@ -92,7 +94,7 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  *
  * OMN-263: before signaling the PID this reads from the file, verifies its
  * command line looks like our spawned server (`commandMatchesPid` against
- * mcp-test-client.ts's resolved absolute `SERVER_PATH` — NOT a bare
+ * server-path.ts's resolved absolute `SERVER_PATH` — NOT a bare
  * `dist/index.js` substring, which couldn't distinguish this checkout's
  * server from an unrelated one, e.g. a real production server) — plain
  * `isPidAlive` can't tell "still our orphan" apart from "OS reassigned this
@@ -169,7 +171,10 @@ export async function killOrphanedSharedServer(
   // production server, since that's the same command this file spawns).
   // Unverifiable (ps failed) falls through to the pre-OMN-263 behavior
   // (proceed with the kill) rather than newly refusing to clean up a real
-  // orphan; only a CONFIRMED mismatch skips the kill.
+  // orphan; only a CONFIRMED mismatch skips the kill. (Sibling of the same
+  // pattern in integration-guard.ts's acquireIntegrationLock and
+  // isIntegrationLockLive, whose unverifiable fallback points the OPPOSITE
+  // way — refuse — see the NOTE there before unifying anything.)
   if (verifyIdentity(pid) === false) {
     console.warn(
       `[shared-server] PID ${pid} from ${pidFilePath} is alive but its command line doesn't look like our ` +

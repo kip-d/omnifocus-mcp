@@ -28,8 +28,23 @@ export const DEFAULT_LOCK_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'inte
 // that legitimately holds this lock — the vitest orchestrator process
 // running an integration suite. This is the ONLY context acquireIntegrationLock
 // is ever called from in this repo (vitest.config.ts gates `globalSetup` off
-// for unit-only runs), so "vitest" in the command line is a reliable check,
-// not a guess.
+// for unit-only runs).
+//
+// OMN-263 review (pass 3): this substring is deliberately BROAD, and the
+// direction is chosen, not accidental. The lock is machine-global (one
+// OmniFocus per machine), so a legitimate holder can be an integration run
+// from ANY checkout/worktree of this repo — a checkout-specific match (the
+// SERVER_PATH approach shared-server.ts uses for the process it spawned
+// itself) would wrongly reject a live holder from a sibling worktree and
+// STEAL its lock: the dangerous direction (the 2026-06-09 incident class
+// this whole file exists to prevent). Over-matching errs the SAFE
+// direction: a stale lock whose PID the OS reused for some unrelated
+// vitest process (e.g. a unit run in another worktree) is falsely treated
+// as held, and the new run is refused with an error message that already
+// names the manual remedy. Closing that residual exactly — with no false
+// negatives — requires recording the holder's process START TIME in the
+// lock file and comparing it on check; that lock-format change is tracked
+// in OMN-265 rather than rushed into incident-history-bearing code here.
 const LOCK_HOLDER_COMMAND_SUBSTRING = 'vitest';
 
 export interface LockResult {
@@ -107,27 +122,39 @@ export function commandMatchesPid(
 
 /**
  * OMN-263 code-review follow-up: the default `verifyPidIdentity` for
- * acquireIntegrationLock/isIntegrationLockLive. A process is trivially,
- * unconditionally itself — when `holderPid === process.pid`, the caller IS
- * the process asking "is this PID still a legitimate lock holder," so no `ps`
- * shellout is needed (or even meaningful) to answer it. This isn't a
- * weakening of the check: PID reuse is a question about a DIFFERENT process
- * having inherited a dead process's number, which cannot apply to asking
- * whether you are yourself.
+ * acquireIntegrationLock/isIntegrationLockLive. Two EXACT shortcuts run
+ * before any `ps` shellout, matching the two processes that legitimately
+ * observe their own run's lock during a live suite (vitest.config.ts:
+ * pool 'forks' + singleFork — one main process, one forked worker):
  *
- * This matters beyond micro-optimization: isIntegrationLockLive is called
- * from sandbox-manager.ts's fullCleanup() on nearly every integration test
- * file's afterAll teardown (and unconditionally, even when scope:'full'
- * already ignores the result — see resolveCleanupMode's short-circuit) — and
- * in that call path `holderPid` is virtually always the CURRENT run's own
- * PID, checking its own still-held lock. Without this shortcut, the
- * `commandMatchesPid` default would shell out to `ps` on nearly every
- * teardown across the suite; this makes that path free again for the common
- * case, while still doing the real check for the genuine cross-process case
- * (a stale lock file naming a since-reused PID).
+ * - `holderPid === process.pid` — the vitest MAIN process examining the
+ *   lock it wrote itself: globalSetup's acquire runs there, and so does
+ *   globalTeardown's `fullCleanup({scope:'full'})` → `isRunLive()` probe.
+ *   A process is trivially, unconditionally itself; PID reuse is a question
+ *   about a DIFFERENT process inheriting a dead one's number, which cannot
+ *   apply to asking whether you are yourself.
+ * - `holderPid === process.ppid` — the forked WORKER examining the main
+ *   process's lock. Per-test-file `afterAll` `fullCleanup()` calls run in
+ *   the worker (a different OS process from the main that holds the lock —
+ *   so the self-PID case above does NOT cover them, a topology error a
+ *   review pass caught in an earlier version of this comment), and the
+ *   worker's direct parent IS that main process (tinypool forks workers
+ *   from it). This is exact, not heuristic: ppid always names our CURRENT,
+ *   live parent (a dead parent reparents us to PID 1, changing ppid — see
+ *   startOrphanWatchdog), so a holder equal to our ppid is the very process
+ *   that spawned this worker, i.e. this run's own vitest main. The
+ *   `!== 1` guard keeps an orphaned, already-reparented worker from
+ *   claiming a lock that names PID 1 as its own parent.
+ *
+ * Together these keep the suite's hot paths — every per-file teardown plus
+ * the global setup/teardown sweeps — free of `ps` shellouts; only genuine
+ * cross-process checks (a stale lock from a crashed run, examined by a
+ * later unrelated process such as `npm run test:cleanup`) pay for the real
+ * command-line comparison.
  */
 function verifyLockHolderIdentity(holderPid: number): boolean | undefined {
   if (holderPid === process.pid) return true;
+  if (holderPid === process.ppid && holderPid !== 1) return true;
   return commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING);
 }
 
@@ -179,6 +206,14 @@ export function acquireIntegrationLock(
     // liveness check above and here) falls through to the pre-OMN-263
     // behavior — refuse — rather than newly reclaiming a lock that might
     // still be live; only a CONFIRMED mismatch treats the holder as gone.
+    //
+    // NOTE: this confirmed-mismatch-vs-unverifiable split appears at three
+    // sites (here, isIntegrationLockLive below, and shared-server.ts's
+    // killOrphanedSharedServer) whose UNVERIFIABLE fallbacks deliberately
+    // point in different directions — refuse here (an unnecessary refusal
+    // only costs a delay), but PROCEED with the kill in shared-server.ts
+    // (an unnecessary skip risks a wedged orphan driving OmniFocus). Don't
+    // unify them into one helper without preserving that per-site choice.
     const identity = verifyIdentity(holder);
     if (identity !== false) {
       return { acquired: false, holderPid: holder };
@@ -239,7 +274,10 @@ export function isIntegrationLockLive(
   // OMN-263: same PID-reuse discrimination as acquireIntegrationLock — a
   // confirmed identity mismatch means the real holder is gone even though
   // its old PID number happens to be alive again; unverifiable preserves the
-  // pre-OMN-263 "alive == live" behavior.
+  // pre-OMN-263 "alive == live" behavior. (Third sibling of this pattern:
+  // shared-server.ts's killOrphanedSharedServer — see the NOTE in
+  // acquireIntegrationLock above on why the three sites' unverifiable
+  // fallbacks deliberately differ and must not be blindly unified.)
   return verifyIdentity(holder) !== false;
 }
 
