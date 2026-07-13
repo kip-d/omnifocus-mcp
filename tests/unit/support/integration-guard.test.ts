@@ -482,4 +482,30 @@ describe('getProcessStartTime (OMN-265)', () => {
   it('undefined for a PID that does not exist', () => {
     expect(getProcessStartTime(99999998)).toBeUndefined();
   });
+
+  it("rendering is pinned against the caller's TZ/locale — writer and checker must agree byte-for-byte across environments", () => {
+    // /code-review finding on PR #222: `ps -o lstart=` renders in the CALLING
+    // process's LC_TIME and TZ (empirically: fr_FR gives 'lun. 13 juil. …',
+    // TZ=UTC shifts the wall-clock digits), so an unpinned reader lets a
+    // checker under a different environment (launchd job, SSH, CI) see a
+    // DIFFERENT string for the same live holder → exact-compare says
+    // "confirmed stale" → a LIVE lock is reclaimed: the dangerous direction.
+    // Pin: the function must return the same rendering no matter what
+    // TZ/LC_ALL this process carries.
+    const originalTZ = process.env.TZ;
+    const originalLcAll = process.env.LC_ALL;
+    try {
+      process.env.TZ = 'UTC';
+      process.env.LC_ALL = 'C';
+      const rendered = getProcessStartTime(process.pid);
+      process.env.TZ = 'Asia/Tokyo'; // UTC+9, no DST — guaranteed different wall clock
+      process.env.LC_ALL = 'fr_FR.UTF-8';
+      expect(getProcessStartTime(process.pid)).toBe(rendered);
+    } finally {
+      if (originalTZ === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTZ;
+      if (originalLcAll === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = originalLcAll;
+    }
+  });
 });

@@ -154,6 +154,16 @@ export function commandMatchesPid(
  * process is gone or `ps` fails, mirroring getProcessCommand above (same
  * timeout rationale: this can sit on setup/teardown's critical path and must
  * degrade to the documented fallback, not hang the run).
+ *
+ * The child env pins LC_ALL and TZ (/code-review finding on PR #222):
+ * lstart renders in the CALLING process's locale and timezone, not the
+ * target's — empirically, fr_FR renders 'lun. 13 juil. …' and TZ=UTC shifts
+ * the wall-clock digits for the SAME instant. Unpinned, a checker whose
+ * environment differs from the writer's (launchd job vs. interactive shell,
+ * SSH, CI) reads a different string for a LIVE holder, the exact comparison
+ * declares it stale, and the lock is stolen from a running suite — the
+ * dangerous direction this whole scheme must never err toward. Pinning makes
+ * the rendering a pure function of the process's start instant.
  */
 export function getProcessStartTime(pid: number): string | undefined {
   try {
@@ -161,6 +171,7 @@ export function getProcessStartTime(pid: number): string | undefined {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 2000,
+      env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
     });
     const trimmed = out.trim();
     return trimmed.length > 0 ? trimmed : undefined;
