@@ -109,19 +109,36 @@ export function recordSharedServerPid(
     //
     // Gate round 2: warn only if the prior PID is STILL ALIVE — the warning
     // must meet the same evidence standard as the reap. A dead prior PID
-    // here is the ordinary warmup-failure retry path (getSharedClientImpl's
+    // here is the common warmup-failure retry case (getSharedClientImpl's
     // catch stop()s/SIGKILLs the old child without touching this file);
     // warning about a confirmed-dead process would poison the signal.
+    // Gate round 3: that retry's prior PID is USUALLY dead, not always —
+    // transport close() resolves at SIGKILL issuance without confirming
+    // exit, so a wedged old child can still be alive here. The warning
+    // firing then is CORRECT: however the slot came to be lost, a live
+    // process is losing its only record. (Residual: a dead-but-unreaped
+    // zombie also reads as alive; the full startServer between the SIGKILL
+    // and this write makes that window negligible.)
     try {
       const existing = parseLockPid(readFileSync(pidFilePath, 'utf-8').trim());
       if (existing !== undefined && existing !== pid && isAlive(existing)) {
         console.warn(
           `[shared-server] Overwriting PID record for ${existing} with ${pid} at ${pidFilePath} — ` +
-            'that process is still alive and is now untracked (SIGKILL-survivor slot loss, OMN-267).',
+            'that process appears still alive and is now untracked (SIGKILL-survivor slot loss, OMN-267).',
         );
       }
-    } catch {
-      /* no existing record — the normal case */
+    } catch (readError) {
+      // Gate round 3: only ENOENT means "no existing record — the normal
+      // case". Any other read failure leaves the survivor check unrun; the
+      // whole point of this block is that a lost record must not vanish
+      // without a trace, so say the check itself could not happen.
+      if (errorCode(readError) !== 'ENOENT') {
+        console.warn(
+          `[shared-server] Could not check for an existing PID record at ${pidFilePath} before overwriting — ` +
+            'if a survivor record was present, its loss is untraced:',
+          readError,
+        );
+      }
     }
     mkdirSync(path.dirname(pidFilePath), { recursive: true });
     writeFileSync(pidFilePath, `${pid}\n${commandPath}`, 'utf-8');
@@ -302,7 +319,7 @@ export async function killOrphanedSharedServer(
       // Warn rather than throw (unlike integration-guard's ENOENT-rethrow
       // sibling): this runs inside setup/teardown, where a throw would fail
       // the whole run over a cleanup bookkeeping problem.
-      if ((e as { code?: string }).code !== 'ENOENT') {
+      if (errorCode(e) !== 'ENOENT') {
         console.warn(`[shared-server] Failed to remove PID record ${pidFilePath} — a stale record may persist:`, e);
       }
     }

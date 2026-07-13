@@ -684,6 +684,31 @@ describe('recordSharedServerPid', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
+  // OMN-267 gate round 3: only ENOENT means "no existing record". Any other
+  // read failure (EACCES, EMFILE, …) leaves the survivor check silently
+  // skipped — the exact vanish-without-a-trace outcome the check exists to
+  // prevent — so it must at least say the check could not run.
+  it('warns when the existing record cannot be read for a non-ENOENT reason, instead of silently skipping the survivor check', async () => {
+    const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const pidFilePath = join(dir, 'shared-server.pid');
+
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+    chmodSync(pidFilePath, 0o200); // write-only: read fails EACCES, overwrite still succeeds
+
+    try {
+      recordSharedServerPid(5555, pidFilePath, '/worktree-b/dist/index.js', () => {
+        throw new Error('liveness must not be probed when the record could not be read');
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain(pidFilePath);
+      chmodSync(pidFilePath, 0o644);
+      expect(readFileSync(pidFilePath, 'utf-8')).toBe('5555\n/worktree-b/dist/index.js');
+    } finally {
+      chmodSync(pidFilePath, 0o644);
+    }
+  });
+
   it('does not warn when re-recording the same pid, without even probing liveness', async () => {
     const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
     const pidFilePath = join(dir, 'shared-server.pid');
