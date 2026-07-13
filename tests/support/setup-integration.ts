@@ -180,7 +180,9 @@ export async function teardown() {
   // (teardown is nearly done), so there's no race to protect against — and
   // waiting would just produce a false-alarm "didn't exit" warning on a
   // zombie awaiting reap by the worker fork, which this process can never
-  // observe (see killOrphanedSharedServer's docstring).
+  // observe (see killOrphanedSharedServer's docstring). OMN-267: this call
+  // deliberately leaves the PID record behind — the next run's setup clears
+  // it (silently if the SIGTERM landed; by escalating if the server wedged).
   await killOrphanedSharedServer({ waitForExit: false });
 
   // OMN-143: release the single-instance guard LAST, after all teardown work.

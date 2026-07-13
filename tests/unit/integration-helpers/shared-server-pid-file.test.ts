@@ -107,6 +107,11 @@ describe('killOrphanedSharedServer', () => {
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
       expect(String(warnSpy.mock.calls[0][0])).toContain('SIGKILL');
+      // OMN-267: a SIGKILL survivor is still alive, so its record must be
+      // KEPT — the next run's setup retries the escalation. (Kip's review
+      // call: accept the repeated ~10s retry cost on an unkillable process;
+      // it's loud, rare, and self-heals when the process finally dies.)
+      expect(existsSync(pidFilePath)).toBe(true);
     } finally {
       warnSpy.mockRestore();
     }
@@ -134,6 +139,150 @@ describe('killOrphanedSharedServer', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  // ── OMN-267: teardown's fire-and-forget SIGTERM must leave the PID record
+  // behind. `waitForExit: false` never learns whether the SIGTERM landed
+  // (polling there false-alarms on zombies — the OMN-261 pass-2 constraint),
+  // so the unlink moves to the points where death IS confirmed. A wedged
+  // survivor (event loop blocked in a sync osascript call; observed live
+  // 2026-07-13) is then rediscovered and finished by the NEXT run's setup,
+  // instead of becoming a permanent, unrecorded ppid-1 orphan.
+  // Spec: Technical/specs/OMN-267-teardown-wedged-server-stranding.md
+
+  it('waitForExit: false keeps the record when the process ignores SIGTERM (wedge), preserving its contents', async () => {
+    const fs = await import('fs');
+    const record = '4242\n/worktree-a/dist/index.js';
+    fs.writeFileSync(pidFilePath, record, 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    const killed: string[] = [];
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => true, // wedged: still alive after SIGTERM
+      verifyPidIdentity: () => true,
+      kill: (_pid, signal) => {
+        killed.push(signal); // no-op: the wedge ignores the signal
+      },
+      waitForExit: false,
+    });
+
+    expect(killed).toEqual(['SIGTERM']);
+    expect(existsSync(pidFilePath)).toBe(true);
+    expect(readFileSync(pidFilePath, 'utf-8')).toBe(record);
+  });
+
+  it('waitForExit: false keeps the record even when the process exits promptly (teardown cannot tell the cases apart)', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: () => true,
+      kill: () => {
+        alive = false; // normal case: SIGTERM lands immediately
+      },
+      waitForExit: false,
+    });
+
+    // The record stays either way; the next run's setup clears a dead-PID
+    // record silently (see the silent-clear test below).
+    expect(existsSync(pidFilePath)).toBe(true);
+  });
+
+  it('a record left by teardown is finished by the next setup: escalation runs, file unlinked on confirmed death', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242\n/worktree-a/dist/index.js', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    // Run 1's teardown: fire-and-forget against a wedge — record survives.
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => true,
+      verifyPidIdentity: () => true,
+      kill: () => {},
+      waitForExit: false,
+    });
+    expect(existsSync(pidFilePath)).toBe(true);
+
+    // Run 2's setup: awaited escalation finishes the wedged survivor.
+    const killed: string[] = [];
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: () => true,
+      kill: (_pid, signal) => {
+        killed.push(signal);
+        if (signal === 'SIGKILL') alive = false; // still ignoring SIGTERM
+      },
+      reapTimeoutMs: 30,
+      sigkillReapTimeoutMs: 30,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(killed).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  it('clears a dead-PID record silently: unlink, no signal, no warning', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242\n/worktree-a/dist/index.js', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => false, // the teardown-killed server exited normally
+        kill: () => {
+          throw new Error('should not be called');
+        },
+      });
+
+      expect(existsSync(pidFilePath)).toBe(false);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('unlinks a garbage record without signaling', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, 'not-a-pid', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => true,
+      kill: () => {
+        throw new Error('should not be called');
+      },
+    });
+
+    expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  it('unlinks when SIGTERM throws because the process died in the read-to-kill gap', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    await expect(
+      killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true,
+        verifyPidIdentity: () => true,
+        kill: () => {
+          throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+        },
+      }),
+    ).resolves.not.toThrow();
+
+    expect(existsSync(pidFilePath)).toBe(false);
   });
 
   it('removes the file but does not kill when the recorded PID is no longer alive', async () => {
