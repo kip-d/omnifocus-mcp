@@ -41,10 +41,14 @@ export const DEFAULT_LOCK_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'inte
 // direction: a stale lock whose PID the OS reused for some unrelated
 // vitest process (e.g. a unit run in another worktree) is falsely treated
 // as held, and the new run is refused with an error message that already
-// names the manual remedy. Closing that residual exactly — with no false
-// negatives — requires recording the holder's process START TIME in the
-// lock file and comparing it on check; that lock-format change is tracked
-// in OMN-265 rather than rushed into incident-history-bearing code here.
+// names the manual remedy.
+//
+// OMN-265: this substring is now the FALLBACK, not the primary check. The
+// lock records its writer's process start time (`<pid>\n<lstart>`), and a
+// readable live start time decides identity EXACTLY (PID + start time is
+// unique per boot — no false refusals, no false steals), so the substring is
+// consulted only for a legacy bare-PID lock file or when `ps` can't read the
+// live process's start time.
 const LOCK_HOLDER_COMMAND_SUBSTRING = 'vitest';
 
 export interface LockResult {
@@ -73,6 +77,24 @@ export function pidIsAlive(pid: number): boolean {
 export function parseLockPid(raw: string): number | undefined {
   const pid = Number.parseInt(raw, 10);
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
+/**
+ * Second line of a `<pid>\n<recorded value>` PID-record file, or undefined
+ * for a legacy bare-PID file (written by code predating the two-line format)
+ * so callers degrade to their pre-record fallback chain. Shared by both
+ * record-based identity schemes — the OMN-265 lock (second line = the
+ * holder's process start time; a spawn path can't discriminate here because
+ * any worktree's vitest is a legitimate holder) and shared-server.ts's
+ * OMN-263 PID file (second line = the recorded spawn path). What the value
+ * MEANS stays per-site; only the parsing is shared, so a fix to the
+ * newline/whitespace handling can't drift between the siblings.
+ */
+export function parseRecordedSecondLine(raw: string): string | undefined {
+  const newline = raw.indexOf('\n');
+  if (newline === -1) return undefined;
+  const recorded = raw.slice(newline + 1).trim();
+  return recorded.length > 0 ? recorded : undefined;
 }
 
 /**
@@ -127,6 +149,40 @@ export function commandMatchesPid(
 }
 
 /**
+ * OMN-265: reads a live process's start time via `ps -o lstart=` — constant
+ * for the process's whole lifetime and second-granular, so PID + start time
+ * identifies a process uniquely per boot (reusing a dead process's PID number
+ * within the same second is not a real interleaving). Undefined when the
+ * process is gone or `ps` fails, mirroring getProcessCommand above (same
+ * timeout rationale: this can sit on setup/teardown's critical path and must
+ * degrade to the documented fallback, not hang the run).
+ *
+ * The child env pins LC_ALL and TZ (/code-review finding on PR #222):
+ * lstart renders in the CALLING process's locale and timezone, not the
+ * target's — empirically, fr_FR renders 'lun. 13 juil. …' and TZ=UTC shifts
+ * the wall-clock digits for the SAME instant. Unpinned, a checker whose
+ * environment differs from the writer's (launchd job vs. interactive shell,
+ * SSH, CI) reads a different string for a LIVE holder, the exact comparison
+ * declares it stale, and the lock is stolen from a running suite — the
+ * dangerous direction this whole scheme must never err toward. Pinning makes
+ * the rendering a pure function of the process's start instant.
+ */
+export function getProcessStartTime(pid: number): string | undefined {
+  try {
+    const out = execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+      env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
+    });
+    const trimmed = out.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * OMN-263 code-review follow-up: the default `verifyPidIdentity` for
  * acquireIntegrationLock/isIntegrationLockLive. Two EXACT shortcuts run
  * before any `ps` shellout, matching the two processes that legitimately
@@ -158,30 +214,63 @@ export function commandMatchesPid(
  * later unrelated process such as `npm run test:cleanup`) pay for the real
  * command-line comparison.
  *
- * Known corner (OMN-263 review pass 5, accepted): if a crashed holder's PID
- * is later reused as THIS process's own pid, the self-PID shortcut confirms
- * a lock this process never wrote, and acquire refuses against a phantom
- * holder. That outcome is IDENTICAL under pre-OMN-263 bare liveness (self
- * is alive) and under the command-substring fallback (this process is
- * itself vitest) — it's an inherent limit of liveness/command-based
- * identity, not a regression of this shortcut, it fails in the safe
- * direction (refuse, with the error message naming the manual remedy), and
- * only OMN-265's recorded-start-time comparison can close it.
+ * OMN-265: after the fast paths, a recorded start time in the lock file
+ * (see acquireIntegrationLock's write) decides identity EXACTLY when the
+ * live process's start time is readable: match → this IS the writer
+ * (confirmed holder, no substring needed — a live holder from any sibling
+ * worktree matches its own record, so no false steals), mismatch → the PID
+ * number was reused after the writer died (confirmed stale — even when the
+ * squatter is itself some vitest process, the case the substring
+ * false-refused). Unreadable start time or a legacy bare-PID lock falls
+ * back to the OMN-263 substring chain unchanged.
  *
- * Exported, with an injectable `commandMatches` fallback, for the
- * fast-path regression tests: review pass 4 proved the earlier mock-based
- * test file couldn't detect removal of these shortcuts (its child_process
- * mock never intercepted this module's import, and the real-`ps` fallback
- * returned identical outcomes). A test injecting a THROWING fallback and
- * calling this function directly fails loudly the moment a fast path stops
- * short-circuiting — no module-mock interception required.
+ * Known corner (OMN-263 review pass 5; still open post-OMN-265, accepted):
+ * if a crashed holder's PID is later reused as THIS process's own pid (or
+ * its parent's), the fast paths confirm a lock this process never wrote
+ * BEFORE the start-time comparison runs, and acquire refuses against a
+ * phantom holder. That outcome is IDENTICAL under pre-OMN-263 bare liveness
+ * and under the command-substring fallback — an inherent limit of the fast
+ * paths, kept because they are what hold the hot per-file teardown path to
+ * two integer compares with zero shellouts (reordering the start-time
+ * comparison ahead of them would put a `ps` call on every per-file check).
+ * It fails in the safe direction (refuse, with the error message naming
+ * the manual remedy) and needs two PID-reuse coincidences landing on this
+ * very run's own/parent pid.
+ *
+ * The check parameter is a single OBJECT (same rationale as
+ * killOrphanedSharedServer's verifyPidIdentity, pass 5): a positional
+ * `(pid, recordedStartTime)` signature would let a 1-arg verifier copied
+ * from elsewhere structurally typecheck while silently dropping the
+ * start-time comparison. The property is named recordedStartTime — not
+ * shared-server's recordedCommand — so cross-module copy-paste of the
+ * OTHER sibling's verifier is also a hard type error, not a silent
+ * behavior change.
+ *
+ * Exported, with injectable `commandMatches`/`getStartTime` fallbacks, for
+ * the fast-path regression tests: review pass 4 proved the earlier
+ * mock-based test file couldn't detect removal of these shortcuts (its
+ * child_process mock never intercepted this module's import, and the
+ * real-`ps` fallback returned identical outcomes). A test injecting a
+ * THROWING fallback and calling this function directly fails loudly the
+ * moment a fast path stops short-circuiting — no module-mock interception
+ * required.
  */
 export function verifyLockHolderIdentity(
-  holderPid: number,
-  opts: { commandMatches?: (pid: number) => boolean | undefined } = {},
+  check: { pid: number; recordedStartTime: string | undefined },
+  opts: {
+    commandMatches?: (pid: number) => boolean | undefined;
+    getStartTime?: (pid: number) => string | undefined;
+  } = {},
 ): boolean | undefined {
+  const holderPid = check.pid;
   if (holderPid === process.pid) return true;
   if (holderPid === process.ppid && holderPid !== 1) return true;
+  if (check.recordedStartTime !== undefined) {
+    const getStartTime = opts.getStartTime ?? getProcessStartTime;
+    const liveStartTime = getStartTime(holderPid);
+    if (liveStartTime !== undefined) return liveStartTime === check.recordedStartTime;
+    // Start time unreadable — fall through to the substring chain below.
+  }
   const commandMatches =
     opts.commandMatches ?? ((pid: number) => commandMatchesPid(pid, LOCK_HOLDER_COMMAND_SUBSTRING));
   return commandMatches(holderPid);
@@ -192,19 +281,31 @@ export function acquireIntegrationLock(
     lockPath?: string;
     pid?: number;
     isPidAlive?: (pid: number) => boolean;
-    verifyPidIdentity?: (pid: number) => boolean | undefined;
+    verifyPidIdentity?: (check: { pid: number; recordedStartTime: string | undefined }) => boolean | undefined;
+    /** OMN-265: reads the acquiring process's own start time for the lock record. */
+    getProcessStartTime?: (pid: number) => string | undefined;
   } = {},
 ): LockResult {
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
   const pid = opts.pid ?? process.pid;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
   const verifyIdentity = opts.verifyPidIdentity ?? verifyLockHolderIdentity;
+  const readStartTime = opts.getProcessStartTime ?? getProcessStartTime;
+
+  // OMN-265: record our own start time next to the PID so a LATER process
+  // examining this lock can tell "this PID is still the writer" from "the OS
+  // reused the writer's PID number" exactly, instead of via the broad
+  // command substring. One `ps` shellout per acquire — once per run, off
+  // every hot path. Unreadable start time degrades to the legacy bare-PID
+  // format (checks then use the substring chain, exactly as pre-OMN-265).
+  const ownStartTime = readStartTime(pid);
+  const lockContents = ownStartTime !== undefined ? `${pid}\n${ownStartTime}` : String(pid);
 
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
 
   // Happy path: atomic create-exclusive. Anything but EEXIST is a real error.
   try {
-    fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
+    fs.writeFileSync(lockPath, lockContents, { flag: 'wx' });
     return { acquired: true };
   } catch (e) {
     if ((e as { code?: string }).code !== 'EEXIST') throw e;
@@ -218,7 +319,7 @@ export function acquireIntegrationLock(
     // the atomic create once; a second EEXIST means a new holder won the race.
     if ((e as { code?: string }).code !== 'ENOENT') throw e;
     try {
-      fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
+      fs.writeFileSync(lockPath, lockContents, { flag: 'wx' });
       return { acquired: true };
     } catch (e2) {
       if ((e2 as { code?: string }).code !== 'EEXIST') throw e2;
@@ -243,13 +344,14 @@ export function acquireIntegrationLock(
     // only costs a delay), but PROCEED with the kill in shared-server.ts
     // (an unnecessary skip risks a wedged orphan driving OmniFocus). Don't
     // unify them into one helper without preserving that per-site choice.
-    const identity = verifyIdentity(holder);
+    const identity = verifyIdentity({ pid: holder, recordedStartTime: parseRecordedSecondLine(raw) });
     if (identity !== false) {
       return { acquired: false, holderPid: holder };
     }
     console.warn(
-      `[Integration Guard] Lock at ${lockPath} names PID ${holder}, which is alive but its command line doesn't ` +
-        'look like a vitest process (OMN-263 PID-reuse check) — treating the lock as stale rather than trusting bare liveness.',
+      `[Integration Guard] Lock at ${lockPath} names PID ${holder}, which is alive but fails the identity check ` +
+        '(OMN-263/OMN-265 PID-reuse detection: recorded start time or command line does not match) — ' +
+        'treating the lock as stale rather than trusting bare liveness.',
     );
   }
 
@@ -265,7 +367,7 @@ export function acquireIntegrationLock(
     if ((e as { code?: string }).code !== 'ENOENT') throw e;
   }
   try {
-    fs.writeFileSync(lockPath, String(pid), { flag: 'wx' });
+    fs.writeFileSync(lockPath, lockContents, { flag: 'wx' });
   } catch (e) {
     if ((e as { code?: string }).code !== 'EEXIST') throw e;
     const winner = parseLockPid(fs.readFileSync(lockPath, 'utf8').trim());
@@ -286,7 +388,7 @@ export function isIntegrationLockLive(
   opts: {
     lockPath?: string;
     isPidAlive?: (pid: number) => boolean;
-    verifyPidIdentity?: (pid: number) => boolean | undefined;
+    verifyPidIdentity?: (check: { pid: number; recordedStartTime: string | undefined }) => boolean | undefined;
   } = {},
 ): boolean {
   const lockPath = opts.lockPath ?? DEFAULT_LOCK_PATH;
@@ -307,7 +409,7 @@ export function isIntegrationLockLive(
   // shared-server.ts's killOrphanedSharedServer — see the NOTE in
   // acquireIntegrationLock above on why the three sites' unverifiable
   // fallbacks deliberately differ and must not be blindly unified.)
-  if (verifyIdentity(holder) === false) {
+  if (verifyIdentity({ pid: holder, recordedStartTime: parseRecordedSecondLine(raw) }) === false) {
     // Pass 4: warn like the siblings do — a confirmed mismatch here flips
     // fullCleanup from scoped to full mode, and doing that silently would
     // leave no trace of why cleanup scope changed if anyone ever debugs it.
@@ -323,6 +425,10 @@ export function isIntegrationLockLive(
 /**
  * Release ONLY if the lock still contains our PID — never delete a lock a
  * later run legitimately reclaimed (e.g. after we were SIGKILLed and restarted).
+ *
+ * OMN-265: compares the PARSED pid, not raw content — the lock now carries a
+ * second start-time line, so an exact string compare against the bare PID
+ * would never match and the owner could never release its own lock.
  */
 export function releaseIntegrationLock(
   opts: {
@@ -334,7 +440,7 @@ export function releaseIntegrationLock(
   const pid = opts.pid ?? process.pid;
   try {
     const raw = fs.readFileSync(lockPath, 'utf8').trim();
-    if (raw !== String(pid)) return false;
+    if (parseLockPid(raw) !== pid) return false;
     fs.unlinkSync(lockPath);
     return true;
   } catch {

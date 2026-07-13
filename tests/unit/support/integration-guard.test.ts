@@ -15,7 +15,16 @@ import {
   pidIsAlive,
   commandMatchesPid,
   getProcessCommand,
+  getProcessStartTime,
+  verifyLockHolderIdentity,
 } from '../../support/integration-guard.js';
+
+// OMN-265: acquire now reads its own process start time (via `ps`) to record
+// it in the lock file. Every acquire call in this file injects this stub so
+// the suite's default paths never spawn a real subprocess (the same rule the
+// OMN-263 verifyPidIdentity stubs follow). Tests exercising the recorded
+// start time inject their own reader instead.
+const NO_START_TIME = { getProcessStartTime: (): string | undefined => undefined };
 
 describe('acquireIntegrationLock / releaseIntegrationLock', () => {
   let dir: string;
@@ -30,14 +39,14 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('fresh acquire creates the lock containing the PID', () => {
-    const res = acquireIntegrationLock({ lockPath, pid: 12345 });
+  it('fresh acquire creates the lock containing the PID (bare format when the start time is unreadable)', () => {
+    const res = acquireIntegrationLock({ lockPath, pid: 12345, ...NO_START_TIME });
     expect(res).toEqual({ acquired: true });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('12345');
   });
 
   it('refuses when a LIVE holder owns the lock, reporting the holder PID', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
     // OMN-263: verifyPidIdentity mocked true (confirmed match) so this test
     // stays fully dependency-injected — it must not shell out to the real
     // `ps` binary for a fake PID.
@@ -46,6 +55,7 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
       pid: 22222,
       isPidAlive: () => true,
       verifyPidIdentity: () => true,
+      ...NO_START_TIME,
     });
     expect(res).toEqual({ acquired: false, holderPid: 11111 });
     // the holder's lock is untouched
@@ -53,8 +63,8 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
   });
 
   it('reclaims a stale lock when the holder is dead', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
-    const res = acquireIntegrationLock({ lockPath, pid: 22222, isPidAlive: () => false });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
+    const res = acquireIntegrationLock({ lockPath, pid: 22222, isPidAlive: () => false, ...NO_START_TIME });
     expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('22222');
   });
@@ -68,13 +78,14 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
       isPidAlive: () => {
         throw new Error('must not probe liveness for garbage content');
       },
+      ...NO_START_TIME,
     });
     expect(res).toEqual({ acquired: true, stale: true });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('33333');
   });
 
   it('release is owner-only: a non-owner release leaves the lock in place', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
     expect(releaseIntegrationLock({ lockPath, pid: 99999 })).toBe(false);
     expect(fs.existsSync(lockPath)).toBe(true);
     expect(releaseIntegrationLock({ lockPath, pid: 11111 })).toBe(true);
@@ -86,10 +97,140 @@ describe('acquireIntegrationLock / releaseIntegrationLock', () => {
   });
 
   it('acquire-after-release round-trip works (the teardown→next-run path)', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
     releaseIntegrationLock({ lockPath, pid: 11111 });
-    const res = acquireIntegrationLock({ lockPath, pid: 22222 });
+    const res = acquireIntegrationLock({ lockPath, pid: 22222, ...NO_START_TIME });
     expect(res).toEqual({ acquired: true });
+  });
+});
+
+// OMN-265: the lock file records the holder's process start time alongside
+// its PID (`<pid>\n<lstart>`), so a stale lock whose PID number the OS reused
+// can be told apart from the real holder EXACTLY — PID + start time is unique
+// per boot — instead of via the deliberately broad 'vitest' command
+// substring (which false-refuses when the reused PID belongs to any other
+// vitest process on the machine).
+describe('acquireIntegrationLock — OMN-265 recorded start-time identity', () => {
+  let dir: string;
+  let lockPath: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omn265-'));
+    lockPath = path.join(dir, 'integration.lock');
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('fresh acquire records `<pid>\\n<start time>` when the start time is readable', () => {
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 12345,
+      getProcessStartTime: () => 'Sun Jul 13 05:00:00 2026',
+    });
+    expect(res).toEqual({ acquired: true });
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe('12345\nSun Jul 13 05:00:00 2026');
+  });
+
+  it('stale reclaim also writes the new format (the reclaimer records its own start time)', () => {
+    acquireIntegrationLock({ lockPath, pid: 11111, getProcessStartTime: () => 'Sat Jul 12 09:00:00 2026' });
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 22222,
+      isPidAlive: () => false,
+      getProcessStartTime: () => 'Sun Jul 13 05:00:00 2026',
+    });
+    expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe('22222\nSun Jul 13 05:00:00 2026');
+  });
+
+  it("round-trips: the FILE's recorded start time (not any ambient value) reaches verifyPidIdentity", () => {
+    acquireIntegrationLock({ lockPath, pid: 11111, getProcessStartTime: () => 'Sat Jul 12 09:00:00 2026' });
+    const verifyPidIdentity = vi.fn((): boolean | undefined => true);
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 22222,
+      isPidAlive: () => true,
+      verifyPidIdentity,
+      ...NO_START_TIME,
+    });
+    expect(res).toEqual({ acquired: false, holderPid: 11111 });
+    expect(verifyPidIdentity).toHaveBeenCalledWith({
+      pid: 11111,
+      recordedStartTime: 'Sat Jul 12 09:00:00 2026',
+    });
+  });
+
+  it('a legacy bare-PID lock reaches verifyPidIdentity with recordedStartTime undefined', () => {
+    fs.writeFileSync(lockPath, '11111');
+    const verifyPidIdentity = vi.fn((): boolean | undefined => true);
+    acquireIntegrationLock({ lockPath, pid: 22222, isPidAlive: () => true, verifyPidIdentity, ...NO_START_TIME });
+    expect(verifyPidIdentity).toHaveBeenCalledWith({ pid: 11111, recordedStartTime: undefined });
+  });
+
+  it('HEADLINE: a stale lock whose PID was reused by an unrelated vitest process is reclaimed on a start-time mismatch', () => {
+    // The pre-OMN-265 trap: the reused PID belongs to a process whose command
+    // line DOES contain 'vitest' (say, a unit run in a sibling worktree), so
+    // the substring check confirms a holder that is not the writer. The
+    // recorded start time disagrees with the live process's — that exact
+    // comparison must win, and the substring must not even be consulted.
+    fs.writeFileSync(lockPath, '11111\nSat Jul 12 09:00:00 2026');
+    const commandMatches = vi.fn((): boolean | undefined => true); // it IS some vitest process…
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = acquireIntegrationLock({
+        lockPath,
+        pid: 22222,
+        isPidAlive: () => true,
+        verifyPidIdentity: (check) =>
+          verifyLockHolderIdentity(check, {
+            getStartTime: () => 'Sun Jul 13 04:59:59 2026', // …but not the one that wrote the lock
+            commandMatches,
+          }),
+        getProcessStartTime: () => 'Sun Jul 13 05:00:00 2026',
+      });
+      expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
+      expect(commandMatches).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('NO FALSE NEGATIVES: a live holder from a different worktree (start times match) is still refused', () => {
+    fs.writeFileSync(lockPath, '11111\nSat Jul 12 09:00:00 2026');
+    const commandMatches = vi.fn((): boolean | undefined => true);
+    const res = acquireIntegrationLock({
+      lockPath,
+      pid: 22222,
+      isPidAlive: () => true,
+      verifyPidIdentity: (check) =>
+        verifyLockHolderIdentity(check, {
+          getStartTime: () => 'Sat Jul 12 09:00:00 2026', // exact match — this IS the writer
+          commandMatches,
+        }),
+      ...NO_START_TIME,
+    });
+    expect(res).toEqual({ acquired: false, holderPid: 11111 });
+    expect(commandMatches).not.toHaveBeenCalled();
+  });
+
+  it('release works on the two-line format (owner-only, parsed-PID comparison)', () => {
+    acquireIntegrationLock({ lockPath, pid: 11111, getProcessStartTime: () => 'Sun Jul 13 05:00:00 2026' });
+    expect(releaseIntegrationLock({ lockPath, pid: 99999 })).toBe(false);
+    expect(fs.existsSync(lockPath)).toBe(true);
+    expect(releaseIntegrationLock({ lockPath, pid: 11111 })).toBe(true);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it('isIntegrationLockLive passes the recorded start time through to verifyPidIdentity', () => {
+    fs.writeFileSync(lockPath, '12345\nSat Jul 12 09:00:00 2026');
+    const verifyPidIdentity = vi.fn((): boolean | undefined => true);
+    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity })).toBe(true);
+    expect(verifyPidIdentity).toHaveBeenCalledWith({
+      pid: 12345,
+      recordedStartTime: 'Sat Jul 12 09:00:00 2026',
+    });
   });
 });
 
@@ -111,7 +252,7 @@ describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', (
   });
 
   it('a CONFIRMED identity mismatch (alive PID, wrong command) is treated as stale and reclaimed', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const res = acquireIntegrationLock({
@@ -119,6 +260,7 @@ describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', (
         pid: 22222,
         isPidAlive: () => true, // OS says the PID is alive...
         verifyPidIdentity: () => false, // ...but it's confirmed NOT our lock holder (PID reuse)
+        ...NO_START_TIME,
       });
       expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
       expect(fs.readFileSync(lockPath, 'utf8')).toBe('22222');
@@ -130,12 +272,13 @@ describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', (
   });
 
   it('an UNVERIFIABLE identity (ps could not confirm either way) preserves the pre-OMN-263 behavior: refuse', () => {
-    acquireIntegrationLock({ lockPath, pid: 11111 });
+    acquireIntegrationLock({ lockPath, pid: 11111, ...NO_START_TIME });
     const res = acquireIntegrationLock({
       lockPath,
       pid: 22222,
       isPidAlive: () => true,
       verifyPidIdentity: () => undefined, // could not check — must NOT be treated as a mismatch
+      ...NO_START_TIME,
     });
     expect(res).toEqual({ acquired: false, holderPid: 11111 });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('11111');
@@ -326,5 +469,45 @@ describe('getProcessCommand', () => {
     // Near the macOS pid_max ceiling — overwhelmingly unlikely to exist; see
     // the identical rationale on pidIsAlive's test above.
     expect(getProcessCommand(99999998)).toBeUndefined();
+  });
+});
+
+describe('getProcessStartTime (OMN-265)', () => {
+  it('reads a stable lstart for the current process (live ps invocation, no mock — same rationale as getProcessCommand)', () => {
+    const startTime = getProcessStartTime(process.pid);
+    expect(startTime).toBeDefined();
+    // lstart is per-process-constant: two reads must agree exactly, which is
+    // the property the whole OMN-265 comparison scheme rests on.
+    expect(getProcessStartTime(process.pid)).toBe(startTime);
+  });
+
+  it('undefined for a PID that does not exist', () => {
+    expect(getProcessStartTime(99999998)).toBeUndefined();
+  });
+
+  it("rendering is pinned against the caller's TZ/locale — writer and checker must agree byte-for-byte across environments", () => {
+    // /code-review finding on PR #222: `ps -o lstart=` renders in the CALLING
+    // process's LC_TIME and TZ (empirically: fr_FR gives 'lun. 13 juil. …',
+    // TZ=UTC shifts the wall-clock digits), so an unpinned reader lets a
+    // checker under a different environment (launchd job, SSH, CI) see a
+    // DIFFERENT string for the same live holder → exact-compare says
+    // "confirmed stale" → a LIVE lock is reclaimed: the dangerous direction.
+    // Pin: the function must return the same rendering no matter what
+    // TZ/LC_ALL this process carries.
+    const originalTZ = process.env.TZ;
+    const originalLcAll = process.env.LC_ALL;
+    try {
+      process.env.TZ = 'UTC';
+      process.env.LC_ALL = 'C';
+      const rendered = getProcessStartTime(process.pid);
+      process.env.TZ = 'Asia/Tokyo'; // UTC+9, no DST — guaranteed different wall clock
+      process.env.LC_ALL = 'fr_FR.UTF-8';
+      expect(getProcessStartTime(process.pid)).toBe(rendered);
+    } finally {
+      if (originalTZ === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTZ;
+      if (originalLcAll === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = originalLcAll;
+    }
   });
 });

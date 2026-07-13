@@ -20,7 +20,12 @@ import { SERVER_PATH } from './server-path.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { profileFixture } from './fixture-profiler.js';
 import { getGlobalSlot } from './global-singleton.js';
-import { pidIsAlive, parseLockPid, commandMatchesPid } from '../../support/integration-guard.js';
+import {
+  pidIsAlive,
+  parseLockPid,
+  parseRecordedSecondLine,
+  commandMatchesPid,
+} from '../../support/integration-guard.js';
 
 // OMN-261: mirrors the OMN-143 lock's PID-in-a-file pattern (integration-guard.ts's
 // DEFAULT_LOCK_PATH/pidIsAlive) — see Task 3b's rationale for why no in-process
@@ -60,13 +65,10 @@ export function setSharedServerPidFilePathForTests(pidFilePath: string | undefin
   pidFilePathForTests = pidFilePath;
 }
 
-/** Second line of the PID file: the recorded spawn path, if present. */
-function parseRecordedCommand(raw: string): string | undefined {
-  const newline = raw.indexOf('\n');
-  if (newline === -1) return undefined;
-  const recorded = raw.slice(newline + 1).trim();
-  return recorded.length > 0 ? recorded : undefined;
-}
+// Second line of the PID file — the recorded spawn path, if present — parsed
+// by the shared parseRecordedSecondLine (OMN-265 review: it was a
+// byte-identical private copy here; only the MEANING of the second line
+// differs between the two record files, not the parsing).
 
 export function recordSharedServerPid(
   pid: number | undefined,
@@ -238,7 +240,7 @@ export async function killOrphanedSharedServer(
   // pattern in integration-guard.ts's acquireIntegrationLock and
   // isIntegrationLockLive, whose unverifiable fallback points the OPPOSITE
   // way — refuse — see the NOTE there before unifying anything.)
-  if (verifyIdentity({ pid, recordedCommand: parseRecordedCommand(raw) }) === false) {
+  if (verifyIdentity({ pid, recordedCommand: parseRecordedSecondLine(raw) }) === false) {
     console.warn(
       `[shared-server] PID ${pid} from ${pidFilePath} is alive but its command line doesn't look like our ` +
         'spawned server (OMN-263 PID-reuse check) — skipping SIGTERM to avoid signaling an unrelated process.',
