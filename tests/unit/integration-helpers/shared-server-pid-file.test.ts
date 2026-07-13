@@ -219,7 +219,7 @@ describe('killOrphanedSharedServer', () => {
     await killOrphanedSharedServer({
       pidFilePath,
       isPidAlive: () => alive,
-      verifyPidIdentity: (pid, recordedCommand) => {
+      verifyPidIdentity: ({ pid, recordedCommand }) => {
         verifyCalls.push({ pid, recordedCommand });
         return true;
       },
@@ -245,7 +245,7 @@ describe('killOrphanedSharedServer', () => {
     await killOrphanedSharedServer({
       pidFilePath,
       isPidAlive: () => alive,
-      verifyPidIdentity: (pid, recordedCommand) => {
+      verifyPidIdentity: ({ pid, recordedCommand }) => {
         verifyCalls.push({ pid, recordedCommand });
         return true;
       },
@@ -269,7 +269,7 @@ describe('killOrphanedSharedServer', () => {
     await killOrphanedSharedServer({
       pidFilePath,
       isPidAlive: () => alive,
-      verifyPidIdentity: (_pid, recordedCommand) => {
+      verifyPidIdentity: ({ recordedCommand }) => {
         seenRecordedCommand = recordedCommand;
         return true;
       },

@@ -160,8 +160,16 @@ export async function killOrphanedSharedServer(
      * OMN-263 pass 4: receives the spawn path recorded in the PID file
      * (undefined for a legacy bare-PID file), so injected verifiers can
      * assert the record actually flows through to the identity check.
+     *
+     * Pass 5: a single OBJECT parameter, deliberately incompatible with the
+     * `(pid: number) => …` shape the OMN-143 lock's same-named option uses —
+     * a 1-arg verifier copied from integration-guard.ts would otherwise
+     * structurally satisfy a 2-positional-arg signature (TS accepts fewer
+     * params) and silently drop the recordedCommand check, reopening the
+     * production-collision / cross-worktree-miss gap with no compiler
+     * signal. With an object param, that copy-paste is a type error.
      */
-    verifyPidIdentity?: (pid: number, recordedCommand: string | undefined) => boolean | undefined;
+    verifyPidIdentity?: (check: { pid: number; recordedCommand: string | undefined }) => boolean | undefined;
     kill?: (pid: number, signal: string) => void;
     reapTimeoutMs?: number;
     reapPollIntervalMs?: number;
@@ -173,7 +181,7 @@ export async function killOrphanedSharedServer(
   const isAlive = opts.isPidAlive ?? pidIsAlive;
   const verifyIdentity =
     opts.verifyPidIdentity ??
-    ((pid: number, recordedCommand: string | undefined) =>
+    (({ pid, recordedCommand }: { pid: number; recordedCommand: string | undefined }) =>
       // The record is authoritative when present; a bare-PID file written by
       // code predating the recorded-path format falls back to the legacy
       // substring (broad enough to reap any worktree's orphan — the
@@ -214,7 +222,7 @@ export async function killOrphanedSharedServer(
   // pattern in integration-guard.ts's acquireIntegrationLock and
   // isIntegrationLockLive, whose unverifiable fallback points the OPPOSITE
   // way — refuse — see the NOTE there before unifying anything.)
-  if (verifyIdentity(pid, parseRecordedCommand(raw)) === false) {
+  if (verifyIdentity({ pid, recordedCommand: parseRecordedCommand(raw) }) === false) {
     console.warn(
       `[shared-server] PID ${pid} from ${pidFilePath} is alive but its command line doesn't look like our ` +
         'spawned server (OMN-263 PID-reuse check) — skipping SIGTERM to avoid signaling an unrelated process.',

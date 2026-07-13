@@ -158,6 +158,16 @@ export function commandMatchesPid(
  * later unrelated process such as `npm run test:cleanup`) pay for the real
  * command-line comparison.
  *
+ * Known corner (OMN-263 review pass 5, accepted): if a crashed holder's PID
+ * is later reused as THIS process's own pid, the self-PID shortcut confirms
+ * a lock this process never wrote, and acquire refuses against a phantom
+ * holder. That outcome is IDENTICAL under pre-OMN-263 bare liveness (self
+ * is alive) and under the command-substring fallback (this process is
+ * itself vitest) — it's an inherent limit of liveness/command-based
+ * identity, not a regression of this shortcut, it fails in the safe
+ * direction (refuse, with the error message naming the manual remedy), and
+ * only OMN-265's recorded-start-time comparison can close it.
+ *
  * Exported, with an injectable `commandMatches` fallback, for the
  * fast-path regression tests: review pass 4 proved the earlier mock-based
  * test file couldn't detect removal of these shortcuts (its child_process
