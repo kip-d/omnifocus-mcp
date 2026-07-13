@@ -260,6 +260,7 @@ describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', (
         pid: 22222,
         isPidAlive: () => true, // OS says the PID is alive...
         verifyPidIdentity: () => false, // ...but it's confirmed NOT our lock holder (PID reuse)
+        ...NO_START_TIME,
       });
       expect(res).toEqual({ acquired: true, stale: true, holderPid: 11111 });
       expect(fs.readFileSync(lockPath, 'utf8')).toBe('22222');
@@ -277,6 +278,7 @@ describe('acquireIntegrationLock — OMN-263 PID-reuse identity verification', (
       pid: 22222,
       isPidAlive: () => true,
       verifyPidIdentity: () => undefined, // could not check — must NOT be treated as a mismatch
+      ...NO_START_TIME,
     });
     expect(res).toEqual({ acquired: false, holderPid: 11111 });
     expect(fs.readFileSync(lockPath, 'utf8')).toBe('11111');

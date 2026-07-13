@@ -80,15 +80,17 @@ export function parseLockPid(raw: string): number | undefined {
 }
 
 /**
- * OMN-265: second line of the lock file — the holder's recorded process start
- * time, if present. Undefined for a legacy bare-PID lock (written by code
- * predating the format) so callers degrade to the OMN-263 substring chain.
- * Same shape as shared-server.ts's parseRecordedCommand, whose PID file
- * records a spawn path instead (a path can't discriminate here: any
- * worktree's vitest is a legitimate lock holder — see the substring comment
- * above).
+ * Second line of a `<pid>\n<recorded value>` PID-record file, or undefined
+ * for a legacy bare-PID file (written by code predating the two-line format)
+ * so callers degrade to their pre-record fallback chain. Shared by both
+ * record-based identity schemes — the OMN-265 lock (second line = the
+ * holder's process start time; a spawn path can't discriminate here because
+ * any worktree's vitest is a legitimate holder) and shared-server.ts's
+ * OMN-263 PID file (second line = the recorded spawn path). What the value
+ * MEANS stays per-site; only the parsing is shared, so a fix to the
+ * newline/whitespace handling can't drift between the siblings.
  */
-function parseRecordedStartTime(raw: string): string | undefined {
+export function parseRecordedSecondLine(raw: string): string | undefined {
   const newline = raw.indexOf('\n');
   if (newline === -1) return undefined;
   const recorded = raw.slice(newline + 1).trim();
@@ -342,7 +344,7 @@ export function acquireIntegrationLock(
     // only costs a delay), but PROCEED with the kill in shared-server.ts
     // (an unnecessary skip risks a wedged orphan driving OmniFocus). Don't
     // unify them into one helper without preserving that per-site choice.
-    const identity = verifyIdentity({ pid: holder, recordedStartTime: parseRecordedStartTime(raw) });
+    const identity = verifyIdentity({ pid: holder, recordedStartTime: parseRecordedSecondLine(raw) });
     if (identity !== false) {
       return { acquired: false, holderPid: holder };
     }
@@ -407,7 +409,7 @@ export function isIntegrationLockLive(
   // shared-server.ts's killOrphanedSharedServer — see the NOTE in
   // acquireIntegrationLock above on why the three sites' unverifiable
   // fallbacks deliberately differ and must not be blindly unified.)
-  if (verifyIdentity({ pid: holder, recordedStartTime: parseRecordedStartTime(raw) }) === false) {
+  if (verifyIdentity({ pid: holder, recordedStartTime: parseRecordedSecondLine(raw) }) === false) {
     // Pass 4: warn like the siblings do — a confirmed mismatch here flips
     // fullCleanup from scoped to full mode, and doing that silently would
     // leave no trace of why cleanup scope changed if anyone ever debugs it.
