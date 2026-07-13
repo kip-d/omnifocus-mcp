@@ -44,6 +44,22 @@ const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared
 // Legacy fallback for a bare-PID file written by code predating this format:
 const LEGACY_SHARED_SERVER_COMMAND_SUBSTRING = 'dist/index.js';
 
+// OMN-266: unit tests exercise the REAL getSharedClientImpl() with a mocked
+// MCPTestClient (pid 1234); without an override, its recordSharedServerPid()
+// call writes that mock PID to the machine-global PID file above — clobbering
+// a genuine crashed-run's record (the file's whole point is surviving a crash
+// so the next run can reap the orphan). getSharedClient() takes no arguments,
+// so the path can't be threaded per-call like killOrphanedSharedServer's
+// opts.pidFilePath; a module-scope override is the seam instead. Deliberately
+// NOT in the globalThis state slot: vitest's per-file module reset returns
+// this to undefined (= the real path) automatically, so a test's override can
+// never leak into another file — the reset direction is safe here, unlike the
+// shared-state case documented at getState().
+let pidFilePathForTests: string | undefined;
+export function setSharedServerPidFilePathForTests(pidFilePath: string | undefined): void {
+  pidFilePathForTests = pidFilePath;
+}
+
 /** Second line of the PID file: the recorded spawn path, if present. */
 function parseRecordedCommand(raw: string): string | undefined {
   const newline = raw.indexOf('\n');
@@ -449,7 +465,10 @@ async function getSharedClientImpl(): Promise<MCPTestClient> {
     const client = new MCPTestClient({ enableCacheWarming: true });
     try {
       await client.startServer();
-      recordSharedServerPid(client.pid);
+      // undefined → recordSharedServerPid's default (the real machine-global
+      // path); only tests that called setSharedServerPidFilePathForTests
+      // divert it (OMN-266).
+      recordSharedServerPid(client.pid, pidFilePathForTests);
       console.log('🔥 Warming up OmniFocus (read + mutation paths)...');
       await warmupOmniFocus(client);
       console.log('✅ Shared MCP server ready (cache warmed, OmniFocus warmed)');

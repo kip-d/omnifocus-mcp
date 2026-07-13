@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
+import { tmpdir, homedir } from 'os';
+import { join } from 'path';
 
 const startServerMock = vi.fn();
 const stopMock = vi.fn();
@@ -47,14 +50,46 @@ vi.mock('../../integration/helpers/mcp-test-client.js', () => {
 // key from the module under test rather than re-typing the literal, so a
 // rename can't silently make clearGlobalSlot a no-op.
 describe('getSharedClient init-failure recovery', () => {
+  let tempDir: string;
+
   beforeEach(async () => {
     vi.resetModules();
     startServerMock.mockReset();
     stopMock.mockReset().mockResolvedValue(undefined);
     callToolMock.mockReset().mockImplementation(defaultCallToolImpl);
     const { clearGlobalSlot } = await import('../../integration/helpers/global-singleton.js');
-    const { SHARED_SERVER_STATE_SLOT } = await import('../../integration/helpers/shared-server.js');
+    const { SHARED_SERVER_STATE_SLOT, setSharedServerPidFilePathForTests } =
+      await import('../../integration/helpers/shared-server.js');
     clearGlobalSlot(SHARED_SERVER_STATE_SLOT);
+    // OMN-266: these tests run the REAL getSharedClientImpl(), whose
+    // recordSharedServerPid(client.pid) call writes the mocked PID (1234) to
+    // the machine-global ~/.omnifocus-mcp/shared-server.pid by default —
+    // clobbering a genuine crashed-run record every time the unit suite runs.
+    // Point the module at a per-test temp path. vi.resetModules() above
+    // re-creates the module (override back to undefined) each test, so the
+    // override must be re-applied here and can never leak past this file.
+    tempDir = mkdtempSync(join(tmpdir(), 'omn-266-shared-server-'));
+    setSharedServerPidFilePathForTests(join(tempDir, 'shared-server.pid'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('records the mocked PID to the injected path, never the real machine-global PID file (OMN-266)', async () => {
+    startServerMock.mockResolvedValue(undefined);
+    const realPidPath = join(homedir(), '.omnifocus-mcp', 'shared-server.pid');
+    const realBefore = existsSync(realPidPath) ? readFileSync(realPidPath, 'utf-8') : undefined;
+
+    const { getSharedClient } = await import('../../integration/helpers/shared-server.js');
+    await getSharedClient();
+
+    // The write landed at the injected path, in the OMN-263 two-line format.
+    expect(readFileSync(join(tempDir, 'shared-server.pid'), 'utf-8')).toMatch(/^1234\n/);
+    // And the real machine-global file is byte-identical (or still absent) —
+    // the ticket's acceptance criterion, checked read-only.
+    const realAfter = existsSync(realPidPath) ? readFileSync(realPidPath, 'utf-8') : undefined;
+    expect(realAfter).toBe(realBefore);
   });
 
   it('resets shared state after an init failure so the next call retries fresh instead of inheriting the broken client forever', async () => {
