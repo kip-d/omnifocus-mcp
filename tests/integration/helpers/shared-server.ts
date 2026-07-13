@@ -32,12 +32,21 @@ import {
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
+// OMN-267 gate round 2: catch blocks are exactly where arbitrary values
+// arrive (`throw null` via the injectable kill), so anything reading `.code`
+// off a caught value must be total over unknown — an unguarded read would
+// throw right back out of the catch, escaping killOrphanedSharedServer into
+// setup/teardown, which call it unguarded (stranding the OMN-143 lock).
+function errorCode(e: unknown): string | undefined {
+  return typeof e === 'object' && e !== null ? (e as { code?: string }).code : undefined;
+}
+
 // OMN-267 gate: only ESRCH ("no such process") confirms the target is gone.
 // EPERM means it EXISTS but we can't signal it — the same semantics
 // integration-guard.ts's pidIsAlive gives kill(pid, 0) errors. Treating any
 // thrown kill() error as death would delete a live process's record.
 function isEsrchError(e: unknown): boolean {
-  return (e as { code?: string }).code === 'ESRCH';
+  return errorCode(e) === 'ESRCH';
 }
 
 // OMN-263 review (pass 4): the identity check must be neither a bare
@@ -85,6 +94,9 @@ export function recordSharedServerPid(
   // run — possibly in a different worktree — verifies the orphan's identity
   // against this record instead of its own (different) checkout path.
   commandPath: string = SERVER_PATH,
+  // DI seam for the overwrite-warning liveness gate below (a fixed test PID
+  // like 4242 could genuinely be alive on the machine running the tests).
+  isAlive: (pid: number) => boolean = pidIsAlive,
 ): void {
   if (pid === undefined) return;
   try {
@@ -94,12 +106,18 @@ export function recordSharedServerPid(
     // untracked orphan. Accepted residual (a survivor of SIGKILL is usually
     // kernel-stuck and beyond further signaling anyway), but it must leave
     // a trace in the run log, not vanish silently.
+    //
+    // Gate round 2: warn only if the prior PID is STILL ALIVE — the warning
+    // must meet the same evidence standard as the reap. A dead prior PID
+    // here is the ordinary warmup-failure retry path (getSharedClientImpl's
+    // catch stop()s/SIGKILLs the old child without touching this file);
+    // warning about a confirmed-dead process would poison the signal.
     try {
       const existing = parseLockPid(readFileSync(pidFilePath, 'utf-8').trim());
-      if (existing !== undefined && existing !== pid) {
+      if (existing !== undefined && existing !== pid && isAlive(existing)) {
         console.warn(
           `[shared-server] Overwriting PID record for ${existing} with ${pid} at ${pidFilePath} — ` +
-            'if that process is still alive it is now untracked (SIGKILL-survivor slot loss, OMN-267).',
+            'that process is still alive and is now untracked (SIGKILL-survivor slot loss, OMN-267).',
         );
       }
     } catch {
@@ -340,7 +358,7 @@ export async function killOrphanedSharedServer(
       // privileges) can retry. No SIGKILL escalation either — it would hit
       // the identical permission failure.
       console.warn(
-        `[shared-server] Could not signal PID ${pid} (${String((e as { code?: string }).code ?? e)}) — ` +
+        `[shared-server] Could not signal PID ${pid} (${String(errorCode(e) ?? e)}) — ` +
           'it may still be alive; keeping its PID record so a later run retries.',
       );
     }
@@ -372,7 +390,7 @@ export async function killOrphanedSharedServer(
       removeRecord();
     } else {
       console.warn(
-        `[shared-server] Could not SIGKILL PID ${pid} (${String((e as { code?: string }).code ?? e)}) — ` +
+        `[shared-server] Could not SIGKILL PID ${pid} (${String(errorCode(e) ?? e)}) — ` +
           'it may still be alive; keeping its PID record so a later run retries.',
       );
     }

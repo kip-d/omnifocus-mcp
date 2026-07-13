@@ -412,6 +412,39 @@ describe('killOrphanedSharedServer', () => {
     expect(existsSync(pidFilePath)).toBe(false);
   });
 
+  // OMN-267 gate round 2: the errno classifier is called from catch blocks,
+  // which is exactly where arbitrary values arrive (`throw null` via the
+  // injectable kill). It must be total over unknown — if it throws, the
+  // TypeError escapes killOrphanedSharedServer into global setup/teardown,
+  // which call it unguarded, stranding the OMN-143 lock.
+  it('survives a non-object throw from kill(): no crash, record kept, warning still emitted', async () => {
+    const fs = await import('fs');
+    const record = '4242\n/worktree-a/dist/index.js';
+    fs.writeFileSync(pidFilePath, record, 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        killOrphanedSharedServer({
+          pidFilePath,
+          isPidAlive: () => true,
+          verifyPidIdentity: () => true,
+          kill: () => {
+            throw null;
+          },
+        }),
+      ).resolves.not.toThrow();
+
+      // Not ESRCH → not confirmed dead → record kept, outcome warned.
+      expect(existsSync(pidFilePath)).toBe(true);
+      expect(readFileSync(pidFilePath, 'utf-8')).toBe(record);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('removes the file but does not kill when the recorded PID is no longer alive', async () => {
     const fs = await import('fs');
     fs.writeFileSync(pidFilePath, '4242', 'utf-8');
@@ -623,24 +656,42 @@ describe('recordSharedServerPid', () => {
   // a SIGKILL-survivor's record, this run's own server registration is the
   // point where that record is lost — it must at least be loud about it, so
   // an untracked orphan leaves a trace in the run log.
-  it('warns when overwriting an existing record for a DIFFERENT pid (survivor slot loss)', async () => {
+  // Gate round 2: the warning must hold itself to the same evidence standard
+  // as the reap — only a STILL-ALIVE prior PID is a survivor being lost. A
+  // dead prior PID is the ordinary warmup-failure retry path (whose own
+  // catch already stop()'d/SIGKILLed the old child without touching the
+  // file); warning there would poison the signal.
+  it('warns when overwriting an existing record for a DIFFERENT, still-alive pid (survivor slot loss)', async () => {
     const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
     const pidFilePath = join(dir, 'shared-server.pid');
 
     recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
-    recordSharedServerPid(5555, pidFilePath, '/worktree-b/dist/index.js');
+    recordSharedServerPid(5555, pidFilePath, '/worktree-b/dist/index.js', () => true);
 
     expect(readFileSync(pidFilePath, 'utf-8')).toBe('5555\n/worktree-b/dist/index.js');
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
   });
 
-  it('does not warn when re-recording the same pid', async () => {
+  it('does not warn when the overwritten record names a DEAD pid (warmup-failure retry path)', async () => {
     const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
     const pidFilePath = join(dir, 'shared-server.pid');
 
     recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+    recordSharedServerPid(5555, pidFilePath, '/worktree-b/dist/index.js', () => false);
+
+    expect(readFileSync(pidFilePath, 'utf-8')).toBe('5555\n/worktree-b/dist/index.js');
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when re-recording the same pid, without even probing liveness', async () => {
+    const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const pidFilePath = join(dir, 'shared-server.pid');
+
     recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js', () => {
+      throw new Error('liveness must not be probed for a same-pid re-record');
+    });
 
     expect(warnSpy).not.toHaveBeenCalled();
   });
