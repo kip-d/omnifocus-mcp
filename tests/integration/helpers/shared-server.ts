@@ -32,6 +32,14 @@ import {
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
+// OMN-267 gate: only ESRCH ("no such process") confirms the target is gone.
+// EPERM means it EXISTS but we can't signal it — the same semantics
+// integration-guard.ts's pidIsAlive gives kill(pid, 0) errors. Treating any
+// thrown kill() error as death would delete a live process's record.
+function isEsrchError(e: unknown): boolean {
+  return (e as { code?: string }).code === 'ESRCH';
+}
+
 // OMN-263 review (pass 4): the identity check must be neither a bare
 // 'dist/index.js' substring (matches a real PRODUCTION server on PID reuse —
 // pass-2 finding) nor the reaper's OWN checkout-specific SERVER_PATH (the
@@ -80,6 +88,23 @@ export function recordSharedServerPid(
 ): void {
   if (pid === undefined) return;
   try {
+    // OMN-267 gate: this file has exactly ONE slot. If setup() kept a
+    // SIGKILL-survivor's record (see killOrphanedSharedServer), this write
+    // is the point where that record is lost — the survivor becomes an
+    // untracked orphan. Accepted residual (a survivor of SIGKILL is usually
+    // kernel-stuck and beyond further signaling anyway), but it must leave
+    // a trace in the run log, not vanish silently.
+    try {
+      const existing = parseLockPid(readFileSync(pidFilePath, 'utf-8').trim());
+      if (existing !== undefined && existing !== pid) {
+        console.warn(
+          `[shared-server] Overwriting PID record for ${existing} with ${pid} at ${pidFilePath} — ` +
+            'if that process is still alive it is now untracked (SIGKILL-survivor slot loss, OMN-267).',
+        );
+      }
+    } catch {
+      /* no existing record — the normal case */
+    }
     mkdirSync(path.dirname(pidFilePath), { recursive: true });
     writeFileSync(pidFilePath, `${pid}\n${commandPath}`, 'utf-8');
   } catch (error) {
@@ -143,12 +168,22 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  * the OMN-143 lock).
  *
  * OMN-267: the PID record is unlinked only where the recorded process is
- * CONFIRMED gone (dead PID, confirmed reuse-mismatch, kill() throwing ESRCH,
+ * CONFIRMED gone (dead PID, confirmed reuse-mismatch, kill() throwing ESRCH
+ * — and ONLY ESRCH; EPERM means alive-but-unsignalable, see isEsrchError —
  * polled-to-death) or the record is confirmed garbage — never eagerly after
  * the read. A branch that cannot know the outcome keeps the record so a
  * later call can re-derive it. The pass-4 "unlink stays correct" argument
  * (a confirmed mismatch implies the recorded orphan is dead) now lives on
  * exactly the branch it covers: the mismatch branch.
+ *
+ * INVARIANT for future edits: every return path out of this function must
+ * either call removeRecord() (outcome: confirmed dead / record garbage) or
+ * deliberately keep the record (outcome: unknown or still alive) — there is
+ * no third state. Each existing branch is pinned by a unit test in
+ * shared-server-pid-file.test.ts; a new branch needs its own pin. A kept
+ * record is best-effort across a run boundary only: within a run, this
+ * run's own recordSharedServerPid() overwrite is the point where a kept
+ * survivor record is lost (loudly — see the warn there).
  *
  * By default, polls after sending SIGTERM so callers can rely on the orphan
  * actually being gone (or log a warning that it wasn't) before touching
@@ -243,8 +278,15 @@ export async function killOrphanedSharedServer(
   const removeRecord = () => {
     try {
       unlinkSync(pidFilePath);
-    } catch {
-      /* already gone — fine */
+    } catch (e) {
+      // ENOENT is fine (already gone); anything else means a stale record
+      // will persist — say so instead of proceeding as if cleanup succeeded.
+      // Warn rather than throw (unlike integration-guard's ENOENT-rethrow
+      // sibling): this runs inside setup/teardown, where a throw would fail
+      // the whole run over a cleanup bookkeeping problem.
+      if ((e as { code?: string }).code !== 'ENOENT') {
+        console.warn(`[shared-server] Failed to remove PID record ${pidFilePath} — a stale record may persist:`, e);
+      }
     }
   };
 
@@ -287,9 +329,21 @@ export async function killOrphanedSharedServer(
 
   try {
     kill(pid, 'SIGTERM');
-  } catch {
-    /* gone between the liveness check and the kill; harmless */
-    removeRecord();
+  } catch (e) {
+    if (isEsrchError(e)) {
+      // Gone between the liveness check and the kill — confirmed dead.
+      removeRecord();
+    } else {
+      // EPERM etc.: the process exists but we can't signal it — the same
+      // semantics pidIsAlive gives kill(pid, 0) errors. NOT confirmed dead:
+      // keep the record so a future run (possibly with different
+      // privileges) can retry. No SIGKILL escalation either — it would hit
+      // the identical permission failure.
+      console.warn(
+        `[shared-server] Could not signal PID ${pid} (${String((e as { code?: string }).code ?? e)}) — ` +
+          'it may still be alive; keeping its PID record so a later run retries.',
+      );
+    }
     return;
   }
 
@@ -312,9 +366,16 @@ export async function killOrphanedSharedServer(
   // process cannot ignore, then give it a shorter window to actually die.
   try {
     kill(pid, 'SIGKILL');
-  } catch {
-    /* died between the check and the escalation; fine */
-    removeRecord();
+  } catch (e) {
+    if (isEsrchError(e)) {
+      // Died between the poll and the escalation — confirmed dead.
+      removeRecord();
+    } else {
+      console.warn(
+        `[shared-server] Could not SIGKILL PID ${pid} (${String((e as { code?: string }).code ?? e)}) — ` +
+          'it may still be alive; keeping its PID record so a later run retries.',
+      );
+    }
     return;
   }
   const killDeadline = Date.now() + sigkillReapTimeoutMs;

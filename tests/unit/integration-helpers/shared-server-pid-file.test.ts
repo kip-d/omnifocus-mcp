@@ -266,6 +266,133 @@ describe('killOrphanedSharedServer', () => {
     expect(existsSync(pidFilePath)).toBe(false);
   });
 
+  // ── OMN-267 gate round 1: only ESRCH confirms death. EPERM (and any other
+  // non-ESRCH error) means the process may well be alive but unsignalable —
+  // deleting its record there reintroduces the unrecorded-orphan class.
+  // pidIsAlive in integration-guard.ts encodes the same semantics (EPERM =
+  // alive, "we must not steal its lock").
+
+  it('keeps the record and warns when SIGTERM throws a non-ESRCH error (process alive but unsignalable)', async () => {
+    const fs = await import('fs');
+    const record = '4242\n/worktree-a/dist/index.js';
+    fs.writeFileSync(pidFilePath, record, 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const killed: string[] = [];
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true,
+        verifyPidIdentity: () => true,
+        kill: (_pid, signal) => {
+          killed.push(signal);
+          throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+        },
+        reapTimeoutMs: 30,
+        reapPollIntervalMs: 5,
+      });
+
+      // No SIGKILL escalation attempt — the same permission failure would
+      // just repeat; the kept record lets a future run (possibly with
+      // different privileges) retry.
+      expect(killed).toEqual(['SIGTERM']);
+      expect(existsSync(pidFilePath)).toBe(true);
+      expect(readFileSync(pidFilePath, 'utf-8')).toBe(record);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('keeps the record and warns when the SIGKILL escalation throws a non-ESRCH error', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242\n/worktree-a/dist/index.js', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const killed: string[] = [];
+      await killOrphanedSharedServer({
+        pidFilePath,
+        isPidAlive: () => true, // survives SIGTERM, forcing the escalation
+        verifyPidIdentity: () => true,
+        kill: (_pid, signal) => {
+          killed.push(signal);
+          if (signal === 'SIGKILL') {
+            throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+          }
+        },
+        reapTimeoutMs: 30,
+        sigkillReapTimeoutMs: 30,
+        reapPollIntervalMs: 5,
+      });
+
+      expect(killed).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(existsSync(pidFilePath)).toBe(true);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('unlinks when the SIGKILL escalation throws ESRCH (died between the poll and the escalation)', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => true,
+      verifyPidIdentity: () => true,
+      kill: (_pid, signal) => {
+        if (signal === 'SIGKILL') {
+          throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+        }
+      },
+      reapTimeoutMs: 30,
+      sigkillReapTimeoutMs: 30,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(existsSync(pidFilePath)).toBe(false);
+  });
+
+  // OMN-267 gate round 1: removeRecord must not silently swallow non-ENOENT
+  // unlink failures — seven branches would proceed believing cleanup
+  // succeeded while a stale record persists. (Warn, not throw: unlike the
+  // integration-guard sibling, this runs inside setup/teardown, where a
+  // throw would fail the whole run over a cleanup bookkeeping problem.)
+  it('warns when the unlink fails for a reason other than ENOENT, instead of silently proceeding', async () => {
+    const fs = await import('fs');
+    const lockedDir = join(dir, 'locked');
+    mkdirSync(lockedDir);
+    const lockedPidPath = join(lockedDir, 'shared-server.pid');
+    fs.writeFileSync(lockedPidPath, '4242', 'utf-8');
+    chmodSync(lockedDir, 0o555); // unlink permission comes from the directory
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await killOrphanedSharedServer({
+        pidFilePath: lockedPidPath,
+        isPidAlive: () => false, // dead-PID branch → removeRecord()
+        kill: () => {
+          throw new Error('should not be called');
+        },
+      });
+
+      expect(existsSync(lockedPidPath)).toBe(true); // the unlink really failed
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain(lockedPidPath);
+    } finally {
+      chmodSync(lockedDir, 0o755);
+      warnSpy.mockRestore();
+    }
+  });
+
   it('unlinks when SIGTERM throws because the process died in the read-to-kill gap', async () => {
     const fs = await import('fs');
     fs.writeFileSync(pidFilePath, '4242', 'utf-8');
@@ -489,6 +616,32 @@ describe('recordSharedServerPid', () => {
     recordSharedServerPid(undefined, pidFilePath);
 
     expect(existsSync(pidFilePath)).toBe(false);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  // OMN-267 gate round 1: the PID file has exactly ONE slot. If setup() kept
+  // a SIGKILL-survivor's record, this run's own server registration is the
+  // point where that record is lost — it must at least be loud about it, so
+  // an untracked orphan leaves a trace in the run log.
+  it('warns when overwriting an existing record for a DIFFERENT pid (survivor slot loss)', async () => {
+    const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const pidFilePath = join(dir, 'shared-server.pid');
+
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+    recordSharedServerPid(5555, pidFilePath, '/worktree-b/dist/index.js');
+
+    expect(readFileSync(pidFilePath, 'utf-8')).toBe('5555\n/worktree-b/dist/index.js');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
+  });
+
+  it('does not warn when re-recording the same pid', async () => {
+    const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const pidFilePath = join(dir, 'shared-server.pid');
+
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });
