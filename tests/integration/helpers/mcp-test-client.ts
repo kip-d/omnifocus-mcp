@@ -1,6 +1,9 @@
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 import { RUN_NAME_PREFIX, runScopedName, runScopedTag } from './run-id.js';
 import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
+// OMN-263: the shared, checkout-specific absolute path — see server-path.ts
+// for why it must be absolute and why there is exactly one copy of it.
+import { SERVER_PATH } from './server-path.js';
 
 export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
 
@@ -109,7 +112,7 @@ export class MCPTestClient {
     }
 
     this.transport = new StdioJsonRpcTransport({
-      serverPath: './dist/index.js',
+      serverPath: SERVER_PATH,
       spawnOptions: { stdio: ['pipe', 'pipe', 'pipe'], env },
     });
   }

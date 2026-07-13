@@ -50,11 +50,11 @@
  * under `npm run test:integration`.
  */
 import type { ChildProcess, SpawnOptions } from 'child_process';
-import path from 'path';
 import { StdioJsonRpcTransport, DEFAULT_TIMEOUT_MS } from './stdio-jsonrpc-transport.js';
-
-/** Resolve `dist/index.js` from this helper's location (tests/integration/helpers → repo root). */
-const SERVER_PATH = path.join(__dirname, '../../../dist/index.js');
+// OMN-263 review: was a second, independently-computed copy of this path
+// (via __dirname) — consolidated so the spawn path and shared-server.ts's
+// process-identity check can never drift apart. See server-path.ts.
+import { SERVER_PATH } from './server-path.js';
 
 export interface StartOptions {
   /**
