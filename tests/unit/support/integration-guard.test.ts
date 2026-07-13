@@ -275,7 +275,17 @@ describe('isIntegrationLockLive', () => {
 
   it('OMN-263: false on a CONFIRMED identity mismatch (alive PID, wrong command) — the real holder is gone', () => {
     fs.writeFileSync(lockPath, '12345');
-    expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity: () => false })).toBe(false);
+    // Pass 4: the mismatch must also WARN (sibling parity with
+    // acquireIntegrationLock / killOrphanedSharedServer) — silently flipping
+    // cleanup scope left a debugging blind spot.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(isIntegrationLockLive({ lockPath, isPidAlive: () => true, verifyPidIdentity: () => false })).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('12345');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('OMN-263: an UNVERIFIABLE identity preserves the pre-OMN-263 "alive == live" behavior', () => {

@@ -202,6 +202,86 @@ describe('killOrphanedSharedServer', () => {
 
     expect(killed).toEqual([{ pid: 4242, signal: 'SIGTERM' }]);
   });
+
+  // OMN-263 pass 4: the identity check must verify against the spawn path
+  // RECORDED IN THE FILE (written by whichever worktree spawned the server),
+  // never against the reaper's own checkout path — a machine-global PID file
+  // can legitimately name a sibling worktree's orphan, which the reaper's
+  // own SERVER_PATH would never match.
+  it('passes the recorded spawn path from the PID file to the identity check', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242\n/worktree-a/dist/index.js', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    const verifyCalls: Array<{ pid: number; recordedCommand: string | undefined }> = [];
+    const killed: string[] = [];
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: (pid, recordedCommand) => {
+        verifyCalls.push({ pid, recordedCommand });
+        return true;
+      },
+      kill: (_pid, signal) => {
+        killed.push(signal);
+        alive = false;
+      },
+      reapTimeoutMs: 200,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(verifyCalls).toEqual([{ pid: 4242, recordedCommand: '/worktree-a/dist/index.js' }]);
+    expect(killed).toEqual(['SIGTERM']);
+  });
+
+  it('a legacy bare-PID file reaches the identity check with no recorded command', async () => {
+    const fs = await import('fs');
+    fs.writeFileSync(pidFilePath, '4242', 'utf-8');
+    const { killOrphanedSharedServer } = await import('../../integration/helpers/shared-server.js');
+
+    const verifyCalls: Array<{ pid: number; recordedCommand: string | undefined }> = [];
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: (pid, recordedCommand) => {
+        verifyCalls.push({ pid, recordedCommand });
+        return true;
+      },
+      kill: () => {
+        alive = false;
+      },
+      reapTimeoutMs: 200,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(verifyCalls).toEqual([{ pid: 4242, recordedCommand: undefined }]);
+  });
+
+  it('round-trips: a path recorded by recordSharedServerPid is what the reaper verifies against', async () => {
+    const { recordSharedServerPid, killOrphanedSharedServer } =
+      await import('../../integration/helpers/shared-server.js');
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+
+    let seenRecordedCommand: string | undefined;
+    let alive = true;
+    await killOrphanedSharedServer({
+      pidFilePath,
+      isPidAlive: () => alive,
+      verifyPidIdentity: (_pid, recordedCommand) => {
+        seenRecordedCommand = recordedCommand;
+        return true;
+      },
+      kill: () => {
+        alive = false;
+      },
+      reapTimeoutMs: 200,
+      reapPollIntervalMs: 5,
+    });
+
+    expect(seenRecordedCommand).toBe('/worktree-a/dist/index.js');
+  });
 });
 
 describe('recordSharedServerPid', () => {
@@ -232,15 +312,25 @@ describe('recordSharedServerPid', () => {
     expect(String(warnSpy.mock.calls[0][0])).toContain('4242');
   });
 
-  it('writes the PID file successfully when the path is writable', async () => {
+  it('writes the PID plus the recorded spawn path (OMN-263 pass 4 format)', async () => {
     const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const pidFilePath = join(dir, 'shared-server.pid');
+
+    recordSharedServerPid(4242, pidFilePath, '/worktree-a/dist/index.js');
+
+    expect(existsSync(pidFilePath)).toBe(true);
+    expect(readFileSync(pidFilePath, 'utf-8')).toBe('4242\n/worktree-a/dist/index.js');
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('defaults the recorded spawn path to this checkout’s SERVER_PATH', async () => {
+    const { recordSharedServerPid } = await import('../../integration/helpers/shared-server.js');
+    const { SERVER_PATH } = await import('../../integration/helpers/server-path.js');
     const pidFilePath = join(dir, 'shared-server.pid');
 
     recordSharedServerPid(4242, pidFilePath);
 
-    expect(existsSync(pidFilePath)).toBe(true);
-    expect(readFileSync(pidFilePath, 'utf-8')).toBe('4242');
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(readFileSync(pidFilePath, 'utf-8')).toBe(`4242\n${SERVER_PATH}`);
   });
 
   it('does nothing when pid is undefined', async () => {

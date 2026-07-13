@@ -87,9 +87,15 @@ export function getProcessCommand(pid: number): string | undefined {
     // stdio: pipe stdout (what we read), swallow stderr — `ps` writes a
     // diagnostic there for a PID it rejects outright (e.g. out of range),
     // which is an expected outcome here, not something to surface.
+    // timeout (OMN-263 review pass 4): this sits on globalSetup/teardown's
+    // and per-file afterAll's critical path — a wedged `ps` (overloaded
+    // process table during a live session) must degrade to the documented
+    // "unverifiable → per-site safe fallback" behavior, not hang the whole
+    // run. On timeout, execFileSync kills the child and throws → undefined.
     const out = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
     });
     const trimmed = out.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -151,11 +157,24 @@ export function commandMatchesPid(
  * cross-process checks (a stale lock from a crashed run, examined by a
  * later unrelated process such as `npm run test:cleanup`) pay for the real
  * command-line comparison.
+ *
+ * Exported, with an injectable `commandMatches` fallback, for the
+ * fast-path regression tests: review pass 4 proved the earlier mock-based
+ * test file couldn't detect removal of these shortcuts (its child_process
+ * mock never intercepted this module's import, and the real-`ps` fallback
+ * returned identical outcomes). A test injecting a THROWING fallback and
+ * calling this function directly fails loudly the moment a fast path stops
+ * short-circuiting — no module-mock interception required.
  */
-function verifyLockHolderIdentity(holderPid: number): boolean | undefined {
+export function verifyLockHolderIdentity(
+  holderPid: number,
+  opts: { commandMatches?: (pid: number) => boolean | undefined } = {},
+): boolean | undefined {
   if (holderPid === process.pid) return true;
   if (holderPid === process.ppid && holderPid !== 1) return true;
-  return commandMatchesPid(holderPid, LOCK_HOLDER_COMMAND_SUBSTRING);
+  const commandMatches =
+    opts.commandMatches ?? ((pid: number) => commandMatchesPid(pid, LOCK_HOLDER_COMMAND_SUBSTRING));
+  return commandMatches(holderPid);
 }
 
 export function acquireIntegrationLock(
@@ -278,7 +297,17 @@ export function isIntegrationLockLive(
   // shared-server.ts's killOrphanedSharedServer — see the NOTE in
   // acquireIntegrationLock above on why the three sites' unverifiable
   // fallbacks deliberately differ and must not be blindly unified.)
-  return verifyIdentity(holder) !== false;
+  if (verifyIdentity(holder) === false) {
+    // Pass 4: warn like the siblings do — a confirmed mismatch here flips
+    // fullCleanup from scoped to full mode, and doing that silently would
+    // leave no trace of why cleanup scope changed if anyone ever debugs it.
+    console.warn(
+      `[Integration Guard] Lock at ${lockPath} names PID ${holder}, which is alive but fails the OMN-263 ` +
+        'identity check (PID reused by an unrelated process) — treating the run as NOT live.',
+    );
+    return false;
+  }
+  return true;
 }
 
 /**

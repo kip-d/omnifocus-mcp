@@ -27,22 +27,43 @@ import { pidIsAlive, parseLockPid, commandMatchesPid } from '../../support/integ
 // exit hook can be relied on to shut this down.
 const SHARED_SERVER_PID_PATH = path.join(os.homedir(), '.omnifocus-mcp', 'shared-server.pid');
 
-// OMN-263 code-review follow-up: this MUST be the shared resolved absolute
-// SERVER_PATH, not a bare 'dist/index.js' substring — the original substring
-// matched ANY `node .../dist/index.js` process, including a real production
-// OmniFocus MCP server (e.g. one launched by Claude Desktop from a different
-// install directory), which defeated the entire point of this identity check
-// on PID reuse. An absolute, checkout-specific path can't collide with a
-// different install directory — and importing the SAME constant the spawn
-// side uses (see server-path.ts) means the identity check can never drift
-// from what was actually spawned.
-const SHARED_SERVER_COMMAND_SUBSTRING = SERVER_PATH;
+// OMN-263 review (pass 4): the identity check must be neither a bare
+// 'dist/index.js' substring (matches a real PRODUCTION server on PID reuse —
+// pass-2 finding) nor the reaper's OWN checkout-specific SERVER_PATH (the
+// PID file lives at a machine-global path, so a genuine orphan left by a
+// crashed run in a SIBLING worktree has a different absolute path and would
+// be silently left alive to drive OmniFocus concurrently — pass-4 finding;
+// the same machine-global-vs-checkout-specific reasoning integration-guard.ts
+// documents for the OMN-143 lock). The resolution: the WRITER records the
+// exact path it spawned (recordSharedServerPid below writes
+// `<pid>\n<serverPath>`), and the reaper verifies the live process against
+// the RECORD — worktree A's orphan matches worktree A's recorded path no
+// matter which worktree reaps it, while a production server can never match
+// because it never writes this file; only PID reuse could point the record
+// at it, and PID reuse is exactly what a recorded-path mismatch detects.
+// Legacy fallback for a bare-PID file written by code predating this format:
+const LEGACY_SHARED_SERVER_COMMAND_SUBSTRING = 'dist/index.js';
 
-export function recordSharedServerPid(pid: number | undefined, pidFilePath: string = SHARED_SERVER_PID_PATH): void {
+/** Second line of the PID file: the recorded spawn path, if present. */
+function parseRecordedCommand(raw: string): string | undefined {
+  const newline = raw.indexOf('\n');
+  if (newline === -1) return undefined;
+  const recorded = raw.slice(newline + 1).trim();
+  return recorded.length > 0 ? recorded : undefined;
+}
+
+export function recordSharedServerPid(
+  pid: number | undefined,
+  pidFilePath: string = SHARED_SERVER_PID_PATH,
+  // OMN-263 pass 4: record WHAT was spawned alongside the pid, so a later
+  // run — possibly in a different worktree — verifies the orphan's identity
+  // against this record instead of its own (different) checkout path.
+  commandPath: string = SERVER_PATH,
+): void {
   if (pid === undefined) return;
   try {
     mkdirSync(path.dirname(pidFilePath), { recursive: true });
-    writeFileSync(pidFilePath, String(pid), 'utf-8');
+    writeFileSync(pidFilePath, `${pid}\n${commandPath}`, 'utf-8');
   } catch (error) {
     // OMN-261 review: silent failure here defeats the only shutdown path
     // that's actually load-bearing (killOrphanedSharedServer, called from
@@ -92,13 +113,17 @@ const SIGKILL_REAP_TIMEOUT_MS = 2000;
  * path back in would only add a second, strictly weaker sweep at the same
  * point in the run — not a safety improvement.
  *
- * OMN-263: before signaling the PID this reads from the file, verifies its
- * command line looks like our spawned server (`commandMatchesPid` against
- * server-path.ts's resolved absolute `SERVER_PATH` — NOT a bare
- * `dist/index.js` substring, which couldn't distinguish this checkout's
- * server from an unrelated one, e.g. a real production server) — plain
+ * OMN-263: before signaling the PID this reads from the file, verifies the
+ * live process's command line against the spawn path RECORDED IN THE FILE
+ * (see recordSharedServerPid / the pass-4 comment above it) — plain
  * `isPidAlive` can't tell "still our orphan" apart from "OS reassigned this
- * PID number to something unrelated after our orphan already exited." See
+ * PID number to something unrelated after our orphan already exited," and
+ * neither a bare substring (matches a production server) nor the reaper's
+ * own checkout path (misses a sibling worktree's orphan) answers it; only
+ * the writer's own record does. Unlinking the file BEFORE the identity
+ * check stays correct under the recorded-path scheme: a CONFIRMED mismatch
+ * means the recorded orphan's PID was reused, i.e. the orphan itself is
+ * already dead — the record is garbage either way. See
  * integration-guard.ts's `commandMatchesPid` for the shared identity-check
  * primitive (also used by the OMN-143 lock).
  *
@@ -131,7 +156,12 @@ export async function killOrphanedSharedServer(
   opts: {
     pidFilePath?: string;
     isPidAlive?: (pid: number) => boolean;
-    verifyPidIdentity?: (pid: number) => boolean | undefined;
+    /**
+     * OMN-263 pass 4: receives the spawn path recorded in the PID file
+     * (undefined for a legacy bare-PID file), so injected verifiers can
+     * assert the record actually flows through to the identity check.
+     */
+    verifyPidIdentity?: (pid: number, recordedCommand: string | undefined) => boolean | undefined;
     kill?: (pid: number, signal: string) => void;
     reapTimeoutMs?: number;
     reapPollIntervalMs?: number;
@@ -142,7 +172,14 @@ export async function killOrphanedSharedServer(
   const pidFilePath = opts.pidFilePath ?? SHARED_SERVER_PID_PATH;
   const isAlive = opts.isPidAlive ?? pidIsAlive;
   const verifyIdentity =
-    opts.verifyPidIdentity ?? ((pid: number) => commandMatchesPid(pid, SHARED_SERVER_COMMAND_SUBSTRING));
+    opts.verifyPidIdentity ??
+    ((pid: number, recordedCommand: string | undefined) =>
+      // The record is authoritative when present; a bare-PID file written by
+      // code predating the recorded-path format falls back to the legacy
+      // substring (broad enough to reap any worktree's orphan — the
+      // production-collision window it reopens exists only for that one
+      // transitional file and closes the first time this run records anew).
+      commandMatchesPid(pid, recordedCommand ?? LEGACY_SHARED_SERVER_COMMAND_SUBSTRING));
   const kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
   const reapTimeoutMs = opts.reapTimeoutMs ?? REAP_TIMEOUT_MS;
   const reapPollIntervalMs = opts.reapPollIntervalMs ?? REAP_POLL_INTERVAL_MS;
@@ -165,17 +202,19 @@ export async function killOrphanedSharedServer(
   if (pid === undefined) return;
   if (!isAlive(pid)) return;
 
-  // OMN-263: confirm this PID is plausibly OUR spawned server before
-  // signaling it — the OS can reassign a dead process's PID number to
-  // something unrelated (worst case, a long-running `dist/index.js`
-  // production server, since that's the same command this file spawns).
+  // OMN-263: confirm this PID is plausibly the server the PID file's writer
+  // spawned before signaling it — the OS can reassign a dead process's PID
+  // number to something unrelated (worst case, a long-running production
+  // `dist/index.js` server). The expected command comes from the FILE's own
+  // record, not this checkout's SERVER_PATH, so a sibling worktree's orphan
+  // still matches (pass-4 finding — see the recordSharedServerPid comment).
   // Unverifiable (ps failed) falls through to the pre-OMN-263 behavior
   // (proceed with the kill) rather than newly refusing to clean up a real
   // orphan; only a CONFIRMED mismatch skips the kill. (Sibling of the same
   // pattern in integration-guard.ts's acquireIntegrationLock and
   // isIntegrationLockLive, whose unverifiable fallback points the OPPOSITE
   // way — refuse — see the NOTE there before unifying anything.)
-  if (verifyIdentity(pid) === false) {
+  if (verifyIdentity(pid, parseRecordedCommand(raw)) === false) {
     console.warn(
       `[shared-server] PID ${pid} from ${pidFilePath} is alive but its command line doesn't look like our ` +
         'spawned server (OMN-263 PID-reuse check) — skipping SIGTERM to avoid signaling an unrelated process.',
