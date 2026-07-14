@@ -43,7 +43,8 @@ function isTaskAvailable(task: Task): boolean {
 
 export function analyzeWipLimits(projects: Project[], options: WipLimitsOptions): WipLimitsResult {
   const { wipLimit } = options;
-  const activeProjects = projects.filter((p) => p.status === 'active' || p.status === 'on-hold');
+  // Canonical status vocabulary (fetchSlimmedData → normalizeProjectStatus): 'onHold', not 'on-hold'.
+  const activeProjects = projects.filter((p) => p.status === 'active' || p.status === 'onHold');
 
   const analyzed = activeProjects.map((project) => {
     let availableTasks: number;

@@ -1702,6 +1702,34 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(never).not.toContain('r3');
     });
 
+    it('wip_limits sees on-hold projects despite raw JXA status strings', async () => {
+      const mkTask = (i: number) => ({
+        id: `t${i}`,
+        name: `task ${i}`,
+        completed: false,
+        flagged: false,
+        status: 'available',
+        tags: [],
+        projectId: 'w1',
+        estimatedMinutes: null,
+      });
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [1, 2, 3, 4, 5, 6, 7].map(mkTask),
+          projects: [
+            { id: 'w1', name: 'Overloaded on hold', status: 'on hold status', taskCount: 7, availableTaskCount: 7 },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['wip_limits'] } },
+      });
+
+      const over = (res.data.wip_limits.items.projects_over_limit as Array<{ project: string }>).map((p) => p.project);
+      expect(over).toContain('Overloaded on hold');
+    });
+
     // Round-2 review: folder lookup is one JXA call, and only emitted when a
     // requested pattern actually uses the folder field.
     it('fetches folder with a single cached call, only when missing_next_actions runs', async () => {
