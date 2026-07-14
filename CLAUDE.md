@@ -12,16 +12,17 @@ focuses on developer implementation details.
 
 **All workflows in:** `.claude/processes/CLAUDE-PROCESSES.dot` (read this file for decision trees)
 
-| Cluster              | When to Use                                         |
-| -------------------- | --------------------------------------------------- |
-| `cluster_understand` | New request arrives                                 |
-| `cluster_pre_code`   | Before writing any code                             |
-| `cluster_implement`  | TDD via `superpowers:test-driven-development` skill |
-| `cluster_jxa_bridge` | Choosing JXA vs Bridge                              |
-| `cluster_debugging`  | Tool returns wrong data                             |
-| `cluster_stuck`      | Third attempt failed                                |
-| `cluster_verify`     | Before completing task                              |
-| `cluster_warnings`   | Critical mistakes to avoid                          |
+| Cluster                   | When to Use                                         |
+| ------------------------- | --------------------------------------------------- |
+| `cluster_understand`      | New request arrives                                 |
+| `cluster_pre_code`        | Before writing any code                             |
+| `cluster_contract_matrix` | Change touches a public field/operation             |
+| `cluster_implement`       | TDD via `superpowers:test-driven-development` skill |
+| `cluster_jxa_bridge`      | Choosing JXA vs Bridge                              |
+| `cluster_debugging`       | Tool returns wrong data                             |
+| `cluster_stuck`           | Third attempt failed                                |
+| `cluster_verify`          | Before completing task                              |
+| `cluster_warnings`        | Critical mistakes to avoid                          |
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
 
@@ -69,6 +70,30 @@ descriptions. The `inputSchema` is what MCP clients (Claude Desktop, etc.) see t
 
 Also update the tool's **description string** if the change affects user-facing behavior (new operations, changed
 semantics).
+
+## ✅ Vertical Contract Matrix (public fields & operations)
+
+Any change that adds or alters a **public field or operation** must be verified at every layer below before merge. Mark
+irrelevant layers **N/A explicitly** in the PR body — an unmarked layer means "not checked", not "not needed".
+
+| #   | Layer               | Stable anchor                                                                          |
+| --- | ------------------- | -------------------------------------------------------------------------------------- |
+| 1   | Schema (both)       | `src/tools/unified/schemas/` + the tool's `inputSchema` override                       |
+| 2   | Normalization       | `src/tools/normalization/` (grep for `WRAPPER_HINTS`)                                  |
+| 3   | Single-item path    | the tool's single-target handler                                                       |
+| 4   | Batch path          | the batch handler(s) — grep for the field name in every batch route                    |
+| 5   | Script lowering     | `src/contracts/ast/` (`MUTATION_DEFS` for mutations)                                   |
+| 6   | Live bridge         | `/verify` against real OmniFocus — mocked tests don't count for this row               |
+| 7   | Response validation | response schema + projection/`fields` handling                                         |
+| 8   | Cache key           | the tool's cache-key builder — new inputs that change script output must key the cache |
+
+**Don't advertise partial contracts:** the `inputSchema`/description change lands in the slice where the **last** matrix
+layer completes, not the first. A field the client can see must already behave intentionally on single, batch, read, and
+projection paths.
+
+Origin (each a merged defect one unchecked layer caused): #72 (lowering emitted un-bridged OmniJS — layer 6), #142
+(batch path silently dropped `sequential` the schema accepted — layer 4), #204 (unreachable emitter, cache-key
+collision, projection strip — layers 3, 7, 8).
 
 ---
 
@@ -219,6 +244,10 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
 multiple machines or sessions).
+
+**Corrective PRs:** a PR that fixes something merged earlier includes a `Corrects #NNN` line in its body, and its Linear
+ticket gets the `corrective` label. This keeps planned slices (one architectural outcome) distinguishable from
+corrective follow-ups (a preventable defect lineage) when reviewing project health.
 
 ## Workflow norms
 
