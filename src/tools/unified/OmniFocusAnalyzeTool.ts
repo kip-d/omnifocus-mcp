@@ -1576,8 +1576,14 @@ SCOPE FILTERING:
   // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
   // excluded here by the active-status gate.
   private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
-    // JXA status().toString() renders as 'active status'; accept the bare form too.
-    const isActive = (status: string) => status === 'active' || status === 'active status';
+    // Mirrors safeGetStatus (scripts/shared/helpers.ts, the canonical normalization
+    // of JXA's 'active status' / 'on hold status' renderings): substring match with
+    // an ACTIVE default. Failing open matters here — a status string this code
+    // doesn't recognize must surface the project in the review, never hide it.
+    const isActive = (status: string) => {
+      const s = status.toLowerCase();
+      return !(s.includes('hold') || s.includes('done') || s.includes('dropped'));
+    };
 
     const stalled = projects
       .filter((p) => isActive(p.status) && p.availableTaskCount === 0)

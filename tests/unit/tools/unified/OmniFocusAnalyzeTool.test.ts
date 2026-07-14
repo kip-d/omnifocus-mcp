@@ -1592,7 +1592,7 @@ describe('OmniFocusAnalyzeTool', () => {
       mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects, tags: [] }));
     }
 
-    it('reports only active projects with zero available tasks (id, name, folder)', async () => {
+    it('reports only active zero-available projects (id, name, folder), excluding on-hold and healthy ones', async () => {
       mockDb();
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
@@ -1604,20 +1604,33 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(finding.severity).toBe('warning');
       expect(finding.count).toBe(2);
       const items = finding.items as Array<{ id: string; name: string; folder: string | null }>;
+      // p2 (has available task) and p3 (on hold) are excluded; p1/p4 reported
       expect(items.map((i) => i.id).sort()).toEqual(['p1', 'p4']);
       const p1 = items.find((i) => i.id === 'p1');
       expect(p1).toMatchObject({ id: 'p1', name: 'Stalled seq', folder: 'Work' });
     });
 
-    it('excludes on-hold projects and projects with available tasks', async () => {
-      mockDb();
+    it('fails open: an unrecognized status string is treated as active, never silently dropped', async () => {
+      // Mirrors safeGetStatus (helpers.ts): normalization defaults to 'active',
+      // so status-string drift (new OF version, locale) surfaces the project
+      // rather than hiding it from the weekly review.
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            { id: 'px', name: 'Drifted status', status: 'mystery rendering', taskCount: 1, availableTaskCount: 0 },
+            { id: 'py', name: 'Dropped', status: 'dropped status', taskCount: 1, availableTaskCount: 0 },
+          ],
+          tags: [],
+        }),
+      );
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
       });
 
       const ids = (res.data.missing_next_actions.items as Array<{ id: string }>).map((i) => i.id);
-      expect(ids).not.toContain('p2');
-      expect(ids).not.toContain('p3');
+      expect(ids).toContain('px'); // unknown → fail open → reported
+      expect(ids).not.toContain('py'); // recognized terminal status → excluded
     });
 
     it('is included in the default "all" expansion', async () => {
