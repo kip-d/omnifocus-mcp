@@ -1538,18 +1538,42 @@ describe('OmniFocusAnalyzeTool', () => {
   // Pattern Analysis
   // ==========================================================================
   describe('pattern_analysis', () => {
-    it('handles fetch failure gracefully', async () => {
-      mockOmni.executeJson.mockResolvedValue({
-        success: false,
-        error: 'Script failed',
-      });
+    // OMN-268: a fetch failure (script timeout/error) must surface as an error
+    // envelope — never as success:true with zero-initialized "healthy" findings.
+    it('returns an error envelope when the data fetch script fails', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptError('Script execution timed out', 'timeout after 120000ms'));
 
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
       });
 
-      // Should return error or empty results (not throw)
-      expect(res).toBeDefined();
+      expect(res.success).toBe(false);
+      expect(res.error?.code).toBe('EXECUTION_ERROR');
+      // No fabricated findings may ride along on the failure
+      expect(res.data?.duplicates).toBeUndefined();
+    });
+
+    it('returns an error envelope when the fetch returns an unusable shape', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess(null));
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis' },
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error?.code).toBe('EXECUTION_ERROR');
+      expect(res.data?.deadline_health).toBeUndefined();
+    });
+
+    it('still succeeds honestly on a genuinely empty (but fetched) database', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.metadata?.tasks_analyzed).toBe(0);
     });
   });
 
