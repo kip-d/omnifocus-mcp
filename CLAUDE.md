@@ -8,21 +8,20 @@ focuses on developer implementation details.
 
 ---
 
-## 🔄 Process Workflows
+## 🔄 Process Rules
 
-**All workflows in:** `.claude/processes/CLAUDE-PROCESSES.dot` (read this file for decision trees)
+_(Extracted 2026-07-14 from the retired `CLAUDE-PROCESSES.dot` — transcript audit showed the DOT was never read
+in-session; prose here is the delivery mechanism that works. TDD, systematic debugging, and pre-completion verification
+arrive via superpowers skills — not restated here.)_
 
-| Cluster                   | When to Use                                         |
-| ------------------------- | --------------------------------------------------- |
-| `cluster_understand`      | New request arrives                                 |
-| `cluster_pre_code`        | Before writing any code                             |
-| `cluster_contract_matrix` | Change touches a public field/operation             |
-| `cluster_implement`       | TDD via `superpowers:test-driven-development` skill |
-| `cluster_jxa_bridge`      | Choosing JXA vs Bridge                              |
-| `cluster_debugging`       | Tool returns wrong data                             |
-| `cluster_stuck`           | Third attempt failed                                |
-| `cluster_verify`          | Before completing task                              |
-| `cluster_warnings`        | Critical mistakes to avoid                          |
+- **Before writing code:** grep `src/omnifocus/scripts/shared/` for an existing pattern; read any match completely
+  before reinventing. Symptom-driven work starts at `docs/dev/PATTERNS.md`.
+- **Debugging is MCP-first:** when a tool returns wrong data, do NOT open the generated script. Test the tool call at
+  the MCP seam first (via `MCPTestClient` — see `tests/`; a raw `echo | node dist/index.js` pipe drops the last
+  in-flight response). If the script output is correct, the bug is in the wrapper/tool layer.
+- **Public field/operation changes** walk the Vertical Contract Matrix below — every layer done or explicitly N/A.
+- **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
+  actually lowers before assuming equivalence.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
 
@@ -140,7 +139,8 @@ collision, projection strip — layers 3, 7, 8).
 
 **For NEW scripts:** Use OmniJS-first pattern. See `/docs/dev/OMNIJS-FIRST-PATTERN.md`
 
-**For EXISTING scripts:** See `cluster_jxa_bridge` in DOT file for decision tree.
+**For EXISTING scripts — JXA vs Bridge decision:** >100 items → use streaming/pagination; needs tags, repetition rules,
+or task movement → bridge required; otherwise pure JXA is fine.
 
 **Bridge is REQUIRED for:** Tag assignment, repetition rules, task movement between projects.
 
