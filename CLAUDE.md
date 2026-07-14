@@ -26,11 +26,12 @@ here.)_
 - **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
   actually lowers before assuming equivalence.
 - **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail), and
-  `npm run test:unit` pass locally; `grep -rn 'console\.log' src/` is clean — ESLint's `no-console` is deliberately off
-  here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client
-  (`console.error`/`console.warn` write to stderr and are safe); TODO comments you touched still reflect reality.
-  Features additionally need integration tests before they're considered complete (~17 min, run in the background, never
-  inside fleet builds — see Code & Writing Standards).
+  `npm run test:unit` pass locally; `grep -rn 'console\.log' src/` shows no hits beyond the known `--help` printer in
+  `src/utils/cli.ts` (runs and exits before stdio mode) — ESLint's `no-console` is deliberately off here, and a stray
+  `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client (`console.error`/`console.warn` write
+  to stderr and are safe); TODO comments you touched still reflect reality. Features additionally need integration tests
+  before they're considered complete (long-running — see `tests/integration/PERFORMANCE.md`; run in the background,
+  never inside fleet builds).
 - **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
