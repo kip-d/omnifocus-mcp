@@ -8,20 +8,31 @@ focuses on developer implementation details.
 
 ---
 
-## 🔄 Process Workflows
+## 🔄 Process Rules
 
-**All workflows in:** `.claude/processes/CLAUDE-PROCESSES.dot` (read this file for decision trees)
+_(Extracted 2026-07-14 from the retired `CLAUDE-PROCESSES.dot` — transcript audit showed the DOT was never read
+in-session; prose here is the delivery mechanism that works. TDD (`superpowers:test-driven-development`), debugging
+discipline including the stuck→escalate-after-third-failed-attempt protocol (`superpowers:systematic-debugging`), and
+pre-completion verification (`superpowers:verification-before-completion`) arrive via those skills — not restated
+here.)_
 
-| Cluster              | When to Use                                         |
-| -------------------- | --------------------------------------------------- |
-| `cluster_understand` | New request arrives                                 |
-| `cluster_pre_code`   | Before writing any code                             |
-| `cluster_implement`  | TDD via `superpowers:test-driven-development` skill |
-| `cluster_jxa_bridge` | Choosing JXA vs Bridge                              |
-| `cluster_debugging`  | Tool returns wrong data                             |
-| `cluster_stuck`      | Third attempt failed                                |
-| `cluster_verify`     | Before completing task                              |
-| `cluster_warnings`   | Critical mistakes to avoid                          |
+- **Ambiguous request?** Ask targeted clarifying questions before acting — don't guess at intent.
+- **Before writing code:** grep `src/omnifocus/scripts/shared/` for an existing pattern; read any match completely
+  before reinventing. Symptom-driven work starts at `docs/dev/PATTERNS.md`.
+- **Debugging is MCP-first:** when a tool returns wrong data, do NOT open the generated script. Test the tool call at
+  the MCP seam first (via `MCPTestClient` — see `tests/`; a raw `echo | node dist/index.js` pipe drops the last
+  in-flight response). If the script output is correct, the bug is in the wrapper/tool layer.
+- **Public field/operation changes** walk the Vertical Contract Matrix below — every layer done or explicitly N/A.
+- **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
+  actually lowers before assuming equivalence.
+- **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail), and
+  `npm run test:unit` pass locally; `grep -rn 'console\.log' src/` shows no hits beyond the known `--help` printer in
+  `src/utils/cli.ts` (runs and exits before stdio mode) — ESLint's `no-console` is deliberately off here, and a stray
+  `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client (`console.error`/`console.warn` write
+  to stderr and are safe); TODO comments you touched still reflect reality. Features additionally need integration tests
+  before they're considered complete (long-running — see `tests/integration/PERFORMANCE.md`; run in the background,
+  never inside fleet builds).
+- **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
 
@@ -70,6 +81,31 @@ descriptions. The `inputSchema` is what MCP clients (Claude Desktop, etc.) see t
 Also update the tool's **description string** if the change affects user-facing behavior (new operations, changed
 semantics).
 
+## ✅ Vertical Contract Matrix (public fields & operations)
+
+Any change that adds or alters a **public field or operation** must be verified at every layer below before merge. Mark
+irrelevant layers **N/A explicitly** in the PR body — an unmarked layer means "not checked", not "not needed".
+
+| #   | Layer               | Stable anchor                                                                          |
+| --- | ------------------- | -------------------------------------------------------------------------------------- |
+| 1   | Schema (both)       | `src/tools/unified/schemas/` + the tool's `inputSchema` override                       |
+| 2   | Normalization       | `src/tools/normalization/` (grep for `WRAPPER_HINTS`)                                  |
+| 3   | Single-item path    | the tool's single-target handler                                                       |
+| 4   | Batch path          | the batch handler(s) — grep for the field name in every batch route                    |
+| 5   | Script lowering     | `src/contracts/ast/` (`MUTATION_DEFS` for mutations)                                   |
+| 6   | Live bridge         | `/verify` against real OmniFocus — mocked tests don't count for this row               |
+| 7   | Response validation | response schema + projection/`fields` handling                                         |
+| 8   | Cache key           | the tool's cache-key builder — new inputs that change script output must key the cache |
+
+**Don't advertise partial contracts:** the `inputSchema`/description change lands in the slice where the **last** matrix
+layer completes, not the first. A field the client can see must already behave intentionally on single, batch, read, and
+projection paths.
+
+Origin (each a merged defect one unchecked layer caused): #72 (lowering emitted un-bridged OmniJS — a layer-5 defect,
+catchable only by layer 6's live verify), #142 (batch path silently dropped `sequential` the schema accepted — layer 4),
+#204 (list-path call site never wired the emitter — layer 4's check-every-route lesson; plus a cache-key collision and a
+projection strip — layers 8 and 7).
+
 ---
 
 ## 📚 Architecture Documentation
@@ -92,7 +128,7 @@ semantics).
 
 | Symptom                                              | Quick Fix                                                 |
 | ---------------------------------------------------- | --------------------------------------------------------- |
-| Tool returns 0s/empty but has data                   | Test MCP integration first! Compare script vs tool output |
+| Tool returns 0s/empty but has data                   | MCP-first — see Process Rules (MCPTestClient at the seam) |
 | Test expects data.id but gets undefined              | Test MCP response structure first                         |
 | Tags not saving/empty                                | Assign via OmniJS `addTag()` — see Tag Operations         |
 | Typed-value write returns success but didn't persist | Read-back required — see `docs/dev/SETTER-PATTERNS.md`    |
@@ -115,9 +151,9 @@ semantics).
 
 **For NEW scripts:** Use OmniJS-first pattern. See `/docs/dev/OMNIJS-FIRST-PATTERN.md`
 
-**For EXISTING scripts:** See `cluster_jxa_bridge` in DOT file for decision tree.
-
-**Bridge is REQUIRED for:** Tag assignment, repetition rules, task movement between projects.
+**For EXISTING scripts — JXA vs Bridge decision:** needs tag assignment, repetition rules, or task movement between
+projects → bridge REQUIRED, regardless of item count (JXA tag writes silently no-op — see Tag Operations); >100 items →
+add streaming/pagination (still bridged if tags are involved); otherwise pure JXA is fine.
 
 ## 🏷️ Tag Operations
 
@@ -199,7 +235,8 @@ process.stdin.on('end', async () => {
 ## Quick Reference
 
 ```bash
-# MCP Testing
+# MCP smoke test (handshake only — for debugging tool behavior use MCPTestClient;
+# raw pipes can drop the last in-flight response, see Process Rules "MCP-first")
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
 # protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports
 ```
@@ -219,6 +256,10 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
 multiple machines or sessions).
+
+**Corrective PRs:** a PR that fixes something merged earlier includes a `Corrects #NNN` line in its body, and its Linear
+ticket gets the `corrective` label. This keeps planned slices (one architectural outcome) distinguishable from
+corrective follow-ups (a preventable defect lineage) when reviewing project health.
 
 ## Workflow norms
 
