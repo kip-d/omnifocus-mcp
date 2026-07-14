@@ -25,7 +25,11 @@ interface ReviewGapsResult {
 
 export function analyzeReviewGaps(projects: Project[]): ReviewGapsResult {
   const now = new Date();
-  const activeProjects = projects.filter((p) => p.status === 'active' || p.status === 'on-hold');
+  // Canonical status vocabulary is safeGetStatus's ('active'/'onHold'/'done'/'dropped');
+  // 'on-hold' kept for callers that pre-date the normalization.
+  const activeProjects = projects.filter(
+    (p) => p.status === 'active' || p.status === 'onHold' || p.status === 'on-hold',
+  );
 
   // Projects never reviewed (no nextReviewDate or lastReviewDate)
   const neverReviewed = activeProjects

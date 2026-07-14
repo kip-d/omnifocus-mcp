@@ -136,6 +136,20 @@ interface SlimTask {
   children?: number;
 }
 
+// Canonical project-status vocabulary, mirroring safeGetStatus in
+// scripts/shared/helpers.ts: JXA renders status as 'active status',
+// 'on hold status', etc.; every ProjectData consumer gets THIS normalized
+// form (applied once in fetchSlimmedData). The unknown-string default is
+// 'active' on purpose — detectors that gate on activity must fail open
+// (surface the project) rather than silently drop it.
+function normalizeProjectStatus(raw: string): 'active' | 'onHold' | 'done' | 'dropped' {
+  const s = raw.toLowerCase();
+  if (s.includes('hold')) return 'onHold';
+  if (s.includes('done')) return 'done';
+  if (s.includes('dropped')) return 'dropped';
+  return 'active';
+}
+
 interface ProjectData {
   id: string;
   name: string;
@@ -1106,8 +1120,11 @@ SCOPE FILTERING:
           ]
         : rawPatterns;
 
-      // Fetch slimmed task data
-      const slimData = await this.fetchSlimmedData(options);
+      // Fetch slimmed task data (folder lookup costs one JXA call per project —
+      // only pay it when a requested pattern actually uses the folder field)
+      const slimData = await this.fetchSlimmedData(options, {
+        includeFolder: patterns.includes('missing_next_actions'),
+      });
 
       if (!slimData) {
         return createErrorResponseV2(
@@ -1290,6 +1307,7 @@ SCOPE FILTERING:
   // read. The caller maps null to an EXECUTION_ERROR envelope.
   private async fetchSlimmedData(
     options: Record<string, unknown>,
+    { includeFolder = false }: { includeFolder?: boolean } = {},
   ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
     const taskScript = `(() => {
       const app = Application('OmniFocus');
@@ -1367,9 +1385,14 @@ SCOPE FILTERING:
             availableTaskCount: project.numberOfAvailableTasks()
           };
 
-          // OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
-          // unlike the parent relationships that require the OmniJS bridge.
-          try { projectData.folder = project.folder() ? project.folder().name() : null; } catch(e) {}
+          ${
+            includeFolder
+              ? `// OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
+          // unlike the parent relationships that require the OmniJS bridge. One call,
+          // cached in a local (each JXA method call is an Apple Event round trip).
+          try { const projFolder = project.folder(); projectData.folder = projFolder ? projFolder.name() : null; } catch(e) {}`
+              : ''
+          }
 
           try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
           try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
@@ -1422,10 +1445,20 @@ SCOPE FILTERING:
       return null;
     }
 
-    if (typeof result === 'string') {
-      return JSON.parse(result) as { tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] };
-    }
-    return result as { tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] };
+    const parsed = (typeof result === 'string' ? JSON.parse(result) : result) as {
+      tasks: SlimTask[];
+      projects: ProjectData[];
+      tags: TagData[];
+    };
+
+    // Normalize status ONCE at the boundary so every detector inherits the
+    // canonical vocabulary instead of re-interpreting raw JXA renderings
+    // (the raw/normalized split had already broken dormant_projects' and
+    // review_gaps' status checks — see normalizeProjectStatus).
+    return {
+      ...parsed,
+      projects: parsed.projects.map((p) => ({ ...p, status: normalizeProjectStatus(p.status) })),
+    };
   }
 
   private detectDuplicates(tasks: SlimTask[], options: Record<string, unknown>): PatternFinding {
@@ -1576,17 +1609,10 @@ SCOPE FILTERING:
   // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
   // excluded here by the active-status gate.
   private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
-    // Mirrors safeGetStatus (scripts/shared/helpers.ts, the canonical normalization
-    // of JXA's 'active status' / 'on hold status' renderings): substring match with
-    // an ACTIVE default. Failing open matters here — a status string this code
-    // doesn't recognize must surface the project in the review, never hide it.
-    const isActive = (status: string) => {
-      const s = status.toLowerCase();
-      return !(s.includes('hold') || s.includes('done') || s.includes('dropped'));
-    };
-
+    // status arrives normalized (fetchSlimmedData → normalizeProjectStatus),
+    // whose unknown-string default is 'active' — so drift still fails open.
     const stalled = projects
-      .filter((p) => isActive(p.status) && p.availableTaskCount === 0)
+      .filter((p) => p.status === 'active' && p.availableTaskCount === 0)
       .map((p) => ({
         id: p.id,
         name: p.name,

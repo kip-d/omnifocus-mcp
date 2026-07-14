@@ -1633,6 +1633,93 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(ids).not.toContain('py'); // recognized terminal status → excluded
     });
 
+    // Round-2 review: ProjectData.status is normalized ONCE at the fetch boundary
+    // (safeGetStatus vocabulary: active/onHold/done/dropped). These pin the two
+    // latent consumer bugs the raw/normalized split had already caused.
+    it('dormant_projects excludes done/dropped projects (raw JXA status strings)', async () => {
+      const old = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString();
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'd1',
+              name: 'Old active',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              modificationDate: old,
+            },
+            {
+              id: 'd2',
+              name: 'Old done',
+              status: 'done status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              modificationDate: old,
+            },
+            {
+              id: 'd3',
+              name: 'Old dropped',
+              status: 'dropped status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              modificationDate: old,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['dormant_projects'] } },
+      });
+
+      const ids = (res.data.dormant_projects.items as Array<{ id: string }>).map((i) => i.id);
+      expect(ids).toContain('d1');
+      expect(ids).not.toContain('d2');
+      expect(ids).not.toContain('d3');
+    });
+
+    it('review_gaps sees active and on-hold projects despite raw JXA status strings', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            { id: 'r1', name: 'Never reviewed active', status: 'active status', taskCount: 1, availableTaskCount: 1 },
+            { id: 'r2', name: 'Never reviewed on hold', status: 'on hold status', taskCount: 1, availableTaskCount: 0 },
+            { id: 'r3', name: 'Done project', status: 'done status', taskCount: 1, availableTaskCount: 0 },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['review_gaps'] } },
+      });
+
+      const never = (res.data.review_gaps.items.never_reviewed as Array<{ id: string }>).map((i) => i.id);
+      expect(never).toContain('r1');
+      expect(never).toContain('r2');
+      expect(never).not.toContain('r3');
+    });
+
+    // Round-2 review: folder lookup is one JXA call, and only emitted when a
+    // requested pattern actually uses the folder field.
+    it('fetches folder with a single cached call, only when missing_next_actions runs', async () => {
+      mockDb();
+      await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+      const withFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      expect(withFolderScript.match(/project\.folder\(\)/g)?.length).toBe(1);
+
+      mockDb();
+      await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+      const withoutFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      expect(withoutFolderScript).not.toContain('project.folder()');
+    });
+
     it('is included in the default "all" expansion', async () => {
       mockDb();
       const res: any = await tool.execute({ analysis: { type: 'pattern_analysis' } });
