@@ -14,6 +14,7 @@ _(Extracted 2026-07-14 from the retired `CLAUDE-PROCESSES.dot` — transcript au
 in-session; prose here is the delivery mechanism that works. TDD, systematic debugging, and pre-completion verification
 arrive via superpowers skills — not restated here.)_
 
+- **Ambiguous request?** Ask targeted clarifying questions before acting — don't guess at intent.
 - **Before writing code:** grep `src/omnifocus/scripts/shared/` for an existing pattern; read any match completely
   before reinventing. Symptom-driven work starts at `docs/dev/PATTERNS.md`.
 - **Debugging is MCP-first:** when a tool returns wrong data, do NOT open the generated script. Test the tool call at
@@ -22,8 +23,10 @@ arrive via superpowers skills — not restated here.)_
 - **Public field/operation changes** walk the Vertical Contract Matrix below — every layer done or explicitly N/A.
 - **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
   actually lowers before assuming equivalence.
-- **Before declaring a task complete:** `grep -rE 'console\.(log|error|warn)' src/` — ESLint's `no-console` is
-  deliberately off here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client.
+- **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail), and
+  `npm run test:unit` pass locally, and `grep -rn 'console\.log' src/` is clean — ESLint's `no-console` is deliberately
+  off here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client
+  (`console.error`/`console.warn` write to stderr and are safe).
 - **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
@@ -143,11 +146,9 @@ projection strip — layers 8 and 7).
 
 **For NEW scripts:** Use OmniJS-first pattern. See `/docs/dev/OMNIJS-FIRST-PATTERN.md`
 
-**For EXISTING scripts — JXA vs Bridge decision:** needs tags, repetition rules, or task movement → bridge REQUIRED,
-regardless of item count (JXA tag writes silently no-op — see Tag Operations); >100 items → add streaming/pagination
-(still bridged if tags are involved); otherwise pure JXA is fine.
-
-**Bridge is REQUIRED for:** Tag assignment, repetition rules, task movement between projects.
+**For EXISTING scripts — JXA vs Bridge decision:** needs tag assignment, repetition rules, or task movement between
+projects → bridge REQUIRED, regardless of item count (JXA tag writes silently no-op — see Tag Operations); >100 items →
+add streaming/pagination (still bridged if tags are involved); otherwise pure JXA is fine.
 
 ## 🏷️ Tag Operations
 

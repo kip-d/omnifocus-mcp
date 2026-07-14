@@ -73,47 +73,18 @@ digraph CLAUDE_OMNIFOCUS {
         style=rounded;
 
         "Search shared helpers" [shape=box];
-        "grep -r 'keyword' src/omnifocus/scripts/shared/" [shape=plaintext, fontsize=9];
+        "grep -r 'keyword' src/shared/" [shape=plaintext, fontsize=9];
         "Found pattern?" [shape=diamond];
         "Read pattern COMPLETELY" [shape=box];
         "Check PATTERN_INDEX.md" [shape=box];
         "Ready to implement" [shape=doublecircle];
 
-        "Search shared helpers" -> "grep -r 'keyword' src/omnifocus/scripts/shared/";
-        "grep -r 'keyword' src/omnifocus/scripts/shared/" -> "Found pattern?";
+        "Search shared helpers" -> "grep -r 'keyword' src/shared/";
+        "grep -r 'keyword' src/shared/" -> "Found pattern?";
         "Found pattern?" -> "Read pattern COMPLETELY" [label="yes"];
         "Found pattern?" -> "Check PATTERN_INDEX.md" [label="no"];
         "Read pattern COMPLETELY" -> "Ready to implement";
         "Check PATTERN_INDEX.md" -> "Ready to implement";
-    }
-
-    // =========================================================
-    // CLUSTER: Vertical Contract Matrix (public fields/operations)
-    // See CLAUDE.md "Vertical Contract Matrix" for layer anchors.
-    // =========================================================
-    subgraph cluster_contract_matrix {
-        label="1.2 CONTRACT MATRIX (public fields/ops)";
-        style=rounded;
-        fillcolor=lavender;
-
-        "Public field/op changed?" [shape=diamond];
-        "Walk all 8 layers" [shape=box, style=filled, fillcolor=lightblue];
-        "schema / normalization / single / batch / lowering / live bridge / response / cache key" [shape=plaintext, fontsize=9];
-        "Every layer done or N/A?" [shape=diamond];
-        "Mark N/A columns in PR body" [shape=box];
-        "STOP: don't advertise partial contract" [shape=octagon, style=filled, fillcolor=orange];
-        "Hold inputSchema change for final slice" [shape=box];
-        "Matrix complete" [shape=doublecircle];
-
-        "Public field/op changed?" -> "Walk all 8 layers" [label="yes"];
-        "Public field/op changed?" -> "Matrix complete" [label="no"];
-        "Walk all 8 layers" -> "schema / normalization / single / batch / lowering / live bridge / response / cache key";
-        "schema / normalization / single / batch / lowering / live bridge / response / cache key" -> "Every layer done or N/A?";
-        "Every layer done or N/A?" -> "Mark N/A columns in PR body" [label="yes"];
-        "Every layer done or N/A?" -> "STOP: don't advertise partial contract" [label="no"];
-        "STOP: don't advertise partial contract" -> "Hold inputSchema change for final slice";
-        "Hold inputSchema change for final slice" -> "Matrix complete";
-        "Mark N/A columns in PR body" -> "Matrix complete";
     }
 
     // =========================================================
@@ -295,8 +266,7 @@ digraph CLAUDE_OMNIFOCUS {
     // Cross-process transitions (dotted lines)
     // =========================================================
     "Proceed to search" -> "Search shared helpers" [style=dotted];
-    "Ready to implement" -> "Public field/op changed?" [style=dotted];
-    "Matrix complete" -> "Start implementing" [style=dotted];
+    "Ready to implement" -> "Start implementing" [style=dotted];
     "Feature complete" -> "Script needed" [style=dotted, label="if script"];
     "Feature complete" -> "Ready to complete" [style=dotted, label="if no script"];
     "Implementation ready" -> "Ready to complete" [style=dotted];
