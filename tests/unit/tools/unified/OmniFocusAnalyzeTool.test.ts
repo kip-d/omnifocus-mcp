@@ -1620,6 +1620,7 @@ describe('OmniFocusAnalyzeTool', () => {
           projects: [
             { id: 'px', name: 'Drifted status', status: 'mystery rendering', taskCount: 1, availableTaskCount: 0 },
             { id: 'py', name: 'Dropped', status: 'dropped status', taskCount: 1, availableTaskCount: 0 },
+            { id: 'pz', name: 'Ambiguous', status: 'active (hold)', taskCount: 1, availableTaskCount: 0 },
           ],
           tags: [],
         }),
@@ -1631,6 +1632,7 @@ describe('OmniFocusAnalyzeTool', () => {
       const ids = (res.data.missing_next_actions.items as Array<{ id: string }>).map((i) => i.id);
       expect(ids).toContain('px'); // unknown → fail open → reported
       expect(ids).not.toContain('py'); // recognized terminal status → excluded
+      expect(ids).toContain('pz'); // ambiguous active+hold → active wins (safeGetStatus order)
     });
 
     // Round-2 review: ProjectData.status is normalized ONCE at the fetch boundary

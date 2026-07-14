@@ -144,6 +144,10 @@ interface SlimTask {
 // (surface the project) rather than silently drop it.
 function normalizeProjectStatus(raw: string): 'active' | 'onHold' | 'done' | 'dropped' {
   const s = raw.toLowerCase();
+  // Same check ORDER as safeGetStatus: 'active' wins first, so an ambiguous
+  // string containing both an active-ish and a terminal-ish substring
+  // classifies toward inclusion (fail-open), matching the default below.
+  if (s.includes('active')) return 'active';
   if (s.includes('hold')) return 'onHold';
   if (s.includes('done')) return 'done';
   if (s.includes('dropped')) return 'dropped';
