@@ -173,7 +173,7 @@ Finally, let's ensure every active project has at least one clear next action.`,
         role: 'user',
         content: {
           type: 'text',
-          text: 'Find all active projects that have zero available tasks. These need immediate attention to define next actions.',
+          text: "Run omnifocus_analyze with type 'pattern_analysis' and params.insights ['missing_next_actions'] — it returns every active project with zero available next actions in one call (id, name, folder). These need immediate attention to define next actions.",
         },
       },
       {

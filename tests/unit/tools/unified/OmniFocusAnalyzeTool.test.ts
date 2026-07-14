@@ -1577,6 +1577,76 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  // OMN-255: missing_next_actions — active projects with zero available tasks.
+  // "Available" is OmniFocus's numberOfAvailableTasks(), live-verified equivalent
+  // to ACTIONABLE_STATUSES semantics (spec: OMN-255-projects-without-next-action.md).
+  describe('pattern_analysis missing_next_actions (OMN-255)', () => {
+    const projects = [
+      { id: 'p1', name: 'Stalled seq', status: 'active status', taskCount: 2, availableTaskCount: 0, folder: 'Work' },
+      { id: 'p2', name: 'Healthy', status: 'active status', taskCount: 1, availableTaskCount: 1, folder: null },
+      { id: 'p3', name: 'On hold', status: 'on hold status', taskCount: 1, availableTaskCount: 0, folder: 'Work' },
+      { id: 'p4', name: 'All done', status: 'active status', taskCount: 1, availableTaskCount: 0, folder: null },
+    ];
+
+    function mockDb() {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects, tags: [] }));
+    }
+
+    it('reports only active projects with zero available tasks (id, name, folder)', async () => {
+      mockDb();
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      expect(res.success).toBe(true);
+      const finding = res.data.missing_next_actions;
+      expect(finding).toBeDefined();
+      expect(finding.severity).toBe('warning');
+      expect(finding.count).toBe(2);
+      const items = finding.items as Array<{ id: string; name: string; folder: string | null }>;
+      expect(items.map((i) => i.id).sort()).toEqual(['p1', 'p4']);
+      const p1 = items.find((i) => i.id === 'p1');
+      expect(p1).toMatchObject({ id: 'p1', name: 'Stalled seq', folder: 'Work' });
+    });
+
+    it('excludes on-hold projects and projects with available tasks', async () => {
+      mockDb();
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      const ids = (res.data.missing_next_actions.items as Array<{ id: string }>).map((i) => i.id);
+      expect(ids).not.toContain('p2');
+      expect(ids).not.toContain('p3');
+    });
+
+    it('is included in the default "all" expansion', async () => {
+      mockDb();
+      const res: any = await tool.execute({ analysis: { type: 'pattern_analysis' } });
+
+      expect(res.data.missing_next_actions).toBeDefined();
+      expect(res.metadata.patterns_checked).toContain('missing_next_actions');
+    });
+
+    it('reports info severity with an honest empty list when nothing is stalled', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [{ id: 'p2', name: 'Healthy', status: 'active status', taskCount: 1, availableTaskCount: 1 }],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      const finding = res.data.missing_next_actions;
+      expect(finding.severity).toBe('info');
+      expect(finding.count).toBe(0);
+      expect(finding.items).toEqual([]);
+    });
+  });
+
   // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
 
   describe('inputSchema (MCP advertisement)', () => {

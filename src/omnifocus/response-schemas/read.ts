@@ -476,6 +476,8 @@ const SlimProjectSchema = z
     status: z.string(),
     taskCount: z.number(),
     availableTaskCount: z.number(),
+    // OMN-255: containing folder name; conditional (inner try/catch) and null for root projects
+    folder: z.string().nullable().optional(),
     lastReviewDate: z.string().optional(),
     nextReviewDate: z.string().optional(),
     creationDate: z.string().optional(),

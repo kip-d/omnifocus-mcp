@@ -142,6 +142,7 @@ interface ProjectData {
   status: string;
   taskCount?: number;
   availableTaskCount?: number;
+  folder?: string | null;
   lastReviewDate?: string;
   nextReviewDate?: string;
   creationDate?: string;
@@ -279,7 +280,7 @@ ANALYSIS TYPES:
 - productivity_stats: GTD health metrics (completion rates, velocity)
 - task_velocity: Completion trends over time
 - overdue_analysis: Bottleneck identification
-- pattern_analysis: Database-wide patterns (tags, projects, stale items)
+- pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions)
 - workflow_analysis: Deep workflow analysis
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Structure meeting action items into OmniFocus.
@@ -1101,6 +1102,7 @@ SCOPE FILTERING:
             'review_gaps',
             'wip_limits',
             'due_date_bunching',
+            'missing_next_actions',
           ]
         : rawPatterns;
 
@@ -1193,6 +1195,9 @@ SCOPE FILTERING:
             break;
           case 'due_date_bunching':
             findings.due_date_bunching = this.analyzeBunchingPattern(slimData.tasks, options.bunching_threshold);
+            break;
+          case 'missing_next_actions':
+            findings.missing_next_actions = this.detectMissingNextActions(slimData.projects);
             break;
         }
       }
@@ -1361,6 +1366,10 @@ SCOPE FILTERING:
             taskCount: project.numberOfTasks(),
             availableTaskCount: project.numberOfAvailableTasks()
           };
+
+          // OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
+          // unlike the parent relationships that require the OmniJS bridge.
+          try { projectData.folder = project.folder() ? project.folder().name() : null; } catch(e) {}
 
           try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
           try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
@@ -1556,6 +1565,38 @@ SCOPE FILTERING:
         dormant.length > 0
           ? `${dormant.length} projects haven't been modified in over ${thresholdDays} days. Consider reviewing, completing, or dropping them.`
           : 'All projects show recent activity.',
+    };
+  }
+
+  // OMN-255: the core GTD weekly-review check — every ACTIVE project must have
+  // at least one available (actionable-now) task. availableTaskCount is OmniFocus's
+  // numberOfAvailableTasks(), live-verified equivalent to ACTIONABLE_STATUSES
+  // semantics (2026-07-14 fixture probe; spec OMN-255-projects-without-next-action.md):
+  // a sequential project with a deferred head, a deferred-only project, and an
+  // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
+  // excluded here by the active-status gate.
+  private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
+    // JXA status().toString() renders as 'active status'; accept the bare form too.
+    const isActive = (status: string) => status === 'active' || status === 'active status';
+
+    const stalled = projects
+      .filter((p) => isActive(p.status) && p.availableTaskCount === 0)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        folder: p.folder ?? null,
+        task_count: p.taskCount,
+      }));
+
+    return {
+      type: 'missing_next_actions',
+      severity: stalled.length > 0 ? 'warning' : 'info',
+      count: stalled.length,
+      items: stalled,
+      recommendation:
+        stalled.length > 0
+          ? `${stalled.length} active project(s) have no available next action. Each needs a next action defined, or should be completed, put on hold, or dropped.`
+          : 'Every active project has at least one available next action.',
     };
   }
 
