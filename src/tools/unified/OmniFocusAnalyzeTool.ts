@@ -1111,8 +1111,8 @@ SCOPE FILTERING:
         return createErrorResponseV2(
           'analyze_patterns',
           'EXECUTION_ERROR',
-          'Failed to fetch data from OmniFocus - received null response',
-          'Check that OmniFocus is running and accessible',
+          'Failed to fetch data from OmniFocus - the data scan errored or timed out before any items were read',
+          'Check that OmniFocus is running and not blocked by a dialog, then retry',
           undefined,
           { query_time_ms: Date.now() - startTime },
         );
@@ -1278,9 +1278,14 @@ SCOPE FILTERING:
     };
   }
 
+  // OMN-268: returns null when the fetch script fails (timeout, script error,
+  // unusable shape). Returning empty arrays here made a failed scan
+  // indistinguishable from an empty database, so every detector downstream
+  // reported zero-count "healthy" findings fabricated from data that was never
+  // read. The caller maps null to an EXECUTION_ERROR envelope.
   private async fetchSlimmedData(
     options: Record<string, unknown>,
-  ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] }> {
+  ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
     const taskScript = `(() => {
       const app = Application('OmniFocus');
       const doc = app.defaultDocument();
@@ -1395,17 +1400,17 @@ SCOPE FILTERING:
 
     if (isScriptError(scriptResult)) {
       this.patternLogger.error('fetchSlimmedData failed', { error: scriptResult.error });
-      return { tasks: [], projects: [], tags: [] };
+      return null;
     }
 
     if (!isScriptSuccess(scriptResult)) {
       this.patternLogger.error('fetchSlimmedData returned unexpected format', { result: scriptResult });
-      return { tasks: [], projects: [], tags: [] };
+      return null;
     }
 
     const result = scriptResult.data;
     if (!result) {
-      return { tasks: [], projects: [], tags: [] };
+      return null;
     }
 
     if (typeof result === 'string') {
