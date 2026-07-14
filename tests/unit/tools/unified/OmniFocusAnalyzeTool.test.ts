@@ -1577,6 +1577,206 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  // OMN-255: missing_next_actions — active projects with zero available tasks.
+  // "Available" is OmniFocus's numberOfAvailableTasks(), live-verified equivalent
+  // to ACTIONABLE_STATUSES semantics (spec: OMN-255-projects-without-next-action.md).
+  describe('pattern_analysis missing_next_actions (OMN-255)', () => {
+    const projects = [
+      { id: 'p1', name: 'Stalled seq', status: 'active status', taskCount: 2, availableTaskCount: 0, folder: 'Work' },
+      { id: 'p2', name: 'Healthy', status: 'active status', taskCount: 1, availableTaskCount: 1, folder: null },
+      { id: 'p3', name: 'On hold', status: 'on hold status', taskCount: 1, availableTaskCount: 0, folder: 'Work' },
+      { id: 'p4', name: 'All done', status: 'active status', taskCount: 1, availableTaskCount: 0, folder: null },
+    ];
+
+    function mockDb() {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects, tags: [] }));
+    }
+
+    it('reports only active zero-available projects (id, name, folder), excluding on-hold and healthy ones', async () => {
+      mockDb();
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      expect(res.success).toBe(true);
+      const finding = res.data.missing_next_actions;
+      expect(finding).toBeDefined();
+      expect(finding.severity).toBe('warning');
+      expect(finding.count).toBe(2);
+      const items = finding.items as Array<{ id: string; name: string; folder: string | null }>;
+      // p2 (has available task) and p3 (on hold) are excluded; p1/p4 reported
+      expect(items.map((i) => i.id).sort()).toEqual(['p1', 'p4']);
+      const p1 = items.find((i) => i.id === 'p1');
+      expect(p1).toMatchObject({ id: 'p1', name: 'Stalled seq', folder: 'Work' });
+    });
+
+    it('fails open: an unrecognized status string is treated as active, never silently dropped', async () => {
+      // Mirrors safeGetStatus (helpers.ts): normalization defaults to 'active',
+      // so status-string drift (new OF version, locale) surfaces the project
+      // rather than hiding it from the weekly review.
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            { id: 'px', name: 'Drifted status', status: 'mystery rendering', taskCount: 1, availableTaskCount: 0 },
+            { id: 'py', name: 'Dropped', status: 'dropped status', taskCount: 1, availableTaskCount: 0 },
+            { id: 'pz', name: 'Ambiguous', status: 'active (hold)', taskCount: 1, availableTaskCount: 0 },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      const ids = (res.data.missing_next_actions.items as Array<{ id: string }>).map((i) => i.id);
+      expect(ids).toContain('px'); // unknown → fail open → reported
+      expect(ids).not.toContain('py'); // recognized terminal status → excluded
+      expect(ids).toContain('pz'); // ambiguous active+hold → active wins (safeGetStatus order)
+    });
+
+    // Round-2 review: ProjectData.status is normalized ONCE at the fetch boundary
+    // (safeGetStatus vocabulary: active/onHold/done/dropped). These pin the two
+    // latent consumer bugs the raw/normalized split had already caused.
+    it('dormant_projects excludes done/dropped projects (raw JXA status strings)', async () => {
+      const old = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString();
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'd1',
+              name: 'Old active',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              modificationDate: old,
+            },
+            {
+              id: 'd2',
+              name: 'Old done',
+              status: 'done status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              modificationDate: old,
+            },
+            {
+              id: 'd3',
+              name: 'Old dropped',
+              status: 'dropped status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              modificationDate: old,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['dormant_projects'] } },
+      });
+
+      const ids = (res.data.dormant_projects.items as Array<{ id: string }>).map((i) => i.id);
+      expect(ids).toContain('d1');
+      expect(ids).not.toContain('d2');
+      expect(ids).not.toContain('d3');
+    });
+
+    it('review_gaps sees active and on-hold projects despite raw JXA status strings', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            { id: 'r1', name: 'Never reviewed active', status: 'active status', taskCount: 1, availableTaskCount: 1 },
+            { id: 'r2', name: 'Never reviewed on hold', status: 'on hold status', taskCount: 1, availableTaskCount: 0 },
+            { id: 'r3', name: 'Done project', status: 'done status', taskCount: 1, availableTaskCount: 0 },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['review_gaps'] } },
+      });
+
+      const never = (res.data.review_gaps.items.never_reviewed as Array<{ id: string }>).map((i) => i.id);
+      expect(never).toContain('r1');
+      expect(never).toContain('r2');
+      expect(never).not.toContain('r3');
+    });
+
+    it('wip_limits sees on-hold projects despite raw JXA status strings', async () => {
+      const mkTask = (i: number) => ({
+        id: `t${i}`,
+        name: `task ${i}`,
+        completed: false,
+        flagged: false,
+        status: 'available',
+        tags: [],
+        projectId: 'w1',
+        estimatedMinutes: null,
+      });
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [1, 2, 3, 4, 5, 6, 7].map(mkTask),
+          projects: [
+            { id: 'w1', name: 'Overloaded on hold', status: 'on hold status', taskCount: 7, availableTaskCount: 7 },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['wip_limits'] } },
+      });
+
+      const over = (res.data.wip_limits.items.projects_over_limit as Array<{ project: string }>).map((p) => p.project);
+      expect(over).toContain('Overloaded on hold');
+    });
+
+    // Round-2 review: folder lookup is one JXA call, and only emitted when a
+    // requested pattern actually uses the folder field.
+    it('fetches folder with a single cached call, only when missing_next_actions runs', async () => {
+      mockDb();
+      await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+      const withFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      expect(withFolderScript.match(/project\.folder\(\)/g)?.length).toBe(1);
+
+      mockDb();
+      await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+      const withoutFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      expect(withoutFolderScript).not.toContain('project.folder()');
+    });
+
+    it('is included in the default "all" expansion', async () => {
+      mockDb();
+      const res: any = await tool.execute({ analysis: { type: 'pattern_analysis' } });
+
+      expect(res.data.missing_next_actions).toBeDefined();
+      expect(res.metadata.patterns_checked).toContain('missing_next_actions');
+    });
+
+    it('reports info severity with an honest empty list when nothing is stalled', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [{ id: 'p2', name: 'Healthy', status: 'active status', taskCount: 1, availableTaskCount: 1 }],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+
+      const finding = res.data.missing_next_actions;
+      expect(finding.severity).toBe('info');
+      expect(finding.count).toBe(0);
+      expect(finding.items).toEqual([]);
+    });
+  });
+
   // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
 
   describe('inputSchema (MCP advertisement)', () => {

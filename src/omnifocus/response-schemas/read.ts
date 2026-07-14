@@ -467,7 +467,8 @@ const SlimTaskSchema = z
  * id, name, status always set. taskCount/availableTaskCount are in the projectData literal
  * (direct property access, NOT inner try/catch) → always present; the outer try/catch skips
  * the whole project on error rather than emitting a partial object.
- * All dates are conditional (inner try/catch).
+ * All dates and `folder` are conditional (inner try/catch); folder is additionally
+ * null for root-level projects.
  */
 const SlimProjectSchema = z
   .object({
@@ -476,6 +477,8 @@ const SlimProjectSchema = z
     status: z.string(),
     taskCount: z.number(),
     availableTaskCount: z.number(),
+    // OMN-255: containing folder name; conditional (inner try/catch) and null for root projects
+    folder: z.string().nullable().optional(),
     lastReviewDate: z.string().optional(),
     nextReviewDate: z.string().optional(),
     creationDate: z.string().optional(),

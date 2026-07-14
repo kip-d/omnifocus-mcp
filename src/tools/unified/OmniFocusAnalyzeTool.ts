@@ -136,12 +136,31 @@ interface SlimTask {
   children?: number;
 }
 
+// Canonical project-status vocabulary, mirroring safeGetStatus in
+// scripts/shared/helpers.ts: JXA renders status as 'active status',
+// 'on hold status', etc.; every ProjectData consumer gets THIS normalized
+// form (applied once in fetchSlimmedData). The unknown-string default is
+// 'active' on purpose — detectors that gate on activity must fail open
+// (surface the project) rather than silently drop it.
+function normalizeProjectStatus(raw: string): 'active' | 'onHold' | 'done' | 'dropped' {
+  const s = raw.toLowerCase();
+  // Same check ORDER as safeGetStatus: 'active' wins first, so an ambiguous
+  // string containing both an active-ish and a terminal-ish substring
+  // classifies toward inclusion (fail-open), matching the default below.
+  if (s.includes('active')) return 'active';
+  if (s.includes('hold')) return 'onHold';
+  if (s.includes('done')) return 'done';
+  if (s.includes('dropped')) return 'dropped';
+  return 'active';
+}
+
 interface ProjectData {
   id: string;
   name: string;
   status: string;
   taskCount?: number;
   availableTaskCount?: number;
+  folder?: string | null;
   lastReviewDate?: string;
   nextReviewDate?: string;
   creationDate?: string;
@@ -279,7 +298,7 @@ ANALYSIS TYPES:
 - productivity_stats: GTD health metrics (completion rates, velocity)
 - task_velocity: Completion trends over time
 - overdue_analysis: Bottleneck identification
-- pattern_analysis: Database-wide patterns (tags, projects, stale items)
+- pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions)
 - workflow_analysis: Deep workflow analysis
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Structure meeting action items into OmniFocus.
@@ -1101,11 +1120,15 @@ SCOPE FILTERING:
             'review_gaps',
             'wip_limits',
             'due_date_bunching',
+            'missing_next_actions',
           ]
         : rawPatterns;
 
-      // Fetch slimmed task data
-      const slimData = await this.fetchSlimmedData(options);
+      // Fetch slimmed task data (folder lookup costs one JXA call per project —
+      // only pay it when a requested pattern actually uses the folder field)
+      const slimData = await this.fetchSlimmedData(options, {
+        includeFolder: patterns.includes('missing_next_actions'),
+      });
 
       if (!slimData) {
         return createErrorResponseV2(
@@ -1193,6 +1216,9 @@ SCOPE FILTERING:
             break;
           case 'due_date_bunching':
             findings.due_date_bunching = this.analyzeBunchingPattern(slimData.tasks, options.bunching_threshold);
+            break;
+          case 'missing_next_actions':
+            findings.missing_next_actions = this.detectMissingNextActions(slimData.projects);
             break;
         }
       }
@@ -1285,6 +1311,7 @@ SCOPE FILTERING:
   // read. The caller maps null to an EXECUTION_ERROR envelope.
   private async fetchSlimmedData(
     options: Record<string, unknown>,
+    { includeFolder = false }: { includeFolder?: boolean } = {},
   ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
     const taskScript = `(() => {
       const app = Application('OmniFocus');
@@ -1362,6 +1389,15 @@ SCOPE FILTERING:
             availableTaskCount: project.numberOfAvailableTasks()
           };
 
+          ${
+            includeFolder
+              ? `// OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
+          // unlike the parent relationships that require the OmniJS bridge. One call,
+          // cached in a local (each JXA method call is an Apple Event round trip).
+          try { const projFolder = project.folder(); projectData.folder = projFolder ? projFolder.name() : null; } catch(e) {}`
+              : ''
+          }
+
           try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
           try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
           try { projectData.creationDate = project.creationDate()?.toISOString(); } catch(e) {}
@@ -1413,10 +1449,20 @@ SCOPE FILTERING:
       return null;
     }
 
-    if (typeof result === 'string') {
-      return JSON.parse(result) as { tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] };
-    }
-    return result as { tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] };
+    const parsed = (typeof result === 'string' ? JSON.parse(result) : result) as {
+      tasks: SlimTask[];
+      projects: ProjectData[];
+      tags: TagData[];
+    };
+
+    // Normalize status ONCE at the boundary so every detector inherits the
+    // canonical vocabulary instead of re-interpreting raw JXA renderings
+    // (the raw/normalized split had already broken dormant_projects' and
+    // review_gaps' status checks — see normalizeProjectStatus).
+    return {
+      ...parsed,
+      projects: parsed.projects.map((p) => ({ ...p, status: normalizeProjectStatus(p.status) })),
+    };
   }
 
   private detectDuplicates(tasks: SlimTask[], options: Record<string, unknown>): PatternFinding {
@@ -1556,6 +1602,37 @@ SCOPE FILTERING:
         dormant.length > 0
           ? `${dormant.length} projects haven't been modified in over ${thresholdDays} days. Consider reviewing, completing, or dropping them.`
           : 'All projects show recent activity.',
+    };
+  }
+
+  // OMN-255: the core GTD weekly-review check — every ACTIVE project must have
+  // at least one available (actionable-now) task. availableTaskCount is OmniFocus's
+  // numberOfAvailableTasks(), live-verified equivalent to ACTIONABLE_STATUSES
+  // semantics (2026-07-14 fixture probe; spec OMN-255-projects-without-next-action.md):
+  // a sequential project with a deferred head, a deferred-only project, and an
+  // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
+  // excluded here by the active-status gate.
+  private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
+    // status arrives normalized (fetchSlimmedData → normalizeProjectStatus),
+    // whose unknown-string default is 'active' — so drift still fails open.
+    const stalled = projects
+      .filter((p) => p.status === 'active' && p.availableTaskCount === 0)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        folder: p.folder ?? null,
+        task_count: p.taskCount,
+      }));
+
+    return {
+      type: 'missing_next_actions',
+      severity: stalled.length > 0 ? 'warning' : 'info',
+      count: stalled.length,
+      items: stalled,
+      recommendation:
+        stalled.length > 0
+          ? `${stalled.length} active project(s) have no available next action. Each needs a next action defined, or should be completed, put on hold, or dropped.`
+          : 'Every active project has at least one available next action.',
     };
   }
 
