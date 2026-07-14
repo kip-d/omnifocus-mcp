@@ -11,8 +11,10 @@ focuses on developer implementation details.
 ## 🔄 Process Rules
 
 _(Extracted 2026-07-14 from the retired `CLAUDE-PROCESSES.dot` — transcript audit showed the DOT was never read
-in-session; prose here is the delivery mechanism that works. TDD, systematic debugging, and pre-completion verification
-arrive via superpowers skills — not restated here.)_
+in-session; prose here is the delivery mechanism that works. TDD (`superpowers:test-driven-development`), debugging
+discipline including the stuck→escalate-after-third-failed-attempt protocol (`superpowers:systematic-debugging`), and
+pre-completion verification (`superpowers:verification-before-completion`) arrive via those skills — not restated
+here.)_
 
 - **Ambiguous request?** Ask targeted clarifying questions before acting — don't guess at intent.
 - **Before writing code:** grep `src/omnifocus/scripts/shared/` for an existing pattern; read any match completely
@@ -24,9 +26,11 @@ arrive via superpowers skills — not restated here.)_
 - **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
   actually lowers before assuming equivalence.
 - **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail), and
-  `npm run test:unit` pass locally, and `grep -rn 'console\.log' src/` is clean — ESLint's `no-console` is deliberately
-  off here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client
-  (`console.error`/`console.warn` write to stderr and are safe).
+  `npm run test:unit` pass locally; `grep -rn 'console\.log' src/` is clean — ESLint's `no-console` is deliberately off
+  here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client
+  (`console.error`/`console.warn` write to stderr and are safe); TODO comments you touched still reflect reality.
+  Features additionally need integration tests before they're considered complete (~17 min, run in the background, never
+  inside fleet builds — see Code & Writing Standards).
 - **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
@@ -123,7 +127,7 @@ projection strip — layers 8 and 7).
 
 | Symptom                                              | Quick Fix                                                 |
 | ---------------------------------------------------- | --------------------------------------------------------- |
-| Tool returns 0s/empty but has data                   | Test MCP integration first! Compare script vs tool output |
+| Tool returns 0s/empty but has data                   | MCP-first — see Process Rules (MCPTestClient at the seam) |
 | Test expects data.id but gets undefined              | Test MCP response structure first                         |
 | Tags not saving/empty                                | Assign via OmniJS `addTag()` — see Tag Operations         |
 | Typed-value write returns success but didn't persist | Read-back required — see `docs/dev/SETTER-PATTERNS.md`    |
@@ -230,7 +234,8 @@ process.stdin.on('end', async () => {
 ## Quick Reference
 
 ```bash
-# MCP Testing
+# MCP smoke test (handshake only — for debugging tool behavior use MCPTestClient;
+# raw pipes can drop the last in-flight response, see Process Rules "MCP-first")
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
 # protocolVersion is the client-declared value; use one your installed @modelcontextprotocol/sdk supports
 ```

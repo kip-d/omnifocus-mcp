@@ -37,7 +37,6 @@ diagnostic-*.json
 output.json
 output_read.json
 
-
 # MCP server config (contains API tokens)
 .mcp.json
 mcp-config.json
