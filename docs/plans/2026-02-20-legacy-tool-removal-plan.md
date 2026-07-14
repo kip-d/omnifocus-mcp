@@ -14,7 +14,7 @@ tool classes are deleted; their logic is either inlined or replaced by AST build
 
 - Design: `docs/plans/2026-02-20-legacy-tool-removal-design.md`
 - AST patterns: `docs/dev/ARCHITECTURE.md`
-- Process: `.claude/processes/CLAUDE-PROCESSES.dot`
+- Process: `.archive/processes/CLAUDE-PROCESSES.dot` (retired 2026-07-14; process rules now live in CLAUDE.md)
 
 ---
 

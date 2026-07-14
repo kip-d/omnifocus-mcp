@@ -22,6 +22,9 @@ arrive via superpowers skills — not restated here.)_
 - **Public field/operation changes** walk the Vertical Contract Matrix below — every layer done or explicitly N/A.
 - **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
   actually lowers before assuming equivalence.
+- **Before declaring a task complete:** `grep -rE 'console\.(log|error|warn)' src/` — ESLint's `no-console` is
+  deliberately off here, and a stray `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client.
+- **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
 
@@ -90,9 +93,10 @@ irrelevant layers **N/A explicitly** in the PR body — an unmarked layer means 
 layer completes, not the first. A field the client can see must already behave intentionally on single, batch, read, and
 projection paths.
 
-Origin (each a merged defect one unchecked layer caused): #72 (lowering emitted un-bridged OmniJS — layer 6), #142
-(batch path silently dropped `sequential` the schema accepted — layer 4), #204 (unreachable emitter, cache-key
-collision, projection strip — layers 3, 7, 8).
+Origin (each a merged defect one unchecked layer caused): #72 (lowering emitted un-bridged OmniJS — a layer-5 defect,
+catchable only by layer 6's live verify), #142 (batch path silently dropped `sequential` the schema accepted — layer 4),
+#204 (list-path call site never wired the emitter — layer 4's check-every-route lesson; plus a cache-key collision and a
+projection strip — layers 8 and 7).
 
 ---
 
@@ -139,8 +143,9 @@ collision, projection strip — layers 3, 7, 8).
 
 **For NEW scripts:** Use OmniJS-first pattern. See `/docs/dev/OMNIJS-FIRST-PATTERN.md`
 
-**For EXISTING scripts — JXA vs Bridge decision:** >100 items → use streaming/pagination; needs tags, repetition rules,
-or task movement → bridge required; otherwise pure JXA is fine.
+**For EXISTING scripts — JXA vs Bridge decision:** needs tags, repetition rules, or task movement → bridge REQUIRED,
+regardless of item count (JXA tag writes silently no-op — see Tag Operations); >100 items → add streaming/pagination
+(still bridged if tags are involved); otherwise pure JXA is fine.
 
 **Bridge is REQUIRED for:** Tag assignment, repetition rules, task movement between projects.
 
