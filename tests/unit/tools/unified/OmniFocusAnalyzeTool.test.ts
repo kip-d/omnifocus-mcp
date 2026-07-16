@@ -1565,6 +1565,39 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data?.deadline_health).toBeUndefined();
     });
 
+    // Round-4 review: analyzeWaitingFor read task.createdDate — a field NO
+    // emitter ever wrote (the wire key is creationDate) — so days_waiting was
+    // silently always 0 and the >30-day warning escalation could never fire.
+    it('waiting_for computes days_waiting from creationDate (red-verified against the createdDate misread)', async () => {
+      const fortyFiveDaysAgo = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 'w1',
+              name: 'Waiting for vendor quote',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              creationDate: fortyFiveDaysAgo,
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [],
+          tags: [],
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['waiting_for'] } },
+      });
+
+      const items = res.data.waiting_for.items as Array<{ id: string; days_waiting: number }>;
+      expect(items.find((i) => i.id === 'w1')?.days_waiting).toBeGreaterThanOrEqual(44);
+    });
+
     it('still succeeds honestly on a genuinely empty (but fetched) database', async () => {
       mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
 

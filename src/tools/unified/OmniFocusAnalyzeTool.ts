@@ -129,8 +129,11 @@ interface SlimTask {
   deferDate?: string;
   dueDate?: string;
   completionDate?: string;
-  createdDate?: string;
-  modifiedDate?: string;
+  // Wire keys per SlimTaskSchema (were misdeclared createdDate/modifiedDate —
+  // names no emitter ever wrote, which silently zeroed waiting_for's
+  // days_waiting; caught in PR #227 review round 4).
+  creationDate?: string;
+  modificationDate?: string;
   // Required since OMN-269: the OmniJS emitter always sets both (null /
   // 0-degrading; SlimTaskSchema enforces it at the wire boundary).
   estimatedMinutes: number | null;
@@ -1430,28 +1433,44 @@ SCOPE FILTERING:
         }
       }
 
+      // availableTaskCount for ALL projects in one uncapped pass over the
+      // global collection (every descendant's containingProject IS its
+      // project, so this equals the per-project flattened count) instead of
+      // re-walking each project's subtree. Deliberately separate from the
+      // capped task loop above: coupling counts to max_tasks would undercount
+      // projects beyond the cap into false "stalled" reports. Failure
+      // granularity (review rounds 2-4): one bad task costs only itself
+      // (inner try/catch); a failure of the pass itself propagates to a
+      // script error and the OMN-268 envelope — an unreadable count must NOT
+      // surface as a real 0.
+      const availByProject = {};
+      flattenedTasks.forEach(t => {
+        try {
+          // The global collection INCLUDES each project's root task, which
+          // project.flattenedTasks excludes — and a root task reads as
+          // actionable even when the project has no workable children.
+          // Root tasks have a non-null .project; skip them (live-caught:
+          // counting roots turned 12 of 13 stalled projects "healthy").
+          if (t.project) return;
+          if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
+          const proj = t.containingProject;
+          if (!proj) return;
+          const pid = proj.id.primaryKey;
+          availByProject[pid] = (availByProject[pid] || 0) + 1;
+        } catch(e) {}
+      });
+
       const projects = [];
       flattenedProjects.forEach(project => {
         try {
-          // Count-failure granularity (review rounds 2+3 synthesis): a single
-          // bad DESCENDANT costs only itself (inner try/catch — availability
-          // stays approximately right), but a failure reading the project's
-          // own collections aborts the whole row via the outer catch — a
-          // count we couldn't read at all must NOT surface as 0, or
-          // missing_next_actions would report a false "stalled project".
           const taskCount = project.task ? project.task.children.length : 0;
-          const descendants = project.flattenedTasks;
-          let availableTaskCount = 0;
-          for (let j = 0; j < descendants.length; j++) {
-            try { if (ACTIONABLE.indexOf(descendants[j].taskStatus) !== -1) availableTaskCount++; } catch(e) {}
-          }
 
           const projectData = {
             id: project.id.primaryKey,
             name: project.name,
             status: projectStatusString(project.status),
             taskCount: taskCount,
-            availableTaskCount: availableTaskCount
+            availableTaskCount: availByProject[project.id.primaryKey] || 0
           };
 
           try { projectData.folder = project.parentFolder ? project.parentFolder.name : null; } catch(e) { projectData.folder = null; }
@@ -1938,8 +1957,8 @@ SCOPE FILTERING:
       const isBlocked = task.status === 'blocked' || (task.children && task.children > 0);
 
       if (isWaiting || hasWaitingTag || isBlocked) {
-        const daysWaiting = task.createdDate
-          ? Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000))
+        const daysWaiting = task.creationDate
+          ? Math.floor((Date.now() - new Date(task.creationDate).getTime()) / (24 * 60 * 60 * 1000))
           : 0;
         const tagOrBlocked = hasWaitingTag ? 'tag' : 'blocked';
         const waitingReason: 'name_pattern' | 'tag' | 'blocked' = isWaiting ? 'name_pattern' : tagOrBlocked;
