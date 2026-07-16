@@ -434,9 +434,10 @@ export const CountResultSchema = z
   .strict();
 
 /**
- * Slimmed task row — emitted by the inline JXA script in fetchSlimmedData.
- * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData inline script taskData object.
- * id, name, completed, flagged, status, tags are always set. All others are conditional (try/catch).
+ * Slimmed task row — emitted by the inline OmniJS bridge scan in fetchSlimmedData (OMN-269).
+ * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData omniJsProgram taskData object.
+ * id, name, completed, flagged, status, tags, estimatedMinutes, children are always set.
+ * Dates/project/noteHead are conditional (emitted only when the value is truthy).
  */
 const SlimTaskSchema = z
   .object({
@@ -453,22 +454,21 @@ const SlimTaskSchema = z
     completionDate: z.string().optional(),
     creationDate: z.string().optional(),
     modificationDate: z.string().optional(),
-    // emitter assigns task.estimatedMinutes() with no ?./coalesce, so an unset estimate
-    // serializes as null (kept by JSON.stringify) — required-nullable, NOT optional.
-    estimatedMinutes: z.number().nullable().optional(),
+    // emitter assigns task.estimatedMinutes with no ?./coalesce (null when unset,
+    // kept by JSON.stringify) and degrades to null on error — required-nullable.
+    estimatedMinutes: z.number().nullable(),
     noteHead: z.string().optional(),
-    children: z.number().optional(),
+    // emitter degrades to 0 on error, never omits — required (OMN-269)
+    children: z.number(),
   })
   .strict();
 
 /**
- * Slimmed project row — emitted by fetchSlimmedData inline JXA script projectData object.
+ * Slimmed project row — emitted by fetchSlimmedData's OmniJS bridge scan projectData object.
  * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData.
- * id, name, status always set. taskCount/availableTaskCount are in the projectData literal
- * (direct property access, NOT inner try/catch) → always present; the outer try/catch skips
- * the whole project on error rather than emitting a partial object.
- * All dates and `folder` are conditional (inner try/catch); folder is additionally
- * null for root-level projects.
+ * id, name, status, taskCount, availableTaskCount, folder always set (folder is null for
+ * root-level projects); the per-project try/catch skips the whole project on error rather
+ * than emitting a partial object. Dates are conditional (emitted only when set).
  */
 const SlimProjectSchema = z
   .object({
@@ -477,8 +477,10 @@ const SlimProjectSchema = z
     status: z.string(),
     taskCount: z.number(),
     availableTaskCount: z.number(),
-    // OMN-255: containing folder name; conditional (inner try/catch) and null for root projects
-    folder: z.string().nullable().optional(),
+    // OMN-255: containing folder name; always emitted since OMN-269 (null for
+    // root projects, degrades to null on error) — required-nullable so a future
+    // emitter regression that omits it fails validation instead of passing silently
+    folder: z.string().nullable(),
     lastReviewDate: z.string().optional(),
     nextReviewDate: z.string().optional(),
     creationDate: z.string().optional(),
@@ -488,19 +490,19 @@ const SlimProjectSchema = z
   .strict();
 
 /**
- * Slimmed tag row — emitted by fetchSlimmedData inline JXA script tagData object.
+ * Slimmed tag row — emitted by fetchSlimmedData's OmniJS bridge scan tag object.
  * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData.
  * id, name always set; taskCount always set (may be 0).
  */
 const SlimTagSchema = z.object({ id: z.string(), name: z.string(), taskCount: z.number() }).strict();
 
 /**
- * Slimmed-data bulk read — emitted by the inline JXA script in fetchSlimmedData
- * (src/tools/unified/OmniFocusAnalyzeTool.ts, method fetchSlimmedData).
+ * Slimmed-data bulk read — emitted by the inline OmniJS bridge scan in fetchSlimmedData
+ * (src/tools/unified/OmniFocusAnalyzeTool.ts, method fetchSlimmedData; OMN-269).
  *
  * Wire shape verified against the inline return statement:
- *   return JSON.stringify({ tasks, projects, tags })
- * where tasks/projects/tags are arrays built by JXA iteration.
+ *   return JSON.stringify({ tasks: tasks, projects: projects, tags: tags })
+ * where tasks/projects/tags are arrays built inside one evaluateJavascript scan.
  */
 export const SlimmedDataSchema = z
   .object({

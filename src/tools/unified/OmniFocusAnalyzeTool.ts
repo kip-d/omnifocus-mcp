@@ -60,6 +60,7 @@ import { extractDates } from '../capture/date-extraction.js';
 
 // OMN-124: read-only pre-flight for structured meeting-note items.
 import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../contracts/ast/types.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
@@ -128,12 +129,17 @@ interface SlimTask {
   deferDate?: string;
   dueDate?: string;
   completionDate?: string;
-  createdDate?: string;
-  modifiedDate?: string;
-  estimatedMinutes?: number;
+  // Wire keys per SlimTaskSchema (were misdeclared createdDate/modifiedDate —
+  // names no emitter ever wrote, which silently zeroed waiting_for's
+  // days_waiting; caught in PR #227 review round 4).
+  creationDate?: string;
+  modificationDate?: string;
+  // Required since OMN-269: the OmniJS emitter always sets both (null /
+  // 0-degrading; SlimTaskSchema enforces it at the wire boundary).
+  estimatedMinutes: number | null;
   note?: string;
   noteHead?: string;
-  children?: number;
+  children: number;
 }
 
 // Canonical project-status vocabulary, mirroring safeGetStatus in
@@ -158,9 +164,11 @@ interface ProjectData {
   id: string;
   name: string;
   status: string;
-  taskCount?: number;
-  availableTaskCount?: number;
-  folder?: string | null;
+  // Required since OMN-269: the OmniJS emitter always sets these three
+  // (SlimProjectSchema enforces it at the wire boundary).
+  taskCount: number;
+  availableTaskCount: number;
+  folder: string | null;
   lastReviewDate?: string;
   nextReviewDate?: string;
   creationDate?: string;
@@ -1124,11 +1132,8 @@ SCOPE FILTERING:
           ]
         : rawPatterns;
 
-      // Fetch slimmed task data (folder lookup costs one JXA call per project —
-      // only pay it when a requested pattern actually uses the folder field)
-      const slimData = await this.fetchSlimmedData(options, {
-        includeFolder: patterns.includes('missing_next_actions'),
-      });
+      // Fetch slimmed task data in one OmniJS bridge scan (OMN-269)
+      const slimData = await this.fetchSlimmedData(options);
 
       if (!slimData) {
         return createErrorResponseV2(
@@ -1311,64 +1316,116 @@ SCOPE FILTERING:
   // read. The caller maps null to an EXECUTION_ERROR envelope.
   private async fetchSlimmedData(
     options: Record<string, unknown>,
-    { includeFolder = false }: { includeFolder?: boolean } = {},
   ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
-    const taskScript = `(() => {
-      const app = Application('OmniFocus');
-      const doc = app.defaultDocument();
-      const tasks = [];
-      const projects = [];
+    // OMN-269: one OmniJS bridge scan replaces the old pure-JXA per-item loop.
+    // JXA made ~12 Apple Event round trips per task (~34k on a ~2.9k-task DB)
+    // and chronically exceeded the 120s script budget; inside evaluateJavascript
+    // the same scan is property access in OmniFocus's own JS engine
+    // (live-probed 2026-07-16: ~11s wall, ~1.25MB JSON, on the real DB).
+    //
+    // numberOfTasks/numberOfAvailableTasks return undefined in OmniJS on the
+    // live app (probed 2026-07-16 on both Project and its root task, current OF
+    // build) — despite src/omnifocus/api/type-mapping.md and the bundled .d.ts
+    // declaring them, and three legacy scripts reading them behind `|| 0` masks
+    // (OMN-270 covers those silent-undefined reads). Do NOT "simplify" back to
+    // the properties without re-probing them live. The counts are therefore computed:
+    // - taskCount: direct children of the project's root task — exact parity
+    //   with JXA numberOfTasks() (219/219 projects in the 2026-07-16 probe).
+    // - availableTaskCount: descendants with an actionable effective status
+    //   (Available/DueSoon/Next/Overdue — ACTIONABLE_STATUSES semantics, the
+    //   OMN-255 spec's live-verified equivalent). This is a deliberate semantic
+    //   change from JXA numberOfAvailableTasks(), which counts DIRECT children
+    //   and treats a blocked parent group as available when a descendant is;
+    //   the flattened count reports the actual actionable tasks instead. The
+    //   ===0 boundary — the only branching consumer semantic
+    //   (missing_next_actions) — agreed with JXA on all 219 probed projects;
+    //   non-zero values (surfaced informationally by dormant_projects) can
+    //   exceed JXA's on projects with nested groups. Exact JXA parity was
+    //   attempted and rejected: the closest reproduction (direct children
+    //   actionable-or-with-actionable-descendant) still mismatched 2/219.
+    // Number.isFinite (not ||) so an explicit max_tasks of 0 means 0, not 3000
+    const parsedMaxTasks = Number(options.max_tasks);
+    const maxTasks = Number.isFinite(parsedMaxTasks) ? parsedMaxTasks : 3000;
+    const includeCompleted = options.include_completed === true;
 
-      const allTasks = doc.flattenedTasks();
-      const maxTasks = ${String(options.max_tasks)};
-      const includeCompleted = ${String(options.include_completed)};
+    const omniJsProgram = `(() => {
+      const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
+      // OmniJS enums stringify as '[object Task.Status: Blocked]' — map explicitly.
+      // Detectors only branch on 'blocked'; the rest are informational.
+      function taskStatusString(s) {
+        if (s === Task.Status.Blocked) return 'blocked';
+        if (s === Task.Status.Available) return 'available';
+        if (s === Task.Status.Next) return 'next';
+        if (s === Task.Status.DueSoon) return 'dueSoon';
+        if (s === Task.Status.Overdue) return 'overdue';
+        if (s === Task.Status.Completed) return 'completed';
+        if (s === Task.Status.Dropped) return 'dropped';
+        return 'unknown';
+      }
+      // Canonical vocabulary; normalizeProjectStatus at the TS boundary stays
+      // as the fail-open safety net for any future drift.
+      function projectStatusString(s) {
+        if (s === Project.Status.Active) return 'active';
+        if (s === Project.Status.OnHold) return 'onHold';
+        if (s === Project.Status.Done) return 'done';
+        if (s === Project.Status.Dropped) return 'dropped';
+        return String(s);
+      }
+      // One shared date emitter: a throwing/absent date degrades to an
+      // omitted key (SlimTask/SlimProject date fields are optional).
+      function putISO(target, key, source, prop) {
+        try {
+          const v = source[prop];
+          if (v) target[key] = v.toISOString();
+        } catch(e) {}
+      }
+
+      const tasks = [];
+      const allTasks = flattenedTasks;
+      const maxTasks = ${String(maxTasks)};
+      const includeCompleted = ${String(includeCompleted)};
 
       for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
         const task = allTasks[i];
-
         try {
-          const completed = task.completed();
+          const completed = task.completed;
           if (!includeCompleted && completed) continue;
 
           const taskData = {
-            id: task.id(),
-            name: task.name(),
+            id: task.id.primaryKey,
+            name: task.name,
             completed: completed,
-            flagged: task.flagged(),
-            status: task.taskStatus ? task.taskStatus().toString() : 'unknown'
+            flagged: task.flagged,
+            status: taskStatusString(task.taskStatus)
           };
 
+          // Per-field try/catch (as in the JXA version): one misbehaving
+          // accessor on an edge-case task must degrade to a missing field,
+          // never silently drop the whole row.
+          try { taskData.tags = task.tags.map(t => t.name); } catch(e) { taskData.tags = []; }
+
           try {
-            const container = task.containingProject();
+            const container = task.containingProject;
             if (container) {
-              taskData.project = container.name();
-              taskData.projectId = container.id();
+              taskData.project = container.name;
+              taskData.projectId = container.id.primaryKey;
             }
           } catch(e) {}
 
-          try {
-            const tags = task.tags();
-            taskData.tags = tags ? tags.map(t => t.name()) : [];
-          } catch(e) { taskData.tags = []; }
-
-          try { taskData.deferDate = task.deferDate()?.toISOString(); } catch(e) {}
-          try { taskData.dueDate = task.dueDate()?.toISOString(); } catch(e) {}
-          try { taskData.completionDate = task.completionDate()?.toISOString(); } catch(e) {}
-          try { taskData.creationDate = task.creationDate()?.toISOString(); } catch(e) {}
-          try { taskData.modificationDate = task.modificationDate()?.toISOString(); } catch(e) {}
-          try { taskData.estimatedMinutes = task.estimatedMinutes(); } catch(e) {}
+          putISO(taskData, 'deferDate', task, 'deferDate');
+          putISO(taskData, 'dueDate', task, 'dueDate');
+          putISO(taskData, 'completionDate', task, 'completionDate');
+          // added/modified are the OmniJS names for JXA's creationDate/modificationDate;
+          // the wire keys stay the JXA-era names (SlimTaskSchema pins them).
+          putISO(taskData, 'creationDate', task, 'added');
+          putISO(taskData, 'modificationDate', task, 'modified');
+          try { taskData.estimatedMinutes = task.estimatedMinutes; } catch(e) { taskData.estimatedMinutes = null; }
 
           try {
-            const note = task.note();
-            if (note) {
-              taskData.noteHead = note.substring(0, 160);
-            }
+            const note = task.note;
+            if (note) taskData.noteHead = note.substring(0, 160);
           } catch(e) {}
-
-          try {
-            const children = task.tasks();
-            taskData.children = children ? children.length : 0;
-          } catch(e) {}
+          try { taskData.children = task.children.length; } catch(e) { taskData.children = 0; }
 
           tasks.push(taskData);
         } catch(e) {
@@ -1376,60 +1433,75 @@ SCOPE FILTERING:
         }
       }
 
-      const allProjects = doc.flattenedProjects();
-      for (let i = 0; i < allProjects.length; i++) {
-        const project = allProjects[i];
-
+      // availableTaskCount for ALL projects in one uncapped pass over the
+      // global collection (every descendant's containingProject IS its
+      // project, so this equals the per-project flattened count) instead of
+      // re-walking each project's subtree. Deliberately separate from the
+      // capped task loop above: coupling counts to max_tasks would undercount
+      // projects beyond the cap into false "stalled" reports. Failure
+      // granularity (review rounds 2-4): one bad task costs only itself
+      // (inner try/catch); a failure of the pass itself propagates to a
+      // script error and the OMN-268 envelope — an unreadable count must NOT
+      // surface as a real 0.
+      const availByProject = {};
+      flattenedTasks.forEach(t => {
         try {
+          // The global collection INCLUDES each project's root task, which
+          // project.flattenedTasks excludes — and a root task reads as
+          // actionable even when the project has no workable children.
+          // Root tasks have a non-null .project; skip them (live-caught:
+          // counting roots turned 12 of 13 stalled projects "healthy").
+          if (t.project) return;
+          if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
+          const proj = t.containingProject;
+          if (!proj) return;
+          const pid = proj.id.primaryKey;
+          availByProject[pid] = (availByProject[pid] || 0) + 1;
+        } catch(e) {}
+      });
+
+      const projects = [];
+      flattenedProjects.forEach(project => {
+        try {
+          const taskCount = project.task ? project.task.children.length : 0;
+
           const projectData = {
-            id: project.id(),
-            name: project.name(),
-            status: project.status().toString(),
-            taskCount: project.numberOfTasks(),
-            availableTaskCount: project.numberOfAvailableTasks()
+            id: project.id.primaryKey,
+            name: project.name,
+            status: projectStatusString(project.status),
+            taskCount: taskCount,
+            availableTaskCount: availByProject[project.id.primaryKey] || 0
           };
 
-          ${
-            includeFolder
-              ? `// OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
-          // unlike the parent relationships that require the OmniJS bridge. One call,
-          // cached in a local (each JXA method call is an Apple Event round trip).
-          try { const projFolder = project.folder(); projectData.folder = projFolder ? projFolder.name() : null; } catch(e) {}`
-              : ''
-          }
-
-          try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
-          try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
-          try { projectData.creationDate = project.creationDate()?.toISOString(); } catch(e) {}
-          try { projectData.modificationDate = project.modificationDate()?.toISOString(); } catch(e) {}
-          try { projectData.completionDate = project.completionDate()?.toISOString(); } catch(e) {}
+          try { projectData.folder = project.parentFolder ? project.parentFolder.name : null; } catch(e) { projectData.folder = null; }
+          putISO(projectData, 'lastReviewDate', project, 'lastReviewDate');
+          putISO(projectData, 'nextReviewDate', project, 'nextReviewDate');
+          putISO(projectData, 'creationDate', project, 'added');
+          putISO(projectData, 'modificationDate', project, 'modified');
+          putISO(projectData, 'completionDate', project, 'completionDate');
 
           projects.push(projectData);
         } catch(e) {}
-      }
+      });
 
       const tags = [];
-      const allTags = doc.flattenedTags();
-      for (let i = 0; i < allTags.length; i++) {
-        const tag = allTags[i];
+      flattenedTags.forEach(tag => {
         try {
-          const tagData = {
-            name: tag.name(),
-            id: tag.id()
-          };
-
-          let taskCount = 0;
-          try {
-            const taggedTasks = tag.tasks();
-            taskCount = taggedTasks ? taggedTasks.length : 0;
-          } catch(e) {}
-
-          tagData.taskCount = taskCount;
+          const tagData = { name: tag.name, id: tag.id.primaryKey };
+          // taskCount degrades to 0 rather than dropping the tag row
+          try { tagData.taskCount = tag.tasks.length; } catch(e) { tagData.taskCount = 0; }
           tags.push(tagData);
         } catch(e) {}
-      }
+      });
 
-      return JSON.stringify({ tasks, projects, tags });
+      return JSON.stringify({ tasks: tasks, projects: projects, tags: tags });
+    })()`;
+
+    // Minimal JXA wrapper (OMNIJS-FIRST-PATTERN). The program is injected via
+    // JSON.stringify to sidestep nested-template escaping entirely.
+    const taskScript = `(() => {
+      const app = Application('OmniFocus');
+      return app.evaluateJavascript(${JSON.stringify(omniJsProgram)});
     })()`;
 
     const scriptResult = await this.execJson(taskScript, SlimmedDataSchema);
@@ -1585,6 +1657,9 @@ SCOPE FILTERING:
             days_dormant: Math.floor(dormantTime / (24 * 60 * 60 * 1000)),
             last_modified: project.modificationDate,
             task_count: project.taskCount,
+            // Informational magnitude; since OMN-269 this is the flattened
+            // actionable-descendant count (can exceed the old JXA direct-child
+            // number on nested-group projects) — see fetchSlimmedData.
             available_tasks: project.availableTaskCount,
           });
         }
@@ -1606,12 +1681,17 @@ SCOPE FILTERING:
   }
 
   // OMN-255: the core GTD weekly-review check — every ACTIVE project must have
-  // at least one available (actionable-now) task. availableTaskCount is OmniFocus's
-  // numberOfAvailableTasks(), live-verified equivalent to ACTIONABLE_STATUSES
-  // semantics (2026-07-14 fixture probe; spec OMN-255-projects-without-next-action.md):
-  // a sequential project with a deferred head, a deferred-only project, and an
-  // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
-  // excluded here by the active-status gate.
+  // at least one available (actionable-now) task. Since OMN-269,
+  // availableTaskCount is the flattened ACTIONABLE_STATUSES descendant count
+  // computed in fetchSlimmedData's OmniJS scan (see the semantics comment
+  // there); its ===0 boundary — all this detector consumes — matched JXA
+  // numberOfAvailableTasks() on 219/219 live-probed projects, and the OMN-255
+  // fixture semantics hold: a sequential project with a deferred head, a
+  // deferred-only project, and an all-tasks-completed project all count 0;
+  // on-hold status propagates to 0 but is excluded here by the active-status
+  // gate. Non-zero magnitudes can exceed JXA's on nested-group projects — do
+  // NOT build magnitude-sensitive logic on this field without reading the
+  // fetchSlimmedData comment first.
   private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
     // status arrives normalized (fetchSlimmedData → normalizeProjectStatus),
     // whose unknown-string default is 'active' — so drift still fails open.
@@ -1620,7 +1700,7 @@ SCOPE FILTERING:
       .map((p) => ({
         id: p.id,
         name: p.name,
-        folder: p.folder ?? null,
+        folder: p.folder,
         task_count: p.taskCount,
       }));
 
@@ -1877,8 +1957,8 @@ SCOPE FILTERING:
       const isBlocked = task.status === 'blocked' || (task.children && task.children > 0);
 
       if (isWaiting || hasWaitingTag || isBlocked) {
-        const daysWaiting = task.createdDate
-          ? Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000))
+        const daysWaiting = task.creationDate
+          ? Math.floor((Date.now() - new Date(task.creationDate).getTime()) / (24 * 60 * 60 * 1000))
           : 0;
         const tagOrBlocked = hasWaitingTag ? 'tag' : 'blocked';
         const waitingReason: 'name_pattern' | 'tag' | 'blocked' = isWaiting ? 'name_pattern' : tagOrBlocked;
