@@ -454,11 +454,12 @@ const SlimTaskSchema = z
     completionDate: z.string().optional(),
     creationDate: z.string().optional(),
     modificationDate: z.string().optional(),
-    // emitter assigns task.estimatedMinutes with no ?./coalesce, so an unset estimate
-    // serializes as null (kept by JSON.stringify) — required-nullable, NOT optional.
-    estimatedMinutes: z.number().nullable().optional(),
+    // emitter assigns task.estimatedMinutes with no ?./coalesce (null when unset,
+    // kept by JSON.stringify) and degrades to null on error — required-nullable.
+    estimatedMinutes: z.number().nullable(),
     noteHead: z.string().optional(),
-    children: z.number().optional(),
+    // emitter degrades to 0 on error, never omits — required (OMN-269)
+    children: z.number(),
   })
   .strict();
 
@@ -476,8 +477,10 @@ const SlimProjectSchema = z
     status: z.string(),
     taskCount: z.number(),
     availableTaskCount: z.number(),
-    // OMN-255: containing folder name; always emitted since OMN-269, null for root projects
-    folder: z.string().nullable().optional(),
+    // OMN-255: containing folder name; always emitted since OMN-269 (null for
+    // root projects, degrades to null on error) — required-nullable so a future
+    // emitter regression that omits it fails validation instead of passing silently
+    folder: z.string().nullable(),
     lastReviewDate: z.string().optional(),
     nextReviewDate: z.string().optional(),
     creationDate: z.string().optional(),

@@ -1318,10 +1318,10 @@ SCOPE FILTERING:
     //
     // numberOfTasks/numberOfAvailableTasks return undefined in OmniJS on the
     // live app (probed 2026-07-16 on both Project and its root task, current OF
-    // build) — despite docs/dev type-mapping.md claiming the mapping and three
-    // legacy scripts reading them behind `|| 0` masks (OMN-270 covers those
-    // silent-undefined reads). Do NOT "simplify" back to the properties without
-    // re-probing them live. The counts are therefore computed:
+    // build) — despite src/omnifocus/api/type-mapping.md and the bundled .d.ts
+    // declaring them, and three legacy scripts reading them behind `|| 0` masks
+    // (OMN-270 covers those silent-undefined reads). Do NOT "simplify" back to
+    // the properties without re-probing them live. The counts are therefore computed:
     // - taskCount: direct children of the project's root task — exact parity
     //   with JXA numberOfTasks() (219/219 projects in the 2026-07-16 probe).
     // - availableTaskCount: descendants with an actionable effective status
@@ -1336,7 +1336,9 @@ SCOPE FILTERING:
     //   exceed JXA's on projects with nested groups. Exact JXA parity was
     //   attempted and rejected: the closest reproduction (direct children
     //   actionable-or-with-actionable-descendant) still mismatched 2/219.
-    const maxTasks = Number(options.max_tasks) || 3000;
+    // Number.isFinite (not ||) so an explicit max_tasks of 0 means 0, not 3000
+    const parsedMaxTasks = Number(options.max_tasks);
+    const maxTasks = Number.isFinite(parsedMaxTasks) ? parsedMaxTasks : 3000;
     const includeCompleted = options.include_completed === true;
 
     const omniJsProgram = `(() => {
@@ -1419,12 +1421,25 @@ SCOPE FILTERING:
       const projects = [];
       flattenedProjects.forEach(project => {
         try {
+          // Counts degrade per-descendant: one bad task must cost at most
+          // itself, never the whole project row (a silently missing project
+          // is invisible in review output; a low count is at least visible).
+          let taskCount = 0;
+          try { taskCount = project.task ? project.task.children.length : 0; } catch(e) {}
+          let availableTaskCount = 0;
+          try {
+            const descendants = project.flattenedTasks;
+            for (let j = 0; j < descendants.length; j++) {
+              try { if (ACTIONABLE.indexOf(descendants[j].taskStatus) !== -1) availableTaskCount++; } catch(e) {}
+            }
+          } catch(e) {}
+
           const projectData = {
             id: project.id.primaryKey,
             name: project.name,
             status: projectStatusString(project.status),
-            taskCount: project.task ? project.task.children.length : 0,
-            availableTaskCount: project.flattenedTasks.filter(t => ACTIONABLE.indexOf(t.taskStatus) !== -1).length
+            taskCount: taskCount,
+            availableTaskCount: availableTaskCount
           };
 
           try { projectData.folder = project.parentFolder ? project.parentFolder.name : null; } catch(e) { projectData.folder = null; }
@@ -1632,12 +1647,17 @@ SCOPE FILTERING:
   }
 
   // OMN-255: the core GTD weekly-review check — every ACTIVE project must have
-  // at least one available (actionable-now) task. availableTaskCount is OmniFocus's
-  // numberOfAvailableTasks(), live-verified equivalent to ACTIONABLE_STATUSES
-  // semantics (2026-07-14 fixture probe; spec OMN-255-projects-without-next-action.md):
-  // a sequential project with a deferred head, a deferred-only project, and an
-  // all-tasks-completed project all count 0; on-hold status propagates to 0 but is
-  // excluded here by the active-status gate.
+  // at least one available (actionable-now) task. Since OMN-269,
+  // availableTaskCount is the flattened ACTIONABLE_STATUSES descendant count
+  // computed in fetchSlimmedData's OmniJS scan (see the semantics comment
+  // there); its ===0 boundary — all this detector consumes — matched JXA
+  // numberOfAvailableTasks() on 219/219 live-probed projects, and the OMN-255
+  // fixture semantics hold: a sequential project with a deferred head, a
+  // deferred-only project, and an all-tasks-completed project all count 0;
+  // on-hold status propagates to 0 but is excluded here by the active-status
+  // gate. Non-zero magnitudes can exceed JXA's on nested-group projects — do
+  // NOT build magnitude-sensitive logic on this field without reading the
+  // fetchSlimmedData comment first.
   private detectMissingNextActions(projects: ProjectData[]): PatternFinding {
     // status arrives normalized (fetchSlimmedData → normalizeProjectStatus),
     // whose unknown-string default is 'active' — so drift still fails open.

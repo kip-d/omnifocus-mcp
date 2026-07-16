@@ -1578,8 +1578,9 @@ describe('OmniFocusAnalyzeTool', () => {
   });
 
   // OMN-255: missing_next_actions — active projects with zero available tasks.
-  // "Available" is OmniFocus's numberOfAvailableTasks(), live-verified equivalent
-  // to ACTIONABLE_STATUSES semantics (spec: OMN-255-projects-without-next-action.md).
+  // "Available" is, since OMN-269, the flattened ACTIONABLE_STATUSES descendant
+  // count from fetchSlimmedData's OmniJS scan; its ===0 boundary (all this
+  // detector consumes) matched JXA numberOfAvailableTasks() 219/219 live.
   describe('pattern_analysis missing_next_actions (OMN-255)', () => {
     const projects = [
       { id: 'p1', name: 'Stalled seq', status: 'active status', taskCount: 2, availableTaskCount: 0, folder: 'Work' },

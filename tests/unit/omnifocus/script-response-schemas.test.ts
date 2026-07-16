@@ -1251,16 +1251,27 @@ describe('FOLDER_LIST_SCHEMA', () => {
 
 describe('SlimmedDataSchema', () => {
   it('(a) accepts representative slimmed-data payload', () => {
-    // Fixture corrected per OMN-158 spec §5: wire shapes for slimmed rows.
-    // tasks: id, name, completed, flagged, status, tags are always emitted.
-    // projects: id, name, status, taskCount, availableTaskCount always emitted
-    //   (taskCount/availableTaskCount are in the projectData literal, not inner try/catch).
+    // Fixture per the OMN-269 OmniJS emitter contract:
+    // tasks: id, name, completed, flagged, status, tags, estimatedMinutes, children always emitted.
+    // projects: id, name, status, taskCount, availableTaskCount, folder always emitted.
     // tags: id, name, taskCount always emitted.
     const result = SlimmedDataSchema.safeParse({
-      tasks: [{ id: 't1', name: 'Buy milk', completed: false, flagged: false, status: 'available', tags: [] }],
-      projects: [{ id: 'p1', name: 'Errands', status: 'active', taskCount: 5, availableTaskCount: 3 }],
+      tasks: [
+        {
+          id: 't1',
+          name: 'Buy milk',
+          completed: false,
+          flagged: false,
+          status: 'available',
+          tags: [],
+          estimatedMinutes: null,
+          children: 0,
+        },
+      ],
+      projects: [{ id: 'p1', name: 'Errands', status: 'active', taskCount: 5, availableTaskCount: 3, folder: null }],
       tags: [{ id: 'tag1', name: 'home', taskCount: 3 }],
     });
+    expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);
   });
 
@@ -1269,8 +1280,8 @@ describe('SlimmedDataSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('(a) accepts a task with estimatedMinutes: null (unset estimate — emitter assigns the raw JXA null)', () => {
-    // Regression guard: the slim emitter does `taskData.estimatedMinutes = task.estimatedMinutes()`
+  it('(a) accepts a task with estimatedMinutes: null (unset estimate — emitter assigns the raw null)', () => {
+    // Regression guard: the slim emitter does `taskData.estimatedMinutes = task.estimatedMinutes`
     // with no ?./coalesce, so an unset estimate serializes as null and must validate (was z.number()
     // .optional(), which fail-closed the whole fetchSlimmedData read for any un-estimated task).
     const result = SlimmedDataSchema.safeParse({
@@ -1283,6 +1294,7 @@ describe('SlimmedDataSchema', () => {
           status: 'available',
           tags: [],
           estimatedMinutes: null,
+          children: 0,
         },
       ],
       projects: [],
@@ -2785,6 +2797,7 @@ describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
           status: 'active',
           taskCount: 5,
           availableTaskCount: 3,
+          folder: 'Home',
           lastReviewDate: '2026-06-01T00:00:00.000Z',
           nextReviewDate: '2026-07-01T00:00:00.000Z',
         },
