@@ -27,7 +27,7 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
-import { ACTIONABLE_STATUSES } from './types.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from './types.js';
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
@@ -256,7 +256,7 @@ function generateFieldProjection(
         // {Available, DueSoon, Next, Overdue} are actionable; Blocked (deferred / sequential
         // predecessor / on-hold project), Completed, and Dropped are not.
         // indexOf used over Array.includes for OmniJS runtime compatibility.
-        projections.push(`available: [${ACTIONABLE_STATUSES.join(', ')}].indexOf(task.taskStatus) !== -1`);
+        projections.push(`available: ${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(task.taskStatus) !== -1`);
         break;
       case 'hasNote':
         // OMN-130: boolean presence marker — true when the task has any non-empty note text.

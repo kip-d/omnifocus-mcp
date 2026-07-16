@@ -181,6 +181,14 @@ export const ACTIONABLE_STATUSES = [
 ] as const;
 
 /**
+ * The same set as a ready-to-splice OmniJS array literal, e.g.
+ * `${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(task.taskStatus) !== -1`.
+ * Single definition so every generated script stays in lockstep with the
+ * canonical set (the old hand-copied forms silently drifted).
+ */
+export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(', ')}]`;
+
+/**
  * Emit the OmniJS predicate for the `task.available` filter field.
  *
  * Uses a membership check across ACTIONABLE_STATUSES — NOT a single === comparison
@@ -195,8 +203,7 @@ export const ACTIONABLE_STATUSES = [
 function emitOmniJSAvailable(operator: ComparisonOperator, value: unknown): string {
   const matches = value as boolean;
   const wantMember = (operator === '==') === matches;
-  const statusArray = `[${ACTIONABLE_STATUSES.join(', ')}]`;
-  return `${statusArray}.indexOf(task.taskStatus) ${wantMember ? '!==' : '==='} -1`;
+  return `${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(task.taskStatus) ${wantMember ? '!==' : '==='} -1`;
 }
 
 function emitOmniJSTagStatusValid(operator: ComparisonOperator, value: unknown): string {

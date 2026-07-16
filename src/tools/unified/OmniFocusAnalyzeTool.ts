@@ -60,7 +60,7 @@ import { extractDates } from '../capture/date-extraction.js';
 
 // OMN-124: read-only pre-flight for structured meeting-note items.
 import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
-import { ACTIONABLE_STATUSES } from '../../contracts/ast/types.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../contracts/ast/types.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
@@ -131,10 +131,12 @@ interface SlimTask {
   completionDate?: string;
   createdDate?: string;
   modifiedDate?: string;
-  estimatedMinutes?: number;
+  // Required since OMN-269: the OmniJS emitter always sets both (null /
+  // 0-degrading; SlimTaskSchema enforces it at the wire boundary).
+  estimatedMinutes: number | null;
   note?: string;
   noteHead?: string;
-  children?: number;
+  children: number;
 }
 
 // Canonical project-status vocabulary, mirroring safeGetStatus in
@@ -159,9 +161,11 @@ interface ProjectData {
   id: string;
   name: string;
   status: string;
-  taskCount?: number;
-  availableTaskCount?: number;
-  folder?: string | null;
+  // Required since OMN-269: the OmniJS emitter always sets these three
+  // (SlimProjectSchema enforces it at the wire boundary).
+  taskCount: number;
+  availableTaskCount: number;
+  folder: string | null;
   lastReviewDate?: string;
   nextReviewDate?: string;
   creationDate?: string;
@@ -1342,7 +1346,7 @@ SCOPE FILTERING:
     const includeCompleted = options.include_completed === true;
 
     const omniJsProgram = `(() => {
-      const ACTIONABLE = [${ACTIONABLE_STATUSES.join(', ')}];
+      const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
       // OmniJS enums stringify as '[object Task.Status: Blocked]' — map explicitly.
       // Detectors only branch on 'blocked'; the rest are informational.
       function taskStatusString(s) {
@@ -1363,6 +1367,14 @@ SCOPE FILTERING:
         if (s === Project.Status.Done) return 'done';
         if (s === Project.Status.Dropped) return 'dropped';
         return String(s);
+      }
+      // One shared date emitter: a throwing/absent date degrades to an
+      // omitted key (SlimTask/SlimProject date fields are optional).
+      function putISO(target, key, source, prop) {
+        try {
+          const v = source[prop];
+          if (v) target[key] = v.toISOString();
+        } catch(e) {}
       }
 
       const tasks = [];
@@ -1397,13 +1409,13 @@ SCOPE FILTERING:
             }
           } catch(e) {}
 
-          try { if (task.deferDate) taskData.deferDate = task.deferDate.toISOString(); } catch(e) {}
-          try { if (task.dueDate) taskData.dueDate = task.dueDate.toISOString(); } catch(e) {}
-          try { if (task.completionDate) taskData.completionDate = task.completionDate.toISOString(); } catch(e) {}
+          putISO(taskData, 'deferDate', task, 'deferDate');
+          putISO(taskData, 'dueDate', task, 'dueDate');
+          putISO(taskData, 'completionDate', task, 'completionDate');
           // added/modified are the OmniJS names for JXA's creationDate/modificationDate;
           // the wire keys stay the JXA-era names (SlimTaskSchema pins them).
-          try { if (task.added) taskData.creationDate = task.added.toISOString(); } catch(e) {}
-          try { if (task.modified) taskData.modificationDate = task.modified.toISOString(); } catch(e) {}
+          putISO(taskData, 'creationDate', task, 'added');
+          putISO(taskData, 'modificationDate', task, 'modified');
           try { taskData.estimatedMinutes = task.estimatedMinutes; } catch(e) { taskData.estimatedMinutes = null; }
 
           try {
@@ -1421,18 +1433,18 @@ SCOPE FILTERING:
       const projects = [];
       flattenedProjects.forEach(project => {
         try {
-          // Counts degrade per-descendant: one bad task must cost at most
-          // itself, never the whole project row (a silently missing project
-          // is invisible in review output; a low count is at least visible).
-          let taskCount = 0;
-          try { taskCount = project.task ? project.task.children.length : 0; } catch(e) {}
+          // Count-failure granularity (review rounds 2+3 synthesis): a single
+          // bad DESCENDANT costs only itself (inner try/catch — availability
+          // stays approximately right), but a failure reading the project's
+          // own collections aborts the whole row via the outer catch — a
+          // count we couldn't read at all must NOT surface as 0, or
+          // missing_next_actions would report a false "stalled project".
+          const taskCount = project.task ? project.task.children.length : 0;
+          const descendants = project.flattenedTasks;
           let availableTaskCount = 0;
-          try {
-            const descendants = project.flattenedTasks;
-            for (let j = 0; j < descendants.length; j++) {
-              try { if (ACTIONABLE.indexOf(descendants[j].taskStatus) !== -1) availableTaskCount++; } catch(e) {}
-            }
-          } catch(e) {}
+          for (let j = 0; j < descendants.length; j++) {
+            try { if (ACTIONABLE.indexOf(descendants[j].taskStatus) !== -1) availableTaskCount++; } catch(e) {}
+          }
 
           const projectData = {
             id: project.id.primaryKey,
@@ -1443,11 +1455,11 @@ SCOPE FILTERING:
           };
 
           try { projectData.folder = project.parentFolder ? project.parentFolder.name : null; } catch(e) { projectData.folder = null; }
-          try { if (project.lastReviewDate) projectData.lastReviewDate = project.lastReviewDate.toISOString(); } catch(e) {}
-          try { if (project.nextReviewDate) projectData.nextReviewDate = project.nextReviewDate.toISOString(); } catch(e) {}
-          try { if (project.added) projectData.creationDate = project.added.toISOString(); } catch(e) {}
-          try { if (project.modified) projectData.modificationDate = project.modified.toISOString(); } catch(e) {}
-          try { if (project.completionDate) projectData.completionDate = project.completionDate.toISOString(); } catch(e) {}
+          putISO(projectData, 'lastReviewDate', project, 'lastReviewDate');
+          putISO(projectData, 'nextReviewDate', project, 'nextReviewDate');
+          putISO(projectData, 'creationDate', project, 'added');
+          putISO(projectData, 'modificationDate', project, 'modified');
+          putISO(projectData, 'completionDate', project, 'completionDate');
 
           projects.push(projectData);
         } catch(e) {}
@@ -1626,6 +1638,9 @@ SCOPE FILTERING:
             days_dormant: Math.floor(dormantTime / (24 * 60 * 60 * 1000)),
             last_modified: project.modificationDate,
             task_count: project.taskCount,
+            // Informational magnitude; since OMN-269 this is the flattened
+            // actionable-descendant count (can exceed the old JXA direct-child
+            // number on nested-group projects) — see fetchSlimmedData.
             available_tasks: project.availableTaskCount,
           });
         }
@@ -1666,7 +1681,7 @@ SCOPE FILTERING:
       .map((p) => ({
         id: p.id,
         name: p.name,
-        folder: p.folder ?? null,
+        folder: p.folder,
         task_count: p.taskCount,
       }));
 
