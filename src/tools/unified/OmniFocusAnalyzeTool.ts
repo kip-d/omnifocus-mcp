@@ -60,6 +60,7 @@ import { extractDates } from '../capture/date-extraction.js';
 
 // OMN-124: read-only pre-flight for structured meeting-note items.
 import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
+import { ACTIONABLE_STATUSES } from '../../contracts/ast/types.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
@@ -1315,21 +1316,31 @@ SCOPE FILTERING:
     // the same scan is property access in OmniFocus's own JS engine
     // (live-probed 2026-07-16: ~11s wall, ~1.25MB JSON, on the real DB).
     //
-    // OmniJS has no numberOfTasks/numberOfAvailableTasks primitives (those are
-    // JXA/AppleScript-only), so the counts are computed:
+    // numberOfTasks/numberOfAvailableTasks return undefined in OmniJS on the
+    // live app (probed 2026-07-16 on both Project and its root task, current OF
+    // build) — despite docs/dev type-mapping.md claiming the mapping and three
+    // legacy scripts reading them behind `|| 0` masks (OMN-270 covers those
+    // silent-undefined reads). Do NOT "simplify" back to the properties without
+    // re-probing them live. The counts are therefore computed:
     // - taskCount: direct children of the project's root task — exact parity
     //   with JXA numberOfTasks() (219/219 projects in the 2026-07-16 probe).
     // - availableTaskCount: descendants with an actionable effective status
     //   (Available/DueSoon/Next/Overdue — ACTIONABLE_STATUSES semantics, the
-    //   OMN-255 spec's live-verified equivalent). Exact values can exceed JXA's
-    //   where available actions nest inside blocked groups, but the ===0
-    //   boundary — the only load-bearing consumer semantic
-    //   (missing_next_actions) — agreed with JXA on all 219 probed projects.
+    //   OMN-255 spec's live-verified equivalent). This is a deliberate semantic
+    //   change from JXA numberOfAvailableTasks(), which counts DIRECT children
+    //   and treats a blocked parent group as available when a descendant is;
+    //   the flattened count reports the actual actionable tasks instead. The
+    //   ===0 boundary — the only branching consumer semantic
+    //   (missing_next_actions) — agreed with JXA on all 219 probed projects;
+    //   non-zero values (surfaced informationally by dormant_projects) can
+    //   exceed JXA's on projects with nested groups. Exact JXA parity was
+    //   attempted and rejected: the closest reproduction (direct children
+    //   actionable-or-with-actionable-descendant) still mismatched 2/219.
     const maxTasks = Number(options.max_tasks) || 3000;
     const includeCompleted = options.include_completed === true;
 
     const omniJsProgram = `(() => {
-      const ACTIONABLE = [Task.Status.Available, Task.Status.DueSoon, Task.Status.Next, Task.Status.Overdue];
+      const ACTIONABLE = [${ACTIONABLE_STATUSES.join(', ')}];
       // OmniJS enums stringify as '[object Task.Status: Blocked]' — map explicitly.
       // Detectors only branch on 'blocked'; the rest are informational.
       function taskStatusString(s) {
@@ -1368,28 +1379,36 @@ SCOPE FILTERING:
             name: task.name,
             completed: completed,
             flagged: task.flagged,
-            status: taskStatusString(task.taskStatus),
-            tags: task.tags.map(t => t.name)
+            status: taskStatusString(task.taskStatus)
           };
 
-          const container = task.containingProject;
-          if (container) {
-            taskData.project = container.name;
-            taskData.projectId = container.id.primaryKey;
-          }
+          // Per-field try/catch (as in the JXA version): one misbehaving
+          // accessor on an edge-case task must degrade to a missing field,
+          // never silently drop the whole row.
+          try { taskData.tags = task.tags.map(t => t.name); } catch(e) { taskData.tags = []; }
 
-          if (task.deferDate) taskData.deferDate = task.deferDate.toISOString();
-          if (task.dueDate) taskData.dueDate = task.dueDate.toISOString();
-          if (task.completionDate) taskData.completionDate = task.completionDate.toISOString();
+          try {
+            const container = task.containingProject;
+            if (container) {
+              taskData.project = container.name;
+              taskData.projectId = container.id.primaryKey;
+            }
+          } catch(e) {}
+
+          try { if (task.deferDate) taskData.deferDate = task.deferDate.toISOString(); } catch(e) {}
+          try { if (task.dueDate) taskData.dueDate = task.dueDate.toISOString(); } catch(e) {}
+          try { if (task.completionDate) taskData.completionDate = task.completionDate.toISOString(); } catch(e) {}
           // added/modified are the OmniJS names for JXA's creationDate/modificationDate;
           // the wire keys stay the JXA-era names (SlimTaskSchema pins them).
-          if (task.added) taskData.creationDate = task.added.toISOString();
-          if (task.modified) taskData.modificationDate = task.modified.toISOString();
-          taskData.estimatedMinutes = task.estimatedMinutes;
+          try { if (task.added) taskData.creationDate = task.added.toISOString(); } catch(e) {}
+          try { if (task.modified) taskData.modificationDate = task.modified.toISOString(); } catch(e) {}
+          try { taskData.estimatedMinutes = task.estimatedMinutes; } catch(e) { taskData.estimatedMinutes = null; }
 
-          const note = task.note;
-          if (note) taskData.noteHead = note.substring(0, 160);
-          taskData.children = task.children.length;
+          try {
+            const note = task.note;
+            if (note) taskData.noteHead = note.substring(0, 160);
+          } catch(e) {}
+          try { taskData.children = task.children.length; } catch(e) { taskData.children = 0; }
 
           tasks.push(taskData);
         } catch(e) {
@@ -1405,15 +1424,15 @@ SCOPE FILTERING:
             name: project.name,
             status: projectStatusString(project.status),
             taskCount: project.task ? project.task.children.length : 0,
-            availableTaskCount: project.flattenedTasks.filter(t => ACTIONABLE.indexOf(t.taskStatus) !== -1).length,
-            folder: project.parentFolder ? project.parentFolder.name : null
+            availableTaskCount: project.flattenedTasks.filter(t => ACTIONABLE.indexOf(t.taskStatus) !== -1).length
           };
 
-          if (project.lastReviewDate) projectData.lastReviewDate = project.lastReviewDate.toISOString();
-          if (project.nextReviewDate) projectData.nextReviewDate = project.nextReviewDate.toISOString();
-          if (project.added) projectData.creationDate = project.added.toISOString();
-          if (project.modified) projectData.modificationDate = project.modified.toISOString();
-          if (project.completionDate) projectData.completionDate = project.completionDate.toISOString();
+          try { projectData.folder = project.parentFolder ? project.parentFolder.name : null; } catch(e) { projectData.folder = null; }
+          try { if (project.lastReviewDate) projectData.lastReviewDate = project.lastReviewDate.toISOString(); } catch(e) {}
+          try { if (project.nextReviewDate) projectData.nextReviewDate = project.nextReviewDate.toISOString(); } catch(e) {}
+          try { if (project.added) projectData.creationDate = project.added.toISOString(); } catch(e) {}
+          try { if (project.modified) projectData.modificationDate = project.modified.toISOString(); } catch(e) {}
+          try { if (project.completionDate) projectData.completionDate = project.completionDate.toISOString(); } catch(e) {}
 
           projects.push(projectData);
         } catch(e) {}
@@ -1422,7 +1441,10 @@ SCOPE FILTERING:
       const tags = [];
       flattenedTags.forEach(tag => {
         try {
-          tags.push({ name: tag.name, id: tag.id.primaryKey, taskCount: tag.tasks.length });
+          const tagData = { name: tag.name, id: tag.id.primaryKey };
+          // taskCount degrades to 0 rather than dropping the tag row
+          try { tagData.taskCount = tag.tasks.length; } catch(e) { tagData.taskCount = 0; }
+          tags.push(tagData);
         } catch(e) {}
       });
 
