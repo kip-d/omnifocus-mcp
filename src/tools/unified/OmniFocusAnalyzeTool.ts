@@ -1124,11 +1124,8 @@ SCOPE FILTERING:
           ]
         : rawPatterns;
 
-      // Fetch slimmed task data (folder lookup costs one JXA call per project —
-      // only pay it when a requested pattern actually uses the folder field)
-      const slimData = await this.fetchSlimmedData(options, {
-        includeFolder: patterns.includes('missing_next_actions'),
-      });
+      // Fetch slimmed task data in one OmniJS bridge scan (OMN-269)
+      const slimData = await this.fetchSlimmedData(options);
 
       if (!slimData) {
         return createErrorResponseV2(
@@ -1311,64 +1308,88 @@ SCOPE FILTERING:
   // read. The caller maps null to an EXECUTION_ERROR envelope.
   private async fetchSlimmedData(
     options: Record<string, unknown>,
-    { includeFolder = false }: { includeFolder?: boolean } = {},
   ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
-    const taskScript = `(() => {
-      const app = Application('OmniFocus');
-      const doc = app.defaultDocument();
-      const tasks = [];
-      const projects = [];
+    // OMN-269: one OmniJS bridge scan replaces the old pure-JXA per-item loop.
+    // JXA made ~12 Apple Event round trips per task (~34k on a ~2.9k-task DB)
+    // and chronically exceeded the 120s script budget; inside evaluateJavascript
+    // the same scan is property access in OmniFocus's own JS engine
+    // (live-probed 2026-07-16: ~11s wall, ~1.25MB JSON, on the real DB).
+    //
+    // OmniJS has no numberOfTasks/numberOfAvailableTasks primitives (those are
+    // JXA/AppleScript-only), so the counts are computed:
+    // - taskCount: direct children of the project's root task — exact parity
+    //   with JXA numberOfTasks() (219/219 projects in the 2026-07-16 probe).
+    // - availableTaskCount: descendants with an actionable effective status
+    //   (Available/DueSoon/Next/Overdue — ACTIONABLE_STATUSES semantics, the
+    //   OMN-255 spec's live-verified equivalent). Exact values can exceed JXA's
+    //   where available actions nest inside blocked groups, but the ===0
+    //   boundary — the only load-bearing consumer semantic
+    //   (missing_next_actions) — agreed with JXA on all 219 probed projects.
+    const maxTasks = Number(options.max_tasks) || 3000;
+    const includeCompleted = options.include_completed === true;
 
-      const allTasks = doc.flattenedTasks();
-      const maxTasks = ${String(options.max_tasks)};
-      const includeCompleted = ${String(options.include_completed)};
+    const omniJsProgram = `(() => {
+      const ACTIONABLE = [Task.Status.Available, Task.Status.DueSoon, Task.Status.Next, Task.Status.Overdue];
+      // OmniJS enums stringify as '[object Task.Status: Blocked]' — map explicitly.
+      // Detectors only branch on 'blocked'; the rest are informational.
+      function taskStatusString(s) {
+        if (s === Task.Status.Blocked) return 'blocked';
+        if (s === Task.Status.Available) return 'available';
+        if (s === Task.Status.Next) return 'next';
+        if (s === Task.Status.DueSoon) return 'dueSoon';
+        if (s === Task.Status.Overdue) return 'overdue';
+        if (s === Task.Status.Completed) return 'completed';
+        if (s === Task.Status.Dropped) return 'dropped';
+        return 'unknown';
+      }
+      // Canonical vocabulary; normalizeProjectStatus at the TS boundary stays
+      // as the fail-open safety net for any future drift.
+      function projectStatusString(s) {
+        if (s === Project.Status.Active) return 'active';
+        if (s === Project.Status.OnHold) return 'onHold';
+        if (s === Project.Status.Done) return 'done';
+        if (s === Project.Status.Dropped) return 'dropped';
+        return String(s);
+      }
+
+      const tasks = [];
+      const allTasks = flattenedTasks;
+      const maxTasks = ${String(maxTasks)};
+      const includeCompleted = ${String(includeCompleted)};
 
       for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
         const task = allTasks[i];
-
         try {
-          const completed = task.completed();
+          const completed = task.completed;
           if (!includeCompleted && completed) continue;
 
           const taskData = {
-            id: task.id(),
-            name: task.name(),
+            id: task.id.primaryKey,
+            name: task.name,
             completed: completed,
-            flagged: task.flagged(),
-            status: task.taskStatus ? task.taskStatus().toString() : 'unknown'
+            flagged: task.flagged,
+            status: taskStatusString(task.taskStatus),
+            tags: task.tags.map(t => t.name)
           };
 
-          try {
-            const container = task.containingProject();
-            if (container) {
-              taskData.project = container.name();
-              taskData.projectId = container.id();
-            }
-          } catch(e) {}
+          const container = task.containingProject;
+          if (container) {
+            taskData.project = container.name;
+            taskData.projectId = container.id.primaryKey;
+          }
 
-          try {
-            const tags = task.tags();
-            taskData.tags = tags ? tags.map(t => t.name()) : [];
-          } catch(e) { taskData.tags = []; }
+          if (task.deferDate) taskData.deferDate = task.deferDate.toISOString();
+          if (task.dueDate) taskData.dueDate = task.dueDate.toISOString();
+          if (task.completionDate) taskData.completionDate = task.completionDate.toISOString();
+          // added/modified are the OmniJS names for JXA's creationDate/modificationDate;
+          // the wire keys stay the JXA-era names (SlimTaskSchema pins them).
+          if (task.added) taskData.creationDate = task.added.toISOString();
+          if (task.modified) taskData.modificationDate = task.modified.toISOString();
+          taskData.estimatedMinutes = task.estimatedMinutes;
 
-          try { taskData.deferDate = task.deferDate()?.toISOString(); } catch(e) {}
-          try { taskData.dueDate = task.dueDate()?.toISOString(); } catch(e) {}
-          try { taskData.completionDate = task.completionDate()?.toISOString(); } catch(e) {}
-          try { taskData.creationDate = task.creationDate()?.toISOString(); } catch(e) {}
-          try { taskData.modificationDate = task.modificationDate()?.toISOString(); } catch(e) {}
-          try { taskData.estimatedMinutes = task.estimatedMinutes(); } catch(e) {}
-
-          try {
-            const note = task.note();
-            if (note) {
-              taskData.noteHead = note.substring(0, 160);
-            }
-          } catch(e) {}
-
-          try {
-            const children = task.tasks();
-            taskData.children = children ? children.length : 0;
-          } catch(e) {}
+          const note = task.note;
+          if (note) taskData.noteHead = note.substring(0, 160);
+          taskData.children = task.children.length;
 
           tasks.push(taskData);
         } catch(e) {
@@ -1376,60 +1397,43 @@ SCOPE FILTERING:
         }
       }
 
-      const allProjects = doc.flattenedProjects();
-      for (let i = 0; i < allProjects.length; i++) {
-        const project = allProjects[i];
-
+      const projects = [];
+      flattenedProjects.forEach(project => {
         try {
           const projectData = {
-            id: project.id(),
-            name: project.name(),
-            status: project.status().toString(),
-            taskCount: project.numberOfTasks(),
-            availableTaskCount: project.numberOfAvailableTasks()
+            id: project.id.primaryKey,
+            name: project.name,
+            status: projectStatusString(project.status),
+            taskCount: project.task ? project.task.children.length : 0,
+            availableTaskCount: project.flattenedTasks.filter(t => ACTIONABLE.indexOf(t.taskStatus) !== -1).length,
+            folder: project.parentFolder ? project.parentFolder.name : null
           };
 
-          ${
-            includeFolder
-              ? `// OMN-255: folder works via method-call in JXA here (live-probed 2026-07-14),
-          // unlike the parent relationships that require the OmniJS bridge. One call,
-          // cached in a local (each JXA method call is an Apple Event round trip).
-          try { const projFolder = project.folder(); projectData.folder = projFolder ? projFolder.name() : null; } catch(e) {}`
-              : ''
-          }
-
-          try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
-          try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
-          try { projectData.creationDate = project.creationDate()?.toISOString(); } catch(e) {}
-          try { projectData.modificationDate = project.modificationDate()?.toISOString(); } catch(e) {}
-          try { projectData.completionDate = project.completionDate()?.toISOString(); } catch(e) {}
+          if (project.lastReviewDate) projectData.lastReviewDate = project.lastReviewDate.toISOString();
+          if (project.nextReviewDate) projectData.nextReviewDate = project.nextReviewDate.toISOString();
+          if (project.added) projectData.creationDate = project.added.toISOString();
+          if (project.modified) projectData.modificationDate = project.modified.toISOString();
+          if (project.completionDate) projectData.completionDate = project.completionDate.toISOString();
 
           projects.push(projectData);
         } catch(e) {}
-      }
+      });
 
       const tags = [];
-      const allTags = doc.flattenedTags();
-      for (let i = 0; i < allTags.length; i++) {
-        const tag = allTags[i];
+      flattenedTags.forEach(tag => {
         try {
-          const tagData = {
-            name: tag.name(),
-            id: tag.id()
-          };
-
-          let taskCount = 0;
-          try {
-            const taggedTasks = tag.tasks();
-            taskCount = taggedTasks ? taggedTasks.length : 0;
-          } catch(e) {}
-
-          tagData.taskCount = taskCount;
-          tags.push(tagData);
+          tags.push({ name: tag.name, id: tag.id.primaryKey, taskCount: tag.tasks.length });
         } catch(e) {}
-      }
+      });
 
-      return JSON.stringify({ tasks, projects, tags });
+      return JSON.stringify({ tasks: tasks, projects: projects, tags: tags });
+    })()`;
+
+    // Minimal JXA wrapper (OMNIJS-FIRST-PATTERN). The program is injected via
+    // JSON.stringify to sidestep nested-template escaping entirely.
+    const taskScript = `(() => {
+      const app = Application('OmniFocus');
+      return app.evaluateJavascript(${JSON.stringify(omniJsProgram)});
     })()`;
 
     const scriptResult = await this.execJson(taskScript, SlimmedDataSchema);

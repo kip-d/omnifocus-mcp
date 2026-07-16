@@ -1732,22 +1732,38 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(over).toContain('Overloaded on hold');
     });
 
-    // Round-2 review: folder lookup is one JXA call, and only emitted when a
-    // requested pattern actually uses the folder field.
-    it('fetches folder with a single cached call, only when missing_next_actions runs', async () => {
-      mockDb();
-      await tool.execute({
-        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
-      });
-      const withFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
-      expect(withFolderScript.match(/project\.folder\(\)/g)?.length).toBe(1);
-
+    // OMN-269: the fetch is ONE OmniJS bridge scan. The old pure-JXA loop made
+    // ~12 Apple Event round trips per task (~34k on a real DB) and chronically
+    // exceeded the 120s script budget; the OmniJS scan runs inside OmniFocus's
+    // JS engine (live-probed 2026-07-16: ~11s on a ~2.9k-task DB).
+    it('emits a single OmniJS bridge scan, never a per-item JXA loop (OMN-269)', async () => {
       mockDb();
       await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
       });
-      const withoutFolderScript = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
-      expect(withoutFolderScript).not.toContain('project.folder()');
+      const script = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      expect(script).toContain('evaluateJavascript');
+      // The JXA per-item accessor pattern IS the timeout mechanism — none may remain
+      expect(script).not.toContain('doc.flattenedTasks()');
+      expect(script).not.toContain('task.completed()');
+      expect(script).not.toContain('project.folder()');
+      // OmniJS enums don't stringify usefully — status must be mapped explicitly
+      expect(script).toContain('Task.Status.Blocked');
+      expect(script).toContain('Project.Status.OnHold');
+    });
+
+    // OMN-269 supersedes the OMN-255 includeFolder gating: folder is property
+    // access in OmniJS (near-zero cost), so it is always emitted (null for
+    // root-level projects) regardless of the requested pattern set.
+    it('always emits the folder read, for any pattern set', async () => {
+      for (const insights of [['missing_next_actions'], ['duplicates']]) {
+        mockDb();
+        await tool.execute({
+          analysis: { type: 'pattern_analysis', params: { insights } },
+        });
+        const script = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+        expect(script.match(/parentFolder/g)?.length).toBeGreaterThanOrEqual(1);
+      }
     });
 
     it('is included in the default "all" expansion', async () => {
