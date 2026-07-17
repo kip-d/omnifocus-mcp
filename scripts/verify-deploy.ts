@@ -42,6 +42,7 @@
  * `await call(...)` lines before the finally block — the server stays up for
  * the whole script.
  */
+import { StringDecoder } from 'node:string_decoder';
 import { pathToFileURL } from 'node:url';
 import { StdioJsonRpcTransport } from '../tests/integration/helpers/stdio-jsonrpc-transport.js';
 
@@ -110,10 +111,12 @@ async function main(): Promise<void> {
   }
 
   // Failure-only stderr replay: keep a bounded tail so a crash surfaces the
-  // server's own diagnostics without polluting success output.
+  // server's own diagnostics without polluting success output. StringDecoder
+  // carries multi-byte UTF-8 sequences split across chunk boundaries.
   let stderrTail = '';
+  const stderrDecoder = new StringDecoder('utf8');
   transport.child.stderr?.on('data', (chunk: Buffer) => {
-    stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT);
+    stderrTail = (stderrTail + stderrDecoder.write(chunk)).slice(-STDERR_TAIL_LIMIT);
   });
   transport.child.on('error', (e) => {
     transport.rejectAllPending(new Error(`could not spawn server: ${e.message}`));
@@ -135,6 +138,7 @@ async function main(): Promise<void> {
     return { ms: Date.now() - t0, parsed: text ? JSON.parse(text) : res };
   }
 
+  let rpcFailed = false;
   try {
     const init = await rpc('initialize', {
       protocolVersion: '2025-06-18',
@@ -163,6 +167,7 @@ async function main(): Promise<void> {
       if (parsed.success === false) process.exitCode = 1;
     }
   } catch (e) {
+    rpcFailed = true;
     console.error('VERIFY FAILED:', (e as Error).message);
     if (stderrTail.trim()) {
       console.error('--- server stderr (tail) ---');
@@ -170,7 +175,11 @@ async function main(): Promise<void> {
     }
     process.exitCode = 1;
   } finally {
-    await transport.close();
+    // On the failure path the caller has already given up waiting (an RPC
+    // timed out or errored) — kill immediately rather than letting graceful
+    // close add its 5s wait + 2s SIGKILL grace on top of --timeout. The
+    // success path keeps the graceful stdin-end shutdown.
+    await transport.close({ graceful: !rpcFailed });
   }
 }
 

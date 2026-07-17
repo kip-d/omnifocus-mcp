@@ -25,6 +25,8 @@ npm run build > /dev/null || (echo -e "${RED}❌ Build failed${NC}" && exit 1)
 npm run test:integration > /dev/null || (echo -e "${RED}❌ Integration tests failed${NC}" && exit 1)
 
 # Key tool validation
+# Driver invocation mirrors test-comprehensive.sh's $VERIFY (minus CI=true) —
+# if you change the invocation there, change it here too.
 echo -e "${YELLOW}⏳ Core tools${NC}"
 npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000 tasks '{"mode":"today","limit":"3","details":"true"}' > /dev/null || (echo -e "${RED}❌ Tasks tool failed${NC}" && exit 1)
 

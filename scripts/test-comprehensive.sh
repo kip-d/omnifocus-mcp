@@ -22,9 +22,11 @@ echo -e "${BLUE}🧪 OmniFocus MCP Comprehensive Test Suite${NC}"
 echo "======================================="
 echo ""
 
-# Single definition of the verify-driver invocation (OMN-275) — edit here, not
-# per call site. Short per-RPC timeout: a dialog-wedged OmniFocus should fail
-# this dev loop in seconds, not ride out the driver's deploy-verify default.
+# Single definition of the verify-driver invocation for THIS file (OMN-275) —
+# edit here, not per call site. One more copy lives in test-quick.sh (its own
+# comment points back here); keep the two in sync. Short per-RPC timeout: a
+# dialog-wedged OmniFocus should fail this dev loop in seconds, not ride out
+# the driver's deploy-verify default.
 VERIFY="CI=true npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000"
 
 # Helper function for test status
