@@ -27,7 +27,11 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL, TASK_COUNTS_BY_PROJECT_PASS_SNIPPET } from './types.js';
+import {
+  ACTIONABLE_STATUSES_ARRAY_LITERAL,
+  TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
+  TASK_COUNTS_ZERO_LITERAL,
+} from './types.js';
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
@@ -1544,7 +1548,7 @@ export function buildFilteredProjectsScript(
               ? `
           // Task counts (normal mode) — OMN-270: see the formula comment
           // above the taskCountsByProject pass
-          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || { total: 0, available: 0, completed: 0 };
+          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
 
           // Next task
           const nextTask = project.nextTask;

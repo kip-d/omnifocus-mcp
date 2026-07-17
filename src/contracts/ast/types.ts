@@ -229,6 +229,15 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  * projects-for-review) so the root-skip marker, scope, and status set can
  * never drift between call paths — the divergence class OMN-270 fixed.
  */
+/**
+ * The zero-counts shape for projects with no (readable) tasks — the fallback
+ * every splice site of TASK_COUNTS_BY_PROJECT_PASS_SNIPPET uses when a
+ * project has no entry in the map. ONE definition so a future shape change
+ * (e.g. adding a field) cannot leave one call site emitting a stale zero
+ * object (/code-review round 3 of the OMN-270 PR).
+ */
+export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 }`;
+
 export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = {};
           flattenedTasks.forEach(t => {
             try {
@@ -236,7 +245,7 @@ export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = 
               const proj = t.containingProject;
               if (!proj) return;
               const pid = proj.id.primaryKey;
-              const counts = taskCountsByProject[pid] || (taskCountsByProject[pid] = { total: 0, available: 0, completed: 0 });
+              const counts = taskCountsByProject[pid] || (taskCountsByProject[pid] = ${TASK_COUNTS_ZERO_LITERAL});
               counts.total++;
               if (t.completed) counts.completed++;
               if (${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(t.taskStatus) !== -1) counts.available++;

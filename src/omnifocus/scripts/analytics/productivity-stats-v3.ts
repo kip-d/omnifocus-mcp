@@ -19,7 +19,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
-import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
+import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -165,7 +165,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                   return;
                 }
 
-                const counts = taskCountsByProject[project.id.primaryKey] || { total: 0, available: 0, completed: 0 };
+                const counts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
                 const totalTasks = counts.total;
                 const completedTasks = counts.completed;
                 const availableTasks = counts.available;
