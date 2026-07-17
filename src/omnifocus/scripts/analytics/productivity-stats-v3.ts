@@ -153,6 +153,15 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             // below (one scope: every non-root descendant) — semantics,
             // failure granularity, and measured cost documented at
             // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+            // Yes, this is a SECOND full flattenedTasks pass on top of the
+            // overview loop above — deliberate, declined-with-data twice in
+            // /code-review of the OMN-270 PR: folding the bucketing into the
+            // overview loop would save a measured ~0.6s (2.9k-task DB, vs
+            // the operation's ~10s floor) but would fork this script off the
+            // shared single-definition snippet, reopening the
+            // scope/root-skip/status-set drift class across the three
+            // emitters that OMN-270 exists to close. Do not fold without
+            // moving ALL THREE call sites to a shared alternative.
             ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
 
             flattenedProjects.forEach(project => {
