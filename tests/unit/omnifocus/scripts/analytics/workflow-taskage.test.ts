@@ -13,7 +13,6 @@ const DAY = 24 * 60 * 60 * 1000;
 
 interface FakeTask {
   completed: boolean;
-  numberOfTasks: number;
   flagged: boolean;
   taskStatus: string;
   dueDate: Date | null;
@@ -31,7 +30,6 @@ interface FakeTask {
 function makeLeafTask(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
-    numberOfTasks: 0,
     flagged: false,
     taskStatus: 'available',
     dueDate: null,
@@ -60,12 +58,10 @@ function runScript(tasks: FakeTask[]): {
   };
   return runAnalyticsScript(WORKFLOW_ANALYSIS_V3, options, {
     flattenedTasks: tasks,
-    flattenedProjects: [
-      {
-        name: 'Aged Project',
-        rootTask: { numberOfTasks: tasks.length, numberOfAvailableTasks: tasks.length, numberOfCompletedTasks: 0 },
-      },
-    ],
+    // OMN-270: the old fixture modeled a rootTask with JXA-only count
+    // properties that don't exist in live OmniJS; the script no longer reads
+    // them (per-project counts come from the task loop).
+    flattenedProjects: [{ name: 'Aged Project' }],
   }) as ReturnType<typeof runScript>;
 }
 

@@ -21,7 +21,6 @@
  * - Strategic vs problematic deferral analysis
  * - Tag bottleneck tracking
  * - Multiple focus areas (productivity, workload, bottlenecks, project_health, time_patterns, opportunities)
- * - Accurate project counts using OmniFocus API
  */
 
 import { ROUND1_HELPER } from '../shared/helpers.js';
@@ -140,34 +139,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
           // Workload analysis
           const workloadByTag = {};
 
-          // PHASE 1: Get accurate project statistics using OmniFocus's own counts
-          // This ensures we have accurate available rates for all projects
-          const projectAccurateStats = {};
-
-          flattenedProjects.forEach(project => {
-            try {
-              const projectName = project.name || 'Unnamed Project';
-              const rootTask = project.rootTask;
-
-              if (rootTask) {
-                // Use OmniFocus's own accurate counts - this fixes the "Pending Purchase Orders" issue
-                const totalTasks = rootTask.numberOfTasks || 0;
-                const availableTasks = rootTask.numberOfAvailableTasks || 0;
-                const completedTasks = rootTask.numberOfCompletedTasks || 0;
-
-                if (totalTasks > 0) {
-                  projectAccurateStats[projectName] = {
-                    total: totalTasks,
-                    available: availableTasks,
-                    completed: completedTasks,
-                    availableRate: (availableTasks / totalTasks * 100).toFixed(1)
-                  };
-                }
-              }
-            } catch (e) {
-              // Skip projects that cause errors
-            }
-          });
+          // OMN-270: the old PHASE 1 "accurate counts" (the root-task count
+          // properties, JXA-only) is deleted, not fixed — every one of those
+          // reads is undefined in OmniJS (live-probed 2026-07-16), so
+          // projectAccurateStats was always {} and the merge/override phases
+          // downstream only ever shipped the manual task-loop counts. Those
+          // counts are correct now that the root-task skip below actually
+          // fires.
 
           // PHASE 2: Process tasks for analysis
           const allTasks = flattenedTasks;
@@ -190,11 +168,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
             try {
               const completed = task.completed || false;
 
-              // CRITICAL FIX: Skip project tasks (tasks that represent projects themselves)
-              // Project tasks have childCounts and should not be counted in task-level analysis
-              const hasChildren = (task.numberOfTasks || 0) > 0;
-              if (hasChildren) {
-                // This is a project task, skip it for task-level analysis
+              // Skip project ROOT tasks: the global flattenedTasks includes
+              // each project's root task (which reads as actionable), unlike
+              // project.flattenedTasks. OMN-270: the old gate read the
+              // JXA-only child-count property — undefined in OmniJS — so it
+              // never fired and every root polluted the task-level metrics.
+              // A non-null task.project is the live root-task marker (PR #227).
+              if (task.project) {
                 continue;
               }
 
@@ -302,10 +282,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                     problematicDeferred: 0,
                     estimatedTime: 0,
                     avgAge: 0,
-                    totalAge: 0,
-                    // Use OmniFocus's own available count for accuracy
-                    omniFocusAvailable: 0,
-                    omniFocusTotal: 0
+                    totalAge: 0
                   };
                 }
 
@@ -412,51 +389,15 @@ export const WORKFLOW_ANALYSIS_V3 = `
             }
           }
 
-          // PHASE 3: Merge the accurate OmniFocus counts with our task-level stats
-          Object.keys(projectAccurateStats).forEach(projectName => {
-            if (!projectStats[projectName]) {
-              projectStats[projectName] = {
-                total: 0,
-                overdue: 0,
-                flagged: 0,
-                blocked: 0,
-                available: 0,
-                deferred: 0,
-                strategicDeferred: 0,
-                problematicDeferred: 0,
-                estimatedTime: 0,
-                avgAge: 0,
-                totalAge: 0,
-                omniFocusAvailable: 0,
-                omniFocusTotal: 0
-              };
-            }
-
-            // Use OmniFocus's accurate counts
-            const accurate = projectAccurateStats[projectName];
-            projectStats[projectName].omniFocusTotal = accurate.total;
-            projectStats[projectName].omniFocusAvailable = accurate.available;
-
-            // Update total to match OmniFocus's count if we have it
-            if (accurate.total > 0) {
-              projectStats[projectName].total = accurate.total;
-            }
-          });
-
           // PHASE 4: Calculate project momentum and workflow health scores
+          // (OMN-270: the old PHASE 3 merge and the omniFocusAvailable
+          // override branch here consumed the deleted dead phase and never
+          // fired — this manual calculation is the path that always shipped.)
           Object.keys(projectStats).forEach(projectName => {
             const stats = projectStats[projectName];
             const avgAge = stats.total > 0 ? Math.round(stats.totalAge / stats.total) : 0;
 
-            // CRITICAL FIX: Use OmniFocus's own available count when available
-            let availableRate;
-            if (stats.omniFocusAvailable > 0 && stats.omniFocusTotal > 0) {
-              // Use OmniFocus's accurate count - this fixes the "Pending Purchase Orders" issue
-              availableRate = round1(stats.omniFocusAvailable / stats.omniFocusTotal * 100);
-            } else {
-              // Fall back to our manual calculation for projects without OmniFocus counts
-              availableRate = stats.total > 0 ? round1(stats.available / stats.total * 100) : 0;
-            }
+            const availableRate = stats.total > 0 ? round1(stats.available / stats.total * 100) : 0;
 
             const overdueRate = stats.total > 0 ? round1(stats.overdue / stats.total * 100) : 0;
 

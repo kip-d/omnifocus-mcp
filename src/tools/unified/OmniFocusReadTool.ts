@@ -144,6 +144,16 @@ export function projectFieldsOnResult(
         out[field] = project[field];
       }
     }
+    // OMN-270: taskCounts/nextTask/stats are not `fields` — they ride on the
+    // performance-mode/includeStats mechanism, so a caller who requested them
+    // must receive them regardless of the fields projection. Stripping them
+    // here was invisible while the taskCounts emitter was dead (the OMN-204
+    // projection-strip class).
+    for (const extra of ['taskCounts', 'nextTask', 'stats'] as const) {
+      if (extra in project) {
+        out[extra] = project[extra];
+      }
+    }
     carryNoteTruncatedMarker(project, out);
     return out;
   };

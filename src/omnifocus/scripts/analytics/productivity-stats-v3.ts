@@ -19,6 +19,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -145,6 +146,32 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           // Project statistics
           const projectStats = {};
           if (includeProjectStats) {
+            // OMN-270: the root-task count properties are undefined in
+            // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so the
+            // old reads emitted all-zero rows. Do NOT "simplify" back to
+            // them. Replacement formulas (probed against JXA on 219
+            // projects — see OmniFocusAnalyzeTool.fetchSlimmedData, PR #227):
+            // total/completed from the root task's DIRECT children (exact
+            // parity 219/219); available from one uncapped pass over the
+            // global flattenedTasks counting ACTIONABLE-status descendants
+            // per containingProject. Root tasks appear in the global
+            // collection and read as actionable — a non-null t.project marks
+            // them; they must be skipped. One bad task costs only itself
+            // (inner catch); a failing pass propagates to the error envelope
+            // — an unreadable count must not surface as a real 0.
+            const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
+            const availByProject = {};
+            flattenedTasks.forEach(t => {
+              try {
+                if (t.project) return;
+                if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
+                const proj = t.containingProject;
+                if (!proj) return;
+                const pid = proj.id.primaryKey;
+                availByProject[pid] = (availByProject[pid] || 0) + 1;
+              } catch (e) {}
+            });
+
             flattenedProjects.forEach(project => {
               try {
                 const projectName = project.name || 'Unnamed Project';
@@ -155,11 +182,13 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                   return;
                 }
 
-                const rootTask = project.task;
-                if (rootTask) {
-                  const totalTasks = rootTask.numberOfTasks || 0;
-                  const completedTasks = rootTask.numberOfCompletedTasks || 0;
-                  const availableTasks = rootTask.numberOfAvailableTasks || 0;
+                const countRoot = project.task;
+                if (countRoot) {
+                  const children = countRoot.children;
+                  const totalTasks = children.length;
+                  let completedTasks = 0;
+                  children.forEach(c => { try { if (c.completed) completedTasks++; } catch (e) {} });
+                  const availableTasks = availByProject[project.id.primaryKey] || 0;
 
                   // Check if project had activity in the period
                   const completionDate = project.completionDate;

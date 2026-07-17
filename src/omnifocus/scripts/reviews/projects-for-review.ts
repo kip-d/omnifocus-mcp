@@ -13,6 +13,8 @@
  * - Essential for GTD weekly reviews
  */
 
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../../contracts/ast/types.js';
+
 export interface ProjectsForReviewFilter {
   overdue?: boolean;
   daysAhead?: number;
@@ -85,6 +87,29 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
               }
             }
 
+            // OMN-270: the root-task count properties are undefined in
+            // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so
+            // taskCounts serialized as {} for every project. Do NOT
+            // "simplify" back to them. Replacement formulas (probed against JXA
+            // on 219 projects — see OmniFocusAnalyzeTool.fetchSlimmedData,
+            // PR #227): total/completed from the root task's DIRECT children
+            // (exact parity 219/219); available from one pass over the global
+            // flattenedTasks counting ACTIONABLE-status descendants per
+            // containingProject, skipping each project's root task (non-null
+            // t.project marks a root, and roots read as actionable).
+            const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
+            const availByProject = {};
+            flattenedTasks.forEach(t => {
+              try {
+                if (t.project) return;
+                if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
+                const proj = t.containingProject;
+                if (!proj) return;
+                const pid = proj.id.primaryKey;
+                availByProject[pid] = (availByProject[pid] || 0) + 1;
+              } catch (e) {}
+            });
+
             // Process all projects
             flattenedProjects.forEach(project => {
               if (projects.length >= limit) return;
@@ -142,13 +167,17 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
                 };
               }
 
-              // Task counts for review context
-              const rootTask = project.task;
-              if (rootTask) {
+              // Task counts for review context (OMN-270: see the formula
+              // comment above the availByProject pass)
+              const countRoot = project.task;
+              if (countRoot) {
+                const children = countRoot.children;
+                let completedCount = 0;
+                children.forEach(c => { try { if (c.completed) completedCount++; } catch (e) {} });
                 projectObj.taskCounts = {
-                  total: rootTask.numberOfTasks,
-                  available: rootTask.numberOfAvailableTasks,
-                  completed: rootTask.numberOfCompletedTasks
+                  total: children.length,
+                  available: availByProject[project.id.primaryKey] || 0,
+                  completed: completedCount
                 };
               }
 

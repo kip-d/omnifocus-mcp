@@ -144,6 +144,10 @@ declare class Project extends DatabaseObject {
 }
 ```
 
+> **⚠️ The declared count properties do not exist live.** `numberOfTasks` / `numberOfAvailableTasks` /
+> `numberOfCompletedTasks` return `undefined` in OmniJS on both Project and its root task (probed 2026-07-16, OMN-270)
+> despite the `.d.ts` above. See "Project Methods We Use" below for the working replacements.
+
 ### Our Custom Type (OmniFocusProject interface)
 
 ```typescript
@@ -256,9 +260,14 @@ export interface OmniFocusTag {
 - `project.containsSingletonActions()` → `project.containsSingletonActions`
 - `project.lastReviewDate()` → `project.lastReviewDate`
 - `project.reviewInterval()` → `project.reviewInterval`
-- `project.numberOfTasks()` → `project.numberOfTasks`
-- `project.numberOfAvailableTasks()` → `project.numberOfAvailableTasks`
-- `project.numberOfCompletedTasks()` → `project.numberOfCompletedTasks`
+- `project.numberOfTasks()` → **no OmniJS equivalent** — despite the bundled `.d.ts` declaring it, the property returns
+  `undefined` live on both Project and its root task (probed 2026-07-16, OMN-270). Use `project.task.children.length`
+  (exact JXA parity, 219/219 probed projects).
+- `project.numberOfAvailableTasks()` → **no OmniJS equivalent** (same probe). Count descendants with an
+  ACTIONABLE_STATUSES effective status in one pass over the global `flattenedTasks`, skipping root tasks (non-null
+  `task.project`) — see `OmniFocusAnalyzeTool.fetchSlimmedData` (PR #227) for semantics and caveats.
+- `project.numberOfCompletedTasks()` → **no OmniJS equivalent** (same probe). Count completed DIRECT children of
+  `project.task` (exact JXA parity, 219/219 probed projects).
 - `project.parentFolder()` → `project.parentFolder`
 
 ### Tag Methods We Use:

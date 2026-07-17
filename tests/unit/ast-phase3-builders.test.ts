@@ -18,6 +18,7 @@ import { emitFolderPathMatch } from '../../src/contracts/ast/folder-path-match.j
 import { buildFilteredProjectsScript, buildProjectByIdScript } from '../../src/contracts/ast/script-builder.js';
 import { buildTagsScript, buildActiveTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import type { ProjectFilter } from '../../src/contracts/filters.js';
+import { runAnalyticsScript } from './omnifocus/scripts/analytics/run-analytics-script.js';
 import type { TagQueryOptions } from '../../src/contracts/tag-options.js';
 
 describe('Phase 3 AST Builders', () => {
@@ -268,6 +269,52 @@ describe('Phase 3 AST Builders', () => {
     it('should include task counts in normal mode', () => {
       const result = buildFilteredProjectsScript({}, { performanceMode: 'normal' });
       expect(result.script).toContain('proj.taskCounts');
+    });
+
+    // OMN-270 — taskCounts read numberOfTasks/numberOfAvailableTasks/
+    // numberOfCompletedTasks on project.rootTask; ALL of it is undefined in
+    // OmniJS (live-probed 2026-07-16: rootTask isn't a Project property there,
+    // and the count properties are JXA-only even on the real root task), so
+    // the advertised taskCounts field was never emitted at all.
+    it('emits real taskCounts values (OMN-270: the rootTask/numberOf* reads were dead in OmniJS)', () => {
+      const { script } = buildFilteredProjectsScript({}, { fields: ['id', 'name'], performanceMode: 'normal' });
+
+      const done = {
+        completed: true,
+        taskStatus: 'completed',
+        project: null,
+        containingProject: { id: { primaryKey: 'p1' } },
+      };
+      const open = {
+        completed: false,
+        taskStatus: 'available',
+        project: null,
+        containingProject: { id: { primaryKey: 'p1' } },
+      };
+      const root = {
+        completed: false,
+        taskStatus: 'available',
+        project: { marker: true },
+        containingProject: { id: { primaryKey: 'p1' } },
+      };
+      const project = { id: { primaryKey: 'p1' }, name: 'P', task: { children: [done, open] }, nextTask: null };
+
+      const parsed = runAnalyticsScript(
+        script,
+        {},
+        {
+          flattenedTasks: [root, done, open],
+          flattenedProjects: [project],
+        },
+      ) as { projects: Array<{ taskCounts?: { total: number; available: number; completed: number } }> };
+
+      expect(parsed.projects).toHaveLength(1);
+      expect(parsed.projects[0].taskCounts).toEqual({ total: 2, available: 1, completed: 1 });
+    });
+
+    it('no longer references the JXA-only count API (dead in OmniJS)', () => {
+      const { script } = buildFilteredProjectsScript({}, { performanceMode: 'normal' });
+      expect(script).not.toMatch(/rootTask|numberOfTasks|numberOfAvailableTasks|numberOfCompletedTasks/);
     });
   });
 
