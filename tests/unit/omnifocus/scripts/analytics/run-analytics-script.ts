@@ -13,6 +13,18 @@ export interface FakeDatabase {
   flattenedTags?: unknown[];
 }
 
+/** Live-faithful Project.Status fakes (OMN-272): real OmniJS enum values are
+ * objects whose String() form is `[object Project.Status: Active]` — NOT the
+ * lowercase word. Faking them as bare strings hid a dead `.replace(' status')`
+ * that shipped the raw object tag to clients. Compare by identity (as the
+ * scripts do) and never rely on their string form. */
+export const FAKE_PROJECT_STATUS = Object.fromEntries(
+  (['Active', 'OnHold', 'Done', 'Dropped'] as const).map((name) => [
+    name,
+    { toString: () => `[object Project.Status: ${name}]` },
+  ]),
+) as Record<'Active' | 'OnHold' | 'Done' | 'Dropped', { toString(): string }>;
+
 /** Execute a `{{options}}`-templated analytics script against a fake database
  * and parse its JSON envelope. */
 export function runAnalyticsScript(
@@ -36,7 +48,7 @@ export function runAnalyticsScript(
         Overdue: 'overdue',
       },
     },
-    Project: { Status: { Active: 'active', OnHold: 'onHold', Done: 'done', Dropped: 'dropped' } },
+    Project: { Status: FAKE_PROJECT_STATUS },
     JSON,
   };
   const outer = {

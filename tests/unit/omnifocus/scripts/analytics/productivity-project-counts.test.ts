@@ -20,7 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_PROJECT_STATUS } from './run-analytics-script.js';
 
 interface FakeTask {
   completed: boolean;
@@ -75,7 +75,7 @@ describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', 
     const project = {
       id: { primaryKey: 'p1' },
       name: 'Quiet Project',
-      status: 'active',
+      status: FAKE_PROJECT_STATUS.Active,
       task: { children: [done, open] },
       completionDate: null,
       modified: null,
@@ -104,7 +104,7 @@ describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', 
     const project = {
       id: { primaryKey: 'p1' },
       name: 'Nested Project',
-      status: 'active',
+      status: FAKE_PROJECT_STATUS.Active,
       task: { children: [group] },
       completionDate: null,
       modified: null,

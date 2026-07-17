@@ -75,6 +75,19 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           const includeTagStats = \${includeTagStats};
           const includeInactive = \${includeInactive};
 
+          // OMN-272: Project.Status enums stringify as
+          // "[object Project.Status: Active]" — never String() them into a
+          // response field. Identity-compare map (same shape as
+          // projectStatusString in fetchSlimmedData); String(s) stays as the
+          // fail-open fallback for status values a future OmniFocus adds.
+          function projectStatusString(s) {
+            if (s === Project.Status.Active) return 'active';
+            if (s === Project.Status.OnHold) return 'onHold';
+            if (s === Project.Status.Done) return 'done';
+            if (s === Project.Status.Dropped) return 'dropped';
+            return String(s);
+          }
+
           // Overall task statistics
           let totalTasks = 0;
           let totalCompleted = 0;
@@ -197,7 +210,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                     available: availableTasks,
                     // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
                     completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
-                    status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
+                    status: projectStatusString(projectStatus),
                     hadRecentActivity: hadActivity
                   };
                 }

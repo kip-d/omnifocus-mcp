@@ -9,7 +9,7 @@
 // live-probed parity set).
 import { describe, it, expect } from 'vitest';
 import { buildProjectsForReviewScript } from '../../../../../src/omnifocus/scripts/reviews/projects-for-review.js';
-import { runAnalyticsScript } from '../analytics/run-analytics-script.js';
+import { runAnalyticsScript, FAKE_PROJECT_STATUS } from '../analytics/run-analytics-script.js';
 
 interface FakeTask {
   completed: boolean;
@@ -33,7 +33,7 @@ function makeProject(children: FakeTask[]): Record<string, unknown> {
   return {
     id: { primaryKey: 'p1' },
     name: 'Review Me',
-    status: 'active',
+    status: FAKE_PROJECT_STATUS.Active,
     flagged: false,
     note: null,
     parentFolder: null,
