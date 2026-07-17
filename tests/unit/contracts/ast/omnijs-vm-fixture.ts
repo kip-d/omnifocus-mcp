@@ -11,20 +11,33 @@
 import * as vm from 'node:vm';
 
 /**
- * The real OmniFocus Task.Status members, verbatim. Generated scripts reference
- * these via property access (`Task.Status.Dropped`); the values are opaque
- * tokens — only identity between a stub task's `taskStatus` and the enum
- * member matters to the predicates.
+ * The real OmniFocus Task.Status members, verbatim — and live-faithful
+ * (OMN-272): real OmniJS enum values are objects whose String() form is
+ * `[object Task.Status: Blocked]`, NOT a friendly word. Predicates compare
+ * by identity (`taskStatus === Task.Status.Dropped`), so the values stay
+ * opaque tokens to them; the faithful toString exists so any emitter that
+ * wrongly String()s an enum ships the tag in tests too — the masked-defect
+ * class that let a dead `.replace(' status')` reach production.
  */
 export const Task = {
   Status: {
-    Available: 'Available',
-    Blocked: 'Blocked',
-    Completed: 'Completed',
-    Dropped: 'Dropped',
-    DueSoon: 'DueSoon',
-    Next: 'Next',
-    Overdue: 'Overdue',
+    Available: { toString: () => '[object Task.Status: Available]' },
+    Blocked: { toString: () => '[object Task.Status: Blocked]' },
+    Completed: { toString: () => '[object Task.Status: Completed]' },
+    Dropped: { toString: () => '[object Task.Status: Dropped]' },
+    DueSoon: { toString: () => '[object Task.Status: DueSoon]' },
+    Next: { toString: () => '[object Task.Status: Next]' },
+    Overdue: { toString: () => '[object Task.Status: Overdue]' },
+  },
+} as const;
+
+/** Project.Status, same live-faithful treatment (OMN-272). */
+export const Project = {
+  Status: {
+    Active: { toString: () => '[object Project.Status: Active]' },
+    OnHold: { toString: () => '[object Project.Status: OnHold]' },
+    Done: { toString: () => '[object Project.Status: Done]' },
+    Dropped: { toString: () => '[object Project.Status: Dropped]' },
   },
 } as const;
 
@@ -35,7 +48,7 @@ export interface StubTask {
   name: string;
   flagged: boolean;
   completed: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   inInbox: boolean;
   tags: unknown[];
   dueDate: null;
@@ -70,6 +83,7 @@ function makeSandbox(tasks: StubTask[]): Record<string, unknown> {
     // The OmniJS `inbox` global is the pre-filtered inbox collection.
     inbox: tasks.filter((t) => t.inInbox),
     Task,
+    Project,
     JSON,
     Date,
   };

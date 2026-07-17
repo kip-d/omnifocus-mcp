@@ -6,6 +6,7 @@
 // "keep byte-identical" note only applied while #209/#213 were both adding
 // this file concurrently and no longer holds now that it's a shared file.
 import vm from 'node:vm';
+import { Task as FixtureTask, Project as FixtureProject } from '../../../contracts/ast/omnijs-vm-fixture.js';
 
 export interface FakeDatabase {
   flattenedTasks?: unknown[];
@@ -13,31 +14,15 @@ export interface FakeDatabase {
   flattenedTags?: unknown[];
 }
 
-/** Live-faithful Project.Status fakes (OMN-272): real OmniJS enum values are
- * objects whose String() form is `[object Project.Status: Active]` — NOT the
- * lowercase word. Faking them as bare strings hid a dead `.replace(' status')`
- * that shipped the raw object tag to clients. Compare by identity (as the
- * scripts do) and never rely on their string form. */
-export const FAKE_PROJECT_STATUS = {
-  Active: { toString: () => '[object Project.Status: Active]' },
-  OnHold: { toString: () => '[object Project.Status: OnHold]' },
-  Done: { toString: () => '[object Project.Status: Done]' },
-  Dropped: { toString: () => '[object Project.Status: Dropped]' },
-};
-
-/** Same live-faithful treatment for Task.Status: real values are enum objects
- * stringifying as `[object Task.Status: Blocked]`. Fixtures must reference
- * these (never bare 'blocked' strings) so a String()-a-status regression in
- * any script fails here instead of only live. */
-export const FAKE_TASK_STATUS = {
-  Available: { toString: () => '[object Task.Status: Available]' },
-  Blocked: { toString: () => '[object Task.Status: Blocked]' },
-  Completed: { toString: () => '[object Task.Status: Completed]' },
-  Dropped: { toString: () => '[object Task.Status: Dropped]' },
-  Next: { toString: () => '[object Task.Status: Next]' },
-  DueSoon: { toString: () => '[object Task.Status: DueSoon]' },
-  Overdue: { toString: () => '[object Task.Status: Overdue]' },
-};
+/** Live-faithful enum fakes (OMN-272): real OmniJS enum values are objects
+ * whose String() form is the object tag (`[object Project.Status: Active]`),
+ * NOT a friendly word — bare-string fakes hid a dead `.replace(' status')`
+ * that shipped the raw tag to clients. The definitions live in the shared
+ * single-source fixture (tests/unit/contracts/ast/omnijs-vm-fixture.ts,
+ * "Extend HERE, not per-file"); these are aliases so fixture files reference
+ * them by role. Compare by identity, never by string form. */
+export const FAKE_PROJECT_STATUS = FixtureProject.Status;
+export const FAKE_TASK_STATUS = FixtureTask.Status;
 
 /** Execute a `{{options}}`-templated analytics script against a fake database
  * and parse its JSON envelope. */
