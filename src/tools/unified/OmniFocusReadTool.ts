@@ -144,6 +144,16 @@ export function projectFieldsOnResult(
         out[field] = project[field];
       }
     }
+    // OMN-270: taskCounts/nextTask/stats are not `fields` — they ride on the
+    // performance-mode/includeStats mechanism, so a caller who requested them
+    // must receive them regardless of the fields projection. Stripping them
+    // here was invisible while the taskCounts emitter was dead (the OMN-204
+    // projection-strip class).
+    for (const extra of ['taskCounts', 'nextTask', 'stats'] as const) {
+      if (extra in project) {
+        out[extra] = project[extra];
+      }
+    }
     carryNoteTruncatedMarker(project, out);
     return out;
   };
@@ -348,6 +358,7 @@ RESPONSE CONTROL:
 - fields (tasks): id, name, completed, flagged, blocked, available, hasNote, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox, sequential
 - available: true when actionable now (OmniFocus status Available, Next, DueSoon, or Overdue); blocked: true when waiting on a predecessor, a future defer date, or an on-hold project (status Blocked). Completed/dropped tasks are neither.
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate
+- includeStats: true (projects) attaches taskCounts {total, available, completed} and nextTask to every row (plus a stats block). These ride on includeStats, NOT on fields — they are attached even when a fields list omits them, so a fields projection combined with includeStats returns the requested fields PLUS these extras. All three taskCounts share one scope — every task in the project at any depth (the project's root task excluded) — so available <= total and completed <= total always hold; available counts actionable-now tasks and 0 reliably means "no workable task". Costs a whole-database task scan regardless of filter/limit — omit it when you only need project identity/metadata
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
 - countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row

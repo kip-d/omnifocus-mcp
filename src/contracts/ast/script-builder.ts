@@ -27,7 +27,11 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from './types.js';
+import {
+  ACTIONABLE_STATUSES_ARRAY_LITERAL,
+  TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
+  TASK_COUNTS_ZERO_LITERAL,
+} from './types.js';
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
@@ -1509,6 +1513,24 @@ export function buildFilteredProjectsScript(
           return ${filterCode};
         }
 
+        ${
+          includeTaskCounts
+            ? `
+        // OMN-270: the root-task count properties are undefined in OmniJS
+        // (live-probed 2026-07-16; JXA-only), and the JXA-era root-task
+        // accessor isn't a Project property there either — so the advertised
+        // taskCounts field was never emitted. Do NOT "simplify" back to
+        // them. All three counts come from the shared whole-DB pass below
+        // (one scope: every non-root descendant) — semantics, failure
+        // granularity, and measured cost (~0.6s live on a 2.9k-task DB; runs
+        // only when includeStats requests counts, and is inherent to
+        // per-project descendant counts) documented at
+        // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+        ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
+        `
+            : ''
+        }
+
         flattenedProjects.forEach(project => {
           // Apply AST-generated filter
           if (!matchesFilter(project)) return;
@@ -1524,15 +1546,9 @@ export function buildFilteredProjectsScript(
           ${
             includeTaskCounts
               ? `
-          // Task counts (normal mode)
-          const rootTask = project.rootTask;
-          if (rootTask) {
-            proj.taskCounts = {
-              total: rootTask.numberOfTasks || 0,
-              available: rootTask.numberOfAvailableTasks || 0,
-              completed: rootTask.numberOfCompletedTasks || 0
-            };
-          }
+          // Task counts (normal mode) — OMN-270: see the formula comment
+          // above the taskCountsByProject pass
+          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
 
           // Next task
           const nextTask = project.nextTask;

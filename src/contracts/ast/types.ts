@@ -189,6 +189,70 @@ export const ACTIONABLE_STATUSES = [
 export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(', ')}]`;
 
 /**
+ * OMN-270: ready-to-splice OmniJS pass that computes `taskCountsByProject` —
+ * a map of project id → `{ total, available, completed }` — in ONE uncapped
+ * scan of the global `flattenedTasks`.
+ *
+ * This is the live replacement for the JXA-only count properties (undefined
+ * in OmniJS on both Project and its root task; probed 2026-07-16). All three
+ * counts share ONE scope: every non-root descendant of the project, at any
+ * depth — so `available <= total` and `completed <= total` hold by
+ * construction. (/code-review round 2 of the fixing PR: an earlier revision
+ * counted total/completed over DIRECT children — exact JXA parity — while
+ * available counted deep descendants, which could report available > total
+ * on projects with nested groups. The JXA trio these replace was DEAD — it
+ * never shipped a value — so JXA parity is a probe anchor, not a
+ * compatibility constraint; scope consistency wins.) Live-probed
+ * 2026-07-16: pass total === project.flattenedTasks.length on 219/219
+ * projects; the available ===0 boundary (the load-bearing consumer
+ * semantic, missing_next_actions/stall detection) is unchanged from
+ * PR #227's OMN-269 semantics.
+ *
+ * Semantics baked in (do not re-derive per call site):
+ * - Root tasks appear in the global collection and read as actionable; a
+ *   non-null `t.project` marks a root and it is skipped (live-caught in
+ *   PR #227: counting roots turned 12 of 13 stalled projects "healthy").
+ * - `completed` is the task's own completed flag (matching every other
+ *   completed-count in the codebase), not effective status.
+ * - One bad task costs only itself (inner catch); a failure of the pass
+ *   itself propagates to the script's error envelope — an unreadable count
+ *   must not surface as a real 0.
+ *
+ * Cost, measured live (PR #227, ~2.9k-task DB): well under a second — the
+ * per-project section including this pass measured ~0.6s of a ~10s full
+ * scan. It is a whole-DB pass regardless of any project filter/limit at the
+ * call site; that is inherent to computing per-project descendant counts
+ * without per-project subtree re-walks (which are strictly more expensive).
+ *
+ * ONE definition spliced by every emitter that needs per-project task
+ * counts (script-builder's includeTaskCounts block, productivity-stats-v3,
+ * projects-for-review) so the root-skip marker, scope, and status set can
+ * never drift between call paths — the divergence class OMN-270 fixed.
+ */
+/**
+ * The zero-counts shape for projects with no (readable) tasks — the fallback
+ * every splice site of TASK_COUNTS_BY_PROJECT_PASS_SNIPPET uses when a
+ * project has no entry in the map. ONE definition so a future shape change
+ * (e.g. adding a field) cannot leave one call site emitting a stale zero
+ * object (/code-review round 3 of the OMN-270 PR).
+ */
+export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 }`;
+
+export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = {};
+          flattenedTasks.forEach(t => {
+            try {
+              if (t.project) return;
+              const proj = t.containingProject;
+              if (!proj) return;
+              const pid = proj.id.primaryKey;
+              const counts = taskCountsByProject[pid] || (taskCountsByProject[pid] = ${TASK_COUNTS_ZERO_LITERAL});
+              counts.total++;
+              if (t.completed) counts.completed++;
+              if (${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(t.taskStatus) !== -1) counts.available++;
+            } catch (e) {}
+          });`;
+
+/**
  * Emit the OmniJS predicate for the `task.available` filter field.
  *
  * Uses a membership check across ACTIONABLE_STATUSES — NOT a single === comparison

@@ -19,6 +19,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
+import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -145,6 +146,24 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           // Project statistics
           const projectStats = {};
           if (includeProjectStats) {
+            // OMN-270: the root-task count properties are undefined in
+            // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so the
+            // old reads emitted all-zero rows. Do NOT "simplify" back to
+            // them. All three counts come from the shared whole-DB pass
+            // below (one scope: every non-root descendant) — semantics,
+            // failure granularity, and measured cost documented at
+            // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+            // Yes, this is a SECOND full flattenedTasks pass on top of the
+            // overview loop above — deliberate, declined-with-data twice in
+            // /code-review of the OMN-270 PR: folding the bucketing into the
+            // overview loop would save a measured ~0.6s (2.9k-task DB, vs
+            // the operation's ~10s floor) but would fork this script off the
+            // shared single-definition snippet, reopening the
+            // scope/root-skip/status-set drift class across the three
+            // emitters that OMN-270 exists to close. Do not fold without
+            // moving ALL THREE call sites to a shared alternative.
+            ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
+
             flattenedProjects.forEach(project => {
               try {
                 const projectName = project.name || 'Unnamed Project';
@@ -155,34 +174,32 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                   return;
                 }
 
-                const rootTask = project.task;
-                if (rootTask) {
-                  const totalTasks = rootTask.numberOfTasks || 0;
-                  const completedTasks = rootTask.numberOfCompletedTasks || 0;
-                  const availableTasks = rootTask.numberOfAvailableTasks || 0;
+                const counts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
+                const totalTasks = counts.total;
+                const completedTasks = counts.completed;
+                const availableTasks = counts.available;
 
-                  // Check if project had activity in the period
-                  const completionDate = project.completionDate;
-                  const modificationDate = project.modified;
+                // Check if project had activity in the period
+                const completionDate = project.completionDate;
+                const modificationDate = project.modified;
 
-                  let hadActivity = false;
-                  if (completionDate && completionDate.getTime() >= periodStartTime) {
-                    hadActivity = true;
-                  } else if (modificationDate && modificationDate.getTime() >= periodStartTime) {
-                    hadActivity = true;
-                  }
+                let hadActivity = false;
+                if (completionDate && completionDate.getTime() >= periodStartTime) {
+                  hadActivity = true;
+                } else if (modificationDate && modificationDate.getTime() >= periodStartTime) {
+                  hadActivity = true;
+                }
 
-                  if (hadActivity || totalTasks > 0) {
-                    projectStats[projectName] = {
-                      total: totalTasks,
-                      completed: completedTasks,
-                      available: availableTasks,
-                      // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
-                      completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
-                      status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
-                      hadRecentActivity: hadActivity
-                    };
-                  }
+                if (hadActivity || totalTasks > 0) {
+                  projectStats[projectName] = {
+                    total: totalTasks,
+                    completed: completedTasks,
+                    available: availableTasks,
+                    // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
+                    completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
+                    status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
+                    hadRecentActivity: hadActivity
+                  };
                 }
               } catch (e) {
                 // Skip projects that cause errors

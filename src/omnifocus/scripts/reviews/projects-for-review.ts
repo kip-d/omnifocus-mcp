@@ -13,6 +13,8 @@
  * - Essential for GTD weekly reviews
  */
 
+import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
+
 export interface ProjectsForReviewFilter {
   overdue?: boolean;
   daysAhead?: number;
@@ -85,6 +87,22 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
               }
             }
 
+            // OMN-270: the root-task count properties are undefined in
+            // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so
+            // taskCounts serialized as {} for every project. Do NOT
+            // "simplify" back to them. All three counts come from the shared
+            // whole-DB pass below (one scope: every non-root descendant) —
+            // semantics and measured cost documented at
+            // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+            // Deliberately unconditional (/code-review round 3, declined
+            // with data): taskCounts is part of this operation's advertised
+            // response shape on EVERY row — the MCP surface has no way to
+            // request list_for_review without it — and the pass measured
+            // ~0.6s on a 2.9k-task DB, on a weekly-review flow that is not
+            // latency-sensitive. A skip flag would be a new public param
+            // (full contract-matrix walk) to save cost no caller can ask for.
+            ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
+
             // Process all projects
             flattenedProjects.forEach(project => {
               if (projects.length >= limit) return;
@@ -142,15 +160,9 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
                 };
               }
 
-              // Task counts for review context
-              const rootTask = project.task;
-              if (rootTask) {
-                projectObj.taskCounts = {
-                  total: rootTask.numberOfTasks,
-                  available: rootTask.numberOfAvailableTasks,
-                  completed: rootTask.numberOfCompletedTasks
-                };
-              }
+              // Task counts for review context (OMN-270: see the formula
+              // comment above the taskCountsByProject pass)
+              projectObj.taskCounts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
 
               // Sequential vs parallel for review
               projectObj.sequential = project.sequential;

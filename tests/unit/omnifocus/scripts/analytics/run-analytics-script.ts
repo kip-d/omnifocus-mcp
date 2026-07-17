@@ -25,8 +25,18 @@ export function runAnalyticsScript(
     flattenedTasks: db.flattenedTasks ?? [],
     flattenedProjects: db.flattenedProjects ?? [],
     flattenedTags: db.flattenedTags ?? [],
-    Task: { Status: { Available: 'available', Blocked: 'blocked', Completed: 'completed', Dropped: 'dropped' } },
-    Project: { Status: { Active: 'active' } },
+    Task: {
+      Status: {
+        Available: 'available',
+        Blocked: 'blocked',
+        Completed: 'completed',
+        Dropped: 'dropped',
+        Next: 'next',
+        DueSoon: 'dueSoon',
+        Overdue: 'overdue',
+      },
+    },
+    Project: { Status: { Active: 'active', OnHold: 'onHold', Done: 'done', Dropped: 'dropped' } },
     JSON,
   };
   const outer = {
