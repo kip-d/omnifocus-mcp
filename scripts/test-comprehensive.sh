@@ -26,7 +26,11 @@ echo ""
 # edit here, not per call site. One more copy lives in test-quick.sh (its own
 # comment points back here); keep the two in sync. Short per-RPC timeout: a
 # dialog-wedged OmniFocus should fail this dev loop in seconds, not ride out
-# the driver's deploy-verify default.
+# the driver's deploy-verify default. NOTE: 30s is sized for the current
+# instant-fail stale tool names below; when the tool vocabulary is fixed
+# (deferred from OMN-271), cold whole-DB analytics calls can legitimately run
+# past 30s (server-side script budget is 120s) — bump analytics-class calls
+# to 60-120s then, or this suite will report false VERIFY FAILED.
 VERIFY="CI=true npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000"
 
 # Helper function for test status

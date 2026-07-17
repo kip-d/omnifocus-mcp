@@ -43,10 +43,14 @@
  * the whole script.
  */
 import { StringDecoder } from 'node:string_decoder';
-import { pathToFileURL } from 'node:url';
+import { isRunDirectly } from './lib/run-directly.js';
 import { StdioJsonRpcTransport } from '../tests/integration/helpers/stdio-jsonrpc-transport.js';
 
 export const DEFAULT_RPC_TIMEOUT_MS = 180_000;
+// initialize answers before the background cache warm (OMN-228) and never
+// touches OmniFocus — a short bound fails a spawned-but-hung server fast
+// instead of riding out the full --timeout meant for live tool calls.
+export const INIT_TIMEOUT_MS = 15_000;
 const STDERR_TAIL_LIMIT = 64 * 1024;
 
 export class UsageError extends Error {}
@@ -127,8 +131,8 @@ async function main(): Promise<void> {
     transport.rejectAllPending(new Error(`server exited unexpectedly (code ${code}, signal ${signal})`));
   });
 
-  const rpc = (method: string, params: unknown): Promise<any> =>
-    transport.sendRequest({ jsonrpc: '2.0', id: transport.nextId(), method, params }, timeoutMs);
+  const rpc = (method: string, params: unknown, rpcTimeoutMs: number = timeoutMs): Promise<any> =>
+    transport.sendRequest({ jsonrpc: '2.0', id: transport.nextId(), method, params }, rpcTimeoutMs);
 
   async function call(name: string, callArgs: unknown): Promise<{ ms: number; parsed: any }> {
     const t0 = Date.now();
@@ -140,11 +144,15 @@ async function main(): Promise<void> {
 
   let rpcFailed = false;
   try {
-    const init = await rpc('initialize', {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'verify-deploy', version: '1.0.0' },
-    });
+    const init = await rpc(
+      'initialize',
+      {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'verify-deploy', version: '1.0.0' },
+      },
+      Math.min(timeoutMs, INIT_TIMEOUT_MS),
+    );
     if (init.error) throw new Error(`initialize: JSON-RPC error: ${JSON.stringify(init.error)}`);
     transport.sendNotification('notifications/initialized', {});
 
@@ -183,6 +191,6 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isRunDirectly(import.meta.url)) {
   await main();
 }
