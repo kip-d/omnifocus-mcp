@@ -26,7 +26,7 @@ npm run test:integration > /dev/null || (echo -e "${RED}❌ Integration tests fa
 
 # Key tool validation
 echo -e "${YELLOW}⏳ Core tools${NC}"
-node scripts/verify-deploy.mjs dist/index.js tasks '{"mode":"today","limit":"3","details":"true"}' > /dev/null || (echo -e "${RED}❌ Tasks tool failed${NC}" && exit 1)
+npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000 tasks '{"mode":"today","limit":"3","details":"true"}' > /dev/null || (echo -e "${RED}❌ Tasks tool failed${NC}" && exit 1)
 
 # Real LLM - key improvement test (M2 MacBook Air: ~30-60s expected)
 echo -e "${YELLOW}⏳ Real LLM (overdue query)${NC}"
