@@ -162,6 +162,10 @@ const AnalysisSchema = z.discriminatedUnion('type', [
           // OMN-273: clear_schedule removed — OmniFocus has no "not scheduled
           // for review" state (reviewInterval is non-nullable; nulling
           // nextReviewDate just recomputes it), so the op can never take effect.
+          // Failure-mode change is deliberate (Kip, 2026-07-17): stale callers
+          // now get a thrown McpError(InvalidParams) naming the valid ops, not
+          // the old UNSUPPORTED envelope. Acceptable break: the op returned
+          // only errors since OMN-106, so no caller ever got value from it.
           operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule']).optional(),
           projectId: z.string().optional(),
           reviewDate: z.string().optional(),
