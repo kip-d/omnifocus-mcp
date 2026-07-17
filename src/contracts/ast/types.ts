@@ -256,7 +256,7 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  * the hyphenated OnHold form AND fail closed to hardcoded fallbacks
  * ('active'/'dropped') instead of this snippet's String(s) fail-open — a
  * public omnifocus_read vocabulary change, so unifying them needs its own
- * slice; and warm-projects-cache normalizes via substring match
+ * slice (OMN-274); and warm-projects-cache normalizes via substring match
  * (adjudicated at that site).
  */
 export const PROJECT_STATUS_STRING_SNIPPET = `function projectStatusString(s) {
