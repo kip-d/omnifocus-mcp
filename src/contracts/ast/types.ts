@@ -251,9 +251,13 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  * 'on-hold'. Do NOT add a fourth inline copy; splice this.
  *
  * Known non-splice sites, deliberately out of scope here: script-builder's
- * read-pipeline emitters still say 'on-hold' (a public omnifocus_read
- * vocabulary change needs its own slice), and warm-projects-cache
- * normalizes via substring match (adjudicated at that site).
+ * read pipeline carries THREE separately-maintained inline copies (two
+ * getProjectStatus helpers plus a folder-listing ternary) that still emit
+ * the hyphenated OnHold form AND fail closed to hardcoded fallbacks
+ * ('active'/'dropped') instead of this snippet's String(s) fail-open — a
+ * public omnifocus_read vocabulary change, so unifying them needs its own
+ * slice; and warm-projects-cache normalizes via substring match
+ * (adjudicated at that site).
  */
 export const PROJECT_STATUS_STRING_SNIPPET = `function projectStatusString(s) {
             if (s === Project.Status.Active) return 'active';
