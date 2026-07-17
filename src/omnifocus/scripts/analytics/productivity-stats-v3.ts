@@ -19,7 +19,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
-import { AVAIL_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
+import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -149,12 +149,11 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             // OMN-270: the root-task count properties are undefined in
             // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so the
             // old reads emitted all-zero rows. Do NOT "simplify" back to
-            // them. total/completed come from the root task's DIRECT
-            // children (exact JXA parity 219/219); available comes from the
-            // shared whole-DB pass below — semantics, failure granularity,
-            // and measured cost documented at AVAIL_BY_PROJECT_PASS_SNIPPET
-            // (contracts/ast/types).
-            ${AVAIL_BY_PROJECT_PASS_SNIPPET}
+            // them. All three counts come from the shared whole-DB pass
+            // below (one scope: every non-root descendant) — semantics,
+            // failure granularity, and measured cost documented at
+            // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+            ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
 
             flattenedProjects.forEach(project => {
               try {
@@ -166,36 +165,32 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                   return;
                 }
 
-                const countRoot = project.task;
-                if (countRoot) {
-                  const children = countRoot.children;
-                  const totalTasks = children.length;
-                  let completedTasks = 0;
-                  children.forEach(c => { try { if (c.completed) completedTasks++; } catch (e) {} });
-                  const availableTasks = availByProject[project.id.primaryKey] || 0;
+                const counts = taskCountsByProject[project.id.primaryKey] || { total: 0, available: 0, completed: 0 };
+                const totalTasks = counts.total;
+                const completedTasks = counts.completed;
+                const availableTasks = counts.available;
 
-                  // Check if project had activity in the period
-                  const completionDate = project.completionDate;
-                  const modificationDate = project.modified;
+                // Check if project had activity in the period
+                const completionDate = project.completionDate;
+                const modificationDate = project.modified;
 
-                  let hadActivity = false;
-                  if (completionDate && completionDate.getTime() >= periodStartTime) {
-                    hadActivity = true;
-                  } else if (modificationDate && modificationDate.getTime() >= periodStartTime) {
-                    hadActivity = true;
-                  }
+                let hadActivity = false;
+                if (completionDate && completionDate.getTime() >= periodStartTime) {
+                  hadActivity = true;
+                } else if (modificationDate && modificationDate.getTime() >= periodStartTime) {
+                  hadActivity = true;
+                }
 
-                  if (hadActivity || totalTasks > 0) {
-                    projectStats[projectName] = {
-                      total: totalTasks,
-                      completed: completedTasks,
-                      available: availableTasks,
-                      // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
-                      completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
-                      status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
-                      hadRecentActivity: hadActivity
-                    };
-                  }
+                if (hadActivity || totalTasks > 0) {
+                  projectStats[projectName] = {
+                    total: totalTasks,
+                    completed: completedTasks,
+                    available: availableTasks,
+                    // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
+                    completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
+                    status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
+                    hadRecentActivity: hadActivity
+                  };
                 }
               } catch (e) {
                 // Skip projects that cause errors

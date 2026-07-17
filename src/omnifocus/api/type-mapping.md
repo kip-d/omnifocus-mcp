@@ -260,14 +260,14 @@ export interface OmniFocusTag {
 - `project.containsSingletonActions()` → `project.containsSingletonActions`
 - `project.lastReviewDate()` → `project.lastReviewDate`
 - `project.reviewInterval()` → `project.reviewInterval`
-- `project.numberOfTasks()` → **no OmniJS equivalent** — despite the bundled `.d.ts` declaring it, the property returns
-  `undefined` live on both Project and its root task (probed 2026-07-16, OMN-270). Use `project.task.children.length`
-  (exact JXA parity, 219/219 probed projects).
-- `project.numberOfAvailableTasks()` → **no OmniJS equivalent** (same probe). Count descendants with an
-  ACTIONABLE_STATUSES effective status in one pass over the global `flattenedTasks`, skipping root tasks (non-null
-  `task.project`) — see `OmniFocusAnalyzeTool.fetchSlimmedData` (PR #227) for semantics and caveats.
-- `project.numberOfCompletedTasks()` → **no OmniJS equivalent** (same probe). Count completed DIRECT children of
-  `project.task` (exact JXA parity, 219/219 probed projects).
+- `project.numberOfTasks()` / `project.numberOfAvailableTasks()` / `project.numberOfCompletedTasks()` → **no OmniJS
+  equivalent** — despite the bundled `.d.ts` declaring them, all three return `undefined` live on both Project and its
+  root task (probed 2026-07-16, OMN-270). Replacement: `TASK_COUNTS_BY_PROJECT_PASS_SNIPPET`
+  (`src/contracts/ast/types.ts`) — one pass over the global `flattenedTasks` counting every non-root descendant per
+  `containingProject` (root tasks are marked by a non-null `task.project` and skipped). All three counts share that one
+  scope, so `available <= total` and `completed <= total` hold by construction; the total equals
+  `project.flattenedTasks.length` (probed 219/219). Note this deliberately does NOT reproduce JXA's direct-child scope —
+  the JXA trio was dead in every OmniJS reader, so scope consistency won over parity.
 - `project.parentFolder()` → `project.parentFolder`
 
 ### Tag Methods We Use:

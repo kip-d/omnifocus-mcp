@@ -6,12 +6,17 @@
 // activity emitted NO row at all, and one WITH activity emitted all-zero
 // counts — the OMN-142 silent-metric-death class.
 //
-// Replacement formulas (live-probed against JXA on 219 projects, 2026-07-16):
-// - total     = project.task.children.length            (exact parity 219/219)
-// - completed = completed DIRECT children of the root   (exact parity 219/219)
-// - available = flattened ACTIONABLE_STATUSES descendant count, skipping each
-//   project's root task (OMN-269 semantics — deliberately flattened, can
-//   exceed JXA's direct-child count on projects with nested groups).
+// Replacement formulas (/code-review round 2 of the fixing PR): ALL THREE
+// counts come from ONE pass over the global flattenedTasks, counting every
+// non-root descendant by containingProject — the SAME scope for total,
+// available, and completed, so available ≤ total and completed ≤ total hold
+// by construction. (Round 1 shipped total/completed as DIRECT children for
+// exact JXA parity while available counted deep descendants — a scope mix
+// that could report available > total. The JXA API these replace was dead —
+// it never shipped a value — so parity to it is not a compatibility
+// constraint.) Live-probed 2026-07-16: pass total === project
+// .flattenedTasks.length on 219/219 projects; the available ===0 boundary
+// (the load-bearing consumer semantic) is unchanged from PR #227.
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
@@ -90,7 +95,7 @@ describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', 
     expect(row.completionRate).toBe('50.0');
   });
 
-  it('completed counts DIRECT children only; available counts flattened actionable descendants, never the root', () => {
+  it('all three counts share ONE scope (every non-root descendant) — available can never exceed total', () => {
     const grandchild = task({}); // actionable, nested one level down
     const completedGrandchild = task({ completed: true, taskStatus: 'completed' });
     const group = task({ taskStatus: 'blocked' }); // direct child, a blocked group
@@ -108,9 +113,14 @@ describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', 
     const parsed = runScript([root, group, grandchild, completedGrandchild], [project]);
     const row = parsed.data.projectStats['Nested Project'];
     expect(row).toBeDefined();
-    expect(row.total).toBe(1); // the group — direct children only (JXA numberOfTasks parity)
-    expect(row.completed).toBe(0); // completed grandchild is NOT a direct child
-    expect(row.available).toBe(1); // flattened: the actionable grandchild; root skipped
+    // /code-review round 2: direct-children total (1, the group) with
+    // deep-descendant available reported available ≥ total on nested
+    // projects — self-contradictory taskCounts. One flattened scope now.
+    expect(row.total).toBe(3); // group + both grandchildren; root excluded
+    expect(row.completed).toBe(1); // the completed grandchild
+    expect(row.available).toBe(1); // the actionable grandchild; blocked group and root excluded
+    expect(row.available).toBeLessThanOrEqual(row.total);
+    expect(row.completed).toBeLessThanOrEqual(row.total);
   });
 
   it('the script text no longer references the JXA-only count API (dead in OmniJS)', () => {

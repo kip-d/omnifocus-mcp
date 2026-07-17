@@ -13,7 +13,7 @@
  * - Essential for GTD weekly reviews
  */
 
-import { AVAIL_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
+import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
 
 export interface ProjectsForReviewFilter {
   overdue?: boolean;
@@ -90,12 +90,11 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
             // OMN-270: the root-task count properties are undefined in
             // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so
             // taskCounts serialized as {} for every project. Do NOT
-            // "simplify" back to them. total/completed come from the root
-            // task's DIRECT children (exact JXA parity 219/219); available
-            // comes from the shared whole-DB pass below — semantics and
-            // measured cost documented at AVAIL_BY_PROJECT_PASS_SNIPPET
-            // (contracts/ast/types).
-            ${AVAIL_BY_PROJECT_PASS_SNIPPET}
+            // "simplify" back to them. All three counts come from the shared
+            // whole-DB pass below (one scope: every non-root descendant) —
+            // semantics and measured cost documented at
+            // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+            ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
 
             // Process all projects
             flattenedProjects.forEach(project => {
@@ -155,18 +154,8 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
               }
 
               // Task counts for review context (OMN-270: see the formula
-              // comment above the availByProject pass)
-              const countRoot = project.task;
-              if (countRoot) {
-                const children = countRoot.children;
-                let completedCount = 0;
-                children.forEach(c => { try { if (c.completed) completedCount++; } catch (e) {} });
-                projectObj.taskCounts = {
-                  total: children.length,
-                  available: availByProject[project.id.primaryKey] || 0,
-                  completed: completedCount
-                };
-              }
+              // comment above the taskCountsByProject pass)
+              projectObj.taskCounts = taskCountsByProject[project.id.primaryKey] || { total: 0, available: 0, completed: 0 };
 
               // Sequential vs parallel for review
               projectObj.sequential = project.sequential;

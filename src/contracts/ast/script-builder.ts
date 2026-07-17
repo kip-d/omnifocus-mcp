@@ -27,7 +27,7 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL, AVAIL_BY_PROJECT_PASS_SNIPPET } from './types.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL, TASK_COUNTS_BY_PROJECT_PASS_SNIPPET } from './types.js';
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
@@ -1516,13 +1516,13 @@ export function buildFilteredProjectsScript(
         // (live-probed 2026-07-16; JXA-only), and the JXA-era root-task
         // accessor isn't a Project property there either — so the advertised
         // taskCounts field was never emitted. Do NOT "simplify" back to
-        // them. total/completed come from the root task's DIRECT children
-        // (exact JXA parity 219/219); available comes from the shared
-        // whole-DB pass below — semantics, failure granularity, and measured
-        // cost (~0.6s live on a 2.9k-task DB; runs only when includeStats
-        // requests counts, and is inherent to per-project descendant counts)
-        // documented at AVAIL_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
-        ${AVAIL_BY_PROJECT_PASS_SNIPPET}
+        // them. All three counts come from the shared whole-DB pass below
+        // (one scope: every non-root descendant) — semantics, failure
+        // granularity, and measured cost (~0.6s live on a 2.9k-task DB; runs
+        // only when includeStats requests counts, and is inherent to
+        // per-project descendant counts) documented at
+        // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+        ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
         `
             : ''
         }
@@ -1543,18 +1543,8 @@ export function buildFilteredProjectsScript(
             includeTaskCounts
               ? `
           // Task counts (normal mode) — OMN-270: see the formula comment
-          // above the availByProject pass
-          const countRoot = project.task;
-          if (countRoot) {
-            const countChildren = countRoot.children;
-            let completedCount = 0;
-            countChildren.forEach(c => { try { if (c.completed) completedCount++; } catch (e) {} });
-            proj.taskCounts = {
-              total: countChildren.length,
-              available: availByProject[project.id.primaryKey] || 0,
-              completed: completedCount
-            };
-          }
+          // above the taskCountsByProject pass
+          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || { total: 0, available: 0, completed: 0 };
 
           // Next task
           const nextTask = project.nextTask;
