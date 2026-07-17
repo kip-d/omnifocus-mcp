@@ -13,12 +13,12 @@
 // omniFocusAvailable branch) only ever shipped the fallback path.
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
-import { runAnalyticsScript } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
 
 interface FakeTask {
   completed: boolean;
   flagged: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   dueDate: Date | null;
   deferDate: Date | null;
   added: Date | null;
@@ -37,7 +37,7 @@ function task(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
     flagged: false,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: null,
     deferDate: null,
     added: null,
@@ -77,7 +77,7 @@ describe('OMN-270 — workflow_analysis skips project root tasks in task-level m
     const parsed = runScript([
       task({ project: { marker: true }, name: 'P (root)' }), // root: reads as actionable
       task({ name: 'leaf available' }),
-      task({ name: 'leaf blocked', taskStatus: 'blocked' }),
+      task({ name: 'leaf blocked', taskStatus: FAKE_TASK_STATUS.Blocked }),
     ]);
     expect(parsed.ok).toBe(true);
 

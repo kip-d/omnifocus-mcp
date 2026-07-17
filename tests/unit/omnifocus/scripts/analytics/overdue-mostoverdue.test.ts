@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { ANALYZE_OVERDUE_V3 } from '../../../../../src/omnifocus/scripts/analytics/analyze-overdue-v3.js';
 import { OVERDUE_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -21,7 +21,7 @@ function makeOverdueTask(id: string, daysOverdue: number): Record<string, unknow
   return {
     id: { primaryKey: id },
     name: `Task ${id}`,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: new Date(Date.now() - daysOverdue * DAY - 60_000),
     containingProject: { name: 'Fixture Project' },
     tags: [],
@@ -33,7 +33,7 @@ function makeBadIdTask(daysOverdue: number): Record<string, unknown> {
   // a record-build failure for the task holding the true global max.
   return {
     name: 'Bad ID task',
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: new Date(Date.now() - daysOverdue * DAY - 60_000),
     containingProject: { name: 'Fixture Project' },
     tags: [],

@@ -7,14 +7,14 @@
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { WORKFLOW_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
 interface FakeTask {
   completed: boolean;
   flagged: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   dueDate: Date | null;
   deferDate: Date | null;
   added: Date | null;
@@ -31,7 +31,7 @@ function makeLeafTask(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
     flagged: false,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: null,
     deferDate: null,
     added: null,

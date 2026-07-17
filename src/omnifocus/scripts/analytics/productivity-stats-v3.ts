@@ -19,7 +19,11 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
-import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
+import {
+  PROJECT_STATUS_STRING_SNIPPET,
+  TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
+  TASK_COUNTS_ZERO_LITERAL,
+} from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -74,6 +78,11 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           const includeProjectStats = \${includeProjectStats};
           const includeTagStats = \${includeTagStats};
           const includeInactive = \${includeInactive};
+
+          // OMN-272: single-definition status map — see
+          // PROJECT_STATUS_STRING_SNIPPET (contracts/ast/types) for the
+          // vocabulary contract and why String()-ing the enum is forbidden.
+          ${PROJECT_STATUS_STRING_SNIPPET}
 
           // Overall task statistics
           let totalTasks = 0;
@@ -197,7 +206,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                     available: availableTasks,
                     // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
                     completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
-                    status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
+                    status: projectStatusString(projectStatus),
                     hadRecentActivity: hadActivity
                   };
                 }

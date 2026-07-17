@@ -18,7 +18,7 @@ import { emitFolderPathMatch } from '../../src/contracts/ast/folder-path-match.j
 import { buildFilteredProjectsScript, buildProjectByIdScript } from '../../src/contracts/ast/script-builder.js';
 import { buildTagsScript, buildActiveTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import type { ProjectFilter } from '../../src/contracts/filters.js';
-import { runAnalyticsScript } from './omnifocus/scripts/analytics/run-analytics-script.js';
+import { runAnalyticsScript, FAKE_TASK_STATUS } from './omnifocus/scripts/analytics/run-analytics-script.js';
 import type { TagQueryOptions } from '../../src/contracts/tag-options.js';
 
 describe('Phase 3 AST Builders', () => {
@@ -281,19 +281,19 @@ describe('Phase 3 AST Builders', () => {
 
       const done = {
         completed: true,
-        taskStatus: 'completed',
+        taskStatus: FAKE_TASK_STATUS.Completed,
         project: null,
         containingProject: { id: { primaryKey: 'p1' } },
       };
       const open = {
         completed: false,
-        taskStatus: 'available',
+        taskStatus: FAKE_TASK_STATUS.Available,
         project: null,
         containingProject: { id: { primaryKey: 'p1' } },
       };
       const root = {
         completed: false,
-        taskStatus: 'available',
+        taskStatus: FAKE_TASK_STATUS.Available,
         project: { marker: true },
         containingProject: { id: { primaryKey: 'p1' } },
       };

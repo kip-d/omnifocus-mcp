@@ -13,7 +13,11 @@
  * - Essential for GTD weekly reviews
  */
 
-import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
+import {
+  PROJECT_STATUS_STRING_SNIPPET,
+  TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
+  TASK_COUNTS_ZERO_LITERAL,
+} from '../../../contracts/ast/types.js';
 
 export interface ProjectsForReviewFilter {
   overdue?: boolean;
@@ -52,14 +56,11 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
               return Math.ceil((date2.getTime() - date1.getTime()) / msPerDay);
             }
 
-            // Helper to get project status string
-            function getProjectStatus(project) {
-              if (project.status === Project.Status.Active) return 'active';
-              if (project.status === Project.Status.OnHold) return 'on-hold';
-              if (project.status === Project.Status.Done) return 'done';
-              if (project.status === Project.Status.Dropped) return 'dropped';
-              return 'unknown';
-            }
+            // OMN-272: single-definition status map (replaced a drifted
+            // inline copy that emitted a hyphenated OnHold variant and an
+            // 'unknown' fallback) — see PROJECT_STATUS_STRING_SNIPPET
+            // (contracts/ast/types). statusFilter uses the same vocabulary.
+            ${PROJECT_STATUS_STRING_SNIPPET}
 
             // Helper to get folder name
             function getFolderName(project) {
@@ -108,7 +109,7 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
               if (projects.length >= limit) return;
 
               // Apply status filter
-              const projectStatus = getProjectStatus(project);
+              const projectStatus = projectStatusString(project.status);
               if (!statusFilter.includes(projectStatus)) return;
 
               // Apply folder filter

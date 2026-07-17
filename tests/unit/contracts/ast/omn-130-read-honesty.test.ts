@@ -95,7 +95,7 @@ describe('OMN-130 Change 1: TaskRowSchema accepts hasNote', () => {
 
 describe('OMN-130 Change 1: VM behavioral — hasNote projection', () => {
   // Task.Status comes from the shared omnijs-vm-fixture — extend it THERE, not locally
-  const makeTask = (name: string, note: string | null, taskStatus: string = Task.Status.Available) =>
+  const makeTask = (name: string, note: string | null, taskStatus: unknown = Task.Status.Available) =>
     stubTask(name, { note, taskStatus });
   const runScript = runListScript;
 
@@ -183,7 +183,7 @@ describe('OMN-130 Change 3: available projection emits 4-status membership check
 // =============================================================================
 
 describe('OMN-130 Change 3: VM behavioral — available reflects 4-status set', () => {
-  const makeTask = (name: string, taskStatus: string) => stubTask(name, { taskStatus });
+  const makeTask = (name: string, taskStatus: unknown) => stubTask(name, { taskStatus });
   const runScript = runListScript;
 
   it('Overdue task: available=true, blocked=false', () => {

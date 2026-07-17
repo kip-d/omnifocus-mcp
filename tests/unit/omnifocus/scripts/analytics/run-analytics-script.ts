@@ -6,12 +6,23 @@
 // "keep byte-identical" note only applied while #209/#213 were both adding
 // this file concurrently and no longer holds now that it's a shared file.
 import vm from 'node:vm';
+import { Task as FixtureTask, Project as FixtureProject } from '../../../contracts/ast/omnijs-vm-fixture.js';
 
 export interface FakeDatabase {
   flattenedTasks?: unknown[];
   flattenedProjects?: unknown[];
   flattenedTags?: unknown[];
 }
+
+/** Live-faithful enum fakes (OMN-272): real OmniJS enum values are objects
+ * whose String() form is the object tag (`[object Project.Status: Active]`),
+ * NOT a friendly word — bare-string fakes hid a dead `.replace(' status')`
+ * that shipped the raw tag to clients. The definitions live in the shared
+ * single-source fixture (tests/unit/contracts/ast/omnijs-vm-fixture.ts,
+ * "Extend HERE, not per-file"); these are aliases so fixture files reference
+ * them by role. Compare by identity, never by string form. */
+export const FAKE_PROJECT_STATUS = FixtureProject.Status;
+export const FAKE_TASK_STATUS = FixtureTask.Status;
 
 /** Execute a `{{options}}`-templated analytics script against a fake database
  * and parse its JSON envelope. */
@@ -25,18 +36,8 @@ export function runAnalyticsScript(
     flattenedTasks: db.flattenedTasks ?? [],
     flattenedProjects: db.flattenedProjects ?? [],
     flattenedTags: db.flattenedTags ?? [],
-    Task: {
-      Status: {
-        Available: 'available',
-        Blocked: 'blocked',
-        Completed: 'completed',
-        Dropped: 'dropped',
-        Next: 'next',
-        DueSoon: 'dueSoon',
-        Overdue: 'overdue',
-      },
-    },
-    Project: { Status: { Active: 'active', OnHold: 'onHold', Done: 'done', Dropped: 'dropped' } },
+    Task: { Status: FAKE_TASK_STATUS },
+    Project: { Status: FAKE_PROJECT_STATUS },
     JSON,
   };
   const outer = {
