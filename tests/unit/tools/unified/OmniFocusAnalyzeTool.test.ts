@@ -734,8 +734,10 @@ describe('OmniFocusAnalyzeTool', () => {
       const fs = await import('fs');
       const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
       // The per-task loop must iterate every task: a capped numerator over a full
-      // `totalTasks` denominator was a ~2.5x understatement of every *Percentage.
-      expect(source).toMatch(/const maxTasksToProcess = totalTasks;/);
+      // denominator was a ~2.5x understatement of every *Percentage. (OMN-270
+      // renamed the raw collection length to allTaskCount — `totalTasks` is now
+      // the in-loop non-root census that the percentages divide by.)
+      expect(source).toMatch(/const maxTasksToProcess = allTaskCount;/);
       // The cap and its unreachable 'deep' escape hatch are gone.
       expect(source).not.toMatch(/Math\.min\(1000/);
       expect(source).not.toMatch(/analysisDepth === 'deep'/);
@@ -755,8 +757,9 @@ describe('OmniFocusAnalyzeTool', () => {
       // Critical invariant: the aggregate metrics loop must still iterate the FULL
       // population — only the raw data.tasks echo is capped. OMN-200 removed the
       // old 1000-task cap specifically so *Percentage metrics reflect the whole DB;
-      // this cap must not reintroduce that regression.
-      expect(source).toMatch(/const maxTasksToProcess = totalTasks;/);
+      // this cap must not reintroduce that regression. (allTaskCount = raw
+      // collection length since OMN-270's denominator fix.)
+      expect(source).toMatch(/const maxTasksToProcess = allTaskCount;/);
       expect(source).not.toMatch(/maxTasksToProcess = MAX_RAW_DATA_TASKS/);
     });
 

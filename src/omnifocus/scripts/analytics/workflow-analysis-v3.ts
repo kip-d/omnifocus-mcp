@@ -150,17 +150,20 @@ export const WORKFLOW_ANALYSIS_V3 = `
           // PHASE 2: Process tasks for analysis
           const allTasks = flattenedTasks;
           const allProjects = flattenedProjects;
-          const totalTasks = allTasks.length;
+          const allTaskCount = allTasks.length;
           const totalProjects = allProjects.length;
 
           // OMN-200: always iterate the full task DB. The old cap processed only
-          // the first 1000 tasks (a biased DB-order prefix) while totalTasks stayed
-          // full, so every workflowMetrics.*Percentage divided a capped numerator by
-          // the full denominator — a systematic ~2.5x understatement. With the loop
-          // full-population, numerator and denominator agree and the percentages are
-          // correct with no separate math change. The 'deep' escape hatch was dead
-          // code (analysisDepth was hardcoded 'standard', never 'deep').
-          const maxTasksToProcess = totalTasks;
+          // the first 1000 tasks (a biased DB-order prefix) while the denominator
+          // stayed full, so every workflowMetrics.*Percentage divided a capped
+          // numerator by the full denominator — a systematic ~2.5x understatement.
+          // OMN-270 (/code-review round 1) re-applies the same
+          // numerator/denominator-agreement lesson to the root-task skip below:
+          // totalTasks is counted IN the loop, after the skip, so the shared
+          // denominator excludes exactly what the counters exclude. Raw
+          // collection length survives only as the loop bound / dataPoints.
+          const maxTasksToProcess = allTaskCount;
+          let totalTasks = 0;
 
           for (let i = 0; i < maxTasksToProcess; i++) {
             const task = allTasks[i];
@@ -177,6 +180,8 @@ export const WORKFLOW_ANALYSIS_V3 = `
               if (task.project) {
                 continue;
               }
+
+              totalTasks++;
 
               const flagged = task.flagged || false;
               const blocked = task.taskStatus === Task.Status.Blocked;

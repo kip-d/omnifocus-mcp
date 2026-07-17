@@ -189,6 +189,49 @@ export const ACTIONABLE_STATUSES = [
 export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(', ')}]`;
 
 /**
+ * OMN-270: ready-to-splice OmniJS pass that computes `availByProject` — a map
+ * of project id → count of ACTIONABLE-status descendant tasks — in ONE
+ * uncapped scan of the global `flattenedTasks`.
+ *
+ * This is the live replacement for the JXA-only available-count property
+ * (undefined in OmniJS on both Project and its root task; probed 2026-07-16),
+ * with the OMN-269 semantics established in PR #227
+ * (`OmniFocusAnalyzeTool.fetchSlimmedData`): the ===0 boundary agrees with
+ * JXA on all 219 probed projects; non-zero magnitudes can exceed JXA's
+ * direct-child quirk on projects with nested groups.
+ *
+ * Semantics baked in (do not re-derive per call site):
+ * - Root tasks appear in the global collection and read as actionable; a
+ *   non-null `t.project` marks a root and it is skipped (live-caught in
+ *   PR #227: counting roots turned 12 of 13 stalled projects "healthy").
+ * - One bad task costs only itself (inner catch); a failure of the pass
+ *   itself propagates to the script's error envelope — an unreadable count
+ *   must not surface as a real 0.
+ *
+ * Cost, measured live (PR #227, ~2.9k-task DB): well under a second — the
+ * per-project section including this pass measured ~0.6s of a ~10s full
+ * scan. It is a whole-DB pass regardless of any project filter/limit at the
+ * call site; that is inherent to computing a per-project descendant count
+ * without per-project subtree re-walks (which are strictly more expensive).
+ *
+ * ONE definition spliced by every emitter that needs per-project available
+ * counts (script-builder's includeTaskCounts block, productivity-stats-v3,
+ * projects-for-review) so the root-skip marker and status set can never
+ * drift between call paths — the divergence class OMN-270 fixed.
+ */
+export const AVAIL_BY_PROJECT_PASS_SNIPPET = `const availByProject = {};
+          flattenedTasks.forEach(t => {
+            try {
+              if (t.project) return;
+              if (${ACTIONABLE_STATUSES_ARRAY_LITERAL}.indexOf(t.taskStatus) === -1) return;
+              const proj = t.containingProject;
+              if (!proj) return;
+              const pid = proj.id.primaryKey;
+              availByProject[pid] = (availByProject[pid] || 0) + 1;
+            } catch (e) {}
+          });`;
+
+/**
  * Emit the OmniJS predicate for the `task.available` filter field.
  *
  * Uses a membership check across ACTIONABLE_STATUSES — NOT a single === comparison

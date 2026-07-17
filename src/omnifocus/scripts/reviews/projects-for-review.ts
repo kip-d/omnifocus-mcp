@@ -13,7 +13,7 @@
  * - Essential for GTD weekly reviews
  */
 
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../../contracts/ast/types.js';
+import { AVAIL_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
 
 export interface ProjectsForReviewFilter {
   overdue?: boolean;
@@ -90,25 +90,12 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
             // OMN-270: the root-task count properties are undefined in
             // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so
             // taskCounts serialized as {} for every project. Do NOT
-            // "simplify" back to them. Replacement formulas (probed against JXA
-            // on 219 projects — see OmniFocusAnalyzeTool.fetchSlimmedData,
-            // PR #227): total/completed from the root task's DIRECT children
-            // (exact parity 219/219); available from one pass over the global
-            // flattenedTasks counting ACTIONABLE-status descendants per
-            // containingProject, skipping each project's root task (non-null
-            // t.project marks a root, and roots read as actionable).
-            const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
-            const availByProject = {};
-            flattenedTasks.forEach(t => {
-              try {
-                if (t.project) return;
-                if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
-                const proj = t.containingProject;
-                if (!proj) return;
-                const pid = proj.id.primaryKey;
-                availByProject[pid] = (availByProject[pid] || 0) + 1;
-              } catch (e) {}
-            });
+            // "simplify" back to them. total/completed come from the root
+            // task's DIRECT children (exact JXA parity 219/219); available
+            // comes from the shared whole-DB pass below — semantics and
+            // measured cost documented at AVAIL_BY_PROJECT_PASS_SNIPPET
+            // (contracts/ast/types).
+            ${AVAIL_BY_PROJECT_PASS_SNIPPET}
 
             // Process all projects
             flattenedProjects.forEach(project => {

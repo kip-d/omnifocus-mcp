@@ -56,6 +56,7 @@ function task(overrides: Partial<FakeTask>): FakeTask {
 function runScript(tasks: FakeTask[]): {
   ok: boolean;
   data: {
+    totalTasks: number;
     patterns: {
       workloadDistribution: { byProject: Record<string, { totalTasks: number }> };
       workflowMetrics: { availablePercentage: number };
@@ -72,7 +73,7 @@ function runScript(tasks: FakeTask[]): {
 }
 
 describe('OMN-270 — workflow_analysis skips project root tasks in task-level metrics', () => {
-  it('a project root task counts in neither per-project totals nor availablePercentage', () => {
+  it('a project root task counts in neither numerators nor the percentage denominator', () => {
     const parsed = runScript([
       task({ project: { marker: true }, name: 'P (root)' }), // root: reads as actionable
       task({ name: 'leaf available' }),
@@ -80,10 +81,16 @@ describe('OMN-270 — workflow_analysis skips project root tasks in task-level m
     ]);
     expect(parsed.ok).toBe(true);
 
-    // Pre-fix: the root was processed as a task → totalTasks 3 and
+    // Pre-fix: the root was processed as a task → per-project total 3 and
     // availablePercentage 66.7 (root + available leaf, over 3).
     expect(parsed.data.patterns.workloadDistribution.byProject['P'].totalTasks).toBe(2);
-    expect(parsed.data.patterns.workflowMetrics.availablePercentage).toBe(33.3);
+    // /code-review of this PR (round 1): the denominator must move WITH the
+    // numerators — skipping roots only in the counters while totalTasks kept
+    // counting them understated every workflowMetrics percentage (the OMN-200
+    // numerator/denominator-agreement lesson, re-learned). 1 available of 2
+    // real tasks is 50%, not 33.3% (over 3 including the root).
+    expect(parsed.data.patterns.workflowMetrics.availablePercentage).toBe(50);
+    expect(parsed.data.totalTasks).toBe(2);
   });
 
   it('the script text no longer references the JXA-only count API (dead in OmniJS)', () => {

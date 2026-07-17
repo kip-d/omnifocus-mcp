@@ -27,7 +27,7 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from './types.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL, AVAIL_BY_PROJECT_PASS_SNIPPET } from './types.js';
 import type { OmniFocusTask } from '../../omnifocus/types.js';
 
 // =============================================================================
@@ -1516,26 +1516,13 @@ export function buildFilteredProjectsScript(
         // (live-probed 2026-07-16; JXA-only), and the JXA-era root-task
         // accessor isn't a Project property there either — so the advertised
         // taskCounts field was never emitted. Do NOT "simplify" back to
-        // them. Replacement formulas
-        // (probed against JXA on 219 projects — see
-        // OmniFocusAnalyzeTool.fetchSlimmedData, PR #227): total/completed
-        // from the root task's DIRECT children (exact parity 219/219);
-        // available from one pass over the global flattenedTasks counting
-        // ACTIONABLE-status descendants per containingProject, skipping each
-        // project's root task (non-null t.project marks a root, and roots
-        // read as actionable).
-        const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
-        const availByProject = {};
-        flattenedTasks.forEach(t => {
-          try {
-            if (t.project) return;
-            if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
-            const proj = t.containingProject;
-            if (!proj) return;
-            const pid = proj.id.primaryKey;
-            availByProject[pid] = (availByProject[pid] || 0) + 1;
-          } catch (e) {}
-        });
+        // them. total/completed come from the root task's DIRECT children
+        // (exact JXA parity 219/219); available comes from the shared
+        // whole-DB pass below — semantics, failure granularity, and measured
+        // cost (~0.6s live on a 2.9k-task DB; runs only when includeStats
+        // requests counts, and is inherent to per-project descendant counts)
+        // documented at AVAIL_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+        ${AVAIL_BY_PROJECT_PASS_SNIPPET}
         `
             : ''
         }

@@ -19,7 +19,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../../contracts/ast/types.js';
+import { AVAIL_BY_PROJECT_PASS_SNIPPET } from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -149,28 +149,12 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             // OMN-270: the root-task count properties are undefined in
             // OmniJS (live-probed 2026-07-16; JXA/AppleScript-only), so the
             // old reads emitted all-zero rows. Do NOT "simplify" back to
-            // them. Replacement formulas (probed against JXA on 219
-            // projects — see OmniFocusAnalyzeTool.fetchSlimmedData, PR #227):
-            // total/completed from the root task's DIRECT children (exact
-            // parity 219/219); available from one uncapped pass over the
-            // global flattenedTasks counting ACTIONABLE-status descendants
-            // per containingProject. Root tasks appear in the global
-            // collection and read as actionable — a non-null t.project marks
-            // them; they must be skipped. One bad task costs only itself
-            // (inner catch); a failing pass propagates to the error envelope
-            // — an unreadable count must not surface as a real 0.
-            const ACTIONABLE = ${ACTIONABLE_STATUSES_ARRAY_LITERAL};
-            const availByProject = {};
-            flattenedTasks.forEach(t => {
-              try {
-                if (t.project) return;
-                if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
-                const proj = t.containingProject;
-                if (!proj) return;
-                const pid = proj.id.primaryKey;
-                availByProject[pid] = (availByProject[pid] || 0) + 1;
-              } catch (e) {}
-            });
+            // them. total/completed come from the root task's DIRECT
+            // children (exact JXA parity 219/219); available comes from the
+            // shared whole-DB pass below — semantics, failure granularity,
+            // and measured cost documented at AVAIL_BY_PROJECT_PASS_SNIPPET
+            // (contracts/ast/types).
+            ${AVAIL_BY_PROJECT_PASS_SNIPPET}
 
             flattenedProjects.forEach(project => {
               try {
