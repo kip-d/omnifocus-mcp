@@ -39,7 +39,14 @@ export const WARM_PROJECTS_CACHE_SCRIPT = `
             // Early exit if we've reached the limit
             if (projects.length >= \${limit}) return;
 
-            // Filter by status if specified
+            // Filter by status if specified.
+            // Adjudicated in OMN-272 (PR #229 review): this String()+substring
+            // normalization is the enum-stringification pattern fixed elsewhere,
+            // but here it is CORRECT for all four current statuses — the
+            // '[object Project.Status: X]' tag contains the status word — and
+            // was deliberately left as-is. If OmniFocus changes the tag format,
+            // every project silently falls back to 'active'; on any edit here,
+            // switch to an identity-compare map (projectStatusString shape).
             const projectStatus = project.status;
             const statusStr = String(projectStatus).toLowerCase();
 

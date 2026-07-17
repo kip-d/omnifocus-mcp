@@ -238,6 +238,31 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  */
 export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 }`;
 
+/**
+ * Canonical Project.Status → wire-vocabulary map ('active' | 'onHold' |
+ * 'done' | 'dropped', String(s) fail-open for statuses a future OmniFocus
+ * adds — never a String()/.replace() of the enum, whose tag stringifies as
+ * "[object Project.Status: Active]", the OMN-272 defect class).
+ *
+ * ONE definition spliced by every OmniJS emitter that ships a project
+ * status string (fetchSlimmedData, productivity-stats-v3,
+ * projects-for-review) so the vocabulary cannot drift between call paths —
+ * before OMN-272 unified them, projects-for-review had already drifted to
+ * 'on-hold'. Do NOT add a fourth inline copy; splice this.
+ *
+ * Known non-splice sites, deliberately out of scope here: script-builder's
+ * read-pipeline emitters still say 'on-hold' (a public omnifocus_read
+ * vocabulary change needs its own slice), and warm-projects-cache
+ * normalizes via substring match (adjudicated at that site).
+ */
+export const PROJECT_STATUS_STRING_SNIPPET = `function projectStatusString(s) {
+            if (s === Project.Status.Active) return 'active';
+            if (s === Project.Status.OnHold) return 'onHold';
+            if (s === Project.Status.Done) return 'done';
+            if (s === Project.Status.Dropped) return 'dropped';
+            return String(s);
+          }`;
+
 export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = {};
           flattenedTasks.forEach(t => {
             try {

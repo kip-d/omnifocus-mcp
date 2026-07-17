@@ -19,7 +19,11 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
-import { TASK_COUNTS_BY_PROJECT_PASS_SNIPPET, TASK_COUNTS_ZERO_LITERAL } from '../../../contracts/ast/types.js';
+import {
+  PROJECT_STATUS_STRING_SNIPPET,
+  TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
+  TASK_COUNTS_ZERO_LITERAL,
+} from '../../../contracts/ast/types.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
   (() => {
@@ -75,18 +79,10 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           const includeTagStats = \${includeTagStats};
           const includeInactive = \${includeInactive};
 
-          // OMN-272: Project.Status enums stringify as
-          // "[object Project.Status: Active]" — never String() them into a
-          // response field. Identity-compare map (same shape as
-          // projectStatusString in fetchSlimmedData); String(s) stays as the
-          // fail-open fallback for status values a future OmniFocus adds.
-          function projectStatusString(s) {
-            if (s === Project.Status.Active) return 'active';
-            if (s === Project.Status.OnHold) return 'onHold';
-            if (s === Project.Status.Done) return 'done';
-            if (s === Project.Status.Dropped) return 'dropped';
-            return String(s);
-          }
+          // OMN-272: single-definition status map — see
+          // PROJECT_STATUS_STRING_SNIPPET (contracts/ast/types) for the
+          // vocabulary contract and why String()-ing the enum is forbidden.
+          ${PROJECT_STATUS_STRING_SNIPPET}
 
           // Overall task statistics
           let totalTasks = 0;

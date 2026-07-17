@@ -20,11 +20,11 @@
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript, FAKE_PROJECT_STATUS } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_PROJECT_STATUS, FAKE_TASK_STATUS } from './run-analytics-script.js';
 
 interface FakeTask {
   completed: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   dueDate: Date | null;
   deferDate: Date | null;
   completionDate: Date | null;
@@ -37,7 +37,7 @@ interface FakeTask {
 function task(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: null,
     deferDate: null,
     completionDate: null,
@@ -69,7 +69,7 @@ function runScript(
 
 describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', () => {
   it('emits real total/completed/available for a project with no recent activity', () => {
-    const done = task({ completed: true, taskStatus: 'completed' });
+    const done = task({ completed: true, taskStatus: FAKE_TASK_STATUS.Completed });
     const open = task({});
     const root = task({ project: { marker: true } });
     const project = {
@@ -97,8 +97,8 @@ describe('OMN-270 — productivity_stats projectStats uses real OmniJS counts', 
 
   it('all three counts share ONE scope (every non-root descendant) — available can never exceed total', () => {
     const grandchild = task({}); // actionable, nested one level down
-    const completedGrandchild = task({ completed: true, taskStatus: 'completed' });
-    const group = task({ taskStatus: 'blocked' }); // direct child, a blocked group
+    const completedGrandchild = task({ completed: true, taskStatus: FAKE_TASK_STATUS.Completed });
+    const group = task({ taskStatus: FAKE_TASK_STATUS.Blocked }); // direct child, a blocked group
     Object.assign(group, { children: [grandchild, completedGrandchild] });
     const root = task({ project: { marker: true } }); // reads as actionable — must not count
     const project = {

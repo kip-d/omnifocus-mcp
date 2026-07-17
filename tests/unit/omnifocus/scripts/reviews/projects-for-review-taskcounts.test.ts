@@ -9,11 +9,11 @@
 // live-probed parity set).
 import { describe, it, expect } from 'vitest';
 import { buildProjectsForReviewScript } from '../../../../../src/omnifocus/scripts/reviews/projects-for-review.js';
-import { runAnalyticsScript, FAKE_PROJECT_STATUS } from '../analytics/run-analytics-script.js';
+import { runAnalyticsScript, FAKE_PROJECT_STATUS, FAKE_TASK_STATUS } from '../analytics/run-analytics-script.js';
 
 interface FakeTask {
   completed: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   /** Non-null marks a project ROOT task (the live OmniJS marker). */
   project: object | null;
   containingProject: { id: { primaryKey: string } } | null;
@@ -22,7 +22,7 @@ interface FakeTask {
 function task(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     project: null,
     containingProject: { id: { primaryKey: 'p1' } },
     ...overrides,
@@ -55,7 +55,7 @@ interface ReviewProject {
 
 describe('OMN-270 — projects_for_review emits real taskCounts', () => {
   it('taskCounts carries total/available/completed instead of serializing as {}', () => {
-    const done = task({ completed: true, taskStatus: 'completed' });
+    const done = task({ completed: true, taskStatus: FAKE_TASK_STATUS.Completed });
     const open = task({});
     const root = task({ project: { marker: true } }); // actionable-reading root: must not count
 

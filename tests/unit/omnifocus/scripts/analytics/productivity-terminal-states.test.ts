@@ -7,13 +7,13 @@
 import { describe, it, expect } from 'vitest';
 import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../../../../src/omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { PRODUCTIVITY_STATS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript } from './run-analytics-script.js';
+import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
 interface FakeTask {
   completed: boolean;
-  taskStatus: string;
+  taskStatus: unknown;
   dueDate: Date | null;
   deferDate: Date | null;
   completionDate: Date | null;
@@ -22,7 +22,7 @@ interface FakeTask {
 function task(overrides: Partial<FakeTask>): FakeTask {
   return {
     completed: false,
-    taskStatus: 'available',
+    taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: null,
     deferDate: null,
     completionDate: null,
@@ -44,7 +44,7 @@ describe('OMN-254 — three terminal states in productivity populations', () => 
   it('a dropped task (even overdue) counts in NEITHER availableTasks NOR overdueCount', () => {
     const parsed = runScript([
       task({}), // genuinely available
-      task({ taskStatus: 'dropped', dueDate: new Date(Date.now() - 5 * DAY) }), // dropped AND past-due
+      task({ taskStatus: FAKE_TASK_STATUS.Dropped, dueDate: new Date(Date.now() - 5 * DAY) }), // dropped AND past-due
       task({ completed: true, completionDate: new Date() }),
     ]);
     expect(parsed.ok).toBe(true);
@@ -62,7 +62,7 @@ describe('OMN-254 — three terminal states in productivity populations', () => 
     // project resolves to taskStatus Completed and is just as terminal.
     const parsed = runScript([
       task({}), // genuinely available
-      task({ taskStatus: 'completed', dueDate: new Date(Date.now() - 5 * DAY) }), // in a completed project, past-due
+      task({ taskStatus: FAKE_TASK_STATUS.Completed, dueDate: new Date(Date.now() - 5 * DAY) }), // in a completed project, past-due
     ]);
     expect(parsed.ok).toBe(true);
     expect(parsed.data.summary.completedTasks).toBe(0); // own .completed stays false
@@ -73,7 +73,7 @@ describe('OMN-254 — three terminal states in productivity populations', () => 
   it('an ACTIVE past-due task still counts overdue; blocked/deferred still excluded from available', () => {
     const parsed = runScript([
       task({ dueDate: new Date(Date.now() - 2 * DAY) }), // active + overdue
-      task({ taskStatus: 'blocked' }),
+      task({ taskStatus: FAKE_TASK_STATUS.Blocked }),
       task({ deferDate: new Date(Date.now() + 5 * DAY) }), // future-deferred
     ]);
     expect(parsed.data.summary.overdueCount).toBe(1);

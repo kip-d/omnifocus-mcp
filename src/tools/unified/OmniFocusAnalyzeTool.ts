@@ -60,7 +60,7 @@ import { extractDates } from '../capture/date-extraction.js';
 
 // OMN-124: read-only pre-flight for structured meeting-note items.
 import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
-import { ACTIONABLE_STATUSES_ARRAY_LITERAL } from '../../contracts/ast/types.js';
+import { ACTIONABLE_STATUSES_ARRAY_LITERAL, PROJECT_STATUS_STRING_SNIPPET } from '../../contracts/ast/types.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks/list-tasks-ast.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 
@@ -1362,15 +1362,10 @@ SCOPE FILTERING:
         if (s === Task.Status.Dropped) return 'dropped';
         return 'unknown';
       }
-      // Canonical vocabulary; normalizeProjectStatus at the TS boundary stays
+      // OMN-272: single-definition status map — see PROJECT_STATUS_STRING_SNIPPET
+      // (contracts/ast/types). normalizeProjectStatus at the TS boundary stays
       // as the fail-open safety net for any future drift.
-      function projectStatusString(s) {
-        if (s === Project.Status.Active) return 'active';
-        if (s === Project.Status.OnHold) return 'onHold';
-        if (s === Project.Status.Done) return 'done';
-        if (s === Project.Status.Dropped) return 'dropped';
-        return String(s);
-      }
+      ${PROJECT_STATUS_STRING_SNIPPET}
       // One shared date emitter: a throwing/absent date degrades to an
       // omitted key (SlimTask/SlimProject date fields are optional).
       function putISO(target, key, source, prop) {
