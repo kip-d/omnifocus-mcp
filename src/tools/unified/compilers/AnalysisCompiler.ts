@@ -76,7 +76,7 @@ export type CompiledAnalysis =
   | {
       type: 'manage_reviews';
       params?: {
-        operation?: 'list_for_review' | 'mark_reviewed' | 'set_schedule' | 'clear_schedule';
+        operation?: 'list_for_review' | 'mark_reviewed' | 'set_schedule';
         projectId?: string;
         reviewDate?: string;
         // OMN-60: review interval for set_schedule, passed through to the script.

@@ -159,7 +159,10 @@ const AnalysisSchema = z.discriminatedUnion('type', [
       type: z.literal('manage_reviews'),
       params: z
         .object({
-          operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule', 'clear_schedule']).optional(),
+          // OMN-273: clear_schedule removed — OmniFocus has no "not scheduled
+          // for review" state (reviewInterval is non-nullable; nulling
+          // nextReviewDate just recomputes it), so the op can never take effect.
+          operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule']).optional(),
           projectId: z.string().optional(),
           reviewDate: z.string().optional(),
           // OMN-60: review interval for set_schedule. Object shape — passed
