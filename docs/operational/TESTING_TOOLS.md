@@ -1,5 +1,12 @@
 # OmniFocus MCP Testing Tools Documentation
 
+> **⚠️ Partially superseded (OMN-271, 2026-07-16).** The current curated script inventory is
+> [`scripts/README.md`](../../scripts/README.md). `emergency-diagnostic.js` and `test-single-tool-proper.js` (called
+> `test-single-tool.js` below — the name was already stale) are archived; both roles are covered by
+> `scripts/verify-deploy.mjs` (`node scripts/verify-deploy.mjs dist/index.js [--expect-build <sha>] [tool [argsJSON]]`),
+> which does the full init handshake and exits nonzero on failure. Sections below describing those two tools are kept
+> for historical context only; example tool names predate the unified API.
+
 ## Overview
 
 This document describes the comprehensive testing toolkit developed for debugging and validating the OmniFocus MCP
