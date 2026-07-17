@@ -1933,19 +1933,23 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(result.error?.code).toBe('VALIDATION_ERROR');
     });
 
-    it('FAIL LOUD (OMN-106): clear_schedule returns UNSUPPORTED without executing', async () => {
+    it('OMN-273: clear_schedule is no longer an operation — rejected at the schema, nothing executes', async () => {
+      // OmniFocus has no "not scheduled for review" state (reviewInterval is
+      // non-nullable and nextReviewDate:null just recomputes from the interval),
+      // so the operation was dropped entirely rather than kept as a runtime
+      // UNSUPPORTED refusal (OMN-41/OMN-58/OMN-106 lineage).
       mockCache.get.mockReturnValue(null);
 
-      const result = (await tool.execute({
-        analysis: {
-          type: 'manage_reviews',
-          params: { operation: 'clear_schedule', projectId: 'p1' },
-        },
-      })) as { success: boolean; error?: { code?: string } };
+      await expect(
+        tool.execute({
+          analysis: {
+            type: 'manage_reviews',
+            params: { operation: 'clear_schedule', projectId: 'p1' },
+          },
+        }),
+      ).rejects.toThrow(/Invalid parameters/);
 
       expect(mockOmni.executeJson).not.toHaveBeenCalled();
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('UNSUPPORTED');
     });
   });
 });

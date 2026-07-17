@@ -1469,8 +1469,8 @@ export interface SetReviewScheduleInput {
  *
  * Fail-loud (Kip 2026-07-06, with OMN-136): a request with NEITHER
  * reviewInterval NOR nextReviewDate throws at build time — the legacy script
- * silently reported per-project success with empty changes (the clear_schedule
- * silent no-op class).
+ * silently reported per-project success with empty changes (the silent no-op
+ * class behind the since-removed clear_schedule operation, OMN-273).
  */
 export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Program {
   const _exhaustive: Record<keyof SetReviewScheduleInput, true> = {

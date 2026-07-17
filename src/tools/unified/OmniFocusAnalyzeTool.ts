@@ -323,8 +323,8 @@ ANALYSIS TYPES:
 - manage_reviews: Project review operations
   params: { operation, projectId, reviewDate, reviewInterval }
   - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
-  - clear_schedule always returns UNSUPPORTED (OmniJS cannot remove a project reviewInterval —
-    OMN-41/OMN-58); set a different interval with set_schedule or clear it in the OmniFocus app
+  - review schedules cannot be removed, only changed: OmniFocus has no "not scheduled
+    for review" project state (OMN-41/OMN-58/OMN-273)
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
@@ -3348,14 +3348,12 @@ SCOPE FILTERING:
           return this.reviewsMarkReviewed(compiled, timer);
         case 'set_schedule':
           return this.reviewsSetSchedule(compiled, timer);
-        case 'clear_schedule':
-          return this.reviewsClearSchedule(compiled, timer);
         default:
           return createErrorResponseV2(
             'manage_reviews',
             'INVALID_OPERATION',
             `Unknown operation: ${String(operation)}`,
-            'Use one of: list_for_review, mark_reviewed, set_schedule (clear_schedule is unsupported — OMN-41/OMN-58)',
+            'Use one of: list_for_review, mark_reviewed, set_schedule',
             { operation },
             timer.toMetadata(),
           );
@@ -3590,27 +3588,5 @@ SCOPE FILTERING:
       projects_updated: brandedProjectIds.length,
       input_params: { projectId },
     });
-  }
-
-  private reviewsClearSchedule(
-    compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
-    timer: OperationTimerV2,
-  ): StandardResponseV2<unknown> {
-    const projectId = compiled.params?.projectId;
-
-    // OMN-106 fail-loud (Kip 2026-07-06, with OMN-136): the legacy path sent
-    // {reviewInterval:null, nextReviewDate:null}, which the script if-gated
-    // into a per-project SUCCESS with empty changes — nothing was ever cleared.
-    // OmniJS cannot construct or null a Project.ReviewInterval (OMN-41/OMN-58),
-    // so a clear cannot take effect through this seam; say so instead of lying.
-    return createErrorResponseV2(
-      'manage_reviews',
-      'UNSUPPORTED',
-      'clear_schedule cannot clear a review schedule: OmniJS cannot remove or null a project reviewInterval ' +
-        '(OMN-41/OMN-58). The previous behavior reported success without changing anything.',
-      'Set a different interval with set_schedule, or clear the review schedule in the OmniFocus app',
-      { projectId },
-      timer.toMetadata(),
-    );
   }
 }

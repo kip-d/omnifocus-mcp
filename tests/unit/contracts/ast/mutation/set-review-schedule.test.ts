@@ -173,13 +173,13 @@ describe('set-review-schedule — behavior goldens (exact JSON, vm-executed)', (
     });
   });
 
-  it('FAIL LOUD: the clear_schedule shape (both params null) now throws at build time', async () => {
+  it('FAIL LOUD: the both-params-null shape throws at build time', async () => {
     // Replaces the legacy silent no-op pinned in the pre-port commit: the
     // script reported per-project success with empty changes while clearing
     // nothing (OMN-106/OMN-136 fail-loud decision, Kip 2026-07-06). The
-    // analyze tool's clear_schedule handler no longer builds a script at all —
-    // it returns an explicit UNSUPPORTED error — and the builder refuses the
-    // shape too, so no caller can regress into the silent path.
+    // clear_schedule operation that produced this shape was removed outright
+    // in OMN-273, but the builder still refuses it so no future caller can
+    // regress into the silent path.
     await expect(
       buildSetReviewScheduleScript({ projectIds: ['p1'], reviewInterval: null, nextReviewDate: null }),
     ).rejects.toThrow(/requires reviewInterval or nextReviewDate/);
