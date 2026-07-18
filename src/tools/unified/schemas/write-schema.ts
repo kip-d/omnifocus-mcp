@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
 import type { RepetitionRule } from '../../../contracts/mutations.js';
+import { isPlainObject } from '../../normalization/normalize-input.js';
 
 // ── Schema ↔ contract sync guards ────────────────────────────────────
 // Two complementary compile-time checks prevent schema/contract drift:
@@ -133,8 +134,7 @@ const writeAliasErrorMap: z.ZodErrorMap = (issue, ctx) => {
   if (issue.code === z.ZodIssueCode.unrecognized_keys) {
     const hints = issue.keys.filter((k) => k in WRITE_FIELD_REDIRECTS).map((k) => `${k} → ${WRITE_FIELD_REDIRECTS[k]}`);
     const rootData = ctx.data as unknown;
-    const envelopeAbsent =
-      typeof rootData === 'object' && rootData !== null && !('mutation' in (rootData as Record<string, unknown>));
+    const envelopeAbsent = isPlainObject(rootData) && !('mutation' in rootData);
     if (issue.path.length === 0 && issue.keys.includes('data') && envelopeAbsent) {
       hints.push(ROOT_DATA_ENVELOPE_HINT);
     }
