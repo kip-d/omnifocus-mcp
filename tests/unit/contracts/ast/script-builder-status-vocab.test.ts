@@ -52,6 +52,17 @@ describe('OMN-274 — read-path Project.Status vocabulary (unified, no drift)', 
     expect(script).not.toContain('getFolderStatus');
   });
 
+  it('folder listing omits the project status map when includeProjects is false (no unused splice)', () => {
+    // projectStatusString is only called inside the includeProjects branch —
+    // splicing it unconditionally would ship an unused function in every
+    // includeProjects:false script against the 261KB OmniJS bridge budget.
+    const script = buildFilteredFoldersScript({ includeProjects: false, limit: 10 }).script;
+    expectSnippet(script, FOLDER_STATUS_STRING_SNIPPET);
+    const escapedProjectSnippet = JSON.stringify(PROJECT_STATUS_STRING_SNIPPET).slice(1, -1);
+    expect(script.includes(PROJECT_STATUS_STRING_SNIPPET) || script.includes(escapedProjectSnippet)).toBe(false);
+    expect(script).not.toContain('function projectStatusString');
+  });
+
   it('both snippets fail OPEN (String(s)), never to a hardcoded status', () => {
     // The old inline maps returned 'active'/'active'/'dropped' for an unknown
     // status — three different silent wrong answers. The snippets surface the

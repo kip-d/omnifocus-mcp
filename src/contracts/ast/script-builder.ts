@@ -1810,7 +1810,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
         // OMN-274: single-definition status maps (String(s) fail-open) — see
         // FOLDER_STATUS_STRING_SNIPPET / PROJECT_STATUS_STRING_SNIPPET in ./types.
         ${FOLDER_STATUS_STRING_SNIPPET}
-        ${PROJECT_STATUS_STRING_SNIPPET}
+        ${includeProjects ? PROJECT_STATUS_STRING_SNIPPET : ''}
 
         // Process all folders
         flattenedFolders.forEach(folder => {
