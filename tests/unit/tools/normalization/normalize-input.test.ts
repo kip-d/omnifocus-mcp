@@ -271,6 +271,29 @@ describe('leniency #3 extension — update data.changes unwrap (OMN-277)', () =>
     expect(r.success).toBe(false);
     expect(r.applied).toEqual([]);
   });
+
+  it('collision-safe on the PLAIN (non-nested) residual too: an outer changes already present must abort, not be silently overwritten', () => {
+    // Pre-existing leniency #3 behavior (data:{id, flagged:true}, no `changes`
+    // key in the residual) must still abort when a top-level `changes` is
+    // already present — routeUpdateResidual's fallback branch used to return
+    // the residual unconditionally, silently clobbering the outer changes
+    // (the OMN-97 anti-pattern) instead of aborting like every other
+    // collision case in this function.
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          changes: { note: 'outer' },
+          data: { flagged: true, id: 'xyz789' },
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
 });
 
 describe('leniency #4 — mutation-field-alias (OMN-168)', () => {

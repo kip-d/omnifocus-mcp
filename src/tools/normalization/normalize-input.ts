@@ -208,6 +208,12 @@ function normalizeArgs(args: unknown, hint: NormalizationHint): { args: unknown;
  * alongside is a both-present collision (same rule as aliasMutationFields) —
  * both return undefined so the recovery aborts and the original strict error
  * stands.
+ *
+ * The plain (non-nested) residual — leniency #3's original behavior, e.g.
+ * `data: {id, flagged: true}` — is also collision-checked: an outer `changes`
+ * already present must abort the recovery for the same reason, rather than
+ * being silently overwritten by the caller (the OMN-97 anti-pattern the rest
+ * of this function guards against).
  */
 function routeUpdateResidual(
   residual: Record<string, unknown>,
@@ -218,7 +224,7 @@ function routeUpdateResidual(
     return outerChanges === undefined ? residual.changes : undefined;
   }
   if (keys.includes('changes')) return undefined;
-  return residual;
+  return outerChanges === undefined ? residual : undefined;
 }
 
 /**
