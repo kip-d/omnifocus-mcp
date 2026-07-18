@@ -198,6 +198,30 @@ function normalizeArgs(args: unknown, hint: NormalizationHint): { args: unknown;
 }
 
 /**
+ * OMN-277 (leniency #3 extension): route an update's residual `data` fields to
+ * `changes`. The recorded llama3.1:8b shape nests the whole changes object
+ * INSIDE data (`data: { changes: {...}, id }`); mapping that residual to
+ * `changes` verbatim double-wraps it (changes.changes) and strict
+ * re-validation rejects the recovery. Unwrap ONLY the unambiguous shape:
+ * `changes` is the SOLE residual key and a plain object. A stray sibling field
+ * would need inference about where it belongs, and an outer `changes`
+ * alongside is a both-present collision (same rule as aliasMutationFields) —
+ * both return undefined so the recovery aborts and the original strict error
+ * stands.
+ */
+function routeUpdateResidual(
+  residual: Record<string, unknown>,
+  outerChanges: unknown,
+): Record<string, unknown> | undefined {
+  const keys = Object.keys(residual);
+  if (keys.length === 1 && keys[0] === 'changes' && isPlainObject(residual.changes)) {
+    return outerChanges === undefined ? residual.changes : undefined;
+  }
+  if (keys.includes('changes')) return undefined;
+  return residual;
+}
+
+/**
  * Leniency #3 worker: hoist `data.id` to the mutation level on non-create
  * operations. Returns the rewritten mutation, or undefined when the shape
  * doesn't match.
@@ -247,7 +271,9 @@ function hoistDataId(m: Record<string, unknown>): Record<string, unknown> | unde
   // deleted before re-validation ever saw the leftovers.
   if (Object.keys(data).length > 0) {
     if (op === 'update') {
-      newMutation.changes = data;
+      const routed = routeUpdateResidual(data, m.changes);
+      if (routed === undefined) return undefined;
+      newMutation.changes = routed;
     } else if (op === 'complete') {
       Object.assign(newMutation, data);
     } else {
