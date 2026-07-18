@@ -147,6 +147,17 @@ function normalizeArgs(args: unknown, hint: NormalizationHint): { args: unknown;
   // ── Leniency #1: wrapper-lift ──────────────────────────────────────────────
   // The model emitted the inner payload at the root, missing the wrapper key but
   // carrying the discriminant (e.g. `{type:'tasks'}` → `{query:{type:'tasks'}}`).
+  //
+  // OMN-260 adjudication — the discriminant gate is deliberate; do NOT widen it
+  // to infer a missing `operation` from a bare root `{data:{...}}` payload. The
+  // ambiguity matrix (Technical/specs/OMN-260-root-data-only-wrapper-lift.md)
+  // kills that inference: the create-shaped case would ALSO need `target`
+  // invented (required on create, no default — inventing dispatch, the OMN-247
+  // hazard class), and the update/complete/delete-shaped cases are multi-match
+  // by construction, so a fire-only-when-unambiguous rule helps neither
+  // recorded payload. The adopted fix is reject-and-hint at the schema layer
+  // (write-schema.ts ROOT_DATA_ENVELOPE_HINT) + envelope examples in the tool
+  // description.
   if (isPlainObject(current) && !(hint.wrapperKey in current) && hint.discriminant in current) {
     current = { [hint.wrapperKey]: { ...current } };
     applied.push('wrapper-lift');

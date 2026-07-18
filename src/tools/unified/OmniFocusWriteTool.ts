@@ -112,6 +112,11 @@ export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
   description = `Create, update, complete, or delete OmniFocus tasks and projects.
 
+ENVELOPE (required on every call): {"mutation":{"operation":<op>, ...}} — the "mutation" wrapper and its "operation" key are mandatory; a bare {"data":{...}} without an operation cannot be routed and is rejected.
+Canonical minimal examples:
+  create: {"mutation":{"operation":"create","target":"task","data":{"name":"Buy milk"}}}
+  update: {"mutation":{"operation":"update","id":"<taskId>","changes":{"flagged":true}}}
+
 OPERATIONS:
 - create: New task/project with data
 - create_folder: New folder (name required, optional parentFolder for nesting)
