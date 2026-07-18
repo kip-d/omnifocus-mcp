@@ -57,4 +57,19 @@ describe('OMN-260 — root data-only payloads reject WITH an envelope hint', () 
     expect(r.success).toBe(true);
     expect(r.applied).toEqual([]);
   });
+
+  it('the hint does NOT fire when a valid mutation envelope is present alongside a stray root data key', () => {
+    // The envelope IS present here — 'data' is just an unrelated extra root
+    // key. Claiming "missing the mutation envelope" would be actively
+    // misleading (the envelope exists and is correct); the plain
+    // unrecognized-key error is the right one.
+    const r = WriteSchema.safeParse({
+      mutation: { operation: 'update', target: 'task', id: 'x', changes: { flagged: true } },
+      data: { legacy: true },
+    });
+    expect(r.success).toBe(false);
+    const message = r.success ? '' : joinedIssues(r.error);
+    expect(message).not.toContain('missing the mutation envelope');
+    expect(message).not.toContain("'operation' is required");
+  });
 });

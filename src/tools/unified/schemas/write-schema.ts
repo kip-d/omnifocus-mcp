@@ -120,6 +120,10 @@ const WRITE_FIELD_REDIRECTS: Record<string, string> = {
 // names the missing envelope so the caller gets an actionable correction.
 // Root-only (path []): a misplaced `data` at a nested level has an envelope
 // already — the generic unrecognized-key error is the right one there.
+// Also gated on `mutation` being genuinely ABSENT from the root object
+// (ctx.data): a valid `mutation` envelope alongside an unrelated stray root
+// `data` key already HAS its envelope — claiming it's "missing" there would
+// be actively misleading, not actionable.
 const ROOT_DATA_ENVELOPE_HINT =
   'missing the mutation envelope: wrap the payload as ' +
   '{"mutation":{"operation":"create"|"update"|"complete"|"delete"|..., ...}} — ' +
@@ -128,7 +132,10 @@ const ROOT_DATA_ENVELOPE_HINT =
 const writeAliasErrorMap: z.ZodErrorMap = (issue, ctx) => {
   if (issue.code === z.ZodIssueCode.unrecognized_keys) {
     const hints = issue.keys.filter((k) => k in WRITE_FIELD_REDIRECTS).map((k) => `${k} → ${WRITE_FIELD_REDIRECTS[k]}`);
-    if (issue.path.length === 0 && issue.keys.includes('data')) {
+    const rootData = ctx.data as unknown;
+    const envelopeAbsent =
+      typeof rootData === 'object' && rootData !== null && !('mutation' in (rootData as Record<string, unknown>));
+    if (issue.path.length === 0 && issue.keys.includes('data') && envelopeAbsent) {
       hints.push(ROOT_DATA_ENVELOPE_HINT);
     }
     if (hints.length > 0) {
