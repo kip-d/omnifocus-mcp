@@ -220,11 +220,22 @@ function routeUpdateResidual(
   outerChanges: unknown,
 ): Record<string, unknown> | undefined {
   const keys = Object.keys(residual);
+  // Candidate `changes` value BEFORE the collision check: the nested-unwrap
+  // shape (`changes` is the sole residual key) unwraps to its value; any other
+  // non-`changes`-bearing residual is used verbatim (leniency #3's original
+  // behavior). A residual that mixes `changes` with other keys is unroutable
+  // (no candidate) regardless of collision.
+  let candidate: Record<string, unknown> | undefined;
   if (keys.length === 1 && keys[0] === 'changes' && isPlainObject(residual.changes)) {
-    return outerChanges === undefined ? residual.changes : undefined;
+    candidate = residual.changes;
+  } else if (!keys.includes('changes')) {
+    candidate = residual;
   }
-  if (keys.includes('changes')) return undefined;
-  return outerChanges === undefined ? residual : undefined;
+  if (candidate === undefined) return undefined;
+  // Single collision gate for every candidate shape: an outer `changes`
+  // already present must abort the recovery, not be silently overwritten
+  // (the OMN-97 anti-pattern the rest of this function guards against).
+  return outerChanges === undefined ? candidate : undefined;
 }
 
 /**
