@@ -344,11 +344,12 @@ describe('OMN-138: live update paths (task + project, persisted read-backs)', ()
     expect(res.data.status).toBe('on_hold');
 
     // Independent read-back — the persisted truth. Read projection vocab is
-    // hyphenated ('on-hold'), distinct from the transport enum.
+    // canonical 'onHold' (OMN-274), distinct from the transport enum the
+    // write envelope echoes ('on_hold' — see PROJECT_STATUS_READBACK).
     const project = await readProjectInFolder(projId, ['name', 'status'], SANDBOX_FOLDER_NAME);
     expect(project, `project ${projId} not found in sandbox on read-back`).toBeTruthy();
     expect(project.name).toBe(UPD_PROJECT_NEW_NAME);
-    expect(project.status).toBe('on-hold');
+    expect(project.status).toBe('onHold');
 
     // No-stale-echo proof: an update that does NOT touch status must still
     // report the persisted 'on_hold'. The legacy envelope echoed

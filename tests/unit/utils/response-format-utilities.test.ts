@@ -571,7 +571,7 @@ describe('Response Format Utilities', () => {
     it('should generate basic project summary', () => {
       const projects = [
         { id: '1', name: 'Project 1', status: 'active' },
-        { id: '2', name: 'Project 2', status: 'on-hold' },
+        { id: '2', name: 'Project 2', status: 'onHold' },
         { id: '3', name: 'Project 3', status: 'done' },
         { id: '4', name: 'Project 4', status: 'dropped' },
       ];
@@ -607,15 +607,22 @@ describe('Response Format Utilities', () => {
       expect(summary.bottlenecks?.[1]).toMatch(/3[45] days/);
     });
 
-    it('should handle on-hold variations', () => {
+    it('counts canonical onHold and leaves an unknown status honestly uncounted (OMN-274)', () => {
+      // The 'on-hold' tolerance key is gone with the last hyphen emitter; a
+      // fail-open unknown (String(s) of a future OmniFocus status) must not be
+      // misbucketed into a known count.
       const projects = [
-        { id: '1', name: 'P1', status: 'on-hold' },
+        { id: '1', name: 'P1', status: 'onHold' },
         { id: '2', name: 'P2', status: 'onHold' },
+        { id: '3', name: 'P3', status: 'someFutureStatus' },
       ];
 
       const summary = generateProjectSummary(projects);
 
       expect(summary.on_hold).toBe(2);
+      expect(summary.active).toBe(0);
+      expect(summary.dropped).toBe(0);
+      expect(summary.total_projects).toBe(3);
     });
 
     it('should detect stalled projects', () => {

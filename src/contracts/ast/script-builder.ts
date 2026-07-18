@@ -29,6 +29,8 @@ import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
 import {
   ACTIONABLE_STATUSES_ARRAY_LITERAL,
+  FOLDER_STATUS_STRING_SNIPPET,
+  PROJECT_STATUS_STRING_SNIPPET,
   TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
   TASK_COUNTS_ZERO_LITERAL,
 } from './types.js';
@@ -1373,7 +1375,7 @@ function generateProjectFieldProjection(fields: string[], context?: { noteTrunca
         projections.push('name: project.name || "Unnamed Project"');
         break;
       case 'status':
-        projections.push('status: getProjectStatus(project)');
+        projections.push('status: projectStatusString(project.status)');
         break;
       case 'flagged':
         projections.push('flagged: project.flagged || false');
@@ -1487,13 +1489,9 @@ export function buildFilteredProjectsScript(
         let totalMatched = 0;
         const limit = ${limit};
 
-        // Helper to get project status string
-        function getProjectStatus(project) {
-          if (project.status === Project.Status.Done) return 'done';
-          if (project.status === Project.Status.Dropped) return 'dropped';
-          if (project.status === Project.Status.OnHold) return 'on-hold';
-          return 'active';
-        }
+        // OMN-274: single-definition status map (canonical 'onHold', String(s)
+        // fail-open) — see PROJECT_STATUS_STRING_SNIPPET in ./types.
+        ${PROJECT_STATUS_STRING_SNIPPET}
 
         // Helper to build folder path
         function getFolderPath(folder) {
@@ -1665,12 +1663,9 @@ export function buildProjectByIdScript(projectId: string, fields: string[] = [])
         const results = [];
         const targetId = ${JSON.stringify(projectId)};
 
-        function getProjectStatus(project) {
-          if (project.status === Project.Status.Done) return 'done';
-          if (project.status === Project.Status.Dropped) return 'dropped';
-          if (project.status === Project.Status.OnHold) return 'on-hold';
-          return 'active';
-        }
+        // OMN-274: single-definition status map (canonical 'onHold', String(s)
+        // fail-open) — see PROJECT_STATUS_STRING_SNIPPET in ./types.
+        ${PROJECT_STATUS_STRING_SNIPPET}
 
         function getFolderPath(folder) {
           if (!folder) return '';
@@ -1812,11 +1807,10 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           return depth;
         }
 
-        // Helper to get folder status
-        function getFolderStatus(folder) {
-          if (folder.status === Folder.Status.Dropped) return 'dropped';
-          return 'active';
-        }
+        // OMN-274: single-definition status maps (String(s) fail-open) — see
+        // FOLDER_STATUS_STRING_SNIPPET / PROJECT_STATUS_STRING_SNIPPET in ./types.
+        ${FOLDER_STATUS_STRING_SNIPPET}
+        ${PROJECT_STATUS_STRING_SNIPPET}
 
         // Process all folders
         flattenedFolders.forEach(folder => {
@@ -1834,7 +1828,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           const folderObj = {
             id: folder.id.primaryKey,
             name: folder.name || 'Unnamed Folder',
-            status: getFolderStatus(folder),
+            status: folderStatusString(folder.status),
             depth: depth,
             path: path,
           };
@@ -1864,9 +1858,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
               folderObj.projects.push({
                 id: proj.id.primaryKey,
                 name: proj.name,
-                status: proj.status === Project.Status.Active ? 'active' :
-                        proj.status === Project.Status.OnHold ? 'on-hold' :
-                        proj.status === Project.Status.Done ? 'done' : 'dropped'
+                status: projectStatusString(proj.status)
               });
             });
             folderObj.projectCount = folder.projects.length;
