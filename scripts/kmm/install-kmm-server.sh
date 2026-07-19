@@ -52,8 +52,14 @@ uninstall() {
   exit 0
 }
 
-# Explicit arg dispatch — reject unknowns so a typo can't silently skip
-# verification and exit 0 (mirrors install-diagnose-schedule.sh's rationale).
+# Explicit arg dispatch — reject unknowns (and trailing extras past the first
+# argument) so a typo can't silently skip verification and exit 0 (mirrors
+# install-diagnose-schedule.sh's rationale).
+if [ "$#" -gt 1 ]; then
+  echo "Unexpected extra argument: $2" >&2
+  echo "Usage: $(basename "$0") [--verify | --uninstall]" >&2
+  exit 2
+fi
 MODE="install"
 case "${1:-}" in
   "")          MODE="install" ;;
@@ -94,20 +100,29 @@ for val in "$NODE_PATH" "$REPO_DIR" "$PORT" "$TAILSCALE_IP" "$MCP_AUTH_TOKEN" "$
     *'|'*|*$'\n'*) die "a substituted value contains '|' or a newline — refusing to generate a possibly-corrupt plist." ;;
   esac
 done
-# sed's REPLACEMENT text has its own metacharacters independent of the pattern
-# side above: an unescaped '&' means "insert the whole match" and '\N' is a
-# backreference. A caller-supplied MCP_AUTH_TOKEN containing either would
-# silently mangle the generated plist instead of being inserted literally.
+# Every substituted value lands inside a plist <string> element, so it must
+# be valid XML content first — a raw '&', '<', or '>' (e.g. inside
+# MCP_AUTH_TOKEN) produces an invalid plist that plutil -lint below rejects.
+# THEN, independently, sed's REPLACEMENT text has its own metacharacters (an
+# unescaped '&' means "insert the whole match", '\N' is a backreference) —
+# xml_escape's output itself contains '&' (from "&amp;" etc.), so it must be
+# re-escaped for sed on top of the XML escaping, not instead of it.
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
 sed_escape_replacement() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/&/\\\&/g'
 }
-sed -e "s|__NODE_PATH__|$(sed_escape_replacement "$NODE_PATH")|g" \
-    -e "s|__REPO_DIR__|$(sed_escape_replacement "$REPO_DIR")|g" \
-    -e "s|__PORT__|$(sed_escape_replacement "$PORT")|g" \
-    -e "s|__TAILSCALE_IP__|$(sed_escape_replacement "$TAILSCALE_IP")|g" \
-    -e "s|__MCP_AUTH_TOKEN__|$(sed_escape_replacement "$MCP_AUTH_TOKEN")|g" \
-    -e "s|__LAUNCHD_LOG__|$(sed_escape_replacement "$LAUNCHD_LOG")|g" \
-    -e "s|__PATH_VALUE__|$(sed_escape_replacement "$PATH_VALUE")|g" \
+plist_value() {
+  sed_escape_replacement "$(xml_escape "$1")"
+}
+sed -e "s|__NODE_PATH__|$(plist_value "$NODE_PATH")|g" \
+    -e "s|__REPO_DIR__|$(plist_value "$REPO_DIR")|g" \
+    -e "s|__PORT__|$(plist_value "$PORT")|g" \
+    -e "s|__TAILSCALE_IP__|$(plist_value "$TAILSCALE_IP")|g" \
+    -e "s|__MCP_AUTH_TOKEN__|$(plist_value "$MCP_AUTH_TOKEN")|g" \
+    -e "s|__LAUNCHD_LOG__|$(plist_value "$LAUNCHD_LOG")|g" \
+    -e "s|__PATH_VALUE__|$(plist_value "$PATH_VALUE")|g" \
     "$TEMPLATE" > "$PLIST_DEST"
 plutil -lint "$PLIST_DEST" >/dev/null
 chmod 600 "$PLIST_DEST" # contains the bearer token — not world-readable
