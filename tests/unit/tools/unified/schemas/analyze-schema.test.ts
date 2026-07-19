@@ -253,6 +253,36 @@ describe('AnalyzeSchema', () => {
       };
       expect(AnalyzeSchema.safeParse(input).success).toBe(true);
     });
+
+    it('rejects mark_reviewed with neither projectId nor projectIds (fail fast, not a round-trip SCRIPT_ERROR)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects set_schedule with neither projectId nor projectIds (fail fast, not a round-trip SCRIPT_ERROR)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'set_schedule', reviewInterval: { unit: 'week', steps: 1 } },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('list_for_review still works with neither projectId nor projectIds (no target needed)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'list_for_review' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
   });
 
   // OMN-90: AnalyzeSchema must reject unknown fields, matching OMN-76's

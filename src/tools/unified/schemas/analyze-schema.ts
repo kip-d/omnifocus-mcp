@@ -227,6 +227,17 @@ export const AnalyzeSchema = z
         message: `${operation} requires exactly one of 'projectId' or 'projectIds', not both`,
       });
     }
+    // With neither, brandedProjectIds/brandedProjectId end up empty and the
+    // request only fails after a round-trip through the AST layer's
+    // empty-pids guard (a SCRIPT_ERROR, not a clean VALIDATION_ERROR) —
+    // catch it here instead, consistent with the "not both" check above.
+    if ((operation === 'mark_reviewed' || operation === 'set_schedule') && !hasSingle && !hasPlural) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['analysis', 'params', 'projectId'],
+        message: `${operation} requires one of 'projectId' or 'projectIds'`,
+      });
+    }
   });
 
 export type AnalyzeInput = z.infer<typeof AnalyzeSchema>;
