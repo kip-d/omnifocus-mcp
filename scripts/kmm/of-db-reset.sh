@@ -108,8 +108,12 @@ restore_golden() {
   log "Restoring golden snapshot from $GOLDEN_ZIP ..."
   local tmp_dir
   tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/of-db-reset.XXXXXX")"
-  # Cleanup on any exit path from this point on.
-  trap 'rm -rf "$tmp_dir"' RETURN
+  # Cleanup on any exit path from this point on. A RETURN trap does NOT fire
+  # when die() below calls `exit` (only on normal function return), so this
+  # uses EXIT instead — and the path is substituted into the trap command
+  # immediately, since $tmp_dir (a `local`) goes out of scope once this
+  # function returns and the trap would later see it unset.
+  trap "rm -rf '$tmp_dir'" EXIT
 
   unzip -q "$GOLDEN_ZIP" -d "$tmp_dir" || die "failed to unzip $GOLDEN_ZIP"
 
@@ -181,8 +185,12 @@ verify_counts() {
     })();
   ')" || die "failed to read task/project counts from OmniFocus via JXA"
 
-  actual_tasks="$(echo "$counts_json" | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).tasks))')"
-  actual_projects="$(echo "$counts_json" | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).projects))')"
+  local counts_pair
+  counts_pair="$(echo "$counts_json" | node -e '
+    const c = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    process.stdout.write(c.tasks + " " + c.projects);
+  ')"
+  read -r actual_tasks actual_projects <<< "$counts_pair"
 
   local mismatch=0
   if [ "$actual_tasks" != "$expected_tasks" ]; then

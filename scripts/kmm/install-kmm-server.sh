@@ -92,13 +92,20 @@ for val in "$TAILSCALE_IP" "$MCP_AUTH_TOKEN" "$PORT"; do
     *'|'*|*$'\n'*) die "a substituted value contains '|' or a newline — refusing to generate a possibly-corrupt plist." ;;
   esac
 done
-sed -e "s|__NODE_PATH__|$NODE_PATH|g" \
-    -e "s|__REPO_DIR__|$REPO_DIR|g" \
-    -e "s|__PORT__|$PORT|g" \
-    -e "s|__TAILSCALE_IP__|$TAILSCALE_IP|g" \
-    -e "s|__MCP_AUTH_TOKEN__|$MCP_AUTH_TOKEN|g" \
-    -e "s|__LAUNCHD_LOG__|$LAUNCHD_LOG|g" \
-    -e "s|__PATH_VALUE__|$PATH_VALUE|g" \
+# sed's REPLACEMENT text has its own metacharacters independent of the pattern
+# side above: an unescaped '&' means "insert the whole match" and '\N' is a
+# backreference. A caller-supplied MCP_AUTH_TOKEN containing either would
+# silently mangle the generated plist instead of being inserted literally.
+sed_escape_replacement() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/&/\\\&/g'
+}
+sed -e "s|__NODE_PATH__|$(sed_escape_replacement "$NODE_PATH")|g" \
+    -e "s|__REPO_DIR__|$(sed_escape_replacement "$REPO_DIR")|g" \
+    -e "s|__PORT__|$(sed_escape_replacement "$PORT")|g" \
+    -e "s|__TAILSCALE_IP__|$(sed_escape_replacement "$TAILSCALE_IP")|g" \
+    -e "s|__MCP_AUTH_TOKEN__|$(sed_escape_replacement "$MCP_AUTH_TOKEN")|g" \
+    -e "s|__LAUNCHD_LOG__|$(sed_escape_replacement "$LAUNCHD_LOG")|g" \
+    -e "s|__PATH_VALUE__|$(sed_escape_replacement "$PATH_VALUE")|g" \
     "$TEMPLATE" > "$PLIST_DEST"
 plutil -lint "$PLIST_DEST" >/dev/null
 chmod 600 "$PLIST_DEST" # contains the bearer token — not world-readable
