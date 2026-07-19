@@ -380,14 +380,15 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       expected: TEST_DATETIME_EPOCH,
     },
     {
-      // Transport enum `on_hold` → projection vocab `on-hold` (hyphen). The
-      // expected value is the PROJECTION form, not the input form.
+      // Transport enum `on_hold` → read projection vocab `onHold` (OMN-274:
+      // one canonical wire vocabulary across read + analytics). The expected
+      // value is the PROJECTION form, not the input form.
       field: 'status',
       op: 'update',
       setValue: 'on_hold',
       readFields: ['status'],
       extract: (p) => p?.status,
-      expected: 'on-hold',
+      expected: 'onHold',
     },
     {
       field: 'sequential',

@@ -189,7 +189,8 @@ Execute in sequence — each step: run the MCP call, act on results:
 `omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })`
 
 **5. On-hold projects** — Reactivate, drop, or keep waiting?
-`omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })`
+`omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })` (filter input uses `on_hold`; the
+returned project rows carry `status: "onHold"` — the canonical read vocabulary)
 
 **6. Waiting-for** — Follow up on anything stale
 `omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@waiting-for"] } }, limit: 50 } })`

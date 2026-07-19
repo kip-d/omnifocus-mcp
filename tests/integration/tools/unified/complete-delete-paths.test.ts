@@ -261,8 +261,9 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
     expectOk(readRes, `read project ${projId} after complete`);
     const project = projectsOf(readRes).find((p: any) => p.id === projId);
     expect(project, `project ${projId} not found on read-back`).toBeTruthy();
-    // buildProjectByIdScript maps Project.Status.Done → 'done' (the OmniJS read
-    // vocab); the write layer uses 'completed'/'on_hold' as transport enum.
+    // Read vocab (PROJECT_STATUS_STRING_SNIPPET, OMN-274) maps
+    // Project.Status.Done → 'done'; the write layer uses 'completed'/'on_hold'
+    // as transport enum.
     expect(project.status).toBe('done');
   }, 120000);
 

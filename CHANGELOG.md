@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
+  script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
+  now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary
+  (`active`/`onHold`/`done`/`dropped`) used by every analytics endpoint. Unknown future statuses now fail OPEN
+  (`String(s)`) instead of silently misreporting as `active`/`dropped`, and folder status gains the same treatment via
+  the new `FOLDER_STATUS_STRING_SNIPPET`. Filter INPUTS are unchanged (`status: "on_hold"` transport form), and the
+  write envelope's status read-back deliberately keeps the transport vocabulary (`on_hold`/`completed`) — adjudication
+  comment at `PROJECT_STATUS_READBACK`. The `generateProjectSummary` dual-key tolerance for the old hyphen form is
+  removed.
+
 ### Added
 
 - **Readable `sequential` field on tasks** (OMN-207) — `type:"tasks"` queries can now request `sequential` via

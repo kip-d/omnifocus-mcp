@@ -49,7 +49,7 @@ describe('buildFilteredFoldersScript', () => {
 
     it('includes status field', () => {
       const result = buildFilteredFoldersScript({});
-      expect(result.script).toContain('getFolderStatus');
+      expect(result.script).toContain('folderStatusString'); // OMN-274: spliced snippet, was getFolderStatus
     });
 
     it('includes depth field', () => {

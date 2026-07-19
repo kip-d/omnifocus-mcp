@@ -115,7 +115,7 @@ describe('OmniFocusReadTool', () => {
     it('returns projects from direct AST execution', async () => {
       const mockProjects = [
         { id: 'p1', name: 'Project 1', status: 'active' },
-        { id: 'p2', name: 'Project 2', status: 'on-hold' },
+        { id: 'p2', name: 'Project 2', status: 'onHold' },
       ];
 
       execJsonSpy.mockResolvedValueOnce({

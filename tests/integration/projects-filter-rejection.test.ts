@@ -97,9 +97,10 @@ d('OMN-171: projects OR returns the union of branches; completed:false and mode+
       return;
     }
 
-    // Status values from warm-projects-cache: 'active' | 'onHold' | 'done' | 'dropped'
+    // Status values: canonical 'active' | 'onHold' (OMN-274 — one read
+    // vocabulary; the hyphen/underscore variants no longer occur on reads).
     // completed:false should exclude 'done' and 'dropped'
-    const allowed = new Set(['active', 'onHold', 'on_hold', 'on-hold']);
+    const allowed = new Set(['active', 'onHold']);
     for (const project of projects) {
       expect(
         allowed.has(project.status),

@@ -438,9 +438,11 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
   let mostOverdueDays = 0;
   const now = new Date();
 
+  // OMN-274: one read vocabulary (canonical 'onHold') — the 'on-hold' tolerance
+  // key is gone with the last hyphen emitter. An unknown status (fail-open
+  // String(s) from a future OmniFocus) is honestly uncounted, not misbucketed.
   const STATUS_KEY: Record<string, keyof ProjectSummary> = {
     active: 'active',
-    'on-hold': 'on_hold',
     onHold: 'on_hold',
     done: 'completed',
     completed: 'completed',

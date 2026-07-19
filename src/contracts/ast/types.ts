@@ -246,24 +246,36 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  *
  * ONE definition spliced by every OmniJS emitter that ships a project
  * status string (fetchSlimmedData, productivity-stats-v3,
- * projects-for-review) so the vocabulary cannot drift between call paths —
+ * projects-for-review, and — since OMN-274 — script-builder's read pipeline:
+ * buildFilteredProjectsScript, buildProjectByIdScript, and the folder
+ * listing's project rows) so the vocabulary cannot drift between call paths —
  * before OMN-272 unified them, projects-for-review had already drifted to
- * 'on-hold'. Do NOT add a fourth inline copy; splice this.
+ * 'on-hold', and the script-builder read path stayed on 'on-hold' until
+ * OMN-274. Do NOT add an inline copy; splice this.
  *
- * Known non-splice sites, deliberately out of scope here: script-builder's
- * read pipeline carries THREE separately-maintained inline copies (two
- * getProjectStatus helpers plus a folder-listing ternary) that still emit
- * the hyphenated OnHold form AND fail closed to hardcoded fallbacks
- * ('active'/'dropped') instead of this snippet's String(s) fail-open — a
- * public omnifocus_read vocabulary change, so unifying them needs its own
- * slice (OMN-274); and warm-projects-cache normalizes via substring match
- * (adjudicated at that site).
+ * Known non-splice sites, deliberately adjudicated elsewhere:
+ * warm-projects-cache normalizes via substring match (adjudicated at that
+ * site), and the write-path read-back echo (mutation/defs.ts
+ * PROJECT_STATUS_READBACK) deliberately speaks the write TRANSPORT
+ * vocabulary ('on_hold'/'completed'), echoing the same enum the write
+ * schema accepts — see the adjudication comment at that site (OMN-274).
  */
 export const PROJECT_STATUS_STRING_SNIPPET = `function projectStatusString(s) {
             if (s === Project.Status.Active) return 'active';
             if (s === Project.Status.OnHold) return 'onHold';
             if (s === Project.Status.Done) return 'done';
             if (s === Project.Status.Dropped) return 'dropped';
+            return String(s);
+          }`;
+
+/**
+ * Folder.Status sibling of PROJECT_STATUS_STRING_SNIPPET (OMN-274). Folder has
+ * only Active/Dropped today; String(s) fail-open surfaces anything OmniFocus
+ * adds instead of the old getFolderStatus fallback silently reporting 'active'.
+ */
+export const FOLDER_STATUS_STRING_SNIPPET = `function folderStatusString(s) {
+            if (s === Folder.Status.Active) return 'active';
+            if (s === Folder.Status.Dropped) return 'dropped';
             return String(s);
           }`;
 

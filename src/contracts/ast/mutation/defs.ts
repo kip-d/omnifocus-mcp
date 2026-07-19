@@ -787,7 +787,17 @@ const PROJECT_STATUS_UPDATE_ENUM: Record<string, string> = {
 /** Live status read-back for the update envelope (spec §2.4) — builder-internal
  * raw (no user data), mapping Project.Status constants to the legacy lowercase
  * strings so the envelope key keeps its shape. The legacy envelope ECHOED
- * `changes.status || 'active'` while the actual set could have silently failed. */
+ * `changes.status || 'active'` while the actual set could have silently failed.
+ *
+ * OMN-274 adjudication — deliberately NOT the read/analytics wire vocabulary:
+ * this echo speaks the write TRANSPORT enum ('active'|'on_hold'|'completed'|
+ * 'dropped'), the same values the write schema accepts and the write response
+ * schema pins (response-schemas/write.ts) — a client reads back the vocabulary
+ * it wrote. It is a whole-vocabulary choice ('completed', not 'done'), not a
+ * drifted copy of the 'onHold' map; changing only the OnHold spelling would
+ * create a THIRD, mixed vocabulary. If this echo ever converges on the wire
+ * form, move 'completed'→'done' and the response schema enum in the same
+ * change. See Technical/specs/OMN-274-read-path-status-vocabulary.md. */
 const PROJECT_STATUS_READBACK =
   "proj.status === Project.Status.Active ? 'active' : " +
   "proj.status === Project.Status.OnHold ? 'on_hold' : " +
