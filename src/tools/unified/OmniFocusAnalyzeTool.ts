@@ -3570,7 +3570,7 @@ SCOPE FILTERING:
         'manage_reviews',
         'SCRIPT_ERROR',
         result.error || 'Script execution failed',
-        'Try again with updateNextReviewDate=false',
+        'Check details for the underlying script error',
         result.details,
         timer.toMetadata(),
       );
