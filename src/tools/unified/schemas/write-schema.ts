@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
 import type { RepetitionRule } from '../../../contracts/mutations.js';
+import { isPlainObject } from '../../normalization/normalize-input.js';
 
 // ── Schema ↔ contract sync guards ────────────────────────────────────
 // Two complementary compile-time checks prevent schema/contract drift:
@@ -112,9 +113,31 @@ const WRITE_FIELD_REDIRECTS: Record<string, string> = {
   subtasks: "create children via a batch op with 'parentTempId' (or set 'parentTaskId' on create)",
 };
 
+// OMN-260: a bare root `{data:{...}}` (no `operation`, no `mutation`) is the
+// recorded small-model failure shape that wrapper-lift structurally cannot
+// repair — its discriminant gate is `'operation' in current`, and inferring
+// the operation was declined with data (see normalize-input.ts at that gate).
+// Reject-and-hint: the strict surface is unchanged, but the root-level error
+// names the missing envelope so the caller gets an actionable correction.
+// Root-only (path []): a misplaced `data` at a nested level has an envelope
+// already — the generic unrecognized-key error is the right one there.
+// Also gated on `mutation` being genuinely ABSENT from the root object
+// (ctx.data): a valid `mutation` envelope alongside an unrelated stray root
+// `data` key already HAS its envelope — claiming it's "missing" there would
+// be actively misleading, not actionable.
+const ROOT_DATA_ENVELOPE_HINT =
+  'missing the mutation envelope: wrap the payload as ' +
+  '{"mutation":{"operation":"create"|"update"|"complete"|"delete"|..., ...}} — ' +
+  "'operation' is required and cannot be inferred from a bare 'data' object";
+
 const writeAliasErrorMap: z.ZodErrorMap = (issue, ctx) => {
   if (issue.code === z.ZodIssueCode.unrecognized_keys) {
     const hints = issue.keys.filter((k) => k in WRITE_FIELD_REDIRECTS).map((k) => `${k} → ${WRITE_FIELD_REDIRECTS[k]}`);
+    const rootData = ctx.data as unknown;
+    const envelopeAbsent = isPlainObject(rootData) && !('mutation' in rootData);
+    if (issue.path.length === 0 && issue.keys.includes('data') && envelopeAbsent) {
+      hints.push(ROOT_DATA_ENVELOPE_HINT);
+    }
     if (hints.length > 0) {
       return { message: `${ctx.defaultError}. ${hints.join('; ')}` };
     }

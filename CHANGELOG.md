@@ -21,6 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **Envelope guidance for root data-only write payloads** (OMN-260) — a bare `{"data":{...}}` sent to `omnifocus_write`
+  with no `operation` key still rejects (the accepted-input surface is unchanged; inferring the operation was declined —
+  the ambiguity analysis lives at the wrapper-lift gate in `src/tools/normalization/` and in the OMN-260 spec), but the
+  root-level error now names the missing `mutation` envelope with the required `operation` key, and the tool description
+  opens with the mandatory envelope shape plus canonical create/update examples — the recorded small-model failure shape
+  (qwen2.5:7b, OMN-168 re-baseline) now gets an actionable correction instead of
+  `Unrecognized key(s) in object: 'data'`.
+
 - **Readable `sequential` field on tasks** (OMN-207) — `type:"tasks"` queries can now request `sequential` via
   `fields:["sequential"]`, closing the settable-but-not-readable gap left by the write side (OMN-198/206). Reported as
   the raw stored boolean on every task (not conditional on child count): OmniFocus persists `sequential` across
