@@ -104,6 +104,53 @@ const SetScheduleFailedEntrySchema = z
   })
   .strict();
 
+/**
+ * Mark-projects-reviewed batch successful entry (OMN-256) — emitted by
+ * applyMarkReviewedBatch's results.successful[] push.
+ * Source: {projectId, projectName, changes, lastReviewDate, nextReviewDate}.
+ */
+const MarkReviewedBatchSuccessEntrySchema = z
+  .object({
+    projectId: z.string(),
+    projectName: z.string(),
+    changes: z.array(z.string()),
+    lastReviewDate: isoDateOrNull,
+    nextReviewDate: isoDateOrNull,
+  })
+  .strict();
+
+/**
+ * Mark-projects-reviewed batch failed entry (OMN-256) — emitted by
+ * applyMarkReviewedBatch's results.failed[] push. projectName is optional:
+ * the not-found branch fires before projectName is known (mirrors
+ * SetScheduleFailedEntrySchema).
+ */
+const MarkReviewedBatchFailedEntrySchema = z
+  .object({
+    projectId: z.string(),
+    projectName: z.string().optional(),
+    error: z.string(),
+  })
+  .strict();
+
+/** Module-scope batch mark-reviewed envelope (OMN-256). message always emitted on success. */
+export const MARK_REVIEWED_BATCH_TYPED_SCHEMA = reviewSuccessSchema({
+  results: z
+    .object({
+      successful: z.array(MarkReviewedBatchSuccessEntrySchema),
+      failed: z.array(MarkReviewedBatchFailedEntrySchema),
+      summary: z
+        .object({
+          total_requested: z.number(),
+          successful_count: z.number(),
+          failed_count: z.number(),
+        })
+        .strict(),
+    })
+    .strict(),
+  message: z.string(),
+});
+
 /** Module-scope set-review-schedule envelope (SET_SCHEDULE_SCHEMA). message always emitted on success. */
 export const SET_SCHEDULE_TYPED_SCHEMA = reviewSuccessSchema({
   results: z

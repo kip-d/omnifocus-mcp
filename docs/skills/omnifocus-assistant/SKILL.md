@@ -204,9 +204,16 @@ returned project rows carry `status: "onHold"` — the canonical read vocabulary
 **9. Ensure next actions** — Every active project needs one
 `omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })`
 
-**10. Get creative** — New projects? Stuck items? Someday/maybe to activate? Ask the user.
+**10. Mark reviewed** — After walking a batch of stale projects from step 9's list, mark them all reviewed in one call
+(OMN-256) instead of one round-trip per project:
+`omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "mark_reviewed", projectIds: ["<id1>", "<id2>", "..."] } } })`
+(single-project form still works: `{ operation: "mark_reviewed", projectId: "<id>" }`). The response reports a
+per-project outcome — an unresolvable id in the batch shows up as its own error row, not a silent drop; check
+`results.failed` before assuming the whole batch succeeded.
 
-**11. Productivity check**
+**11. Get creative** — New projects? Stuck items? Someday/maybe to activate? Ask the user.
+
+**12. Productivity check**
 `omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } })`
 
 ---

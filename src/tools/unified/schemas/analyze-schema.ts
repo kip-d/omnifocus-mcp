@@ -168,6 +168,11 @@ const AnalysisSchema = z.discriminatedUnion('type', [
           // only errors since OMN-106, so no caller ever got value from it.
           operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule']).optional(),
           projectId: z.string().optional(),
+          // OMN-256: batch sibling of projectId — mark_reviewed/set_schedule
+          // accept ONE of projectId/projectIds (enforced by AnalyzeSchema's
+          // superRefine below; discriminated-union members can't carry a
+          // refinement directly). Cap mirrors bulk_delete's ids cap.
+          projectIds: z.array(z.string()).min(1).max(100).optional(),
           reviewDate: z.string().optional(),
           // OMN-60: review interval for set_schedule. Object shape — passed
           // through to buildSetReviewScheduleScript(), which expects { unit, steps }.
@@ -191,6 +196,37 @@ export const AnalyzeSchema = z
   .object({
     analysis: coerceObject(AnalysisSchema),
   })
-  .strict();
+  .strict()
+  // OMN-256: manage_reviews's projectId/projectIds exactly-one-of + the
+  // list_for_review reject-loud rule. The discriminated-union member can't
+  // carry a refinement (zod requires ZodObject members), so this lives at
+  // the wrapper boundary — mirrors WriteSchema's id/target_id precedent.
+  .superRefine((val, ctx) => {
+    const analysis = val.analysis as {
+      type?: string;
+      params?: { operation?: string; projectId?: string; projectIds?: string[] };
+    };
+    if (analysis.type !== 'manage_reviews') return;
+    const params = analysis.params;
+    const operation = params?.operation ?? 'list_for_review';
+    const hasSingle = params?.projectId !== undefined;
+    const hasPlural = params?.projectIds !== undefined;
+
+    if (operation === 'list_for_review' && hasPlural) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['analysis', 'params', 'projectIds'],
+        message:
+          'list_for_review does not accept projectIds — batch project selection only applies to mark_reviewed/set_schedule',
+      });
+    }
+    if ((operation === 'mark_reviewed' || operation === 'set_schedule') && hasSingle && hasPlural) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['analysis', 'params', 'projectIds'],
+        message: `${operation} requires exactly one of 'projectId' or 'projectIds', not both`,
+      });
+    }
+  });
 
 export type AnalyzeInput = z.infer<typeof AnalyzeSchema>;

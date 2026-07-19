@@ -30,6 +30,7 @@ export {
   buildUnparentTagProgram,
   buildReparentTagProgram,
   buildMarkProjectReviewedProgram,
+  buildMarkProjectsReviewedProgram,
   buildSetReviewScheduleProgram,
   lowerTaskCreate,
   MUTATION_DEFS,
@@ -38,6 +39,7 @@ export {
 export type {
   TaskLoweringNames,
   MarkProjectReviewedInput,
+  MarkProjectsReviewedInput,
   SetReviewScheduleInput,
   ReviewIntervalSpecInput,
   BatchCreateTasksData,

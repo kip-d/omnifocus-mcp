@@ -1454,6 +1454,69 @@ export function buildMarkProjectReviewedProgram(data: MarkProjectReviewedInput):
 }
 
 // =============================================================================
+// MARK PROJECTS REVIEWED — BATCH LOWERING (OMN-256)
+// =============================================================================
+
+export interface MarkProjectsReviewedInput {
+  projectIds: string[];
+  reviewDate: string;
+  updateNextReviewDate: boolean;
+}
+
+/**
+ * Lower a batch mark-projects-reviewed request (OMN-256). Statement shape
+ * mirrors buildSetReviewScheduleProgram (OMN-106 PR-2): json binds, an
+ * empty-ids guard, a build-time-unrolled for-loop calling the
+ * applyMarkReviewedBatch snippet per id (continue-on-error, never abort on
+ * the first failure), and the batch envelope {success, results, message}
+ * (MARK_REVIEWED_BATCH_TYPED_SCHEMA is the contract). The single-id
+ * `mark-reviewed/project` route and its envelope are untouched — this is an
+ * ADDITIONAL route, not a replacement.
+ */
+export function buildMarkProjectsReviewedProgram(data: MarkProjectsReviewedInput): Program {
+  const _exhaustive: Record<keyof MarkProjectsReviewedInput, true> = {
+    projectIds: true,
+    reviewDate: true,
+    updateNextReviewDate: true,
+  };
+  void _exhaustive;
+
+  const statements: Stmt[] = [
+    // User data enters via json() binds, never raw interpolation.
+    bind('pids', json(data.projectIds)),
+    bind('reviewDateStr', json(data.reviewDate)),
+    // total_requested is a build-time count (mirrors set-review-schedule).
+    bind(
+      'results',
+      raw(
+        `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
+      ),
+    ),
+    guard('pids.length === 0', {
+      success: json(false),
+      error: json(true),
+      message: json('No project IDs provided'),
+      results: ref('results'),
+    }),
+    bind(
+      'applied',
+      raw(
+        `(function () { for (var i = 0; i < pids.length; i++) { applyMarkReviewedBatch(pids[i], reviewDateStr, ${data.updateNextReviewDate ? 'true' : 'false'}, results); } ` +
+          'results.summary.successful_count = results.successful.length; results.summary.failed_count = results.failed.length; return true; })()',
+      ),
+    ),
+    return_({
+      success: json(true),
+      results: ref('results'),
+      message: raw(
+        '"Batch mark-reviewed completed: " + results.summary.successful_count + " successful, " + results.summary.failed_count + " failed"',
+      ),
+    }),
+  ];
+  return { statements, context: 'mark_projects_reviewed', snippetDeps: ['applyMarkReviewedBatch'] };
+}
+
+// =============================================================================
 // SET REVIEW SCHEDULE LOWERING (OMN-106 PR-2)
 // =============================================================================
 
@@ -1654,6 +1717,16 @@ export const MUTATION_DEFS = {
     guard: (d) => (d.projectId ? validateProjectInSandbox(d.projectId, 'mark reviewed') : undefined),
     build: buildMarkProjectReviewedProgram,
   } as MutationDef<MarkProjectReviewedInput>,
+  'mark-reviewed/projects': {
+    // OMN-256: batch sibling of mark-reviewed/project. ALL ids pre-flight
+    // before any update executes (mirrors bulk_delete / set-review-schedule/project;
+    // spec §2.1) — registering the route is non-negotiable, an unregistered
+    // mutation route reopens the sandbox-guard-bypass class.
+    guard: async (d) => {
+      await Promise.all(d.projectIds.map((id) => validateProjectInSandbox(id, 'mark reviewed')));
+    },
+    build: buildMarkProjectsReviewedProgram,
+  } as MutationDef<MarkProjectsReviewedInput>,
   'reparent/tag': {
     // Spec §2.1: guard EVERY name the op touches — parent included when present.
     guard: (d) => {

@@ -302,6 +302,60 @@ function applySetReviewSchedule(projectId, reviewInterval, nextReviewDateParam, 
   }
 }`;
 
+// OMN-256: batch mark-reviewed body, mirroring applySetReviewSchedule's
+// accumulator shape (results.successful[] / failed[], continue-on-error) but
+// carrying the mark-reviewed logic inherited from applyMarkReviewed (single
+// lastReviewDate set + optional nextReviewDate advance from the LIVE typed
+// reviewInterval). Kept as its own function rather than reusing
+// applyMarkReviewed directly — that one returns a bare changes[] array for
+// the single-id envelope; this one needs the full per-row success/failure
+// shape the batch envelope requires.
+const applyMarkReviewedBatch = `
+function applyMarkReviewedBatch(projectId, reviewDateStr, updateNextReviewDate, results) {
+  var project = Project.byIdentifier(projectId);
+  if (!project) {
+    results.failed.push({
+      projectId: projectId,
+      error: "Project not found"
+    });
+    return;
+  }
+  try {
+    var reviewDateTime = new Date(reviewDateStr);
+    project.lastReviewDate = reviewDateTime;
+    var changes = ["Last review date set to " + reviewDateStr];
+    if (updateNextReviewDate) {
+      var reviewInterval = project.reviewInterval;
+      if (reviewInterval) {
+        try {
+          var nextReviewDateValue = calculateNextReviewDate(reviewInterval, reviewDateTime);
+          if (nextReviewDateValue) {
+            project.nextReviewDate = nextReviewDateValue;
+            changes.push("Next review date calculated and set to " + nextReviewDateValue.toISOString());
+          }
+        } catch (calcError) {
+          changes.push("Warning: Could not calculate next review date: " + calcError.message);
+        }
+      } else {
+        changes.push("Note: No review interval set, next review date not calculated");
+      }
+    }
+    results.successful.push({
+      projectId: projectId,
+      projectName: project.name,
+      changes: changes,
+      lastReviewDate: project.lastReviewDate ? project.lastReviewDate.toISOString() : null,
+      nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null
+    });
+  } catch (updateError) {
+    results.failed.push({
+      projectId: projectId,
+      projectName: project.name,
+      error: "Failed to update: " + updateError.message
+    });
+  }
+}`;
+
 export const SNIPPETS: Record<string, Snippet> = {
   parseFolderPath: { source: parseFolderPath, deps: [] },
   resolveFolderPath: { source: resolveFolderPath, deps: [] },
@@ -334,6 +388,8 @@ export const SNIPPETS: Record<string, Snippet> = {
     source: applySetReviewSchedule,
     deps: ['normalizeReviewUnit', 'calculateNextReviewFromSpec'],
   },
+  // OMN-256: batch mark-reviewed body — reuses the single-id calculateNextReviewDate.
+  applyMarkReviewedBatch: { source: applyMarkReviewedBatch, deps: ['calculateNextReviewDate'] },
 };
 
 export function collectSnippets(keys: readonly string[]): string {

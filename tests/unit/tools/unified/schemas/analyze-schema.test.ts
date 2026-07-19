@@ -163,6 +163,98 @@ describe('AnalyzeSchema', () => {
     });
   });
 
+  describe('manage_reviews batch projectIds (OMN-256)', () => {
+    it('accepts mark_reviewed with projectIds (1..100)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectIds: ['p1', 'p2', 'p3'] },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
+
+    it('accepts set_schedule with projectIds', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectIds: ['p1', 'p2'],
+            reviewInterval: { unit: 'week', steps: 1 },
+          },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
+
+    it('rejects an empty projectIds array', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectIds: [] },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects projectIds over the 100-id cap', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectIds: Array.from({ length: 101 }, (_, i) => `p${i}`) },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects providing BOTH projectId and projectIds on mark_reviewed', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectId: 'p1', projectIds: ['p2'] },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects providing BOTH projectId and projectIds on set_schedule', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'p1',
+            projectIds: ['p2'],
+            reviewInterval: { unit: 'week', steps: 1 },
+          },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('rejects projectIds on list_for_review (loud, not silently ignored)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'list_for_review', projectIds: ['p1'] },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('single projectId form still works unchanged on mark_reviewed', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectId: 'p1' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
+  });
+
   // OMN-90: AnalyzeSchema must reject unknown fields, matching OMN-76's
   // CreateDataSchema/UpdateChangesSchema strict behavior. Without `.strict()`
   // applied at every depth (wrapper, discriminated-union members, scope,

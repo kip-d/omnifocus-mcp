@@ -32,6 +32,7 @@ import {
   WORKFLOW_ANALYSIS_V3_SCHEMA,
   REVIEWS_LIST_TYPED_SCHEMA,
   MARK_REVIEWED_TYPED_SCHEMA,
+  MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
 // Script imports (irreducible computation)
@@ -44,6 +45,7 @@ import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/ana
 // OMN-106: review mutations emit from the AST mutation pipeline (sandbox-guarded).
 import {
   buildMarkProjectReviewedScript,
+  buildMarkProjectsReviewedScript,
   buildSetReviewScheduleScript,
 } from '../../contracts/ast/mutation-script-builder.js';
 import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/projects-for-review.js';
@@ -292,6 +294,7 @@ const TASKS_LIST_SCHEMA = listResultSchema(['tasks', 'items'], {
 // Re-exported aliases kept here for local readability.
 const REVIEWS_LIST_SCHEMA = REVIEWS_LIST_TYPED_SCHEMA;
 const MARK_REVIEWED_SCHEMA = MARK_REVIEWED_TYPED_SCHEMA;
+const MARK_REVIEWED_BATCH_SCHEMA = MARK_REVIEWED_BATCH_TYPED_SCHEMA;
 const SET_SCHEDULE_SCHEMA = SET_SCHEDULE_TYPED_SCHEMA;
 
 // ---------------------------------------------------------------------------
@@ -321,7 +324,13 @@ ANALYSIS TYPES:
   FALLBACK: pass params.text (raw prose) and the heuristic extractor runs;
   un-parsed lines are surfaced in unparsed[]. Provide exactly one of items|text.
 - manage_reviews: Project review operations
-  params: { operation, projectId, reviewDate, reviewInterval }
+  params: { operation, projectId, projectIds, reviewDate, reviewInterval }
+  - mark_reviewed and set_schedule accept EITHER a single projectId OR a batch
+    projectIds[] (1-100 ids, mirrors bulk_delete's cap) — exactly one of the two,
+    never both. Batch responses report a per-project outcome (id -> ok/error); an
+    unresolvable id in the batch fails loudly as its own row, not silently dropped.
+    One shared reviewInterval applies to all listed projects on set_schedule.
+  - list_for_review does NOT accept projectIds (rejected, not silently ignored)
   - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
   - review schedules cannot be removed, only changed: OmniFocus has no "not scheduled
     for review" project state (OMN-41/OMN-58/OMN-273)
@@ -3495,8 +3504,16 @@ SCOPE FILTERING:
     compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
-    const projectId = compiled.params?.projectId;
+    const projectIds = compiled.params?.projectIds;
     const reviewDate = compiled.params?.reviewDate || new Date().toISOString();
+
+    // OMN-256: batch path when projectIds is present; single-id path (below)
+    // is UNCHANGED — same builder, same schema, same envelope shape.
+    if (projectIds && projectIds.length > 0) {
+      return this.reviewsMarkReviewedBatch(projectIds, reviewDate, timer);
+    }
+
+    const projectId = compiled.params?.projectId;
     const brandedProjectId = projectId ? convertToProjectId(projectId) : undefined;
 
     const { script } = await buildMarkProjectReviewedScript({
@@ -3534,12 +3551,64 @@ SCOPE FILTERING:
     });
   }
 
+  private async reviewsMarkReviewedBatch(
+    projectIds: string[],
+    reviewDate: string,
+    timer: OperationTimerV2,
+  ): Promise<StandardResponseV2<unknown>> {
+    const brandedProjectIds = projectIds.map((id) => convertToProjectId(id));
+
+    const { script } = await buildMarkProjectsReviewedScript({
+      projectIds: brandedProjectIds,
+      reviewDate,
+      updateNextReviewDate: true,
+    });
+    const result = await this.execJson(script, MARK_REVIEWED_BATCH_SCHEMA);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'manage_reviews',
+        'SCRIPT_ERROR',
+        result.error || 'Script execution failed',
+        'Try again with updateNextReviewDate=false',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    this.cache.invalidate('projects');
+    this.cache.invalidate('reviews');
+
+    const envelope = result.data as unknown;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
+
+    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'mark_reviewed',
+      review_date: reviewDate,
+      next_review_calculated: true,
+      input_params: { projectIds, reviewDate, updateNextReviewDate: true },
+    });
+  }
+
   private async reviewsSetSchedule(
     compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
     const projectId = compiled.params?.projectId;
-    const brandedProjectIds = projectId ? [convertToProjectId(projectId)] : [];
+    const projectIds = compiled.params?.projectIds;
+    // OMN-256: set_schedule was already batch-native at the AST layer
+    // (buildSetReviewScheduleScript takes projectIds: string[]) — batching
+    // here is plumbing-widening only, no new lowering.
+    let brandedProjectIds: ProjectId[];
+    if (projectIds) {
+      brandedProjectIds = projectIds.map((id) => convertToProjectId(id));
+    } else if (projectId) {
+      brandedProjectIds = [convertToProjectId(projectId)];
+    } else {
+      brandedProjectIds = [];
+    }
 
     // OMN-106 fail-loud (Kip 2026-07-06, with OMN-136): with neither an
     // interval nor a date the legacy script reported per-project success with
@@ -3550,7 +3619,7 @@ SCOPE FILTERING:
         'VALIDATION_ERROR',
         'set_schedule requires reviewInterval and/or reviewDate — with neither there is nothing to set',
         'Provide reviewInterval {unit, steps} and/or reviewDate',
-        { projectId },
+        { projectId, projectIds },
         timer.toMetadata(),
       );
     }
@@ -3586,7 +3655,7 @@ SCOPE FILTERING:
       ...timer.toMetadata(),
       operation: 'set_schedule',
       projects_updated: brandedProjectIds.length,
-      input_params: { projectId },
+      input_params: projectIds ? { projectIds } : { projectId },
     });
   }
 }

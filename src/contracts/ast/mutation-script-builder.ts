@@ -24,7 +24,12 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
-import { dispatchMutation, type MarkProjectReviewedInput, type SetReviewScheduleInput } from './mutation/defs.js';
+import {
+  dispatchMutation,
+  type MarkProjectReviewedInput,
+  type MarkProjectsReviewedInput,
+  type SetReviewScheduleInput,
+} from './mutation/defs.js';
 import { emitProgram, wrapInLauncher } from './mutation/emitter.js';
 import { validateMutationProgram } from './mutation/validator.js';
 
@@ -711,6 +716,26 @@ export async function buildMarkProjectReviewedScript(
     operation: 'mark_reviewed',
     target: 'project',
     description: `Mark project reviewed: ${params.projectId}`,
+  };
+}
+
+/**
+ * Build a JXA script for the batch mark-projects-reviewed mutation (OMN-256).
+ * Emits from the mutation AST via 'mark-reviewed/projects' dispatch — the
+ * sandbox guard pre-flights ALL ids before any update executes. Wire envelope
+ * is MARK_REVIEWED_BATCH_TYPED_SCHEMA; the single-id 'mark-reviewed/project'
+ * route and its envelope are unaffected.
+ */
+export async function buildMarkProjectsReviewedScript(
+  params: MarkProjectsReviewedInput,
+): Promise<GeneratedMutationScript> {
+  const program = await dispatchMutation('mark-reviewed/projects', params);
+  validateMutationProgram(program);
+  return {
+    script: wrapInLauncher(emitProgram(program), program.context).trim(),
+    operation: 'mark_reviewed_batch',
+    target: 'project',
+    description: `Mark projects reviewed: ${params.projectIds.join(', ')}`,
   };
 }
 
