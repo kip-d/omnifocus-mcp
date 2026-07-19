@@ -220,6 +220,17 @@ export const AnalyzeSchema = z
           'list_for_review does not accept projectIds — batch project selection only applies to mark_reviewed/set_schedule',
       });
     }
+    // Same reject-loud rule for the singular spelling: reviewsListForReview
+    // never reads params.projectId, so accepting it would be a silent no-op
+    // (the caller gets the full unfiltered list and no signal).
+    if (operation === 'list_for_review' && hasSingle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['analysis', 'params', 'projectId'],
+        message:
+          'list_for_review does not accept projectId — project selection only applies to mark_reviewed/set_schedule',
+      });
+    }
     if ((operation === 'mark_reviewed' || operation === 'set_schedule') && hasSingle && hasPlural) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -231,6 +242,10 @@ export const AnalyzeSchema = z
     // request only fails after a round-trip through the AST layer's
     // empty-pids guard (a SCRIPT_ERROR, not a clean VALIDATION_ERROR) —
     // catch it here instead, consistent with the "not both" check above.
+    // The SCRIPT_ERROR→VALIDATION_ERROR error-code shift for this case is
+    // intentional (review-adjudicated): it lands in the same unmerged PR
+    // that introduced projectIds, so no released caller ever saw the old
+    // shape for this omission.
     if ((operation === 'mark_reviewed' || operation === 'set_schedule') && !hasSingle && !hasPlural) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

@@ -244,6 +244,16 @@ describe('AnalyzeSchema', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects the singular projectId on list_for_review too (same reject-loud rule)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'list_for_review', projectId: 'p1' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
     it('single projectId form still works unchanged on mark_reviewed', () => {
       const input = {
         analysis: {

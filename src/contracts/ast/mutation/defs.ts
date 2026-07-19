@@ -1472,6 +1472,14 @@ export interface MarkProjectsReviewedInput {
  * (MARK_REVIEWED_BATCH_TYPED_SCHEMA is the contract). The single-id
  * `mark-reviewed/project` route and its envelope are untouched — this is an
  * ADDITIONAL route, not a replacement.
+ *
+ * DELIBERATE MIRROR (review-adjudicated): the accumulator scaffold (pids
+ * bind, results literal, empty-pids guard, IIFE loop, envelope return) is
+ * intentionally duplicated from buildSetReviewScheduleProgram rather than
+ * factored — the shared shape is pinned by each builder's own typed schema
+ * and goldens, and a premature abstraction would couple two operations that
+ * may diverge (e.g. per-op envelope fields). The cost: any change to the
+ * shared scaffold MUST be applied to BOTH builders (grep for this marker).
  */
 export function buildMarkProjectsReviewedProgram(data: MarkProjectsReviewedInput): Program {
   const _exhaustive: Record<keyof MarkProjectsReviewedInput, true> = {
@@ -1544,6 +1552,11 @@ export interface SetReviewScheduleInput {
  * reviewInterval NOR nextReviewDate throws at build time — the legacy script
  * silently reported per-project success with empty changes (the silent no-op
  * class behind the since-removed clear_schedule operation, OMN-273).
+ *
+ * DELIBERATE MIRROR (review-adjudicated): buildMarkProjectsReviewedProgram
+ * duplicates this builder's accumulator scaffold on purpose — see the
+ * matching marker on that builder for the rationale. Any change to the
+ * shared scaffold MUST be applied to BOTH builders.
  */
 export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Program {
   const _exhaustive: Record<keyof SetReviewScheduleInput, true> = {

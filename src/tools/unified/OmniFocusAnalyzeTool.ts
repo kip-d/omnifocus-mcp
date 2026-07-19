@@ -3515,6 +3515,11 @@ SCOPE FILTERING:
 
     // OMN-256: batch path when projectIds is present; single-id path (below)
     // is UNCHANGED — same builder, same schema, same envelope shape.
+    // DELIBERATE (review-adjudicated): the two forms return different
+    // envelopes — single-id keeps its pre-existing pinned {data.project}
+    // contract, batch uses {data.batch} with per-row results. Normalizing
+    // both onto one shape would break existing single-id callers; documented
+    // in SKILL.md alongside the batch example.
     if (projectIds && projectIds.length > 0) {
       return this.reviewsMarkReviewedBatch(projectIds, reviewDate, timer);
     }
@@ -3590,6 +3595,7 @@ SCOPE FILTERING:
       operation: 'mark_reviewed',
       review_date: reviewDate,
       next_review_calculated: true,
+      projects_updated: brandedProjectIds.length,
       input_params: { projectIds, reviewDate, updateNextReviewDate: true },
     });
   }
