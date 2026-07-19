@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# of-kmm-redeploy — redeploy the KMM MCP HTTP server (OMN-279).
+#
+# git pull, npm ci, build, restart the LaunchAgent, then verify. Two distinct
+# verification steps, not one, because they check different things:
+#   1. verify-deploy.ts (stdio) — sanity-checks the freshly BUILT artifact
+#      (dist/index.js) in isolation, independent of whether the LaunchAgent
+#      picked it up. Confirms `--expect-build` matches the commit just pulled.
+#   2. install-kmm-server.sh --verify (HTTP) — checks the actually RUNNING
+#      LaunchAgent instance: auth enforcement + a real authenticated request.
+#      Confirms the restart actually took and auth wasn't silently disabled.
+#
+# Spec: docs/superpowers/specs/2026-07-02-kmm-test-ground-design.md §4
+# ("Deploy: of-kmm-redeploy (git pull, npm ci, build, launchctl kickstart),
+# verified via the system{version} buildId + stale===false probe").
+#
+# Usage:
+#   of-kmm-redeploy
+#
+# Required env vars (same as install-kmm-server.sh, needed for step 2):
+#   TAILSCALE_IP, MCP_AUTH_TOKEN
+# Optional:
+#   OF_MCP_REPO_DIR  (default ~/omnifocus-mcp)
+set -euo pipefail
+
+log() { echo "[of-kmm-redeploy] $*"; }
+die() { echo "[of-kmm-redeploy] ERROR: $*" >&2; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LABEL="com.omnifocus-mcp.kmm-server"
+
+[ -n "${TAILSCALE_IP:-}" ] || die "TAILSCALE_IP is required (see install-kmm-server.sh's header)."
+[ -n "${MCP_AUTH_TOKEN:-}" ] || die "MCP_AUTH_TOKEN is required (see install-kmm-server.sh's header)."
+[ -d "$REPO_DIR/.git" ] || die "not a git checkout: $REPO_DIR (set OF_MCP_REPO_DIR)"
+
+cd "$REPO_DIR"
+
+log "git pull --rebase..."
+git pull --rebase
+
+EXPECT_SHA="$(git rev-parse --short HEAD)"
+log "Now at $EXPECT_SHA."
+
+log "npm ci..."
+npm ci
+
+log "npm run build..."
+npm run build
+
+log "Sanity-checking the freshly built artifact (stdio, isolated from the running LaunchAgent)..."
+npx tsx scripts/verify-deploy.ts "$REPO_DIR/dist/index.js" --expect-build "$EXPECT_SHA" \
+  || die "verify-deploy.ts rejected the fresh build (buildId mismatch or stale) — NOT restarting the live server."
+
+log "Restarting the LaunchAgent ($LABEL) and verifying it (auth enforcement + an authenticated request)..."
+# install-kmm-server.sh is idempotent — it (re)generates the plist and
+# reloads whether or not $LABEL is currently loaded, so one call covers both
+# the "already running, needs a restart" and "not loaded yet" cases.
+TAILSCALE_IP="$TAILSCALE_IP" MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN" OF_MCP_REPO_DIR="$REPO_DIR" \
+  "$SCRIPT_DIR/install-kmm-server.sh" --verify
+
+log "Redeploy complete at $EXPECT_SHA."
