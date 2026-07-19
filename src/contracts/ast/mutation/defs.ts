@@ -797,7 +797,7 @@ const PROJECT_STATUS_UPDATE_ENUM: Record<string, string> = {
  * drifted copy of the 'onHold' map; changing only the OnHold spelling would
  * create a THIRD, mixed vocabulary. If this echo ever converges on the wire
  * form, move 'completed'→'done' and the response schema enum in the same
- * change. See Technical/specs/OMN-274-read-path-status-vocabulary.md. */
+ * change. Tracked as OMN-278. See Technical/specs/OMN-274-read-path-status-vocabulary.md. */
 const PROJECT_STATUS_READBACK =
   "proj.status === Project.Status.Active ? 'active' : " +
   "proj.status === Project.Status.OnHold ? 'on_hold' : " +
