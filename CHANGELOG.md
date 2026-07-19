@@ -29,6 +29,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (qwen2.5:7b, OMN-168 re-baseline) now gets an actionable correction instead of
   `Unrecognized key(s) in object: 'data'`.
 
+- **Update `data.changes` nest unwrap** (OMN-277, parent OMN-260) — the recorded llama3.1:8b shape
+  `{"mutation":{"operation":"update","data":{"changes":{...},"id":...}}}` now normalizes: when `changes` is the SOLE
+  residual key inside `data` after the id hoist, it unwraps to the mutation's `changes` (previously the hoist
+  double-wrapped it and the recovery failed). Collision-safe per the established leniency rules: an outer `changes`
+  alongside, or a stray sibling field in `data`, aborts the recovery and the original strict error stands.
+
 - **Readable `sequential` field on tasks** (OMN-207) — `type:"tasks"` queries can now request `sequential` via
   `fields:["sequential"]`, closing the settable-but-not-readable gap left by the write side (OMN-198/206). Reported as
   the raw stored boolean on every task (not conditional on child count): OmniFocus persists `sequential` across

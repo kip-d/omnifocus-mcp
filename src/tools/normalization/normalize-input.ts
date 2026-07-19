@@ -198,6 +198,47 @@ function normalizeArgs(args: unknown, hint: NormalizationHint): { args: unknown;
 }
 
 /**
+ * OMN-277 (leniency #3 extension): route an update's residual `data` fields to
+ * `changes`. The recorded llama3.1:8b shape nests the whole changes object
+ * INSIDE data (`data: { changes: {...}, id }`); mapping that residual to
+ * `changes` verbatim double-wraps it (changes.changes) and strict
+ * re-validation rejects the recovery. Unwrap ONLY the unambiguous shape:
+ * `changes` is the SOLE residual key and a plain object. A stray sibling field
+ * would need inference about where it belongs, and an outer `changes`
+ * alongside is a both-present collision (same rule as aliasMutationFields) —
+ * both return undefined so the recovery aborts and the original strict error
+ * stands.
+ *
+ * The plain (non-nested) residual — leniency #3's original behavior, e.g.
+ * `data: {id, flagged: true}` — is also collision-checked: an outer `changes`
+ * already present must abort the recovery for the same reason, rather than
+ * being silently overwritten by the caller (the OMN-97 anti-pattern the rest
+ * of this function guards against).
+ */
+function routeUpdateResidual(
+  residual: Record<string, unknown>,
+  outerChanges: unknown,
+): Record<string, unknown> | undefined {
+  const keys = Object.keys(residual);
+  // Candidate `changes` value BEFORE the collision check: the nested-unwrap
+  // shape (`changes` is the sole residual key) unwraps to its value; any other
+  // non-`changes`-bearing residual is used verbatim (leniency #3's original
+  // behavior). A residual that mixes `changes` with other keys is unroutable
+  // (no candidate) regardless of collision.
+  let candidate: Record<string, unknown> | undefined;
+  if (keys.length === 1 && keys[0] === 'changes' && isPlainObject(residual.changes)) {
+    candidate = residual.changes;
+  } else if (!keys.includes('changes')) {
+    candidate = residual;
+  }
+  if (candidate === undefined) return undefined;
+  // Single collision gate for every candidate shape: an outer `changes`
+  // already present must abort the recovery, not be silently overwritten
+  // (the OMN-97 anti-pattern the rest of this function guards against).
+  return outerChanges === undefined ? candidate : undefined;
+}
+
+/**
  * Leniency #3 worker: hoist `data.id` to the mutation level on non-create
  * operations. Returns the rewritten mutation, or undefined when the shape
  * doesn't match.
@@ -247,7 +288,9 @@ function hoistDataId(m: Record<string, unknown>): Record<string, unknown> | unde
   // deleted before re-validation ever saw the leftovers.
   if (Object.keys(data).length > 0) {
     if (op === 'update') {
-      newMutation.changes = data;
+      const routed = routeUpdateResidual(data, m.changes);
+      if (routed === undefined) return undefined;
+      newMutation.changes = routed;
     } else if (op === 'complete') {
       Object.assign(newMutation, data);
     } else {

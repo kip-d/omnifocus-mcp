@@ -210,6 +210,92 @@ describe('leniency #3 — data-hoist on non-create mutations (malformed-in → c
   });
 });
 
+describe('leniency #3 extension — update data.changes unwrap (OMN-277)', () => {
+  it('recovers the recorded llama3.1:8b artifact: changes nested inside data (2026-07-08)', () => {
+    // Verbatim shape from the OMN-168 re-baseline that regressed llama to
+    // 18/19: operation present (wrapper intact), but the update payload nests
+    // `changes` INSIDE `data` alongside the id. Pre-OMN-277 the hoist fired
+    // and produced a double-nested changes:{changes:{...}} that strict
+    // re-validation rejected — original error stood.
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          data: { changes: { flagged: true }, id: 'xyz789' },
+          minimalResponse: false,
+          operation: 'update',
+          target: 'task',
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(true);
+    expect(r.applied).toContain('data-hoist-id');
+    expect(r.data).toMatchObject({
+      mutation: { operation: 'update', target: 'task', id: 'xyz789', changes: { flagged: true } },
+    });
+  });
+
+  it('collision-safe: top-level changes AND data.changes both present → recovery aborts', () => {
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          changes: { note: 'outer' },
+          data: { changes: { flagged: true }, id: 'xyz789' },
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
+
+  it('mixed residual (changes nest + stray sibling field) is NOT unwrapped — original error stands', () => {
+    // Guessing where the stray sibling belongs would be inference; the
+    // unwrap fires only when `changes` is the SOLE residual after the id
+    // hoist (the unambiguous recorded shape).
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          data: { changes: { flagged: true }, note: 'stray', id: 'xyz789' },
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
+
+  it('collision-safe on the PLAIN (non-nested) residual too: an outer changes already present must abort, not be silently overwritten', () => {
+    // Pre-existing leniency #3 behavior (data:{id, flagged:true}, no `changes`
+    // key in the residual) must still abort when a top-level `changes` is
+    // already present — routeUpdateResidual's fallback branch used to return
+    // the residual unconditionally, silently clobbering the outer changes
+    // (the OMN-97 anti-pattern) instead of aborting like every other
+    // collision case in this function.
+    const r = parseWithNormalization(
+      WriteSchema,
+      {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          changes: { note: 'outer' },
+          data: { flagged: true, id: 'xyz789' },
+        },
+      },
+      'omnifocus_write',
+    );
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]);
+  });
+});
+
 describe('leniency #4 — mutation-field-alias (OMN-168)', () => {
   it('recovers the recorded qwen complete artifact: root {operation, target_id} (2026-06-12)', () => {
     // Verbatim shape from the OMN-168 ticket: strict error was
