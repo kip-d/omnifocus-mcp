@@ -84,10 +84,12 @@ PATH_VALUE="$(IFS=:; printf '%s' "${brew_dirs[*]}"):/usr/bin:/bin:/usr/sbin:/sbi
 mkdir -p "$LAUNCH_AGENTS" "$(dirname "$LAUNCHD_LOG")"
 # Substituted values: absolute paths, a PATH string, an IP, a port number, and
 # a bearer token. None of these should contain '|' or newlines in normal use,
-# but MCP_AUTH_TOKEN is caller-supplied — reject anything containing the sed
-# delimiter or a literal newline outright rather than let it silently corrupt
-# the generated plist.
-for val in "$TAILSCALE_IP" "$MCP_AUTH_TOKEN" "$PORT"; do
+# but several (MCP_AUTH_TOKEN, TAILSCALE_IP, and REPO_DIR via OF_MCP_REPO_DIR)
+# are caller-supplied — every value that goes through the `s|__X__|...|g`
+# substitution below must be checked, not just the obviously-external ones, or
+# a stray '|' silently truncates that sed expression and either aborts the
+# installer or writes a malformed plist.
+for val in "$NODE_PATH" "$REPO_DIR" "$PORT" "$TAILSCALE_IP" "$MCP_AUTH_TOKEN" "$LAUNCHD_LOG" "$PATH_VALUE"; do
   case "$val" in
     *'|'*|*$'\n'*) die "a substituted value contains '|' or a newline — refusing to generate a possibly-corrupt plist." ;;
   esac
