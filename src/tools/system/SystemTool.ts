@@ -82,7 +82,8 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
     stability: 'stable' as const,
     complexity: 'simple' as const,
     performanceClass: 'fast' as const,
-    tags: ['queries', 'read-only', 'diagnostics', 'system'],
+    // OMN-284: 'read-only' removed — operation:"cache" action:"clear" mutates cache state.
+    tags: ['queries', 'diagnostics', 'system'],
     capabilities: ['version', 'diagnostics', 'metrics', 'health-check'],
 
     // Phase 2: Capability & Performance Documentation
@@ -100,7 +101,14 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
 
   annotations = {
     title: 'System Utilities',
-    readOnlyHint: true,
+    // OMN-284: operation:"cache", cacheAction:"clear" mutates the server's
+    // own cache state (a real, user-directed side effect — unlike a read
+    // tool's incidental cache.set() while serving a query, which is
+    // transparent to the caller and not what readOnlyHint is meant to
+    // flag). No per-operation annotation granularity exists in the MCP
+    // spec, so the tool-level hint must reflect the most permissive
+    // operation a caller could trigger.
+    readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,
