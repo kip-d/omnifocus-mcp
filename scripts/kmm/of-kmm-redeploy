@@ -21,17 +21,33 @@
 #   TAILSCALE_IP, MCP_AUTH_TOKEN
 # Optional:
 #   OF_MCP_REPO_DIR  (default ~/omnifocus-mcp)
+#   OF_MCP_KMM_PORT  (default 3111) — MUST match the port used at install
+#                     time: the redeploy regenerates the plist via
+#                     install-kmm-server.sh, so leaving this unset after a
+#                     custom-port install silently reverts the server to 3111.
 set -euo pipefail
 
-log() { echo "[of-kmm-redeploy] $*"; }
-die() { echo "[of-kmm-redeploy] ERROR: $*" >&2; exit 1; }
+# Resolve symlinks so SCRIPT_DIR is the real scripts/kmm/ directory even when
+# this script is invoked via a PATH symlink (the bare `of-kmm-redeploy`
+# convention) — the lib.sh and install-kmm-server.sh lookups break otherwise.
+# Stays inline (not in lib.sh) because it is what locates lib.sh.
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SCRIPT_SOURCE" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  case "$SCRIPT_SOURCE" in /*) ;; *) SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE" ;; esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OF_KMM_LOG_TAG="of-kmm-redeploy"
+# shellcheck source=scripts/kmm/lib.sh
+. "$SCRIPT_DIR/lib.sh"
+
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 LABEL="com.omnifocus-mcp.kmm-server"
 
-[ -n "${TAILSCALE_IP:-}" ] || die "TAILSCALE_IP is required (see install-kmm-server.sh's header)."
-[ -n "${MCP_AUTH_TOKEN:-}" ] || die "MCP_AUTH_TOKEN is required (see install-kmm-server.sh's header)."
+require_env TAILSCALE_IP
+require_env MCP_AUTH_TOKEN
 [ -d "$REPO_DIR/.git" ] || die "not a git checkout: $REPO_DIR (set OF_MCP_REPO_DIR)"
 
 cd "$REPO_DIR"
@@ -56,7 +72,12 @@ log "Restarting the LaunchAgent ($LABEL) and verifying it (auth enforcement + an
 # install-kmm-server.sh is idempotent — it (re)generates the plist and
 # reloads whether or not $LABEL is currently loaded, so one call covers both
 # the "already running, needs a restart" and "not loaded yet" cases.
+# OF_MCP_KMM_PORT is forwarded explicitly (defaulted to the installer's own
+# default) — without it, a redeploy after a custom-port install would
+# regenerate the plist on 3111 and the --verify probes would "pass" against
+# the wrong port while the intended one goes down.
 TAILSCALE_IP="$TAILSCALE_IP" MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN" OF_MCP_REPO_DIR="$REPO_DIR" \
+  OF_MCP_KMM_PORT="${OF_MCP_KMM_PORT:-3111}" \
   "$SCRIPT_DIR/install-kmm-server.sh" --verify
 
 log "Redeploy complete at $EXPECT_SHA."

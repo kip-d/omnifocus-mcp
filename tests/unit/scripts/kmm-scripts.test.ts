@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,6 +21,7 @@ const FAKE_GOLDEN_DIR = join(tmpdir(), 'of-db-reset-test-fake-golden');
 const OF_DB_RESET = join(REPO_ROOT, 'scripts/kmm/of-db-reset.sh');
 const INSTALL_KMM_SERVER = join(REPO_ROOT, 'scripts/kmm/install-kmm-server.sh');
 const OF_KMM_REDEPLOY = join(REPO_ROOT, 'scripts/kmm/of-kmm-redeploy');
+const KMM_LIB = join(REPO_ROOT, 'scripts/kmm/lib.sh');
 
 function bashSyntaxOk(script: string): boolean {
   try {
@@ -56,6 +57,9 @@ describe('scripts/kmm — syntax', () => {
   });
   it('of-kmm-redeploy has valid bash syntax', () => {
     expect(bashSyntaxOk(OF_KMM_REDEPLOY)).toBe(true);
+  });
+  it('lib.sh has valid bash syntax', () => {
+    expect(bashSyntaxOk(KMM_LIB)).toBe(true);
   });
 });
 
@@ -155,6 +159,128 @@ describe('of-db-reset.sh — set_derived_paths', () => {
       OF_QUIT_TIMEOUT_S: '5',
     });
     expect(stdout.trim()).toBe('5');
+  });
+
+  it('defaults the verify settle knobs (retries, interval)', () => {
+    const { stdout } = sourceAndRun(OF_DB_RESET, 'set_derived_paths; echo "$VERIFY_RETRIES $VERIFY_INTERVAL_S"', {
+      OF_GOLDEN_DIR: FAKE_GOLDEN_DIR,
+    });
+    expect(stdout.trim()).toBe('10 3');
+  });
+
+  it('honors verify settle overrides', () => {
+    const { stdout } = sourceAndRun(OF_DB_RESET, 'set_derived_paths; echo "$VERIFY_RETRIES $VERIFY_INTERVAL_S"', {
+      OF_GOLDEN_DIR: FAKE_GOLDEN_DIR,
+      OF_VERIFY_RETRIES: '2',
+      OF_VERIFY_INTERVAL_S: '1',
+    });
+    expect(stdout.trim()).toBe('2 1');
+  });
+});
+
+describe('of-db-reset.sh — select_extracted_bundle', () => {
+  function withExtractionDir(bundleNames: string[], fn: (dir: string) => void): void {
+    const dir = mkdtempSync(join(tmpdir(), 'of-extract-'));
+    try {
+      for (const name of bundleNames) mkdirSync(join(dir, name));
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('returns the bundle path when exactly one .ofocus bundle exists', () => {
+    withExtractionDir(['golden.ofocus'], (dir) => {
+      const { status, stdout } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe(join(dir, 'golden.ofocus'));
+    });
+  });
+
+  it('dies loudly when no .ofocus bundle exists', () => {
+    withExtractionDir(['not-a-bundle'], (dir) => {
+      const { status, stderr } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
+      expect(status).toBe(1);
+      expect(stderr).toContain('expected exactly one .ofocus bundle');
+      expect(stderr).toContain('found 0');
+    });
+  });
+
+  it('dies loudly (instead of silently picking one) when multiple .ofocus bundles exist', () => {
+    withExtractionDir(['a.ofocus', 'b.ofocus'], (dir) => {
+      const { status, stderr } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
+      expect(status).toBe(1);
+      expect(stderr).toContain('expected exactly one .ofocus bundle');
+      expect(stderr).toContain('found 2');
+    });
+  });
+});
+
+describe('scripts/kmm — PATH-symlink invocation (SCRIPT_DIR symlink resolution)', () => {
+  // The scripts' documented invocation is bare (`ssh kmm of-db-reset`,
+  // `of-kmm-redeploy`), i.e. via a PATH symlink. Reaching each script's own
+  // env-validation die() proves lib.sh was found through the symlink — an
+  // unresolved SCRIPT_DIR would fail earlier, sourcing lib.sh from the
+  // symlink's directory.
+  function viaSymlink(script: string, env: Record<string, string>): { status: number | null; stderr: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'kmm-bin-'));
+    try {
+      const link = join(dir, 'linked-script');
+      symlinkSync(script, link);
+      const result = spawnSync('bash', [link], {
+        env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
+        encoding: 'utf8',
+      });
+      return { status: result.status, stderr: result.stderr };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('of-db-reset.sh finds lib.sh when run via a symlink', () => {
+    const { status, stderr } = viaSymlink(OF_DB_RESET, {});
+    expect(status).toBe(1);
+    expect(stderr).toContain('OF_GOLDEN_DIR is required');
+  });
+
+  it('of-kmm-redeploy finds lib.sh when run via a symlink', () => {
+    const { status, stderr } = viaSymlink(OF_KMM_REDEPLOY, { MCP_AUTH_TOKEN: 'x' });
+    expect(status).toBe(1);
+    expect(stderr).toContain('TAILSCALE_IP is required');
+  });
+
+  it('install-kmm-server.sh finds lib.sh when run via a symlink', () => {
+    const { status, stderr } = viaSymlink(INSTALL_KMM_SERVER, {});
+    expect(status).toBe(1);
+    expect(stderr).toContain('TAILSCALE_IP is required');
+  });
+});
+
+describe('scripts/kmm — regression pins for review findings', () => {
+  it('install-kmm-server.sh --verify curls carry explicit timeouts', () => {
+    // Without --connect-timeout/--max-time, a hung LaunchAgent blocks the
+    // whole redeploy pipeline forever instead of failing loud.
+    const src = readFileSync(INSTALL_KMM_SERVER, 'utf8');
+    expect(src).toContain('--connect-timeout');
+    expect(src).toContain('--max-time');
+    const curls = src.split('\n').filter((l) => l.includes('curl -s'));
+    expect(curls.length).toBeGreaterThanOrEqual(2);
+    for (const line of curls) expect(line).toContain('CURL_TIMEOUT_ARGS');
+  });
+
+  it('of-kmm-redeploy forwards OF_MCP_KMM_PORT to install-kmm-server.sh', () => {
+    // Otherwise a redeploy after a custom-port install silently reverts the
+    // LaunchAgent to the default port 3111.
+    const src = readFileSync(OF_KMM_REDEPLOY, 'utf8');
+    expect(src).toMatch(/OF_MCP_KMM_PORT="\$\{OF_MCP_KMM_PORT:-3111\}"/);
+  });
+
+  it('of-db-reset.sh restore never rm -rfs the live container before the replacement lands', () => {
+    // Move-aside pattern: the only rm -rf of the container path targets the
+    // .pre-reset move-aside copy, after the golden mv has succeeded.
+    const src = readFileSync(OF_DB_RESET, 'utf8');
+    expect(src).not.toMatch(/rm -rf "\$\{?OF_CONTAINER_PATH/);
+    expect(src).toContain('.pre-reset.');
   });
 });
 

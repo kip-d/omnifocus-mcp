@@ -44,17 +44,25 @@
 #   OF_QUIT_TIMEOUT_S     Seconds to wait for graceful quit before pkill (default: 15)
 #   OF_RELAUNCH_RETRIES   Poll attempts waiting for the relaunched doc to answer (default: 30)
 #   OF_RELAUNCH_INTERVAL_S  Seconds between relaunch poll attempts (default: 2)
+#   OF_VERIFY_RETRIES     Count-read attempts before a mismatch is treated as real (default: 10)
+#   OF_VERIFY_INTERVAL_S  Seconds between count-read attempts (default: 3)
 set -euo pipefail
 
-log() { echo "[of-db-reset] $*"; }
-die() { echo "[of-db-reset] ERROR: $*" >&2; exit 1; }
+# Resolve symlinks so SCRIPT_DIR is the real scripts/kmm/ directory even when
+# this script is invoked via a PATH symlink (the `ssh kmm of-db-reset`
+# convention) — the lib.sh lookup below breaks otherwise. This bootstrap
+# stays inline (not in lib.sh) because it is what locates lib.sh.
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SCRIPT_SOURCE" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  case "$SCRIPT_SOURCE" in /*) ;; *) SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE" ;; esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 
-require_env() {
-  local name="$1"
-  if [ -z "${!name:-}" ]; then
-    die "$name is required and not set. See this script's header for what it must be."
-  fi
-}
+OF_KMM_LOG_TAG="of-db-reset"
+# shellcheck source=scripts/kmm/lib.sh
+. "$SCRIPT_DIR/lib.sh"
 
 # Sets GOLDEN_ZIP/PROVENANCE/timing globals from env vars, applying defaults.
 # Split from validate_inputs so a test can construct paths without also
@@ -66,6 +74,8 @@ set_derived_paths() {
   QUIT_TIMEOUT_S="${OF_QUIT_TIMEOUT_S:-15}"
   RELAUNCH_RETRIES="${OF_RELAUNCH_RETRIES:-30}"
   RELAUNCH_INTERVAL_S="${OF_RELAUNCH_INTERVAL_S:-2}"
+  VERIFY_RETRIES="${OF_VERIFY_RETRIES:-10}"
+  VERIFY_INTERVAL_S="${OF_VERIFY_INTERVAL_S:-3}"
 }
 
 # Required env vars + required-file existence checks. Kept as its own
@@ -103,6 +113,19 @@ quit_omnifocus() {
   log "OmniFocus quit confirmed."
 }
 
+# Picks the single top-level .ofocus bundle inside the extraction dir ($1).
+# Fails loud on zero OR multiple matches — find's ordering is unspecified, so
+# silently taking the first of several bundles could restore the wrong
+# database (the exact guess-wrong-silently failure the OF_CONTAINER_PATH
+# handling above refuses to risk).
+select_extracted_bundle() {
+  local dir="$1" matches count
+  matches="$(find "$dir" -maxdepth 1 -name '*.ofocus')"
+  count="$(printf '%s' "$matches" | grep -c '^' || true)"
+  [ "$count" -eq 1 ] || die "expected exactly one .ofocus bundle at the top level of the golden zip, found $count"
+  printf '%s\n' "$matches"
+}
+
 # --- Step 2: unzip golden snapshot, restore over the container path -----------
 restore_golden() {
   log "Restoring golden snapshot from $GOLDEN_ZIP ..."
@@ -118,18 +141,35 @@ restore_golden() {
   unzip -q "$GOLDEN_ZIP" -d "$tmp_dir" || die "failed to unzip $GOLDEN_ZIP"
 
   local extracted
-  extracted="$(find "$tmp_dir" -maxdepth 1 -name '*.ofocus' | head -n 1)"
-  [ -n "$extracted" ] || die "no .ofocus bundle found inside $GOLDEN_ZIP (expected exactly one at the zip's top level)"
+  extracted="$(select_extracted_bundle "$tmp_dir")"
 
   # The golden copy is stored zipped and is never modified in place (spec
   # §2) — we operate on the freshly extracted copy in $tmp_dir, never the
   # archive itself, so a failed restore never corrupts the golden source.
+  #
+  # Move-aside, not rm -rf: destroying the live container before the
+  # replacement mv is confirmed would leave NO database at all if the mv
+  # fails (disk full, permissions). Instead the old container is renamed
+  # aside first, restored on mv failure, and deleted only after success.
+  local old_container=""
   if [ -e "$OF_CONTAINER_PATH" ]; then
-    log "Removing existing container contents at $OF_CONTAINER_PATH ..."
-    rm -rf "${OF_CONTAINER_PATH:?}"
+    old_container="${OF_CONTAINER_PATH}.pre-reset.$$"
+    log "Moving existing container aside to $old_container ..."
+    mv "$OF_CONTAINER_PATH" "$old_container" \
+      || die "failed to move the existing container aside — live database left untouched at $OF_CONTAINER_PATH."
   fi
   mkdir -p "$(dirname "$OF_CONTAINER_PATH")"
-  mv "$extracted" "$OF_CONTAINER_PATH"
+  if ! mv "$extracted" "$OF_CONTAINER_PATH"; then
+    if [ -n "$old_container" ]; then
+      mv "$old_container" "$OF_CONTAINER_PATH" \
+        || die "failed to move the golden snapshot into place AND rollback failed — pre-reset database is at $old_container, container path is empty. Manual intervention required."
+      die "failed to move the golden snapshot into place — pre-reset database rolled back to $OF_CONTAINER_PATH."
+    fi
+    die "failed to move the golden snapshot into place at $OF_CONTAINER_PATH."
+  fi
+  if [ -n "$old_container" ]; then
+    rm -rf "$old_container"
+  fi
   log "Golden snapshot restored to $OF_CONTAINER_PATH."
 }
 
@@ -168,12 +208,9 @@ parse_provenance_count() {
   echo "$value"
 }
 
-verify_counts() {
-  log "Verifying restored counts against PROVENANCE.md..."
-  local expected_tasks expected_projects actual_tasks actual_projects
-  expected_tasks="$(parse_provenance_count tasks)"
-  expected_projects="$(parse_provenance_count projects)"
-
+# Reads "tasks projects" from the live OmniFocus document via JXA. Returns
+# non-zero if OmniFocus doesn't answer or emits non-JSON.
+read_live_counts() {
   local counts_json
   counts_json="$(osascript -l JavaScript -e '
     (function () {
@@ -183,29 +220,47 @@ verify_counts() {
       const projects = doc.flattenedProjects().length;
       return JSON.stringify({ tasks: tasks, projects: projects });
     })();
-  ')" || die "failed to read task/project counts from OmniFocus via JXA"
-
-  local counts_pair
-  counts_pair="$(echo "$counts_json" | node -e '
+  ')" || return 1
+  echo "$counts_json" | node -e '
     const c = JSON.parse(require("fs").readFileSync(0, "utf8"));
     process.stdout.write(c.tasks + " " + c.projects);
-  ')"
-  read -r actual_tasks actual_projects <<< "$counts_pair"
+  '
+}
 
-  local mismatch=0
-  if [ "$actual_tasks" != "$expected_tasks" ]; then
-    echo "[of-db-reset] MISMATCH: tasks expected=$expected_tasks actual=$actual_tasks" >&2
-    mismatch=1
-  fi
-  if [ "$actual_projects" != "$expected_projects" ]; then
-    echo "[of-db-reset] MISMATCH: projects expected=$expected_projects actual=$actual_projects" >&2
-    mismatch=1
-  fi
+verify_counts() {
+  log "Verifying restored counts against PROVENANCE.md..."
+  local expected_tasks expected_projects actual_tasks actual_projects
+  expected_tasks="$(parse_provenance_count tasks)"
+  expected_projects="$(parse_provenance_count projects)"
 
-  if [ "$mismatch" -ne 0 ]; then
-    die "restored database does not match PROVENANCE.md — the restore may have failed or the golden snapshot is stale."
-  fi
-  log "Verified: tasks=$actual_tasks projects=$actual_projects (matches PROVENANCE.md)."
+  # OmniFocus can answer the relaunch JXA ping while still loading/indexing
+  # the freshly restored document, so the first count read may see a partial
+  # tree. Retry until the counts match PROVENANCE.md or the budget runs out —
+  # only a mismatch that persists across all attempts is treated as real.
+  local attempt=1 counts_pair
+  while :; do
+    counts_pair="$(read_live_counts)" || die "failed to read task/project counts from OmniFocus via JXA"
+    read -r actual_tasks actual_projects <<< "$counts_pair"
+
+    if [ "$actual_tasks" = "$expected_tasks" ] && [ "$actual_projects" = "$expected_projects" ]; then
+      log "Verified: tasks=$actual_tasks projects=$actual_projects (matches PROVENANCE.md, attempt $attempt/$VERIFY_RETRIES)."
+      return 0
+    fi
+
+    if [ "$attempt" -ge "$VERIFY_RETRIES" ]; then
+      if [ "$actual_tasks" != "$expected_tasks" ]; then
+        echo "[of-db-reset] MISMATCH: tasks expected=$expected_tasks actual=$actual_tasks" >&2
+      fi
+      if [ "$actual_projects" != "$expected_projects" ]; then
+        echo "[of-db-reset] MISMATCH: projects expected=$expected_projects actual=$actual_projects" >&2
+      fi
+      die "restored database does not match PROVENANCE.md after $VERIFY_RETRIES reads (${VERIFY_INTERVAL_S}s apart) — the restore may have failed or the golden snapshot is stale."
+    fi
+
+    log "Counts not settled yet (tasks=$actual_tasks/$expected_tasks projects=$actual_projects/$expected_projects) — retrying in ${VERIFY_INTERVAL_S}s (attempt $attempt/$VERIFY_RETRIES)."
+    attempt=$((attempt + 1))
+    sleep "$VERIFY_INTERVAL_S"
+  done
 }
 
 main() {

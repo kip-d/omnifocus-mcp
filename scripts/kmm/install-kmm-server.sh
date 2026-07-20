@@ -29,10 +29,21 @@
 #   OF_MCP_KMM_PORT  (default 3111)              HTTP port
 set -euo pipefail
 
-log() { echo "[install-kmm-server] $*"; }
-die() { echo "[install-kmm-server] ERROR: $*" >&2; exit 1; }
+# Resolve symlinks so SCRIPT_DIR is the real scripts/kmm/ directory even when
+# this script is invoked via a PATH symlink — the lib.sh and plist-template
+# lookups below break otherwise. Stays inline (not in lib.sh) because it is
+# what locates lib.sh.
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SCRIPT_SOURCE" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  case "$SCRIPT_SOURCE" in /*) ;; *) SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE" ;; esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OF_KMM_LOG_TAG="install-kmm-server"
+# shellcheck source=scripts/kmm/lib.sh
+. "$SCRIPT_DIR/lib.sh"
 LABEL="com.omnifocus-mcp.kmm-server"
 PLIST_NAME="$LABEL.plist"
 TEMPLATE="$SCRIPT_DIR/$PLIST_NAME.template"
@@ -70,8 +81,8 @@ case "${1:-}" in
      exit 2 ;;
 esac
 
-[ -n "${TAILSCALE_IP:-}" ] || die "TAILSCALE_IP is required. See this script's header."
-[ -n "${MCP_AUTH_TOKEN:-}" ] || die "MCP_AUTH_TOKEN is required. See this script's header."
+require_env TAILSCALE_IP
+require_env MCP_AUTH_TOKEN
 [ -d "$REPO_DIR" ] || die "repo checkout not found: $REPO_DIR (set OF_MCP_REPO_DIR)"
 [ -f "$REPO_DIR/dist/index.js" ] || die "$REPO_DIR/dist/index.js not found — run 'npm run build' in $REPO_DIR first"
 
@@ -147,8 +158,14 @@ if [ "$MODE" = "verify" ]; then
   # 1. Confirm auth is actually enforced — a missing/blank MCP_AUTH_TOKEN
   #    silently disables auth entirely (OMN-236), so this is the one check
   #    that catches that specific footgun rather than just "server answers".
+  # Both curls carry explicit timeouts: without them, a LaunchAgent that
+  # failed to bind (port conflict) or hung after bootstrap leaves curl
+  # waiting forever — hanging the whole of-kmm-redeploy pipeline instead of
+  # failing loud through the diagnostics below.
+  CURL_TIMEOUT_ARGS=(--connect-timeout 5 --max-time 30)
+
   log "  Checking unauthenticated requests are rejected..."
-  unauth_status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL" \
+  unauth_status="$(curl -s "${CURL_TIMEOUT_ARGS[@]}" -o /dev/null -w '%{http_code}' -X POST "$BASE_URL" \
     -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' || echo "000")"
   if [ "$unauth_status" != "401" ]; then
@@ -165,7 +182,7 @@ if [ "$MODE" = "verify" ]; then
   # curl failing (e.g. connection refused) would otherwise kill the script
   # here under set -e before the diagnostic checks below can report it —
   # `|| true` lets an empty $auth_response fall through to those checks.
-  auth_response="$(curl -s -X POST "$BASE_URL" \
+  auth_response="$(curl -s "${CURL_TIMEOUT_ARGS[@]}" -X POST "$BASE_URL" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"install-kmm-server-verify","version":"1.0.0"}}}' || true)"
