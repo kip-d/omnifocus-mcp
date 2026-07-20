@@ -502,6 +502,23 @@ describe('of-kmm-redeploy — env validation', () => {
     expect(stderr).toContain('MCP_AUTH_TOKEN is required');
   });
 
+  it('accepts a git WORKTREE checkout (.git is a file, not a directory)', () => {
+    const worktreeLikeDir = mkdtempSync(join(tmpdir(), 'worktree-like-'));
+    try {
+      writeFileSync(join(worktreeLikeDir, '.git'), 'gitdir: /nonexistent/main/.git/worktrees/x\n');
+      const { stderr } = spawnScript(OF_KMM_REDEPLOY, [], {
+        TAILSCALE_IP: 'kmm-test-host.example',
+        MCP_AUTH_TOKEN: 'x',
+        OF_MCP_REPO_DIR: worktreeLikeDir,
+      });
+      // The script fails later (the gitdir pointer is fake), but it must get
+      // PAST the checkout check — a worktree is a valid git checkout.
+      expect(stderr).not.toContain('not a git checkout');
+    } finally {
+      rmSync(worktreeLikeDir, { recursive: true, force: true });
+    }
+  });
+
   it('dies loudly when OF_MCP_REPO_DIR is not a git checkout', () => {
     const notAGitDir = mkdtempSync(join(tmpdir(), 'not-git-'));
     try {

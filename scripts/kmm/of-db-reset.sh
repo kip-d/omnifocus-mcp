@@ -222,21 +222,19 @@ parse_provenance_count() {
 }
 
 # Reads "tasks projects" from the live OmniFocus document via JXA. Returns
-# non-zero if OmniFocus doesn't answer or emits non-JSON.
+# non-zero if OmniFocus doesn't answer. Deliberately emits a plain
+# space-separated pair straight from JXA — no node/JSON round-trip — so this
+# script's only runtime dependency is /usr/bin/osascript, which is always on
+# PATH. A `node` dependency here would hit the launchd/non-interactive-SSH
+# PATH footgun (Homebrew bin dirs absent → exit 127) AFTER the destructive
+# restore has already happened, misreporting a successful reset as a failure.
 read_live_counts() {
-  local counts_json
-  counts_json="$(osascript -l JavaScript -e '
+  osascript -l JavaScript -e '
     (function () {
       const app = Application("OmniFocus");
       const doc = app.defaultDocument;
-      const tasks = doc.flattenedTasks().length;
-      const projects = doc.flattenedProjects().length;
-      return JSON.stringify({ tasks: tasks, projects: projects });
+      return doc.flattenedTasks().length + " " + doc.flattenedProjects().length;
     })();
-  ')" || return 1
-  echo "$counts_json" | node -e '
-    const c = JSON.parse(require("fs").readFileSync(0, "utf8"));
-    process.stdout.write(c.tasks + " " + c.projects);
   '
 }
 

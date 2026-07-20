@@ -87,6 +87,10 @@ require_env MCP_AUTH_TOKEN
 [ -f "$REPO_DIR/dist/index.js" ] || die "$REPO_DIR/dist/index.js not found — run 'npm run build' in $REPO_DIR first"
 
 # --- Detect Homebrew bin dir(s) and the node binary ---------------------------
+# Deliberately MIRRORS (not shares) scripts/ops/install-diagnose-schedule.sh's
+# detection loop: extracting a cross-directory lib for two consumers in
+# different script families would couple scripts/kmm to scripts/ops for ~6
+# lines. Revisit if a third consumer appears.
 brew_dirs=()
 for d in /opt/homebrew/bin /usr/local/bin; do
   [ -x "$d/node" ] && brew_dirs+=("$d")
@@ -141,6 +145,9 @@ log "Installed plist   → $PLIST_DEST (mode 600, contains MCP_AUTH_TOKEN)"
 log "  node = $NODE_PATH, repo = $REPO_DIR, http://$TAILSCALE_IP:$PORT"
 
 # --- (Re)load the job ------------------------------------------------------------
+# bootout is async — poll until the old job is gone, then bootstrap with one
+# retry. Deliberately MIRRORS (not shares) install-diagnose-schedule.sh's
+# sequence — same cross-family-lib tradeoff as the Homebrew detection above.
 launchctl bootout "$GUI/$LABEL" 2>/dev/null || true
 for _ in $(seq 1 10); do
   launchctl print "$GUI/$LABEL" >/dev/null 2>&1 || break

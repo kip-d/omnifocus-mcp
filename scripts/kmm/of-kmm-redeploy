@@ -48,7 +48,10 @@ LABEL="com.omnifocus-mcp.kmm-server"
 
 require_env TAILSCALE_IP
 require_env MCP_AUTH_TOKEN
-[ -d "$REPO_DIR/.git" ] || die "not a git checkout: $REPO_DIR (set OF_MCP_REPO_DIR)"
+# -e, not -d: a git WORKTREE checkout's .git is a plain file ("gitdir: ..."),
+# and this repo's dev workflow leans on worktrees — rejecting them would
+# block redeploys against a perfectly valid checkout.
+[ -e "$REPO_DIR/.git" ] || die "not a git checkout: $REPO_DIR (set OF_MCP_REPO_DIR)"
 
 cd "$REPO_DIR"
 
