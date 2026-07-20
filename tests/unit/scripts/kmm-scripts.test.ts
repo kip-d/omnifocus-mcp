@@ -178,6 +178,71 @@ describe('of-db-reset.sh — set_derived_paths', () => {
   });
 });
 
+describe('of-db-reset.sh — verify_counts retry behavior (stubbed read_live_counts)', () => {
+  // verify_counts must treat a FAILED count read the same as an unsettled
+  // count — consume retry budget, not die on the first throw — because
+  // flattenedTasks() can still throw while OmniFocus indexes the freshly
+  // restored document. Stubbing read_live_counts after sourcing exercises
+  // the loop without a live OmniFocus.
+  function withProvenanceAndStub(stub: string, fn: (dir: string) => void): void {
+    const dir = mkdtempSync(join(tmpdir(), 'verify-counts-'));
+    try {
+      writeFileSync(join(dir, 'PROVENANCE.md'), 'tasks: 10\nprojects: 2\n');
+      writeFileSync(join(dir, 'stub.sh'), stub);
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('retries when the count read fails, then succeeds once it answers', () => {
+    withProvenanceAndStub(
+      // Fails on the first call, answers with matching counts on the second.
+      `read_live_counts() {
+        local n; n="$(cat "$STATE_FILE")"; n=$((n + 1)); echo "$n" > "$STATE_FILE"
+        [ "$n" -ge 2 ] || return 1
+        echo "10 2"
+      }`,
+      (dir) => {
+        writeFileSync(join(dir, 'state'), '0');
+        const { status, stdout } = sourceAndRun(
+          OF_DB_RESET,
+          `source "${join(dir, 'stub.sh')}"; STATE_FILE="${join(dir, 'state')}"; ` +
+            `PROVENANCE="${join(dir, 'PROVENANCE.md')}"; VERIFY_RETRIES=3; VERIFY_INTERVAL_S=0; verify_counts`,
+        );
+        expect(status).toBe(0);
+        expect(stdout).toContain('Count read failed');
+        expect(stdout).toContain('Verified: tasks=10 projects=2');
+      },
+    );
+  });
+
+  it('dies only after the retry budget is exhausted when reads keep failing', () => {
+    withProvenanceAndStub(`read_live_counts() { return 1; }`, (dir) => {
+      const { status, stderr } = sourceAndRun(
+        OF_DB_RESET,
+        `source "${join(dir, 'stub.sh')}"; PROVENANCE="${join(dir, 'PROVENANCE.md')}"; ` +
+          `VERIFY_RETRIES=2; VERIFY_INTERVAL_S=0; verify_counts`,
+      );
+      expect(status).toBe(1);
+      expect(stderr).toContain('after 2 attempts');
+    });
+  });
+
+  it('dies with MISMATCH details after retries when counts stay wrong', () => {
+    withProvenanceAndStub(`read_live_counts() { echo "9 2"; }`, (dir) => {
+      const { status, stderr } = sourceAndRun(
+        OF_DB_RESET,
+        `source "${join(dir, 'stub.sh')}"; PROVENANCE="${join(dir, 'PROVENANCE.md')}"; ` +
+          `VERIFY_RETRIES=2; VERIFY_INTERVAL_S=0; verify_counts`,
+      );
+      expect(status).toBe(1);
+      expect(stderr).toContain('MISMATCH: tasks expected=10 actual=9');
+      expect(stderr).toContain('does not match PROVENANCE.md after 2 reads');
+    });
+  });
+});
+
 describe('of-db-reset.sh — select_extracted_bundle', () => {
   function withExtractionDir(bundleNames: string[], fn: (dir: string) => void): void {
     const dir = mkdtempSync(join(tmpdir(), 'of-extract-'));
@@ -320,6 +385,28 @@ describe('of-db-reset.sh — parse_provenance_count', () => {
     withProvenance('# Golden DB provenance\nexport date: 2026-07-19\ntasks: 5\n', (dir) => {
       const { stdout } = sourceAndRun(OF_DB_RESET, `PROVENANCE="${dir}/PROVENANCE.md"; parse_provenance_count tasks`);
       expect(stdout.trim()).toBe('5');
+    });
+  });
+
+  it('tolerates trailing whitespace after the value', () => {
+    withProvenance('tasks: 1523   \nprojects: 87\n', (dir) => {
+      const { status, stdout } = sourceAndRun(
+        OF_DB_RESET,
+        `PROVENANCE="${dir}/PROVENANCE.md"; parse_provenance_count tasks`,
+      );
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe('1523');
+    });
+  });
+
+  it('tolerates CRLF line endings', () => {
+    withProvenance('tasks: 1523\r\nprojects: 87\r\n', (dir) => {
+      const { status, stdout } = sourceAndRun(
+        OF_DB_RESET,
+        `PROVENANCE="${dir}/PROVENANCE.md"; parse_provenance_count projects`,
+      );
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe('87');
     });
   });
 

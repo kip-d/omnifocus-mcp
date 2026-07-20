@@ -202,7 +202,10 @@ parse_provenance_count() {
   # grep exits 1 when the key is absent, which under pipefail + set -e would
   # kill the script here instead of reaching the die() below that reports it
   # properly — the `|| true` defers that check to the explicit -n test.
-  value="$(grep -E "^${key}:" "$PROVENANCE" | head -n 1 | sed -E "s/^${key}:[[:space:]]*//" || true)"
+  # Trailing [[:space:]] strip covers trailing spaces AND a CR from a
+  # CRLF-terminated PROVENANCE.md (grep keeps the \r; POSIX [[:space:]]
+  # includes it) — otherwise "tasks: 1523\r" fails the integer check below.
+  value="$(grep -E "^${key}:" "$PROVENANCE" | head -n 1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*\$//" || true)"
   [ -n "$value" ] || die "PROVENANCE.md has no '$key:' line (checked $PROVENANCE)"
   [[ "$value" =~ ^[0-9]+$ ]] || die "PROVENANCE.md's '$key:' value is not a plain integer: '$value'"
   echo "$value"
@@ -239,7 +242,18 @@ verify_counts() {
   # only a mismatch that persists across all attempts is treated as real.
   local attempt=1 counts_pair
   while :; do
-    counts_pair="$(read_live_counts)" || die "failed to read task/project counts from OmniFocus via JXA"
+    # A failed read consumes retry budget instead of dying outright — right
+    # after relaunch, flattenedTasks()/flattenedProjects() can throw while
+    # OmniFocus is still indexing, even though the relaunch ping succeeded.
+    if ! counts_pair="$(read_live_counts)"; then
+      if [ "$attempt" -ge "$VERIFY_RETRIES" ]; then
+        die "failed to read task/project counts from OmniFocus via JXA after $VERIFY_RETRIES attempts (${VERIFY_INTERVAL_S}s apart)."
+      fi
+      log "Count read failed (OmniFocus may still be loading) — retrying in ${VERIFY_INTERVAL_S}s (attempt $attempt/$VERIFY_RETRIES)."
+      attempt=$((attempt + 1))
+      sleep "$VERIFY_INTERVAL_S"
+      continue
+    fi
     read -r actual_tasks actual_projects <<< "$counts_pair"
 
     if [ "$actual_tasks" = "$expected_tasks" ] && [ "$actual_projects" = "$expected_projects" ]; then
