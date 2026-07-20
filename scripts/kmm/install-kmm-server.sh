@@ -54,7 +54,7 @@ LAUNCHD_LOG="$HOME/.omnifocus-mcp/kmm-server-launchd.log"
 GUI="gui/$(id -u)"
 
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
-PORT="${OF_MCP_KMM_PORT:-3111}"
+PORT="${OF_MCP_KMM_PORT:-$OF_KMM_DEFAULT_PORT}"
 
 uninstall() {
   log "Unloading $LABEL ..."
@@ -146,19 +146,33 @@ log "Loaded job $LABEL (RunAtLoad + KeepAlive)."
 
 # --- Optional verification ---------------------------------------------------
 if [ "$MODE" = "verify" ]; then
-  log "Verifying: waiting for the server to come up..."
-  sleep 3
   BASE_URL="http://$TAILSCALE_IP:$PORT/mcp"
 
-  # 1. Confirm auth is actually enforced — a missing/blank MCP_AUTH_TOKEN
-  #    silently disables auth entirely (OMN-236), so this is the one check
-  #    that catches that specific footgun rather than just "server answers".
-  # Both curls carry explicit timeouts: without them, a LaunchAgent that
+  # All curls carry explicit timeouts: without them, a LaunchAgent that
   # failed to bind (port conflict) or hung after bootstrap leaves curl
   # waiting forever — hanging the whole of-kmm-redeploy pipeline instead of
   # failing loud through the diagnostics below.
   CURL_TIMEOUT_ARGS=(--connect-timeout 5 --max-time 30)
 
+  # Poll until the server answers rather than a fixed sleep — a cold start
+  # right after npm ci + build under load can exceed any fixed delay, and a
+  # false verify failure aborts the whole of-kmm-redeploy run. Any HTTP
+  # status (401/404/405/...) means the port is listening; 000 = not yet.
+  log "Verifying: waiting for the server to come up..."
+  server_up=""
+  for _ in $(seq 1 15); do
+    probe_status="$(curl -s "${CURL_TIMEOUT_ARGS[@]}" -o /dev/null -w '%{http_code}' "$BASE_URL" || echo "000")"
+    if [ "$probe_status" != "000" ]; then
+      server_up=1
+      break
+    fi
+    sleep 1
+  done
+  [ -n "$server_up" ] || die "server did not answer at $BASE_URL within 15s of bootstrap — check the launchd log: $LAUNCHD_LOG"
+
+  # 1. Confirm auth is actually enforced — a missing/blank MCP_AUTH_TOKEN
+  #    silently disables auth entirely (OMN-236), so this is the one check
+  #    that catches that specific footgun rather than just "server answers".
   log "  Checking unauthenticated requests are rejected..."
   unauth_status="$(curl -s "${CURL_TIMEOUT_ARGS[@]}" -o /dev/null -w '%{http_code}' -X POST "$BASE_URL" \
     -H 'Content-Type: application/json' \

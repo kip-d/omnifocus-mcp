@@ -80,7 +80,7 @@ log "Restarting the LaunchAgent ($LABEL) and verifying it (auth enforcement + an
 # regenerate the plist on 3111 and the --verify probes would "pass" against
 # the wrong port while the intended one goes down.
 TAILSCALE_IP="$TAILSCALE_IP" MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN" OF_MCP_REPO_DIR="$REPO_DIR" \
-  OF_MCP_KMM_PORT="${OF_MCP_KMM_PORT:-3111}" \
+  OF_MCP_KMM_PORT="${OF_MCP_KMM_PORT:-$OF_KMM_DEFAULT_PORT}" \
   "$SCRIPT_DIR/install-kmm-server.sh" --verify
 
 log "Redeploy complete at $EXPECT_SHA."

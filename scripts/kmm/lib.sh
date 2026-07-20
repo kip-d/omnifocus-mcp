@@ -7,6 +7,12 @@
 # so that loop is the one piece of boilerplate that cannot live here.
 # shellcheck shell=bash
 
+# Single source of truth for the KMM server's default HTTP port — both the
+# installer's plist generation and of-kmm-redeploy's env forwarding default
+# to this; a drift between two literals would recreate the silent-port-
+# mismatch bug one layer up.
+OF_KMM_DEFAULT_PORT=3111
+
 log() { echo "[${OF_KMM_LOG_TAG:-kmm}] $*"; }
 die() { echo "[${OF_KMM_LOG_TAG:-kmm}] ERROR: $*" >&2; exit 1; }
 

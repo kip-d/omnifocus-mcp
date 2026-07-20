@@ -386,7 +386,11 @@ describe('scripts/kmm — regression pins for review findings', () => {
     // Otherwise a redeploy after a custom-port install silently reverts the
     // LaunchAgent to the default port 3111.
     const src = readFileSync(OF_KMM_REDEPLOY, 'utf8');
-    expect(src).toMatch(/OF_MCP_KMM_PORT="\$\{OF_MCP_KMM_PORT:-3111\}"/);
+    // Both sides default via lib.sh's OF_KMM_DEFAULT_PORT — a literal port
+    // here would reintroduce the two-files-one-default drift hazard.
+    expect(src).toMatch(/OF_MCP_KMM_PORT="\$\{OF_MCP_KMM_PORT:-\$OF_KMM_DEFAULT_PORT\}"/);
+    expect(readFileSync(INSTALL_KMM_SERVER, 'utf8')).toContain('${OF_MCP_KMM_PORT:-$OF_KMM_DEFAULT_PORT}');
+    expect(readFileSync(KMM_LIB, 'utf8')).toMatch(/^OF_KMM_DEFAULT_PORT=\d+$/m);
   });
 
   it('of-db-reset.sh restore never destroys the live database before the replacement lands', () => {
