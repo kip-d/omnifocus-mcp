@@ -123,17 +123,28 @@ async function getSandboxFolderId(): Promise<string | null> {
 const validatedProjectIds = new Set<string>();
 
 /**
+ * OMN-286: tri-state sandbox check. The bridge script has always distinguished
+ * "project not found" from "found but outside the sandbox"; the old boolean
+ * return collapsed them, which made guarded batch routes abort whole
+ * continue-on-error batches on a bogus id. Callers decide per-site what
+ * not_found means (the id-addressed mutation guards pass it through to the
+ * script's own strict-byIdentifier error row; the create-into-project guard
+ * stays fail-closed — see each site).
+ */
+type SandboxCheck = 'in_sandbox' | 'outside_sandbox' | 'not_found';
+
+/**
  * Check if a project is inside the sandbox folder
  * Uses O(1) Project.byIdentifier via OmniJS bridge instead of O(n) iteration
  */
-async function isProjectInSandbox(projectId: string): Promise<boolean> {
+async function isProjectInSandbox(projectId: string): Promise<SandboxCheck> {
   // Fast path: already validated this project
   if (validatedProjectIds.has(projectId)) {
-    return true;
+    return 'in_sandbox';
   }
 
   const sandboxId = await getSandboxFolderId();
-  if (!sandboxId) return false;
+  if (!sandboxId) return 'outside_sandbox';
 
   // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
   const script = `
@@ -162,13 +173,16 @@ async function isProjectInSandbox(projectId: string): Promise<boolean> {
   `;
 
   try {
-    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
     if (result.inSandbox) {
       validatedProjectIds.add(projectId);
+      return 'in_sandbox';
     }
-    return result.inSandbox;
+    return result.error === 'not_found' ? 'not_found' : 'outside_sandbox';
   } catch {
-    return false;
+    // Bridge failure fails CLOSED: an unverifiable project must never be
+    // treated as merely not-found (which some callers pass through).
+    return 'outside_sandbox';
   }
 }
 
@@ -291,8 +305,12 @@ export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   }
   // Case 2: Task in project - validate project is in sandbox
   else if (data.project) {
-    const inSandbox = await isProjectInSandbox(data.project);
-    if (!inSandbox) {
+    // OMN-286: deliberately fail-closed on not_found here, unlike the
+    // id-addressed mutation guards. Create resolves `project` by NAME as well
+    // as id in the real script, so a not-found-BY-ID value could still
+    // resolve by name to a project OUTSIDE the sandbox and write there.
+    const check = await isProjectInSandbox(data.project);
+    if (check !== 'in_sandbox') {
       throw new Error(
         `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
           `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
@@ -397,13 +415,21 @@ export async function validateTaskInSandbox(taskId: string, operation: string): 
 }
 
 /**
- * Validate that a project update/delete is on a project inside the sandbox
+ * Validate that a project update/delete is on a project inside the sandbox.
+ *
+ * OMN-286: a NOT-FOUND id passes through without throwing. These routes lower
+ * with strict Project.byIdentifier (no name fallback), so a not-found id
+ * writes nothing — the script's own continue-on-error reports it as an error
+ * row, exactly as in production (unguarded) runs. Aborting the whole batch on
+ * it provided no safety and broke the documented partition in guarded
+ * integration runs. Found-but-outside-sandbox still throws; so does any
+ * bridge failure (fails closed as 'outside_sandbox').
  */
 export async function validateProjectInSandbox(projectId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
-  const inSandbox = await isProjectInSandbox(projectId);
-  if (!inSandbox) {
+  const check = await isProjectInSandbox(projectId);
+  if (check === 'outside_sandbox') {
     throw new Error(
       `TEST GUARD: Cannot ${operation} project "${projectId}" outside sandbox. ` +
         `Project must be inside "${SANDBOX_FOLDER_NAME}" folder.`,
