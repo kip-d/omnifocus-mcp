@@ -59,39 +59,9 @@ export interface ProductivityStatsData {
 }
 
 // Velocity metrics
-export interface VelocityMetrics {
-  daily?: number;
-  weekly?: number;
-  monthly?: number;
-  trend?: string;
-}
-
 // Trend data points
-export interface TrendData {
-  date: string;
-  value: number;
-  period?: string;
-}
-
 // Prediction data
-export interface PredictionData {
-  nextWeek?: number;
-  nextMonth?: number;
-  confidence?: number;
-}
-
 // Task velocity script response
-export interface TaskVelocityData {
-  velocity: VelocityMetrics;
-  trends: TrendData[];
-  predictions: PredictionData;
-  summary?: {
-    currentVelocity: number;
-    previousVelocity: number;
-    percentageChange: number;
-  };
-}
-
 // Workflow pattern
 export interface Pattern {
   type: string;
@@ -150,26 +120,6 @@ export interface TaskCreationArgs {
   tags?: string[];
   sequential?: boolean;
   repeatRule?: RepeatRule;
-}
-
-export interface TaskUpdateArgs {
-  taskId: string;
-  name?: string;
-  note?: string;
-  projectId?: string;
-  parentTaskId?: string;
-  dueDate?: string;
-  deferDate?: string;
-  plannedDate?: string;
-  flagged?: boolean;
-  estimatedMinutes?: number;
-  tags?: string[];
-  sequential?: boolean;
-  repeatRule?: RepeatRule;
-  clearDueDate?: boolean;
-  clearDeferDate?: boolean;
-  clearPlannedDate?: boolean;
-  clearEstimatedMinutes?: boolean;
 }
 
 export interface RepeatRule {
