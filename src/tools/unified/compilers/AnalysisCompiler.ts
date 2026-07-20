@@ -78,6 +78,8 @@ export type CompiledAnalysis =
       params?: {
         operation?: 'list_for_review' | 'mark_reviewed' | 'set_schedule';
         projectId?: string;
+        // OMN-256: batch sibling of projectId (exactly-one-of, enforced by AnalyzeSchema).
+        projectIds?: string[];
         reviewDate?: string;
         // OMN-60: review interval for set_schedule, passed through to the script.
         reviewInterval?: { unit: 'day' | 'week' | 'month' | 'year'; steps: number };

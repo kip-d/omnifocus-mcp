@@ -1454,6 +1454,86 @@ export function buildMarkProjectReviewedProgram(data: MarkProjectReviewedInput):
 }
 
 // =============================================================================
+// MARK PROJECTS REVIEWED — BATCH LOWERING (OMN-256)
+// =============================================================================
+
+export interface MarkProjectsReviewedInput {
+  projectIds: string[];
+  reviewDate: string;
+  updateNextReviewDate: boolean;
+}
+
+/**
+ * Lower a batch mark-projects-reviewed request (OMN-256). Statement shape
+ * mirrors buildSetReviewScheduleProgram (OMN-106 PR-2): json binds, an
+ * empty-ids guard, a build-time-unrolled for-loop calling the
+ * applyMarkReviewedBatch snippet per id (continue-on-error, never abort on
+ * the first failure), and the batch envelope {success, results, message}
+ * (MARK_REVIEWED_BATCH_TYPED_SCHEMA is the contract). The single-id
+ * `mark-reviewed/project` route and its envelope are untouched — this is an
+ * ADDITIONAL route, not a replacement.
+ *
+ * DELIBERATE MIRROR (review-adjudicated): the accumulator scaffold (pids
+ * bind, results literal, empty-pids guard, IIFE loop, envelope return) is
+ * intentionally duplicated from buildSetReviewScheduleProgram rather than
+ * factored — the shared shape is pinned by each builder's own typed schema
+ * and goldens, and a premature abstraction would couple two operations that
+ * may diverge (e.g. per-op envelope fields). The cost: any change to the
+ * shared scaffold MUST be applied to BOTH builders (grep for this marker).
+ */
+export function buildMarkProjectsReviewedProgram(data: MarkProjectsReviewedInput): Program {
+  const _exhaustive: Record<keyof MarkProjectsReviewedInput, true> = {
+    projectIds: true,
+    reviewDate: true,
+    updateNextReviewDate: true,
+  };
+  void _exhaustive;
+
+  const statements: Stmt[] = [
+    // User data enters via json() binds, never raw interpolation.
+    bind('pids', json(data.projectIds)),
+    bind('reviewDateStr', json(data.reviewDate)),
+    // total_requested is a build-time count (mirrors set-review-schedule).
+    bind(
+      'results',
+      raw(
+        `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
+      ),
+    ),
+    // NOT dead-envelope drift (review-adjudicated, recurring finding): this
+    // {success:false, error:true} shape is deliberate. It is double-unreachable
+    // from the shipped path (AnalyzeSchema's projectIds.min(1) + the
+    // "at least one of projectId/projectIds" superRefine both reject empty
+    // before lowering), AND if a future direct caller ever reached it,
+    // detectKnownErrorShape() intercepts `error:true` in executeJson BEFORE the
+    // success-schema validation runs — so the 'No project IDs provided' message
+    // surfaces intact, never an opaque schema failure. Do NOT "fix" it to
+    // success:true to satisfy the *_BATCH typed success schema.
+    guard('pids.length === 0', {
+      success: json(false),
+      error: json(true),
+      message: json('No project IDs provided'),
+      results: ref('results'),
+    }),
+    bind(
+      'applied',
+      raw(
+        `(function () { for (var i = 0; i < pids.length; i++) { applyMarkReviewedBatch(pids[i], reviewDateStr, ${data.updateNextReviewDate ? 'true' : 'false'}, results); } ` +
+          'results.summary.successful_count = results.successful.length; results.summary.failed_count = results.failed.length; return true; })()',
+      ),
+    ),
+    return_({
+      success: json(true),
+      results: ref('results'),
+      message: raw(
+        '"Batch mark-reviewed completed: " + results.summary.successful_count + " successful, " + results.summary.failed_count + " failed"',
+      ),
+    }),
+  ];
+  return { statements, context: 'mark_projects_reviewed', snippetDeps: ['applyMarkReviewedBatch'] };
+}
+
+// =============================================================================
 // SET REVIEW SCHEDULE LOWERING (OMN-106 PR-2)
 // =============================================================================
 
@@ -1481,6 +1561,11 @@ export interface SetReviewScheduleInput {
  * reviewInterval NOR nextReviewDate throws at build time — the legacy script
  * silently reported per-project success with empty changes (the silent no-op
  * class behind the since-removed clear_schedule operation, OMN-273).
+ *
+ * DELIBERATE MIRROR (review-adjudicated): buildMarkProjectsReviewedProgram
+ * duplicates this builder's accumulator scaffold on purpose — see the
+ * matching marker on that builder for the rationale. Any change to the
+ * shared scaffold MUST be applied to BOTH builders.
  */
 export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Program {
   const _exhaustive: Record<keyof SetReviewScheduleInput, true> = {
@@ -1509,6 +1594,15 @@ export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Pro
         `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
       ),
     ),
+    // NOT dead-envelope drift (review-adjudicated, recurring finding): this
+    // {success:false, error:true} shape is deliberate. It is double-unreachable
+    // from the shipped path (AnalyzeSchema's projectIds.min(1) + the
+    // "at least one of projectId/projectIds" superRefine both reject empty
+    // before lowering), AND if a future direct caller ever reached it,
+    // detectKnownErrorShape() intercepts `error:true` in executeJson BEFORE the
+    // success-schema validation runs — so the 'No project IDs provided' message
+    // surfaces intact, never an opaque schema failure. Do NOT "fix" it to
+    // success:true to satisfy the *_BATCH typed success schema.
     guard('pids.length === 0', {
       success: json(false),
       error: json(true),
@@ -1654,6 +1748,27 @@ export const MUTATION_DEFS = {
     guard: (d) => (d.projectId ? validateProjectInSandbox(d.projectId, 'mark reviewed') : undefined),
     build: buildMarkProjectReviewedProgram,
   } as MutationDef<MarkProjectReviewedInput>,
+  'mark-reviewed/projects': {
+    // OMN-256: batch sibling of mark-reviewed/project. ALL ids pre-flight
+    // before any update executes (mirrors bulk_delete / set-review-schedule/project;
+    // spec §2.1) — registering the route is non-negotiable, an unregistered
+    // mutation route reopens the sandbox-guard-bypass class.
+    //
+    // KNOWN LAYERING (test-mode-only; OMN-286): validateProjectInSandbox is a
+    // no-op unless isTestMode(). In test mode it collapses "not found" into
+    // "outside sandbox" (isProjectInSandbox returns false for both), so a
+    // mixed batch containing a not-found id aborts the WHOLE batch here rather
+    // than partitioning it into the script's continue-on-error failed[] row.
+    // This is shared-guard behavior identical across bulk_delete and
+    // set-review-schedule/project — production (guard off) partitions
+    // correctly; the divergence is confined to sandbox integration runs.
+    // Whether the guard should pass not-found ids through to the script is a
+    // shared-infra decision tracked in OMN-286, pending Kip's live /verify.
+    guard: async (d) => {
+      await Promise.all(d.projectIds.map((id) => validateProjectInSandbox(id, 'mark reviewed')));
+    },
+    build: buildMarkProjectsReviewedProgram,
+  } as MutationDef<MarkProjectsReviewedInput>,
   'reparent/tag': {
     // Spec §2.1: guard EVERY name the op touches — parent included when present.
     guard: (d) => {

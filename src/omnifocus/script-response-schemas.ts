@@ -67,6 +67,7 @@ export type { OverdueAnalysisV3Data, TaskVelocityV3Data, WorkflowAnalysisV3Data 
 export {
   REVIEWS_LIST_TYPED_SCHEMA,
   MARK_REVIEWED_TYPED_SCHEMA,
+  MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
   TaskWriteResultSchema,
   CompleteResultSchema,

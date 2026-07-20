@@ -1535,6 +1535,85 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
       expect(mockCache.invalidate).toHaveBeenCalledWith('reviews');
     });
+
+    // OMN-256: batch mark_reviewed — the plural path, distinct envelope shape.
+    describe('mark_reviewed batch (projectIds, OMN-256)', () => {
+      it('marks multiple projects reviewed via projectIds, invalidates caches', async () => {
+        mockOmni.buildScript.mockReturnValue('script');
+        mockOmni.executeJson.mockResolvedValue(
+          createScriptSuccess({
+            success: true,
+            results: {
+              successful: [
+                {
+                  projectId: 'p1',
+                  projectName: 'Alpha',
+                  changes: ['Last review date set to 2026-07-01T12:00:00.000Z'],
+                  lastReviewDate: '2026-07-01T12:00:00.000Z',
+                  nextReviewDate: null,
+                },
+                {
+                  projectId: 'p2',
+                  projectName: 'Beta',
+                  changes: ['Last review date set to 2026-07-01T12:00:00.000Z'],
+                  lastReviewDate: '2026-07-01T12:00:00.000Z',
+                  nextReviewDate: null,
+                },
+              ],
+              failed: [],
+              summary: { total_requested: 2, successful_count: 2, failed_count: 0 },
+            },
+            message: 'Batch mark-reviewed completed: 2 successful, 0 failed',
+          }),
+        );
+
+        const res: any = await tool.execute({
+          analysis: { type: 'manage_reviews', params: { operation: 'mark_reviewed', projectIds: ['p1', 'p2'] } },
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.metadata.operation).toBe('mark_reviewed');
+        // Parity with the set_schedule batch response: requested-project count.
+        expect(res.metadata.projects_updated).toBe(2);
+        expect(res.data.batch.results.summary).toEqual({ total_requested: 2, successful_count: 2, failed_count: 0 });
+        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+        expect(mockCache.invalidate).toHaveBeenCalledWith('reviews');
+      });
+
+      it('reports an unresolvable id as its own loud failed row (continue-on-error, no silent drop)', async () => {
+        mockOmni.buildScript.mockReturnValue('script');
+        mockOmni.executeJson.mockResolvedValue(
+          createScriptSuccess({
+            success: true,
+            results: {
+              successful: [
+                {
+                  projectId: 'p1',
+                  projectName: 'Alpha',
+                  changes: ['Last review date set to 2026-07-01T12:00:00.000Z'],
+                  lastReviewDate: '2026-07-01T12:00:00.000Z',
+                  nextReviewDate: null,
+                },
+              ],
+              failed: [{ projectId: 'ghost', error: 'Project not found' }],
+              summary: { total_requested: 2, successful_count: 1, failed_count: 1 },
+            },
+            message: 'Batch mark-reviewed completed: 1 successful, 1 failed',
+          }),
+        );
+
+        const res: any = await tool.execute({
+          analysis: { type: 'manage_reviews', params: { operation: 'mark_reviewed', projectIds: ['p1', 'ghost'] } },
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.data.batch.results.failed).toEqual([{ projectId: 'ghost', error: 'Project not found' }]);
+        expect(res.data.batch.results.successful).toHaveLength(1);
+        // projects_updated must reflect ACTUAL successes (1), not the 2
+        // requested ids — a partial failure must not read as full success.
+        expect(res.metadata.projects_updated).toBe(1);
+      });
+    });
   });
 
   // ==========================================================================
@@ -1912,6 +1991,31 @@ describe('OmniFocusAnalyzeTool', () => {
       // OMN-106: the AST launcher carries the OmniJS body as ONE JSON string
       // literal, so the interval spec appears with escaped quotes.
       expect(generatedScript).toContain('const intervalSpec = {\\"unit\\":\\"week\\",\\"steps\\":2};');
+    });
+
+    // OMN-256: set_schedule was already batch-native at the AST layer —
+    // this pins that the tool layer now actually widens through projectIds.
+    it('OMN-256: passes projectIds through as a real batch, not a 1-element wrap of projectId', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.executeJson.mockResolvedValue({
+        success: true,
+        data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
+      });
+
+      await tool.execute({
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectIds: ['p1', 'p2', 'p3'],
+            reviewInterval: { unit: 'week', steps: 2 },
+          },
+        },
+      });
+
+      expect(mockOmni.executeJson).toHaveBeenCalledTimes(1);
+      const generatedScript = mockOmni.executeJson.mock.calls[0][0] as string;
+      expect(generatedScript).toContain('const pids = [\\"p1\\",\\"p2\\",\\"p3\\"];');
     });
 
     it('FAIL LOUD (OMN-106): set_schedule with neither interval nor date refuses without executing', async () => {
