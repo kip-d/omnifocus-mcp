@@ -440,15 +440,6 @@ export async function validateBatchCreateOps(
 }
 
 /**
- * Clear all sandbox caches (for testing)
- */
-export function clearSandboxCache(): void {
-  cachedSandboxFolderId = null;
-  validatedTaskIds.clear();
-  validatedProjectIds.clear();
-}
-
-/**
  * Mark a project as validated in sandbox (for batch operations that create projects in sandbox)
  */
 export function markProjectAsValidated(projectId: string): void {

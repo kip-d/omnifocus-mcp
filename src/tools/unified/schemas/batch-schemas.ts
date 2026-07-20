@@ -60,5 +60,4 @@ export const BatchCreateSchema = z.object({
   stopOnError: coerceBoolean().optional().default(true).describe('Stop processing on first error (default: true)'),
 });
 
-export type BatchCreateInput = z.infer<typeof BatchCreateSchema>;
 export type BatchItem = z.infer<typeof BatchItemSchema>;

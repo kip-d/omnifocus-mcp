@@ -132,7 +132,9 @@ const filterFields = {
 const FlatFilterSchema = z.object(filterFields).strict();
 
 // Exported for parity tests (OMN-47): every key the schema accepts must be
-// recognized by QueryCompiler.transformFilters.
+// recognized by QueryCompiler.transformFilters. (OMN-283: KEEP — test oracle
+// consumed by schema-impl-parity + task-key-disposition tests; ts-prune can't
+// see test consumers, so it flags this as an orphan. It isn't.)
 export const FILTER_FIELD_NAMES = Object.keys(filterFields) as readonly string[];
 
 // Full filter: base fields + one level of AND/OR/NOT (referencing FlatFilterSchema).

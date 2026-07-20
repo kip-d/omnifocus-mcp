@@ -15,6 +15,3 @@ export const LocalDateTimeSchema = z
 
 // Task/Project ID validation
 export const IdSchema = z.string().min(1).describe('OmniFocus entity ID');
-
-// Tag name validation
-export const TagNameSchema = z.string().min(1).max(100).describe('Tag name');
