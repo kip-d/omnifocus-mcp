@@ -115,22 +115,10 @@ for val in "$NODE_PATH" "$REPO_DIR" "$PORT" "$TAILSCALE_IP" "$MCP_AUTH_TOKEN" "$
     *'|'*|*$'\n'*) die "a substituted value contains '|' or a newline — refusing to generate a possibly-corrupt plist." ;;
   esac
 done
-# Every substituted value lands inside a plist <string> element, so it must
-# be valid XML content first — a raw '&', '<', or '>' (e.g. inside
-# MCP_AUTH_TOKEN) produces an invalid plist that plutil -lint below rejects.
-# THEN, independently, sed's REPLACEMENT text has its own metacharacters (an
-# unescaped '&' means "insert the whole match", '\N' is a backreference) —
-# xml_escape's output itself contains '&' (from "&amp;" etc.), so it must be
-# re-escaped for sed on top of the XML escaping, not instead of it.
-xml_escape() {
-  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-}
-sed_escape_replacement() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/&/\\\&/g'
-}
-plist_value() {
-  sed_escape_replacement "$(xml_escape "$1")"
-}
+# xml_escape / sed_escape_replacement / plist_value live in lib.sh (sourced
+# above) — both so their double-escaping order is unit-testable by sourcing
+# the lib, and because this script's top-level side effects make IT unsafe
+# to source in tests. plutil -lint below still backstops the output.
 sed -e "s|__NODE_PATH__|$(plist_value "$NODE_PATH")|g" \
     -e "s|__REPO_DIR__|$(plist_value "$REPO_DIR")|g" \
     -e "s|__PORT__|$(plist_value "$PORT")|g" \

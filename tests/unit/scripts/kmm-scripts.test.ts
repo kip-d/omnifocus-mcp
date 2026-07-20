@@ -339,6 +339,37 @@ describe('scripts/kmm — PATH-symlink invocation (SCRIPT_DIR symlink resolution
   });
 });
 
+describe('lib.sh — plist/sed escaping pipeline', () => {
+  // These helpers gate caller-supplied values (MCP_AUTH_TOKEN, TAILSCALE_IP)
+  // into a generated plist; the double-escaping ORDER (XML first, then sed
+  // replacement) is the load-bearing invariant.
+  it('xml_escape escapes &, <, >', () => {
+    const { status, stdout } = sourceAndRun(KMM_LIB, `xml_escape 'a&b<c>d'`);
+    expect(status).toBe(0);
+    expect(stdout).toBe('a&amp;b&lt;c&gt;d');
+  });
+
+  it('sed_escape_replacement escapes backslashes and ampersands', () => {
+    const { stdout } = sourceAndRun(KMM_LIB, String.raw`sed_escape_replacement 'a\b&c'`);
+    expect(stdout).toBe(String.raw`a\\b\&c`);
+  });
+
+  it('plist_value round-trips through a sed substitution to the XML-escaped original', () => {
+    // The real invariant: substituting plist_value's output via sed must
+    // yield exactly xml_escape(original) in the generated document — for a
+    // token containing every metacharacter the pipeline defends against.
+    const nasty = String.raw`tok&en\with\back<slash>&amp;`;
+    const { status, stdout } = sourceAndRun(
+      KMM_LIB,
+      `v="$(plist_value '${nasty}')"; expected="$(xml_escape '${nasty}')"; ` +
+        `substituted="$(echo '__X__' | sed "s|__X__|$v|g")"; ` +
+        `[ "$substituted" = "$expected" ] && echo ROUND-TRIP-OK || { echo "got: $substituted want: $expected"; exit 1; }`,
+    );
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe('ROUND-TRIP-OK');
+  });
+});
+
 describe('scripts/kmm — regression pins for review findings', () => {
   it('install-kmm-server.sh --verify curls carry explicit timeouts', () => {
     // Without --connect-timeout/--max-time, a hung LaunchAgent blocks the
@@ -358,12 +389,22 @@ describe('scripts/kmm — regression pins for review findings', () => {
     expect(src).toMatch(/OF_MCP_KMM_PORT="\$\{OF_MCP_KMM_PORT:-3111\}"/);
   });
 
-  it('of-db-reset.sh restore never rm -rfs the live container before the replacement lands', () => {
-    // Move-aside pattern: the only rm -rf of the container path targets the
-    // .pre-reset move-aside copy, after the golden mv has succeeded.
+  it('of-db-reset.sh restore never destroys the live database before the replacement lands', () => {
+    // Move-aside pattern: the live container is renamed aside (never
+    // deleted) before the golden mv. The ONE permitted rm -rf of the
+    // container path clears a partial failed-mv result during rollback —
+    // while the pre-reset database sits safely at the move-aside path.
     const src = readFileSync(OF_DB_RESET, 'utf8');
-    expect(src).not.toMatch(/rm -rf "\$\{?OF_CONTAINER_PATH/);
     expect(src).toContain('.pre-reset.');
+    expect(src).toContain('Moving existing container aside');
+    const containerRmRfs = src.split('\n').filter((l) => /rm -rf "\$\{?OF_CONTAINER_PATH/.test(l));
+    expect(containerRmRfs).toHaveLength(1);
+    // ...and that one occurrence lives in the rollback branch, after the
+    // failed golden mv, not on the happy path before it.
+    const rmIndex = src.indexOf(containerRmRfs[0]);
+    const failedMvIndex = src.indexOf('if ! mv "$extracted"');
+    expect(failedMvIndex).toBeGreaterThan(-1);
+    expect(rmIndex).toBeGreaterThan(failedMvIndex);
   });
 });
 

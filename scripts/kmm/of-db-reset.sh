@@ -92,13 +92,27 @@ validate_inputs() {
 
 # --- Step 1: quit OmniFocus gracefully, escalate to pkill ---------------------
 quit_omnifocus() {
+  if ! pgrep -x "OmniFocus" >/dev/null 2>&1; then
+    # A quit AppleEvent LAUNCHES the target app if it isn't running (the
+    # Apple Event Manager must start it to deliver the event) — skip the
+    # pointless launch-then-quit when there's nothing to quit.
+    log "OmniFocus is not running — nothing to quit."
+    return 0
+  fi
+
   log "Quitting OmniFocus gracefully..."
-  osascript -e 'tell application "OmniFocus" to quit' >/dev/null 2>&1 || true
+  # Backgrounded: a wedged OmniFocus (modal dialog) can block the AppleEvent
+  # send for up to the ~2-minute AppleScript timeout, and this script must
+  # work even against a wedged app — the bounded poll loop below owns the
+  # timeout, and pkill escalation must not wait behind a stuck osascript.
+  osascript -e 'tell application "OmniFocus" to quit' >/dev/null 2>&1 &
+  local quit_pid=$!
 
   local waited=0
   while pgrep -x "OmniFocus" >/dev/null 2>&1; do
     if [ "$waited" -ge "$QUIT_TIMEOUT_S" ]; then
       log "OmniFocus did not quit within ${QUIT_TIMEOUT_S}s — escalating to pkill."
+      kill "$quit_pid" 2>/dev/null || true
       pkill -x "OmniFocus" || true
       # pkill sends SIGTERM, and a large document can legitimately take more
       # than a moment to tear down — wait (bounded) for the process to exit
@@ -171,6 +185,12 @@ restore_golden() {
   mkdir -p "$(dirname "$OF_CONTAINER_PATH")"
   if ! mv "$extracted" "$OF_CONTAINER_PATH"; then
     if [ -n "$old_container" ]; then
+      # A partway-failed mv (e.g. cross-device copy hitting disk-full) can
+      # leave a partial directory AT the container path — and `mv src dst`
+      # with an existing dst directory would nest the pre-reset database
+      # INSIDE it instead of restoring it at the path. Clear the partial
+      # result first so the rollback lands where the log says it does.
+      rm -rf "${OF_CONTAINER_PATH:?}"
       mv "$old_container" "$OF_CONTAINER_PATH" \
         || die "failed to move the golden snapshot into place AND rollback failed — pre-reset database is at $old_container, container path is empty. Manual intervention required."
       die "failed to move the golden snapshot into place — pre-reset database rolled back to $OF_CONTAINER_PATH."
