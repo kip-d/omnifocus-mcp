@@ -785,23 +785,24 @@ const PROJECT_STATUS_UPDATE_ENUM: Record<string, string> = {
 };
 
 /** Live status read-back for the update envelope (spec §2.4) — builder-internal
- * raw (no user data), mapping Project.Status constants to the legacy lowercase
- * strings so the envelope key keeps its shape. The legacy envelope ECHOED
- * `changes.status || 'active'` while the actual set could have silently failed.
+ * raw (no user data). The legacy envelope ECHOED `changes.status || 'active'`
+ * while the actual set could have silently failed; this reads the live value.
  *
- * OMN-274 adjudication — deliberately NOT the read/analytics wire vocabulary:
- * this echo speaks the write TRANSPORT enum ('active'|'on_hold'|'completed'|
- * 'dropped'), the same values the write schema accepts and the write response
- * schema pins (response-schemas/write.ts) — a client reads back the vocabulary
- * it wrote. It is a whole-vocabulary choice ('completed', not 'done'), not a
- * drifted copy of the 'onHold' map; changing only the OnHold spelling would
- * create a THIRD, mixed vocabulary. If this echo ever converges on the wire
- * form, move 'completed'→'done' and the response schema enum in the same
- * change. Tracked as OMN-278. See Technical/specs/OMN-274-read-path-status-vocabulary.md. */
+ * Vocabulary (OMN-278, converged 2026-07-20): the echo speaks the CANONICAL
+ * read/analytics wire form ('active'|'onHold'|'done'|'dropped') — the OmniJS
+ * Project.Status constant names camelCased — matching what a subsequent read
+ * of the same project returns. The INPUT side is unchanged: writes still
+ * accept the transport enum ('on_hold'/'completed', PROJECT_STATUS_UPDATE_ENUM
+ * above), so input and echo are asymmetric by design — the same asymmetry the
+ * read path has had since OMN-274 (filter input 'on_hold' → response 'onHold').
+ * This constant and the response schema enum (response-schemas/write.ts,
+ * ProjectWriteResultSchema update variant) MUST move together — see the
+ * OMN-274 spec's POST-BUILD REVERSAL section for the mixed-vocabulary hazard
+ * a partial edit reintroduces. */
 const PROJECT_STATUS_READBACK =
   "proj.status === Project.Status.Active ? 'active' : " +
-  "proj.status === Project.Status.OnHold ? 'on_hold' : " +
-  "proj.status === Project.Status.Done ? 'completed' : 'dropped'";
+  "proj.status === Project.Status.OnHold ? 'onHold' : " +
+  "proj.status === Project.Status.Done ? 'done' : 'dropped'";
 
 /**
  * Lower a project-update request into a typed mutation Program (OMN-128 slice 4).

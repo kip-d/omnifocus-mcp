@@ -711,6 +711,38 @@ describe('ProjectWriteResultSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  // OMN-278: the update echo speaks the canonical read/analytics vocabulary
+  // (onHold/done), NOT the write-transport input enum (on_hold/completed).
+  // The enum pin and PROJECT_STATUS_READBACK moved together — a mismatch here
+  // means the schema and the emitted ternary have drifted apart.
+  it('(a) accepts canonical onHold/done status echoes on the update envelope', () => {
+    for (const status of ['onHold', 'done']) {
+      const result = ProjectWriteResultSchema.safeParse({
+        projectId: 'p123',
+        name: 'Updated Project',
+        flagged: true,
+        status,
+        updated: true,
+        warnings: [],
+      });
+      expect(result.success, `status '${status}' should parse`).toBe(true);
+    }
+  });
+
+  it('(b) rejects the retired write-transport spellings on_hold/completed on the update echo', () => {
+    for (const status of ['on_hold', 'completed']) {
+      const result = ProjectWriteResultSchema.safeParse({
+        projectId: 'p123',
+        name: 'Updated Project',
+        flagged: true,
+        status,
+        updated: true,
+        warnings: [],
+      });
+      expect(result.success, `status '${status}' should be rejected`).toBe(false);
+    }
+  });
+
   it('(b) rejects payload missing both created and updated discriminators', () => {
     const result = ProjectWriteResultSchema.safeParse({
       projectId: 'p123',
