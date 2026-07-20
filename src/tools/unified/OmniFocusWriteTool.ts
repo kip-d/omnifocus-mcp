@@ -44,7 +44,7 @@ import type {
   RepetitionRule,
   TaskCreateData,
 } from '../../contracts/mutations.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError, isScriptSuccess, unwrapScriptEnvelope } from '../../omnifocus/script-result-types.js';
 import {
   TaskWriteResultSchema,
   CompleteResultSchema,
@@ -2442,12 +2442,8 @@ SAFETY:
       );
     }
 
-    // Unwrap double-wrapped data structure
-    const envelope = result.data as unknown;
-    const parsedResult =
-      envelope && typeof envelope === 'object' && 'data' in envelope && (envelope as { data?: unknown }).data
-        ? (envelope as { data: unknown }).data
-        : envelope;
+    // Unwrap the optional {data: ...} envelope (shared helper, OMN-287)
+    const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
     // Smart cache invalidation for tag changes
     this.cache.invalidateTag(tagName);

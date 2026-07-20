@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
+  unwrapScriptEnvelope,
   SCRIPT_ERROR_CONTEXT,
   detectKnownErrorShape,
   truncateRawOutput,
@@ -189,5 +190,30 @@ describe('truncateRawOutput', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(truncateRawOutput(circular)).toBe('[object Object]');
+  });
+});
+
+// OMN-287: shared envelope-unwrap — extracted from the byte-identical private
+// copies in OmniFocusAnalyzeTool and OmniFocusWriteTool so a future envelope
+// change happens in one place.
+describe('unwrapScriptEnvelope', () => {
+  it('unwraps a {data: ...} envelope', () => {
+    expect(unwrapScriptEnvelope<{ x: number }>({ ok: true, v: 'ast', data: { x: 1 } })).toEqual({ x: 1 });
+  });
+
+  it('returns the raw value when there is no data key', () => {
+    expect(unwrapScriptEnvelope<{ y: number }>({ y: 2 })).toEqual({ y: 2 });
+  });
+
+  it('returns the raw value when data is falsy (matches both original copies)', () => {
+    // Both pre-extraction copies required a TRUTHY data value to unwrap —
+    // {data: null} passes through whole, preserving exact legacy semantics.
+    expect(unwrapScriptEnvelope<unknown>({ data: null, other: 1 })).toEqual({ data: null, other: 1 });
+  });
+
+  it('passes primitives and null through untouched', () => {
+    expect(unwrapScriptEnvelope<string>('plain')).toBe('plain');
+    expect(unwrapScriptEnvelope<null>(null)).toBeNull();
+    expect(unwrapScriptEnvelope<number>(0)).toBe(0);
   });
 });
