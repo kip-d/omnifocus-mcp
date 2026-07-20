@@ -255,6 +255,12 @@ etc.)
 
 Guide the user progressively through these until they have a short list.
 
+**`smart_suggest` is a screen, not a ranking (OMN-259):** it returns a candidate shortlist selected by mechanical
+signals, and each task carries `screen_reasons` (e.g. `overdue_5d`, `due_today`, `flagged`, `available`, `quick_win`)
+naming why it was selected. The list ORDER is not a priority verdict — re-rank the candidates yourself using the four
+criteria above plus context the server can't see (the user's stated intent, calendar, energy), and explain your ordering
+to the user in terms of the reasons.
+
 ---
 
 ## Task Creation Best Practices

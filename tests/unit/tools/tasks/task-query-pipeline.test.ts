@@ -711,6 +711,112 @@ describe('scoreForSmartSuggest', () => {
     const result = scoreForSmartSuggest(tasks, 10);
     expect(result[0].id).toBe('1'); // Available+flagged scores higher
   });
+
+  // OMN-259: screen + evidence + model-judges — each suggested task carries its
+  // screen reasons as structured fields so the caller can re-rank against
+  // context the server can't see. Selection behavior is unchanged.
+  describe('screen_reasons evidence (OMN-259)', () => {
+    it('attaches structured screen reasons per suggested task', () => {
+      const fiveDaysAgo = new Date();
+      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+      const tasks: OmniFocusTask[] = [
+        {
+          id: '1',
+          name: 'Overdue flagged quick win',
+          completed: false,
+          flagged: true,
+          blocked: false,
+          available: true,
+          dueDate: fiveDaysAgo.toISOString(),
+          estimatedMinutes: 10,
+        },
+      ];
+
+      const result = scoreForSmartSuggest(tasks, 10);
+      expect(result[0].screen_reasons).toEqual(
+        expect.arrayContaining(['overdue_5d', 'flagged', 'available', 'quick_win']),
+      );
+    });
+
+    it('labels due-today tasks with due_today, not overdue', () => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 0, 0, 0);
+
+      const tasks: OmniFocusTask[] = [
+        {
+          id: '1',
+          name: 'Due later today',
+          completed: false,
+          flagged: false,
+          blocked: false,
+          available: true,
+          dueDate: laterToday.toISOString(),
+        },
+      ];
+
+      const result = scoreForSmartSuggest(tasks, 10);
+      expect(result[0].screen_reasons).toContain('due_today');
+      expect(result[0].screen_reasons?.join()).not.toMatch(/overdue/);
+    });
+
+    it('the due-today backstop task also carries screen reasons', () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+
+      // Fill the limit with overdue+flagged tasks; the due-today candidate has
+      // score 80 < the others, so it only enters via the backstop swap.
+      const tasks: OmniFocusTask[] = [
+        ...Array.from({ length: 3 }, (_, i) => ({
+          id: `o${i}`,
+          name: `Overdue ${i}`,
+          completed: false,
+          flagged: true,
+          blocked: false,
+          dueDate: yesterday.toISOString(),
+        })),
+        {
+          id: 'today',
+          name: 'Due today',
+          completed: false,
+          flagged: false,
+          blocked: false,
+          dueDate: laterToday.toISOString(),
+        },
+      ];
+
+      const result = scoreForSmartSuggest(tasks, 3);
+      const backstop = result.find((t) => t.id === 'today');
+      expect(backstop).toBeDefined();
+      expect(backstop!.screen_reasons).toContain('due_today');
+    });
+  });
+});
+
+describe('projectFields carries screen_reasons (OMN-259)', () => {
+  it('screen_reasons survives narrow field projection like the noteTruncated marker', () => {
+    const tasks = [
+      {
+        id: '1',
+        name: 'T',
+        completed: false,
+        flagged: true,
+        blocked: false,
+        screen_reasons: ['flagged'],
+      },
+    ] as unknown as OmniFocusTask[];
+
+    const result = projectFields(tasks, ['id', 'name']);
+    expect((result[0] as Record<string, unknown>).screen_reasons).toEqual(['flagged']);
+  });
+
+  it('does not invent screen_reasons on tasks that lack it', () => {
+    const tasks = [{ id: '1', name: 'T', completed: false, flagged: false, blocked: false }] as OmniFocusTask[];
+    const result = projectFields(tasks, ['id', 'name']);
+    expect('screen_reasons' in (result[0] as Record<string, unknown>)).toBe(false);
+  });
 });
 
 // =============================================================================
