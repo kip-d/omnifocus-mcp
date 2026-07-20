@@ -3382,6 +3382,17 @@ SCOPE FILTERING:
       : (raw as T);
   }
 
+  // Both batch review ops are continue-on-error: a not-found/typo'd id becomes
+  // its own results.failed[] row rather than aborting the batch. So the count
+  // that actually mutated is results.summary.successful_count — NOT the
+  // requested id count, which would report a partially-failed batch as fully
+  // successful in metadata.projects_updated. Falls back to null when the shape
+  // is unexpected rather than inventing a number.
+  private batchSuccessfulCount(parsed: unknown): number | null {
+    const summary = (parsed as { results?: { summary?: { successful_count?: unknown } } })?.results?.summary;
+    return typeof summary?.successful_count === 'number' ? summary.successful_count : null;
+  }
+
   private async reviewsListForReview(
     _compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
     timer: OperationTimerV2,
@@ -3595,7 +3606,8 @@ SCOPE FILTERING:
       operation: 'mark_reviewed',
       review_date: reviewDate,
       next_review_calculated: true,
-      projects_updated: brandedProjectIds.length,
+      // Actual mutations, not requested count (continue-on-error partitions).
+      projects_updated: this.batchSuccessfulCount(parsedResult) ?? brandedProjectIds.length,
       input_params: { projectIds, reviewDate, updateNextReviewDate: true },
     });
   }
@@ -3660,7 +3672,8 @@ SCOPE FILTERING:
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
       ...timer.toMetadata(),
       operation: 'set_schedule',
-      projects_updated: brandedProjectIds.length,
+      // Actual mutations, not requested count (continue-on-error partitions).
+      projects_updated: this.batchSuccessfulCount(parsedResult) ?? brandedProjectIds.length,
       input_params: projectIds ? { projectIds } : { projectId },
     });
   }

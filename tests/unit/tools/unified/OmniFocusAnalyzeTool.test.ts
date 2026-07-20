@@ -1609,6 +1609,9 @@ describe('OmniFocusAnalyzeTool', () => {
         expect(res.success).toBe(true);
         expect(res.data.batch.results.failed).toEqual([{ projectId: 'ghost', error: 'Project not found' }]);
         expect(res.data.batch.results.successful).toHaveLength(1);
+        // projects_updated must reflect ACTUAL successes (1), not the 2
+        // requested ids — a partial failure must not read as full success.
+        expect(res.metadata.projects_updated).toBe(1);
       });
     });
   });

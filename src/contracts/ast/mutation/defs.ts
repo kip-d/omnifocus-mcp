@@ -1735,6 +1735,17 @@ export const MUTATION_DEFS = {
     // before any update executes (mirrors bulk_delete / set-review-schedule/project;
     // spec §2.1) — registering the route is non-negotiable, an unregistered
     // mutation route reopens the sandbox-guard-bypass class.
+    //
+    // KNOWN LAYERING (test-mode-only; OMN-286): validateProjectInSandbox is a
+    // no-op unless isTestMode(). In test mode it collapses "not found" into
+    // "outside sandbox" (isProjectInSandbox returns false for both), so a
+    // mixed batch containing a not-found id aborts the WHOLE batch here rather
+    // than partitioning it into the script's continue-on-error failed[] row.
+    // This is shared-guard behavior identical across bulk_delete and
+    // set-review-schedule/project — production (guard off) partitions
+    // correctly; the divergence is confined to sandbox integration runs.
+    // Whether the guard should pass not-found ids through to the script is a
+    // shared-infra decision tracked in OMN-286, pending Kip's live /verify.
     guard: async (d) => {
       await Promise.all(d.projectIds.map((id) => validateProjectInSandbox(id, 'mark reviewed')));
     },
