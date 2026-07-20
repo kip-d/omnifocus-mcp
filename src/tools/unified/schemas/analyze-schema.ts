@@ -173,7 +173,13 @@ const AnalysisSchema = z.discriminatedUnion('type', [
           // superRefine below; discriminated-union members can't carry a
           // refinement directly). Cap mirrors bulk_delete's ids cap.
           projectIds: z.array(z.string()).min(1).max(100).optional(),
-          reviewDate: z.string().optional(),
+          // Must be a parseable date: an unparseable string reaches the
+          // script as an Invalid Date and (before the script-level guard)
+          // corrupted project.lastReviewDate. Reject early as VALIDATION_ERROR.
+          reviewDate: z
+            .string()
+            .refine((s) => !Number.isNaN(new Date(s).getTime()), { message: 'reviewDate must be a parseable date' })
+            .optional(),
           // OMN-60: review interval for set_schedule. Object shape — passed
           // through to buildSetReviewScheduleScript(), which expects { unit, steps }.
           reviewInterval: z

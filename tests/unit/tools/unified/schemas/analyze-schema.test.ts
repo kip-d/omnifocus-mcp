@@ -254,6 +254,26 @@ describe('AnalyzeSchema', () => {
       expect(AnalyzeSchema.safeParse(input).success).toBe(false);
     });
 
+    it('rejects an unparseable reviewDate before it can corrupt lastReviewDate', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectId: 'p1', reviewDate: 'not-a-date' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('accepts a parseable reviewDate', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectId: 'p1', reviewDate: '2026-07-01 12:00' },
+        },
+      };
+      expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+    });
+
     it('single projectId form still works unchanged on mark_reviewed', () => {
       const input = {
         analysis: {

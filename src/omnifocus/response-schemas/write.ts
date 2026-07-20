@@ -121,17 +121,12 @@ const MarkReviewedBatchSuccessEntrySchema = z
 
 /**
  * Mark-projects-reviewed batch failed entry (OMN-256) — emitted by
- * applyMarkReviewedBatch's results.failed[] push. projectName is optional:
- * the not-found branch fires before projectName is known (mirrors
- * SetScheduleFailedEntrySchema).
+ * applyMarkReviewedBatch's results.failed[] push. Structurally identical to
+ * SetScheduleFailedEntrySchema (same {projectId, projectName?, error}, same
+ * .strict()); reuse it directly so the two batch-review failed-entry
+ * validators can't silently drift.
  */
-const MarkReviewedBatchFailedEntrySchema = z
-  .object({
-    projectId: z.string(),
-    projectName: z.string().optional(),
-    error: z.string(),
-  })
-  .strict();
+const MarkReviewedBatchFailedEntrySchema = SetScheduleFailedEntrySchema;
 
 /** Module-scope batch mark-reviewed envelope (OMN-256). message always emitted on success. */
 export const MARK_REVIEWED_BATCH_TYPED_SCHEMA = reviewSuccessSchema({

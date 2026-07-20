@@ -128,6 +128,45 @@ describe('Batch mark_reviewed live (OMN-256 / OMN-286)', () => {
     expect(results?.summary?.failed_count).toBe(1);
   }, 120000);
 
+  // ── 2b. Unparseable reviewDate is rejected AND corrupts nothing (round 7) ──
+  it('rejects an unparseable reviewDate and leaves lastReviewDate untouched on the real object', async () => {
+    const idE = await createSandboxProject('E');
+
+    // A freshly-created OmniFocus project already carries a lastReviewDate (its
+    // creation-date default), so "untouched" means UNCHANGED, not null. Capture
+    // the baseline first.
+    const readLastReviewDate = async (): Promise<string | null> => {
+      const r = await server.callTool('omnifocus_read', {
+        query: { type: 'projects', filters: { folder: SANDBOX_FOLDER_NAME }, fields: ['id', 'lastReviewDate'] },
+      });
+      expectOk(r, 'read lastReviewDate');
+      const projects: Array<{ id: string; lastReviewDate?: string | null }> = r.data?.projects ?? [];
+      const p = projects.find((x) => x.id === idE);
+      expect(p, `project ${idE} found on read-back`).toBeTruthy();
+      return p?.lastReviewDate ?? null;
+    };
+    const before = await readLastReviewDate();
+
+    // Schema rejects the unparseable date up front, before the script can
+    // assign an Invalid Date to the live project. A schema-validation failure
+    // surfaces as a JSON-RPC protocol error (-32602), which callTool throws —
+    // so assert the throw carries the parseable-date message.
+    await expect(
+      server.callTool('omnifocus_analyze', {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'mark_reviewed', projectId: idE, reviewDate: 'not-a-date' },
+        },
+      }),
+    ).rejects.toThrow(/parseable date/i);
+
+    // The critical assertion: the rejected call corrupted NOTHING — the live
+    // lastReviewDate is byte-identical to the pre-call baseline (not an Invalid
+    // Date, not cleared).
+    const after = await readLastReviewDate();
+    expect(after, 'lastReviewDate must be unchanged after a rejected mark').toBe(before);
+  }, 120000);
+
   // ── 3. Guard masks not-found on a GUARDED server (OMN-286 documented) ──────
   it('guarded: a not-found id in the batch is rejected whole by the sandbox pre-flight (OMN-286)', async () => {
     const idD = await createSandboxProject('D');

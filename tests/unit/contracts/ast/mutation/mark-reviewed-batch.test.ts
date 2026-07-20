@@ -167,6 +167,29 @@ describe('mark-projects-reviewed batch — behavior goldens (exact JSON, vm-exec
     expect(alpha.lastReviewDate?.toISOString()).toBe(REVIEW_DATE);
   });
 
+  it('unparseable reviewDate: reported failed AND leaves lastReviewDate UNMUTATED (validate-before-mutate)', async () => {
+    // Regression for the round-7 finding: applyMarkReviewed set
+    // project.lastReviewDate = new Date('bad') (Invalid Date) BEFORE the
+    // toISOString() read-back threw, corrupting the live object while the row
+    // was reported as failed. The guard now throws before any assignment.
+    const alpha = makeProject('p1', 'Alpha', { unit: { name: 'weeks' }, steps: 1 });
+    const { script } = await buildMarkProjectsReviewedScript({
+      projectIds: ['p1'],
+      reviewDate: 'not-a-date',
+      updateNextReviewDate: true,
+    });
+    const parsed = runScript(script, { p1: alpha }) as {
+      results: { successful: unknown[]; failed: Array<{ projectId: string; error: string }> };
+    };
+    expect(parsed.results.successful).toEqual([]);
+    expect(parsed.results.failed).toHaveLength(1);
+    expect(parsed.results.failed[0].projectId).toBe('p1');
+    expect(parsed.results.failed[0].error).toContain('Invalid reviewDate');
+    // The critical assertion: NOTHING was written to the live object.
+    expect(alpha.lastReviewDate).toBeNull();
+    expect(alpha.nextReviewDate).toBeNull();
+  });
+
   it('empty projectIds: the early error envelope, mirrors set_schedule', async () => {
     const { script } = await buildMarkProjectsReviewedScript({
       projectIds: [],

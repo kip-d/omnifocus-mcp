@@ -1500,6 +1500,15 @@ export function buildMarkProjectsReviewedProgram(data: MarkProjectsReviewedInput
         `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
       ),
     ),
+    // NOT dead-envelope drift (review-adjudicated, recurring finding): this
+    // {success:false, error:true} shape is deliberate. It is double-unreachable
+    // from the shipped path (AnalyzeSchema's projectIds.min(1) + the
+    // "at least one of projectId/projectIds" superRefine both reject empty
+    // before lowering), AND if a future direct caller ever reached it,
+    // detectKnownErrorShape() intercepts `error:true` in executeJson BEFORE the
+    // success-schema validation runs — so the 'No project IDs provided' message
+    // surfaces intact, never an opaque schema failure. Do NOT "fix" it to
+    // success:true to satisfy the *_BATCH typed success schema.
     guard('pids.length === 0', {
       success: json(false),
       error: json(true),
@@ -1585,6 +1594,15 @@ export function buildSetReviewScheduleProgram(data: SetReviewScheduleInput): Pro
         `{ successful: [], failed: [], summary: { total_requested: ${data.projectIds.length}, successful_count: 0, failed_count: 0 } }`,
       ),
     ),
+    // NOT dead-envelope drift (review-adjudicated, recurring finding): this
+    // {success:false, error:true} shape is deliberate. It is double-unreachable
+    // from the shipped path (AnalyzeSchema's projectIds.min(1) + the
+    // "at least one of projectId/projectIds" superRefine both reject empty
+    // before lowering), AND if a future direct caller ever reached it,
+    // detectKnownErrorShape() intercepts `error:true` in executeJson BEFORE the
+    // success-schema validation runs — so the 'No project IDs provided' message
+    // surfaces intact, never an opaque schema failure. Do NOT "fix" it to
+    // success:true to satisfy the *_BATCH typed success schema.
     guard('pids.length === 0', {
       success: json(false),
       error: json(true),

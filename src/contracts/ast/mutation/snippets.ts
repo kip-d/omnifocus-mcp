@@ -190,6 +190,13 @@ function calculateNextReviewDate(reviewInterval, fromDate) {
 const applyMarkReviewed = `
 function applyMarkReviewed(project, reviewDateStr, updateNextReviewDate) {
   var reviewDateTime = new Date(reviewDateStr);
+  // Validate BEFORE mutating: an unparseable date is an Invalid Date, whose
+  // later .toISOString() read-back throws — assigning it first would corrupt
+  // project.lastReviewDate on the live object while the row is reported as
+  // failed (mutate-before-validate). Throw up front so nothing is written.
+  if (isNaN(reviewDateTime.getTime())) {
+    throw new Error("Invalid reviewDate: " + reviewDateStr);
+  }
   project.lastReviewDate = reviewDateTime;
   var changes = ["Last review date set to " + reviewDateStr];
   if (updateNextReviewDate) {
