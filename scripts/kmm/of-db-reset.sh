@@ -100,7 +100,14 @@ quit_omnifocus() {
     if [ "$waited" -ge "$QUIT_TIMEOUT_S" ]; then
       log "OmniFocus did not quit within ${QUIT_TIMEOUT_S}s — escalating to pkill."
       pkill -x "OmniFocus" || true
-      sleep 1
+      # pkill sends SIGTERM, and a large document can legitimately take more
+      # than a moment to tear down — wait (bounded) for the process to exit
+      # rather than dying on a still-shutting-down OmniFocus one second later.
+      local pkill_waited=0
+      while pgrep -x "OmniFocus" >/dev/null 2>&1 && [ "$pkill_waited" -lt "$QUIT_TIMEOUT_S" ]; do
+        sleep 1
+        pkill_waited=$((pkill_waited + 1))
+      done
       break
     fi
     sleep 1
@@ -113,16 +120,19 @@ quit_omnifocus() {
   log "OmniFocus quit confirmed."
 }
 
-# Picks the single top-level .ofocus bundle inside the extraction dir ($1).
-# Fails loud on zero OR multiple matches — find's ordering is unspecified, so
-# silently taking the first of several bundles could restore the wrong
-# database (the exact guess-wrong-silently failure the OF_CONTAINER_PATH
-# handling above refuses to risk).
+# Picks the single .ofocus bundle inside the extraction dir ($1), at any
+# depth — zips are easily built with a wrapper directory (zip -r of a parent
+# folder), and requiring a top-level bundle would false-fail on a valid
+# snapshot. -prune stops find descending INTO a matched bundle. Fails loud
+# on zero OR multiple matches — find's ordering is unspecified, so silently
+# taking the first of several bundles could restore the wrong database (the
+# exact guess-wrong-silently failure the OF_CONTAINER_PATH handling above
+# refuses to risk).
 select_extracted_bundle() {
   local dir="$1" matches count
-  matches="$(find "$dir" -maxdepth 1 -name '*.ofocus')"
+  matches="$(find "$dir" -name '*.ofocus' -prune)"
   count="$(printf '%s' "$matches" | grep -c '^' || true)"
-  [ "$count" -eq 1 ] || die "expected exactly one .ofocus bundle at the top level of the golden zip, found $count"
+  [ "$count" -eq 1 ] || die "expected exactly one .ofocus bundle inside the golden zip, found $count"
   printf '%s\n' "$matches"
 }
 

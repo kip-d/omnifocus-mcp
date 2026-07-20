@@ -262,6 +262,24 @@ describe('of-db-reset.sh — select_extracted_bundle', () => {
     });
   });
 
+  it('finds a bundle nested inside a wrapper directory (zip -r layout)', () => {
+    withExtractionDir([], (dir) => {
+      mkdirSync(join(dir, 'wrapper', 'golden.ofocus'), { recursive: true });
+      const { status, stdout } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe(join(dir, 'wrapper', 'golden.ofocus'));
+    });
+  });
+
+  it('does not descend into a matched bundle looking for further matches', () => {
+    withExtractionDir(['golden.ofocus'], (dir) => {
+      mkdirSync(join(dir, 'golden.ofocus', 'inner.ofocus'));
+      const { status, stdout } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe(join(dir, 'golden.ofocus'));
+    });
+  });
+
   it('dies loudly when no .ofocus bundle exists', () => {
     withExtractionDir(['not-a-bundle'], (dir) => {
       const { status, stderr } = sourceAndRun(OF_DB_RESET, `select_extracted_bundle "${dir}"`);
