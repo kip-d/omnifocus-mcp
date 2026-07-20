@@ -1,4 +1,8 @@
 // src/diagnostics/ledger.ts
+// intentionally-exposed-for-CLI (OMN-282): consumed by scripts/diagnose-failures.ts
+// (the `npm run diagnose-failures` entry the weekly ~/bin/of-mcp-diagnose launchd
+// job runs). scripts/ sits outside tsconfig's src/** include, so ts-prune flags
+// these exports as orphans; they are not.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
