@@ -650,6 +650,23 @@ count, inbox size, and completion rate.
 All analysis types accept an optional `scope` with `dateRange`, `tags`, `projects`, `includeCompleted`, and
 `includeDropped`.
 
+### Judgment detectors return screens + evidence, not verdicts (`pattern_analysis`)
+
+Three `pattern_analysis` insights — `clarify_candidates` (formerly `next_actions`), `waiting_for`, and `estimation_bias`
+— follow a **screen → evidence-bundle → you-judge** contract:
+
+- The server runs a cheap, recall-oriented lexical screen and returns per-candidate **evidence bundles**: `id`, `name`,
+  `note_head` (first ~160 note chars), `note_empty`, `project`/`folder_path`, `tags`, raw dates, `estimated_minutes`,
+  `has_children`, plus `screen_reasons` saying which lexical signal fired.
+- **You judge.** A bare "Follow up with Ryan" may be perfectly clear once its note says who/what/when — read the bundle
+  before flagging anything to the user. `note_empty: true` alongside a vague name is the strongest clarify signal; a
+  clear-only-via-note task is legitimate and needs no rewrite.
+- Candidate lists are **capped** and say so (`items.screen.capped`, `candidates_total` vs `candidates_returned`) — never
+  present a capped list as exhaustive. `estimation_bias` returns distribution facts (histogram, round-number counts,
+  largest-by-id) with no thresholds; interpret them for the user yourself.
+- Act by `id` via `omnifocus_write` — every candidate is directly actionable, no search-by-name needed.
+- The `next_actions` key is retired: sending it returns `metadata.unrecognized_insights` rather than data.
+
 ### Parsing Meeting Notes (`parse_meeting_notes`)
 
 **Extract the action items yourself, then pass `items[]` — do not paste raw prose.** You read the notes far more

@@ -52,7 +52,7 @@ import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/pr
 
 // Pure-JS analyzer imports (for pattern analysis)
 import { analyzeReviewGaps } from '../../omnifocus/scripts/analytics/review-gaps-analyzer.js';
-import { analyzeNextActions } from '../../omnifocus/scripts/analytics/next-actions-analyzer.js';
+import { screenClarifyCandidates } from '../../omnifocus/scripts/analytics/clarify-candidates-analyzer.js';
 import { analyzeWipLimits } from '../../omnifocus/scripts/analytics/wip-limits-analyzer.js';
 import { analyzeDueDateBunching } from '../../omnifocus/scripts/analytics/due-date-bunching-analyzer.js';
 
@@ -111,6 +111,13 @@ function classifyAnalyticsError(errorMessage: string): { errorCode: string; sugg
 }
 
 // Pattern analysis types
+
+// OMN-258: the explicit contract statement carried on every screen-detector
+// response — the server screens, the caller judges.
+const SCREEN_CONTRACT =
+  'heuristic screen, not a judgment — screen_reasons are recall-oriented lexical signals; ' +
+  'judge each candidate from its evidence bundle (name, note_head, placement, dates) and act by id';
+
 interface PatternFinding {
   type: string;
   severity: 'info' | 'warning' | 'critical';
@@ -309,7 +316,10 @@ ANALYSIS TYPES:
 - productivity_stats: GTD health metrics (completion rates, velocity)
 - task_velocity: Completion trends over time
 - overdue_analysis: Bottleneck identification
-- pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions)
+- pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions).
+  The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
+  SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
+  the screen does not judge; YOU judge each candidate from its evidence and act by id.
 - workflow_analysis: Deep workflow analysis
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Structure meeting action items into OmniFocus.
@@ -1125,21 +1135,23 @@ SCOPE FILTERING:
       };
 
       // Expand 'all' to include all patterns
-      const patterns = rawPatterns.includes('all')
-        ? [
-            'duplicates',
-            'dormant_projects',
-            'tag_audit',
-            'deadline_health',
-            'waiting_for',
-            'estimation_bias',
-            'next_actions',
-            'review_gaps',
-            'wip_limits',
-            'due_date_bunching',
-            'missing_next_actions',
-          ]
-        : rawPatterns;
+      const KNOWN_PATTERNS = [
+        'duplicates',
+        'dormant_projects',
+        'tag_audit',
+        'deadline_health',
+        'waiting_for',
+        'estimation_bias',
+        'clarify_candidates',
+        'review_gaps',
+        'wip_limits',
+        'due_date_bunching',
+        'missing_next_actions',
+      ];
+      const patterns = rawPatterns.includes('all') ? KNOWN_PATTERNS : rawPatterns;
+      // OMN-258: unknown keys (incl. the retired 'next_actions', renamed
+      // clarify_candidates with no alias) are reported, never silently no-op'd.
+      const unrecognized = patterns.filter((p) => !KNOWN_PATTERNS.includes(p));
 
       // Fetch slimmed task data in one OmniJS bridge scan (OMN-269)
       const slimData = await this.fetchSlimmedData(options);
@@ -1184,22 +1196,28 @@ SCOPE FILTERING:
             findings.deadline_health = this.analyzeDeadlines(slimData.tasks);
             break;
           case 'waiting_for':
-            findings.waiting_for = this.analyzeWaitingFor(slimData.tasks);
+            findings.waiting_for = this.analyzeWaitingFor(slimData.tasks, this.projectFolderMap(slimData.projects));
             break;
           case 'estimation_bias':
             findings.estimation_bias = this.analyzeEstimationBias(slimData.tasks);
             break;
-          case 'next_actions': {
-            const result = analyzeNextActions(
-              slimData.tasks.map((t) => ({ id: t.id, name: t.name, completed: t.completed })),
-            );
-            findings.next_actions = {
-              type: 'next_actions',
-              severity: result.vagueTasks > 20 ? 'warning' : 'info',
-              count: result.vagueTasks,
-              items: result.examples,
-              recommendation:
-                result.recommendations.join(' ') || 'Most tasks appear to be clear, actionable next actions.',
+          case 'clarify_candidates': {
+            const result = screenClarifyCandidates(slimData.tasks, this.projectFolderMap(slimData.projects));
+            findings.clarify_candidates = {
+              type: 'clarify_candidates',
+              severity: result.candidates_total > 20 ? 'warning' : 'info',
+              count: result.candidates_total,
+              items: {
+                screen: {
+                  contract: SCREEN_CONTRACT,
+                  screened_total: result.screened_total,
+                  candidates_total: result.candidates_total,
+                  candidates_returned: result.candidates_returned,
+                  capped: result.candidates_capped,
+                  cap: result.candidate_cap,
+                },
+                candidates: result.candidates,
+              },
             };
             break;
           }
@@ -1244,7 +1262,8 @@ SCOPE FILTERING:
       return createAnalyticsResponseV2('analyze_patterns', findings, 'pattern_analysis', summary.key_insights || [], {
         tasks_analyzed: slimData.tasks.length,
         projects_analyzed: slimData.projects.length,
-        patterns_checked: patterns,
+        patterns_checked: patterns.filter((p) => !unrecognized.includes(p)),
+        ...(unrecognized.length > 0 ? { unrecognized_insights: unrecognized, known_insights: KNOWN_PATTERNS } : {}),
         query_time_ms: duration,
         from_cache: false,
       });
@@ -1934,7 +1953,17 @@ SCOPE FILTERING:
     return recommendations.length > 0 ? recommendations.join(' ') : 'Deadline distribution looks manageable.';
   }
 
-  private analyzeWaitingFor(tasks: SlimTask[]): PatternFinding {
+  /** projectId → folder path, for candidate placement context (OMN-258 bundles). */
+  private projectFolderMap(projects: ProjectData[]): Map<string, string | null> {
+    return new Map(projects.map((p) => [p.id, p.folder ?? null]));
+  }
+
+  // OMN-258: screen + evidence-bundle + model-judges. The name/tag regexes are
+  // a recall-oriented SCREEN; the caller judges who/what each candidate waits
+  // on (that context lives in the note, per the skill convention). Raw dates
+  // ship; the days_waiting verdict framing is gone, as is the canned
+  // recommendation. Candidates are capped LOUDLY (screen.capped), oldest first.
+  private analyzeWaitingFor(tasks: SlimTask[], folderById: Map<string, string | null>): PatternFinding {
     const waitingPatterns = [
       /waiting/i,
       /wait for/i,
@@ -1945,107 +1974,150 @@ SCOPE FILTERING:
       /pending/i,
     ];
 
-    const waitingTasks: Array<{
+    interface WaitingCandidate {
       id: string;
       name: string;
-      project?: string;
-      reason: 'name_pattern' | 'tag' | 'blocked';
-      days_waiting: number;
-    }> = [];
+      screen_reasons: Array<'name_pattern' | 'waiting_tag' | 'blocked_status'>;
+      note_head: string | null;
+      note_empty: boolean;
+      project: string | null;
+      project_id: string | null;
+      folder_path: string | null;
+      tags: string[];
+      creation_date: string | null;
+      defer_date: string | null;
+      due_date: string | null;
+      has_children: boolean;
+    }
+
+    const candidates: WaitingCandidate[] = [];
+    let screenedTotal = 0;
 
     for (const task of tasks) {
       if (task.completed) continue;
+      screenedTotal++;
 
-      const isWaiting = waitingPatterns.some((pattern) => pattern.test(task.name));
-      const hasWaitingTag = task.tags.some((tag) => /wait/i.test(tag) || /pending/i.test(tag) || /blocked/i.test(tag));
-      const isBlocked = task.status === 'blocked' || (task.children && task.children > 0);
-
-      if (isWaiting || hasWaitingTag || isBlocked) {
-        const daysWaiting = task.creationDate
-          ? Math.floor((Date.now() - new Date(task.creationDate).getTime()) / (24 * 60 * 60 * 1000))
-          : 0;
-        const tagOrBlocked = hasWaitingTag ? 'tag' : 'blocked';
-        const waitingReason: 'name_pattern' | 'tag' | 'blocked' = isWaiting ? 'name_pattern' : tagOrBlocked;
-
-        waitingTasks.push({
-          id: task.id,
-          name: task.name,
-          project: task.project,
-          reason: waitingReason,
-          days_waiting: daysWaiting,
-        });
+      const reasons: WaitingCandidate['screen_reasons'] = [];
+      if (waitingPatterns.some((pattern) => pattern.test(task.name))) reasons.push('name_pattern');
+      // The @waiting-for tag convention is a first-class screen input; the
+      // looser wait/pending/blocked substrings stay for recall.
+      if (task.tags.some((tag) => /wait/i.test(tag) || /pending/i.test(tag) || /blocked/i.test(tag))) {
+        reasons.push('waiting_tag');
       }
+      // NOTE: the old screen also flagged every task with children (action
+      // groups) as "blocked" — pure noise for a waiting-on-someone judgment.
+      // has_children ships as evidence instead.
+      if (task.status === 'blocked') reasons.push('blocked_status');
+
+      if (reasons.length === 0) continue;
+
+      candidates.push({
+        id: task.id,
+        name: task.name,
+        screen_reasons: reasons,
+        note_head: task.noteHead ?? task.note ?? null,
+        note_empty: !(task.noteHead ?? task.note),
+        project: task.project ?? null,
+        project_id: task.projectId ?? null,
+        folder_path: task.projectId ? (folderById.get(task.projectId) ?? null) : null,
+        tags: task.tags,
+        creation_date: task.creationDate ?? null,
+        defer_date: task.deferDate ?? null,
+        due_date: task.dueDate ?? null,
+        has_children: task.children > 0,
+      });
     }
 
-    waitingTasks.sort((a, b) => b.days_waiting - a.days_waiting);
+    // Oldest first — the caller sees the longest-waiting candidates even when capped.
+    candidates.sort((a, b) => (a.creation_date ?? '9999').localeCompare(b.creation_date ?? '9999'));
 
-    const severity = waitingTasks.filter((t) => t.days_waiting > 30).length > 5 ? 'warning' : 'info';
+    const cap = 25;
+    const capped = candidates.length > cap;
+    const returned = capped ? candidates.slice(0, cap) : candidates;
 
     return {
       type: 'waiting_for',
-      severity,
-      count: waitingTasks.length,
-      items: waitingTasks.slice(0, 10),
-      recommendation:
-        waitingTasks.length > 10
-          ? `${waitingTasks.length} tasks appear to be waiting. Review blockers and follow up on dependencies.`
-          : 'Waiting/blocked tasks are at reasonable levels.',
+      severity: candidates.length > 10 ? 'warning' : 'info',
+      count: candidates.length,
+      items: {
+        screen: {
+          contract: SCREEN_CONTRACT,
+          screened_total: screenedTotal,
+          candidates_total: candidates.length,
+          candidates_returned: returned.length,
+          capped,
+          cap,
+        },
+        candidates: returned,
+      },
     };
   }
 
+  // OMN-258: pure estimate STATISTICS — distribution facts the caller judges.
+  // The threshold-verdict prose ("over-reliance…", "consider breaking down…")
+  // is gone; the facts it summarized (round-number concentration, outliers)
+  // ship raw, with ids on the outliers so the caller can act immediately.
   private analyzeEstimationBias(tasks: SlimTask[]): PatternFinding {
-    const estimatedTasks = tasks.filter((t) => t.estimatedMinutes && t.completed && t.completionDate);
-
-    if (estimatedTasks.length < 10) {
-      return {
-        type: 'estimation_bias',
-        severity: 'info',
-        count: 0,
-        recommendation: 'Not enough completed tasks with estimates to analyze bias.',
-      };
-    }
-
-    const estimates = tasks.filter((t) => t.estimatedMinutes).map((t) => t.estimatedMinutes!);
+    const withEstimates = tasks.filter(
+      (t): t is SlimTask & { estimatedMinutes: number } => t.estimatedMinutes !== null && t.estimatedMinutes > 0,
+    );
+    const estimates = withEstimates.map((t) => t.estimatedMinutes);
 
     if (estimates.length === 0) {
       return {
         type: 'estimation_bias',
         severity: 'info',
         count: 0,
-        recommendation: 'No tasks have time estimates. Consider adding estimates for better planning.',
+        items: {
+          tasks_with_estimates: 0,
+          tasks_without_estimates: tasks.length,
+        },
       };
     }
 
+    const sorted = [...estimates].sort((a, b) => a - b);
     const stats = {
-      count: estimates.length,
-      min: Math.min(...estimates),
-      max: Math.max(...estimates),
-      mean: estimates.reduce((a, b) => a + b, 0) / estimates.length,
-      median: [...estimates].sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      mean: Math.round((estimates.reduce((a, b) => a + b, 0) / estimates.length) * 10) / 10,
+      median: sorted[Math.floor(sorted.length / 2)],
     };
 
-    const patterns: string[] = [];
+    const histogramBuckets: Array<{ bucket: string; test: (e: number) => boolean }> = [
+      { bucket: '<=15', test: (e) => e <= 15 },
+      { bucket: '16-30', test: (e) => e > 15 && e <= 30 },
+      { bucket: '31-60', test: (e) => e > 30 && e <= 60 },
+      { bucket: '61-120', test: (e) => e > 60 && e <= 120 },
+      { bucket: '>120', test: (e) => e > 120 },
+    ];
+    const histogram = histogramBuckets.map(({ bucket, test }) => ({
+      bucket,
+      count: estimates.filter(test).length,
+    }));
 
-    const commonEstimates = estimates.filter((e) => e === 30 || e === 60);
-    if (commonEstimates.length > estimates.length * 0.5) {
-      patterns.push('Over-reliance on 30/60 minute estimates');
-    }
-    if (stats.min >= 30) {
-      patterns.push('No tasks under 30 minutes - consider breaking down work');
-    }
-    if (stats.max > stats.mean * 10) {
-      patterns.push('Very large tasks detected - consider decomposition');
-    }
+    const ROUND_NUMBERS = [15, 30, 60, 120] as const;
+    const round_number_counts = Object.fromEntries(
+      ROUND_NUMBERS.map((n) => [String(n), estimates.filter((e) => e === n).length]),
+    );
+
+    const largest = [...withEstimates]
+      .sort((a, b) => b.estimatedMinutes - a.estimatedMinutes)
+      .slice(0, 5)
+      .map((t) => ({ id: t.id, name: t.name, estimated_minutes: t.estimatedMinutes }));
 
     return {
       type: 'estimation_bias',
-      severity: patterns.length > 1 ? 'warning' : 'info',
+      severity: 'info',
       count: estimates.length,
-      items: { stats, patterns },
-      recommendation:
-        patterns.length > 0
-          ? `Estimation patterns suggest: ${patterns.join(', ')}`
-          : 'Time estimation distribution looks reasonable.',
+      items: {
+        tasks_with_estimates: estimates.length,
+        tasks_without_estimates: tasks.length - estimates.length,
+        completed_with_estimates: withEstimates.filter((t) => t.completed).length,
+        stats,
+        histogram,
+        round_number_counts,
+        largest,
+      },
     };
   }
 
