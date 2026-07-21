@@ -1,0 +1,351 @@
+#!/usr/bin/env npx tsx
+/**
+ * KMM golden-database seeder (OMN-235 Phase 1, Deliverable 3).
+ *
+ * Runs ON KMM against whatever OmniFocus document is currently open. Creates a
+ * `Fixtures` top-level folder containing labeled `FIXTURE:`-prefixed data covering the
+ * coverage matrix in docs/superpowers/specs/2026-07-02-kmm-test-ground-design.md, then
+ * reads the resulting entity counts back and writes them to PROVENANCE.md.
+ *
+ * All dates are computed relative to the moment this script runs (never hardcoded), so
+ * the golden DB stays "overdue 12 days" etc. no matter when it's re-seeded.
+ *
+ * Usage: npx tsx scripts/kmm/seed-golden-database.ts [--out ~/of-golden]
+ *
+ * NOT YET LIVE-VERIFIED — this must run against real OmniFocus on KMM before the
+ * database is frozen. Treat every OmniJS API call below as a hypothesis until an
+ * actual run confirms it (perspective creation in particular is best-effort).
+ */
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { mkdir, writeFile } from 'fs/promises';
+import { homedir } from 'os';
+import { join } from 'path';
+
+const execFileAsync = promisify(execFile);
+
+function parseArgs(argv: string[]): { outDir: string } {
+  const outIndex = argv.indexOf('--out');
+  const outDir = outIndex !== -1 && argv[outIndex + 1] ? argv[outIndex + 1] : join(homedir(), 'of-golden');
+  return { outDir };
+}
+
+/**
+ * The seeding logic runs as OmniJS (property access, not method calls) because it
+ * creates folders/projects/tags and assigns tags+parents — all bridge-only operations
+ * per this repo's JXA-vs-OmniJS split (CLAUDE.md "Tag Operations").
+ *
+ * JXA drives `evaluateJavascript` from the outside so the whole payload is one
+ * osascript invocation.
+ */
+function buildOmniJsPayload(): string {
+  return `
+(function () {
+  var now = new Date();
+  function daysFromNow(n) {
+    var d = new Date(now.getTime());
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+  function fixtureName(label) {
+    return 'FIXTURE: ' + label;
+  }
+
+  var root = new Folder(fixtureName('Fixtures'), Folder.ending.None, library.beginning);
+  var nested1 = new Folder(fixtureName('Nested L1'), Folder.ending.None, root);
+  var nested2 = new Folder(fixtureName('Nested L2'), Folder.ending.None, nested1);
+  var droppedFolder = new Folder(fixtureName('Dropped Folder'), Folder.ending.None, root);
+  droppedFolder.status = Folder.Status.Dropped;
+
+  // ---- Tags ------------------------------------------------------------
+  var tagSingle = new Tag(fixtureName('tag-single'));
+  var tagMultiA = new Tag(fixtureName('tag-multi-a'));
+  var tagMultiB = new Tag(fixtureName('tag-multi-b'));
+  var tagParent = new Tag(fixtureName('tag-parent'));
+  var tagChild = new Tag(fixtureName('tag-child'), tagParent);
+  var tagOnHold = new Tag(fixtureName('tag-on-hold'));
+  tagOnHold.status = Tag.Status.OnHold;
+  var tagDropped = new Tag(fixtureName('tag-dropped'));
+  tagDropped.status = Tag.Status.Dropped;
+  var tagUnused = new Tag(fixtureName('tag-zero-tasks'));
+
+  // ---- Projects: types x statuses x features ----------------------------
+  var pParallel = new Project(fixtureName('Parallel Project'), root);
+  pParallel.sequential = false;
+
+  var pSequential = new Project(fixtureName('Sequential Project'), root);
+  pSequential.sequential = true;
+
+  var pSingleAction = new Project(fixtureName('Single Action List'), root);
+  pSingleAction.singletonActionHolder = true;
+
+  var pOnHold = new Project(fixtureName('On Hold Project'), root);
+  pOnHold.status = Project.Status.OnHold;
+
+  var pCompleted = new Project(fixtureName('Completed Project'), root);
+  var completedTask = new Task(fixtureName('completed project seed task'), pCompleted);
+  completedTask.markComplete();
+  pCompleted.status = Project.Status.Done;
+
+  var pDropped = new Project(fixtureName('Dropped Project'), root);
+  pDropped.status = Project.Status.Dropped;
+
+  var pReview = new Project(fixtureName('Review Interval Project'), root);
+  pReview.reviewInterval = { unit: 'week', steps: 1 };
+  pReview.nextReviewDate = daysFromNow(3);
+
+  var pDeferDue = new Project(fixtureName('Defer+Due Project'), root);
+  pDeferDue.deferDate = daysFromNow(-2);
+  pDeferDue.dueDate = daysFromNow(10);
+
+  var pCompleteWithLast = new Project(fixtureName('Complete-With-Last-Action Project'), root);
+  pCompleteWithLast.completedByChildren = true;
+
+  var pRepeating = new Project(fixtureName('Repeating Project'), root);
+  pRepeating.repetitionRule = new Task.RepetitionRule('FREQ=WEEKLY', Task.RepetitionMethod.Fixed);
+
+  var pEmpty = new Project(fixtureName('Empty Project'), root);
+
+  var pPerf = new Project(fixtureName('Perf 100+ Tasks Project'), root);
+  for (var i = 0; i < 105; i++) {
+    new Task(fixtureName('perf task ' + i), pPerf);
+  }
+
+  // Duplicate project names (OF allows this; known trap).
+  new Project(fixtureName('Duplicate Name'), root);
+  new Project(fixtureName('Duplicate Name'), root);
+
+  // ---- Task locations: inbox / root / nested action groups --------------
+  new Task(fixtureName('inbox task'), inbox);
+
+  var rootTask = new Task(fixtureName('root-level task'), pParallel);
+
+  var groupL1 = new Task(fixtureName('action group L1'), pParallel);
+  groupL1.sequential = true;
+  var groupL2 = new Task(fixtureName('action group L2 (nested)'), groupL1);
+  new Task(fixtureName('nested task under group L2'), groupL2);
+
+  // sequential group inside parallel project
+  var seqGroupInParallel = new Task(fixtureName('sequential group in parallel project'), pParallel);
+  seqGroupInParallel.sequential = true;
+  new Task(fixtureName('seq-in-parallel child 1'), seqGroupInParallel);
+  new Task(fixtureName('seq-in-parallel child 2'), seqGroupInParallel);
+
+  // parallel group inside sequential project
+  var parGroupInSequential = new Task(fixtureName('parallel group in sequential project'), pSequential);
+  parGroupInSequential.sequential = false;
+  new Task(fixtureName('par-in-sequential child 1'), parGroupInSequential);
+  new Task(fixtureName('par-in-sequential child 2'), parGroupInSequential);
+
+  // ---- Task states --------------------------------------------------------
+  new Task(fixtureName('available task'), pParallel);
+
+  var blockedChain = new Task(fixtureName('blocked-by-sequence chain'), pSequential);
+  blockedChain.sequential = true;
+  var blockerFirst = new Task(fixtureName('blocker: do this first'), blockedChain);
+  var blockedSecond = new Task(fixtureName('blocked: waits on first'), blockedChain);
+
+  var deferredTask = new Task(fixtureName('deferred (future)'), pParallel);
+  deferredTask.deferDate = daysFromNow(14);
+
+  var dueSoonTask = new Task(fixtureName('due soon'), pParallel);
+  dueSoonTask.dueDate = daysFromNow(2);
+
+  // Overdue spread: 1d / 3d / 12d / 45d, across >=3 projects, one clear bottleneck.
+  var overdue1 = new Task(fixtureName('overdue 1d'), pParallel);
+  overdue1.dueDate = daysFromNow(-1);
+  var overdue3 = new Task(fixtureName('overdue 3d'), pSequential);
+  overdue3.dueDate = daysFromNow(-3);
+  var overdue12 = new Task(fixtureName('overdue 12d'), pDeferDue);
+  overdue12.dueDate = daysFromNow(-12);
+  var bottleneckProject = new Project(fixtureName('Overdue Bottleneck Project'), root);
+  var overdue45 = new Task(fixtureName('overdue 45d (bottleneck)'), bottleneckProject);
+  overdue45.dueDate = daysFromNow(-45);
+
+  var flaggedTask = new Task(fixtureName('flagged task'), pParallel);
+  flaggedTask.flagged = true;
+
+  var completedStandaloneTask = new Task(fixtureName('completed standalone task'), pParallel);
+  completedStandaloneTask.markComplete();
+
+  var droppedStandaloneTask = new Task(fixtureName('dropped standalone task'), pParallel);
+  droppedStandaloneTask.drop();
+
+  // ---- Task features --------------------------------------------------
+  var repFixed = new Task(fixtureName('repeats fixed weekly'), pParallel);
+  repFixed.repetitionRule = new Task.RepetitionRule('FREQ=WEEKLY', Task.RepetitionMethod.Fixed);
+  repFixed.dueDate = daysFromNow(7);
+
+  var repDeferAnother = new Task(fixtureName('repeats defer-another'), pParallel);
+  repDeferAnother.repetitionRule = new Task.RepetitionRule('FREQ=DAILY', Task.RepetitionMethod.DeferUntilDate);
+  repDeferAnother.deferDate = daysFromNow(1);
+
+  var repDueAgain = new Task(fixtureName('repeats due-again'), pParallel);
+  repDueAgain.repetitionRule = new Task.RepetitionRule('FREQ=MONTHLY', Task.RepetitionMethod.DueDate);
+  repDueAgain.dueDate = daysFromNow(30);
+
+  var estimatedTask = new Task(fixtureName('has estimated duration'), pParallel);
+  estimatedTask.estimatedMinutes = 45;
+
+  var plainNoteTask = new Task(fixtureName('plain note'), pParallel);
+  plainNoteTask.note = 'Plain fixture note, no links.';
+
+  var urlNoteTask = new Task(fixtureName('note with URL'), pParallel);
+  urlNoteTask.note = 'See https://example.com/fixture for context.';
+
+  var plannedTask = new Task(fixtureName('planned date'), pParallel);
+  plannedTask.plannedDate = daysFromNow(5);
+
+  new Task(fixtureName('no dates at all'), pParallel);
+
+  // ---- Tag assignments (bridge-only per this repo's addTag() convention) --
+  var untaggedTask = new Task(fixtureName('untagged task'), pParallel);
+  var singleTagTask = new Task(fixtureName('single-tag task'), pParallel);
+  singleTagTask.addTag(tagSingle);
+  var multiTagTask = new Task(fixtureName('multi-tag task'), pParallel);
+  multiTagTask.addTag(tagMultiA);
+  multiTagTask.addTag(tagMultiB);
+  var nestedTagTask = new Task(fixtureName('nested-tag task'), pParallel);
+  nestedTagTask.addTag(tagChild);
+  var onHoldTagTask = new Task(fixtureName('on-hold-tag task'), pParallel);
+  onHoldTagTask.addTag(tagOnHold);
+  var droppedTagTask = new Task(fixtureName('dropped-tag task'), pParallel);
+  droppedTagTask.addTag(tagDropped);
+
+  // ---- Name edge cases ------------------------------------------------
+  new Task(fixtureName('unicode/emoji name ✅ 日本語 🚀'), pParallel);
+  new Task(fixtureName('name with "quotes" and \\\\backslashes\\\\'), pParallel);
+  new Task(
+    fixtureName(
+      'a very long task name that goes on and on and on to make sure truncation and rendering code paths ' +
+        'get exercised against something realistically oversized rather than a short sample string',
+    ),
+    pParallel,
+  );
+
+  // ---- Custom perspective (best-effort; requires Pro; verify on KMM) ---
+  var perspectiveCreated = false;
+  try {
+    var customPerspective = new Perspective.Custom(fixtureName('Custom Perspective'));
+    customPerspective.archivedFilterRules = [Perspective.FilterRule.Flagged];
+    perspectiveCreated = true;
+  } catch (e) {
+    perspectiveCreated = false;
+  }
+
+  // ---- Seed-timestamp marker task (conformance suite reset-window precondition) ---
+  var marker = new Task(fixtureName('seed-timestamp'), root);
+  marker.note = now.toISOString();
+
+  // ---- Count-verify -----------------------------------------------------
+  var allTasks = flattenedTasks;
+  var allProjects = flattenedProjects;
+  var allTags = flattenedTags;
+  var allFolders = flattenedFolders;
+
+  var counts = {
+    tasks: allTasks.length,
+    projects: allProjects.length,
+    tags: allTags.length,
+    folders: allFolders.length,
+    tasks_completed: allTasks.filter(function (t) { return t.completed; }).length,
+    tasks_dropped: allTasks.filter(function (t) { return t.dropped; }).length,
+    projects_dropped: allProjects.filter(function (p) { return p.status === Project.Status.Dropped; }).length,
+    projects_done: allProjects.filter(function (p) { return p.status === Project.Status.Done; }).length,
+    seed_timestamp: now.toISOString(),
+    perspective_created: perspectiveCreated,
+  };
+
+  return JSON.stringify(counts);
+})();
+`;
+}
+
+interface SeedCounts {
+  tasks: number;
+  projects: number;
+  tags: number;
+  folders: number;
+  tasks_completed: number;
+  tasks_dropped: number;
+  projects_dropped: number;
+  projects_done: number;
+  seed_timestamp: string;
+  perspective_created: boolean;
+}
+
+async function runOmniJs(omniJsPayload: string): Promise<string> {
+  const jxa = `
+    var of = Application('OmniFocus');
+    of.includeStandardAdditions = true;
+    var result = of.evaluateJavascript(${JSON.stringify(omniJsPayload)});
+    result;
+  `;
+  const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa]);
+  return stdout.trim();
+}
+
+function renderProvenance(counts: SeedCounts): string {
+  return `# KMM Golden Database Provenance
+
+Generated by \`scripts/kmm/seed-golden-database.ts\`. Do not hand-edit — regenerate by re-seeding.
+
+Export date: ${counts.seed_timestamp}
+Custom perspective created: ${counts.perspective_created}
+
+## Counts
+
+tasks: ${counts.tasks}
+projects: ${counts.projects}
+tags: ${counts.tags}
+folders: ${counts.folders}
+tasks_completed: ${counts.tasks_completed}
+tasks_dropped: ${counts.tasks_dropped}
+projects_dropped: ${counts.projects_dropped}
+projects_done: ${counts.projects_done}
+
+## Notes
+
+- These counts are the OmniFocus \`flattenedTasks\` / \`flattenedProjects\` / \`flattenedTags\` / \`flattenedFolders\`
+  totals across the WHOLE document, not just the \`Fixtures\` folder — the golden DB is Kip's old real database
+  plus these fixtures layered on top, so counts include both.
+- \`scripts/kmm/of-db-reset.sh\` diffs its post-restore counts against this file and fails loudly on mismatch.
+- Re-run the coverage-matrix audit (spec §2) before trusting a freshly regenerated golden snapshot; this script
+  does not itself verify coverage, only entity counts.
+`;
+}
+
+async function main(): Promise<void> {
+  const { outDir } = parseArgs(process.argv.slice(2));
+  console.log(`Seeding golden database fixtures (OmniFocus must already be running with the target document open)...`);
+
+  const rawResult = await runOmniJs(buildOmniJsPayload());
+  let counts: SeedCounts;
+  try {
+    counts = JSON.parse(rawResult) as SeedCounts;
+  } catch (err) {
+    throw new Error(`Seed script did not return valid JSON. Raw osascript output:\n${rawResult}\n\n${String(err)}`);
+  }
+
+  await mkdir(outDir, { recursive: true });
+  const provenancePath = join(outDir, 'PROVENANCE.md');
+  await writeFile(provenancePath, renderProvenance(counts), 'utf8');
+
+  console.log(`Seeding complete. Counts:`, counts);
+  console.log(`Wrote ${provenancePath}`);
+  if (!counts.perspective_created) {
+    console.warn(
+      'WARNING: custom perspective creation failed (Perspective.Custom API not available or not licensed for ' +
+        'Pro?). Coverage-matrix row "Perspectives" is not satisfied — investigate before freezing.',
+    );
+  }
+  console.log(
+    'Next: run the coverage-matrix audit by hand against docs/superpowers/specs/2026-07-02-kmm-test-ground-design.md §2, ' +
+      'then zip the document into the golden snapshot (see spec §2 "Freeze").',
+  );
+}
+
+main().catch((err) => {
+  console.error('Seeding failed:', err);
+  process.exitCode = 1;
+});
