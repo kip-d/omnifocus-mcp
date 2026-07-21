@@ -111,6 +111,11 @@ function buildOmniJsPayload(): string {
   // partial cascade can't hide — creating a fresh tree would produce
   // exactly the duplicate-fixture corruption the sweep exists to prevent;
   // fail loud instead (the throw propagates out of evaluateJavascript).
+  // This re-scan is a DELIBERATE extra traversal, not a redundant one: the
+  // sweep, this verification, and the final count block each read a
+  // DIFFERENT database state (pre-sweep, post-sweep, post-create) — merging
+  // them would verify intentions instead of effects. The cost is bounded by
+  // the whole-DB traversal floor; raise OF_SEED_TIMEOUT_MS on a huge DB.
   var leftovers = flattenedFolders.filter(isFixture).length +
     flattenedProjects.filter(isFixture).length +
     flattenedTags.filter(isFixture).length +
@@ -320,6 +325,7 @@ function buildOmniJsPayload(): string {
   // prior run's copy (no documented delete API exists to sweep it), so
   // re-seeding never duplicates the perspective.
   var perspectiveCreated = false;
+  var perspectiveError = null;
   try {
     var customPerspective =
       Perspective.Custom.byName(fixtureName('Custom Perspective')) ||
@@ -334,6 +340,10 @@ function buildOmniJsPayload(): string {
     perspectiveCreated = true;
   } catch (e) {
     perspectiveCreated = false;
+    // Preserve the REAL error: a malformed rule shape or typo'd property is
+    // a fixable code bug, and reporting it as a licensing question would
+    // burn a live debug cycle chasing the wrong cause.
+    perspectiveError = String(e);
   }
 
   // ---- Seed-timestamp marker task (conformance suite reset-window precondition) ---
@@ -375,6 +385,7 @@ function buildOmniJsPayload(): string {
     projects_done: projectTotals.done,
     seed_timestamp: now.toISOString(),
     perspective_created: perspectiveCreated,
+    perspective_error: perspectiveError,
   };
 
   return JSON.stringify(counts);
@@ -393,6 +404,7 @@ interface SeedCounts {
   projects_done: number;
   seed_timestamp: string;
   perspective_created: boolean;
+  perspective_error: string | null;
 }
 
 async function runOmniJs(omniJsPayload: string): Promise<string> {
@@ -426,7 +438,7 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
       if (signal) {
         reject(
           new Error(
-            `osascript killed by ${signal} after ${timeoutMs}ms — is OmniFocus blocked by a modal dialog? (OF_SEED_TIMEOUT_MS overrides the bound)`,
+            `osascript killed by ${signal} after ${timeoutMs}ms. Either OmniFocus is wedged (modal dialog) or the seed is legitimately slow on a large database — NOTE: killing osascript does NOT stop an in-flight evaluateJavascript inside OmniFocus, so the mutation may still be running server-side. Wait for OmniFocus to settle before re-running (an immediate re-run races it; a later one may hit the leftover-sweep guard). Raise OF_SEED_TIMEOUT_MS if the run was merely slow.`,
           ),
         );
       } else if (code !== 0) {
@@ -505,8 +517,10 @@ async function main(): Promise<void> {
   console.log(`Wrote ${provenancePath}`);
   if (!counts.perspective_created) {
     console.warn(
-      'WARNING: custom perspective creation failed (Perspective.Custom API not available or not licensed for ' +
-        'Pro?). Coverage-matrix row "Perspectives" is not satisfied — investigate before freezing.',
+      `WARNING: custom perspective creation failed. Actual error: ${counts.perspective_error ?? '(none captured)'}\n` +
+        'If this reads as a missing API/licensing error, Perspective.Custom may need Pro; otherwise it is a code ' +
+        'bug (e.g. rule-dictionary shape) — fix it rather than chasing licensing. Coverage-matrix row ' +
+        '"Perspectives" is not satisfied — investigate before freezing.',
     );
   }
   console.log(

@@ -36,6 +36,7 @@ const SAMPLE_COUNTS: SeedCounts = {
   projects_done: 1,
   seed_timestamp: '2026-07-21T12:00:00.000Z',
   perspective_created: false,
+  perspective_error: null,
 };
 
 describe('parseArgs', () => {
@@ -78,17 +79,22 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
     expect(payload).toContain("new Folder(fixtureName('Nested L1'), root)");
   });
 
-  // [^\n]* not [^)]* — the first argument is always a fixtureName(...) call,
-  // whose closing paren would stop a [^)]* class before it ever reached the
-  // position argument, making the not.toMatch a permanent false negative.
-  const TASK_IN_FOLDER = /new Task\([^\n]*,\s*root\)/;
-  const TASK_IN_INBOX_COLLECTION = /new Task\([^\n]*,\s*inbox\)/;
+  // [^;]* not [^)]* (which stops at fixtureName()'s closing paren — a
+  // permanent false negative) and not [^\n]* (which misses multi-line
+  // new Task(...) calls, a formatting the payload already uses elsewhere).
+  // Statements end with ';' and fixtureName args contain none, so [^;]*
+  // spans exactly one call including line breaks.
+  const TASK_IN_FOLDER = /new Task\([^;]*,\s*root,?\s*\)/;
+  const TASK_IN_INBOX_COLLECTION = /new Task\([^;]*,\s*inbox,?\s*\)/;
 
   it('the Task-position pin regexes actually match known-bad code (canary)', () => {
     // Watched-it-fail guard: if these regexes cannot flag the exact bug
-    // they exist to catch, the pins below prove nothing.
+    // they exist to catch, the pins below prove nothing — in single-line
+    // AND multi-line formatting.
     expect("var marker = new Task(fixtureName('seed-timestamp'), root);").toMatch(TASK_IN_FOLDER);
+    expect("new Task(\n  fixtureName('a long name'),\n  root,\n);").toMatch(TASK_IN_FOLDER);
     expect("new Task(fixtureName('inbox task'), inbox);").toMatch(TASK_IN_INBOX_COLLECTION);
+    expect("new Task(\n  fixtureName('x'),\n  inbox,\n);").toMatch(TASK_IN_INBOX_COLLECTION);
   });
 
   it('never positions a Task in a Folder (marker lives in the Seed Meta project)', () => {
