@@ -64,12 +64,25 @@ function buildOmniJsPayload(): string {
   // The header advertises re-running this script to refresh relative dates;
   // without this sweep a re-run would create a SECOND fixture tree alongside
   // the first and corrupt whatever golden snapshot gets frozen from it.
-  // Deleting a folder cascades to its contained projects/tasks; tags and
-  // inbox tasks live outside the folder tree and are swept separately.
+  // FLATTENED collections, not top-level ones: a FIXTURE folder/tag nested
+  // under a non-fixture parent would be invisible to folders/tags. Deleting
+  // a parent cascades to children already in the slice, so each delete is
+  // try/caught (a dead reference just means the cascade got there first).
   // Slice first: deleting while iterating a live collection is undefined.
-  folders.slice().filter(isFixture).forEach(function (f) { deleteObject(f); });
-  tags.slice().filter(isFixture).forEach(function (t) { deleteObject(t); });
-  inbox.slice().filter(isFixture).forEach(function (t) { deleteObject(t); });
+  function sweepFixtures(collection) {
+    collection.slice().filter(isFixture).forEach(function (obj) {
+      try {
+        deleteObject(obj);
+      } catch (e) {
+        // already removed via a parent's cascade delete
+      }
+    });
+  }
+  sweepFixtures(flattenedFolders);
+  sweepFixtures(flattenedTags);
+  sweepFixtures(inbox);
+  // The custom perspective is handled by reuse-not-recreate below (there is
+  // no documented Perspective delete API to sweep with).
 
   // Folder/Project constructors take (name, position) — position is a parent
   // Folder or a Folder.ChildInsertionLocation like library.beginning
@@ -252,9 +265,14 @@ function buildOmniJsPayload(): string {
   );
 
   // ---- Custom perspective (best-effort; requires Pro; verify on KMM) ---
+  // Reuse-not-recreate for idempotency: Perspective.Custom.byName finds a
+  // prior run's copy (no documented delete API exists to sweep it), so
+  // re-seeding never duplicates the perspective.
   var perspectiveCreated = false;
   try {
-    var customPerspective = new Perspective.Custom(fixtureName('Custom Perspective'));
+    var customPerspective =
+      Perspective.Custom.byName(fixtureName('Custom Perspective')) ||
+      new Perspective.Custom(fixtureName('Custom Perspective'));
     customPerspective.archivedFilterRules = [Perspective.FilterRule.Flagged];
     perspectiveCreated = true;
   } catch (e) {
@@ -379,6 +397,11 @@ async function main(): Promise<void> {
   const { outDir } = parseArgs(process.argv.slice(2));
   console.log(`Seeding golden database fixtures (OmniFocus must already be running with the target document open)...`);
 
+  // Fail fast on a bad --out BEFORE the live OmniFocus mutation: if this
+  // mkdir ran after runOmniJs, a typo'd path would throw only after the
+  // expensive live seed, losing PROVENANCE.md and forcing a full re-seed.
+  await mkdir(outDir, { recursive: true });
+
   const rawResult = await runOmniJs(buildOmniJsPayload());
   let counts: SeedCounts;
   try {
@@ -387,7 +410,6 @@ async function main(): Promise<void> {
     throw new Error(`Seed script did not return valid JSON. Raw osascript output:\n${rawResult}\n\n${String(err)}`);
   }
 
-  await mkdir(outDir, { recursive: true });
   const provenancePath = join(outDir, 'PROVENANCE.md');
   await writeFile(provenancePath, renderProvenance(counts), 'utf8');
 

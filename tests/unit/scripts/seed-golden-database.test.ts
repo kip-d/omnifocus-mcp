@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -81,21 +81,36 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
     expect(payload).not.toMatch(/new Task\([^)]*,\s*inbox\)/);
   });
 
-  it('sweeps prior FIXTURE: folders, tags, and inbox tasks before creating anything (idempotent re-seed)', () => {
-    for (const sweep of [
-      'folders.slice().filter(isFixture)',
-      'tags.slice().filter(isFixture)',
-      'inbox.slice().filter(isFixture)',
-    ]) {
-      expect(payload).toContain(sweep);
+  it('sweeps prior FIXTURE: data from FLATTENED collections before creating anything (idempotent re-seed)', () => {
+    // Flattened, not top-level — a fixture nested under a non-fixture
+    // parent would be invisible to the top-level folders/tags collections.
+    for (const swept of ['sweepFixtures(flattenedFolders)', 'sweepFixtures(flattenedTags)', 'sweepFixtures(inbox)']) {
+      expect(payload).toContain(swept);
     }
     // The sweep must run BEFORE the first fixture creation.
     expect(payload.indexOf('deleteObject')).toBeLessThan(payload.indexOf('new Folder('));
   });
 
+  it('reuses an existing FIXTURE custom perspective instead of duplicating it on re-seed', () => {
+    expect(payload).toContain("Perspective.Custom.byName(fixtureName('Custom Perspective')) ||");
+  });
+
   it('contains the seed-timestamp marker and returns JSON counts', () => {
     expect(payload).toContain("fixtureName('seed-timestamp')");
     expect(payload).toContain('return JSON.stringify(counts)');
+  });
+});
+
+describe('main() ordering', () => {
+  it('creates the output directory BEFORE the live OmniFocus mutation', () => {
+    // A bad --out path must fail fast, not after the expensive live seed
+    // has already mutated the real document (losing PROVENANCE.md).
+    const src = readFileSync(join(REPO_ROOT, 'scripts/kmm/seed-golden-database.ts'), 'utf8');
+    const mkdirIndex = src.indexOf('await mkdir(outDir');
+    const seedIndex = src.indexOf('await runOmniJs(');
+    expect(mkdirIndex).toBeGreaterThan(-1);
+    expect(seedIndex).toBeGreaterThan(-1);
+    expect(mkdirIndex).toBeLessThan(seedIndex);
   });
 });
 
