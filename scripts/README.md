@@ -42,6 +42,20 @@ and unblocked.
 | `measure-actual-script-sizes.js`    | Measure generated script sizes vs empirical limits (cited by `docs/dev/SCRIPT_SIZE_LIMITS.md`)                  | `node scripts/measure-actual-script-sizes.js`    |
 | `measure-bridge-return-limit.ts`    | Measure OmniJS bridge RETURN-path size limit — run manually, supervised, against live OmniFocus (still pending) | `npx tsx scripts/measure-bridge-return-limit.ts` |
 
+## kmm/ — KMM test-ground deploy + reset (OMN-279, spec `docs/superpowers/specs/2026-07-02-kmm-test-ground-design.md`)
+
+Runs ON KMM (the physical test-ground Mac), not on the dev machine. **Unverified pending KMM's physical existence** —
+see OMN-280 (manual machine setup) for the live acceptance pass; this repo-code slice was built blind against the
+approved spec.
+
+| Script                                            | Purpose                                                                                                                                     | Invocation                                                                                                                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kmm/of-db-reset.sh`                              | Quit OmniFocus → restore the frozen golden snapshot → relaunch → verify counts vs PROVENANCE.md                                             | `ssh kmm of-db-reset` (requires `OF_GOLDEN_DIR`, `OF_CONTAINER_PATH`)                                                                                              |
+| `kmm/install-kmm-server.sh`                       | Install/reload the KMM MCP HTTP server LaunchAgent (RunAtLoad+KeepAlive); `--verify` checks auth enforcement + a real authenticated request | `scripts/kmm/install-kmm-server.sh [--verify\|--uninstall]` (requires `TAILSCALE_IP`, `MCP_AUTH_TOKEN`)                                                            |
+| `kmm/com.omnifocus-mcp.kmm-server.plist.template` | LaunchAgent plist template, substituted by the installer above                                                                              | not invoked directly                                                                                                                                               |
+| `kmm/of-kmm-redeploy`                             | git pull + npm ci + build + restart the LaunchAgent + verify (both the fresh-build sanity check and the live HTTP check)                    | `of-kmm-redeploy` (same required env vars as the installer; set `OF_MCP_KMM_PORT` too if the install used a non-default port — the redeploy regenerates the plist) |
+| `kmm/lib.sh`                                      | Shared `log`/`die`/`require_env` helpers sourced by the three scripts above                                                                 | not invoked directly                                                                                                                                               |
+
 ## Prompts
 
 | Script            | Purpose                            | Invocation             |

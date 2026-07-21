@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from scripts/kmm/com.omnifocus-mcp.kmm-server.plist.template by
+     install-kmm-server.sh, which substitutes absolute paths, a Homebrew-aware
+     PATH (launchd does NOT expand $HOME or ~), the Tailscale IP, port, and
+     MCP_AUTH_TOKEN. Re-run the installer to update; do not hand-edit the
+     deployed copy. See docs/superpowers/specs/2026-07-02-kmm-test-ground-design.md §4. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.omnifocus-mcp.kmm-server</string>
+    <!-- launchd's default PATH omits Homebrew -> node not found -> exit 127. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>__PATH_VALUE__</string>
+      <!-- OMN-236: auth is env-var-only, there is no --auth-token CLI flag.
+           A missing MCP_AUTH_TOKEN here silently disables auth entirely —
+           the installer's --verify mode checks the server actually rejects
+           an unauthenticated request. -->
+      <key>MCP_AUTH_TOKEN</key>
+      <string>__MCP_AUTH_TOKEN__</string>
+      <!-- Long-lived process pays the cache warm once, not per session
+           (spec §4). -->
+      <key>ENABLE_CACHE_WARMING</key>
+      <string>true</string>
+      <!-- Deliberately open posture (spec §"Guard posture"): no sandbox
+           guard, no NODE_ENV=test. Safety is environmental — disposable DB,
+           no sync, tailnet-only reachability, one-command restore
+           (of-db-reset.sh). -->
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>__REPO_DIR__</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>__NODE_PATH__</string>
+      <string>__REPO_DIR__/dist/index.js</string>
+      <string>--http</string>
+      <string>--port</string>
+      <string>__PORT__</string>
+      <string>--host</string>
+      <string>__TAILSCALE_IP__</string>
+    </array>
+    <!-- Long-lived server, not a scheduled job: start at login, restart on
+         crash. Unlike the diagnose job's StartCalendarInterval. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__LAUNCHD_LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LAUNCHD_LOG__</string>
+  </dict>
+</plist>
