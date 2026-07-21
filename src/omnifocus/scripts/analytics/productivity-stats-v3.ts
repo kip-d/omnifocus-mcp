@@ -94,6 +94,13 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           // OmniJS: Iterate through all tasks for overall statistics
           flattenedTasks.forEach(task => {
             try {
+              // OMN-290 (OMN-148 D11/D15): project ROOT rows are never tasks
+              // in analytics. The global flattenedTasks includes each
+              // project's root task; a non-null task.project is the live
+              // root marker (PR #227). Same rule as workflow_analysis
+              // (OMN-270) and the shared per-project counts pass.
+              if (task.project) return;
+
               totalTasks++;
 
               const isCompleted = task.completed || false;

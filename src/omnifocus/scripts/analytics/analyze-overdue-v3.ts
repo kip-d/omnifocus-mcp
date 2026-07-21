@@ -116,6 +116,13 @@ export const ANALYZE_OVERDUE_V3 = `
           // OmniJS: Iterate through all tasks for overdue analysis
           flattenedTasks.forEach(task => {
             try {
+              // OMN-290 (OMN-148 D11): project ROOT rows are never tasks in
+              // analytics — pre-fix every project inflated totalActive by one
+              // phantom row (and an overdue project's root counted as an
+              // overdue task). Non-null task.project is the live root marker
+              // (PR #227); same rule as workflow_analysis (OMN-270).
+              if (task.project) return;
+
               // OMN-187: one "active" predicate drives BOTH the overduePercentage
               // denominator (totalActive) and the overdue numerator below, so the
               // numerator is a subset of the denominator by construction (percentage

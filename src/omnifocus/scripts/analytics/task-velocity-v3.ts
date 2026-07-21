@@ -64,9 +64,22 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           // Only count tasks completed within the specified date range
           let totalCompleted = 0;
           let totalCreated = 0;
+          let tasksAnalyzed = 0;
           const completionTimes = [];
 
           flattenedTasks.forEach(task => {
+            // OMN-290 (OMN-148 D11/D15): project ROOT rows are never tasks in
+            // analytics — a completed project's root row otherwise counts as a
+            // completed task. Non-null task.project is the live root marker
+            // (PR #227). Own try so a corrupted row skips (per-task swallow
+            // convention) instead of aborting the forEach.
+            try {
+              if (task.project) return;
+            } catch (e) {
+              return;
+            }
+            tasksAnalyzed++;
+
             try {
               // Completion analysis - only count if within date range
               const completionDate = task.completionDate;
@@ -147,7 +160,10 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
               },
               breakdown: {
                 medianCompletionHours: medianCompletionTime.toFixed(1),
-                tasksAnalyzed: flattenedTasks.length
+                // OMN-290: the analyzed (non-root) population, counted in the
+                // loop after the root skip — the OMN-270 lesson: report what
+                // was analyzed, not the raw collection length.
+                tasksAnalyzed: tasksAnalyzed
               },
               projections: {
                 tasksPerDay: velocity.toFixed(2),
