@@ -95,17 +95,25 @@ function buildOmniJsPayload(): string {
       }
     });
   }
+  // Projects and tasks are swept too, not just left to folder cascades: a
+  // cascade that failed partway on a prior run can leave orphaned FIXTURE
+  // projects/tasks whose parent folder no longer exists.
   sweepFixtures(flattenedFolders);
+  sweepFixtures(flattenedProjects);
   sweepFixtures(flattenedTags);
+  sweepFixtures(flattenedTasks);
   sweepFixtures(inbox);
   // Post-sweep verification: the per-delete try/catch above tolerates
   // cascade-dead references, but that must not hide a delete that failed
   // for a REAL reason (mid-sync, locked item). If anything FIXTURE-prefixed
-  // survived the sweep, creating a fresh tree would produce exactly the
-  // duplicate-fixture corruption the sweep exists to prevent — fail loud
-  // instead (the throw propagates out of evaluateJavascript to the caller).
+  // survived the sweep — in ANY flattened collection, so orphans of a
+  // partial cascade can't hide — creating a fresh tree would produce
+  // exactly the duplicate-fixture corruption the sweep exists to prevent;
+  // fail loud instead (the throw propagates out of evaluateJavascript).
   var leftovers = flattenedFolders.slice().filter(isFixture).length +
+    flattenedProjects.slice().filter(isFixture).length +
     flattenedTags.slice().filter(isFixture).length +
+    flattenedTasks.slice().filter(isFixture).length +
     inbox.slice().filter(isFixture).length;
   if (leftovers > 0) {
     throw new Error('idempotency sweep left ' + leftovers + ' FIXTURE item(s) behind — refusing to seed a second fixture tree alongside them.');

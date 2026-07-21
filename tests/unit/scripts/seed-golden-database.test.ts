@@ -105,8 +105,23 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
   it('sweeps prior FIXTURE: data from FLATTENED collections before creating anything (idempotent re-seed)', () => {
     // Flattened, not top-level — a fixture nested under a non-fixture
     // parent would be invisible to the top-level folders/tags collections.
-    for (const swept of ['sweepFixtures(flattenedFolders)', 'sweepFixtures(flattenedTags)', 'sweepFixtures(inbox)']) {
+    // ALL flattened collections — a partial cascade failure can orphan
+    // FIXTURE projects/tasks whose parent folder is already gone.
+    for (const swept of [
+      'sweepFixtures(flattenedFolders)',
+      'sweepFixtures(flattenedProjects)',
+      'sweepFixtures(flattenedTags)',
+      'sweepFixtures(flattenedTasks)',
+      'sweepFixtures(inbox)',
+    ]) {
       expect(payload).toContain(swept);
+    }
+    // The leftover verification must scan the same five collections.
+    for (const checked of [
+      'flattenedProjects.slice().filter(isFixture).length',
+      'flattenedTasks.slice().filter(isFixture).length',
+    ]) {
+      expect(payload).toContain(checked);
     }
     // The sweep must run BEFORE the first fixture creation.
     expect(payload.indexOf('deleteObject')).toBeLessThan(payload.indexOf('new Folder('));

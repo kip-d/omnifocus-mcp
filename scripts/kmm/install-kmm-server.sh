@@ -141,7 +141,11 @@ for _ in $(seq 1 10); do
   launchctl print "$GUI/$LABEL" >/dev/null 2>&1 || break
   sleep 0.5
 done
-launchctl bootstrap "$GUI" "$PLIST_DEST" || { sleep 1; launchctl bootstrap "$GUI" "$PLIST_DEST"; }
+launchctl bootstrap "$GUI" "$PLIST_DEST" || {
+  sleep 1
+  launchctl bootstrap "$GUI" "$PLIST_DEST" \
+    || die "launchctl bootstrap failed twice for $LABEL — launchd may still be tearing down the old job. Check: launchctl print $GUI/$LABEL ; then re-run this installer."
+}
 log "Loaded job $LABEL (RunAtLoad + KeepAlive)."
 
 # --- Optional verification ---------------------------------------------------
