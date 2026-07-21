@@ -131,6 +131,13 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
     expect(payload).toContain("Perspective.Custom.byName(fixtureName('Custom Perspective')) ||");
   });
 
+  it('calls Task.drop() with both required arguments (allOccurrences, dateDropped)', () => {
+    // Zero-arg drop() has no documented fallback (unlike markComplete);
+    // production defs.ts always passes both.
+    expect(payload).toContain('.drop(true, now)');
+    expect(payload).not.toMatch(/\.drop\(\)/);
+  });
+
   it('contains the seed-timestamp marker and returns JSON counts', () => {
     expect(payload).toContain("fixtureName('seed-timestamp')");
     expect(payload).toContain('return JSON.stringify(counts)');

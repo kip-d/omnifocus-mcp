@@ -246,8 +246,12 @@ function buildOmniJsPayload(): string {
   var completedStandaloneTask = new Task(fixtureName('completed standalone task'), pParallel);
   completedStandaloneTask.markComplete();
 
+  // drop() requires (allOccurrences, dateDropped) per OmniFocus.d.ts — the
+  // production mutation code (src/contracts/ast/mutation/defs.ts) always
+  // calls it with both; there is no documented no-arg fallback like
+  // markComplete()'s.
   var droppedStandaloneTask = new Task(fixtureName('dropped standalone task'), pParallel);
-  droppedStandaloneTask.drop();
+  droppedStandaloneTask.drop(true, now);
 
   // ---- Task features --------------------------------------------------
   var repFixed = new Task(fixtureName('repeats fixed weekly'), pParallel);
