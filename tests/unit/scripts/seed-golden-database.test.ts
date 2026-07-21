@@ -11,18 +11,18 @@
  * a real OmniFocus database.
  */
 import { describe, it, expect } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
+import { REPO_ROOT, sourceAndRun } from './bash-harness.js';
 import {
   parseArgs,
   buildOmniJsPayload,
   renderProvenance,
+  resolveSeedTimeoutMs,
   type SeedCounts,
 } from '../../../scripts/kmm/seed-golden-database.js';
 
-const REPO_ROOT = join(__dirname, '../../..');
 const OF_DB_RESET = join(REPO_ROOT, 'scripts/kmm/of-db-reset.sh');
 
 const SAMPLE_COUNTS: SeedCounts = {
@@ -45,6 +45,10 @@ describe('parseArgs', () => {
 
   it('throws loudly when --out has no value instead of silently defaulting', () => {
     expect(() => parseArgs(['--out'])).toThrow('--out requires a directory argument');
+  });
+
+  it('throws loudly when --out is followed by another flag instead of mkdir-ing a directory named like the flag', () => {
+    expect(() => parseArgs(['--out', '--verbose'])).toThrow('--out requires a directory argument');
   });
 
   it('honors --out override', () => {
@@ -145,21 +149,31 @@ describe('renderProvenance — contract with of-db-reset.sh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'provenance-xcontract-'));
     try {
       writeFileSync(join(dir, 'PROVENANCE.md'), renderProvenance(SAMPLE_COUNTS));
-      const result = spawnSync(
-        'bash',
-        [
-          '-c',
-          `source "$1"; PROVENANCE="$2/PROVENANCE.md"; echo "$(parse_provenance_count tasks) $(parse_provenance_count projects)"`,
-          'bash',
-          OF_DB_RESET,
-          dir,
-        ],
-        { env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }, encoding: 'utf8' },
+      const result = sourceAndRun(
+        OF_DB_RESET,
+        `PROVENANCE="${dir}/PROVENANCE.md"; echo "$(parse_provenance_count tasks) $(parse_provenance_count projects)"`,
       );
       expect(result.status).toBe(0);
       expect(result.stdout.trim()).toBe('152 21');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('resolveSeedTimeoutMs', () => {
+  it('defaults to 180000 when unset or empty', () => {
+    expect(resolveSeedTimeoutMs(undefined)).toBe(180_000);
+    expect(resolveSeedTimeoutMs('')).toBe(180_000);
+  });
+
+  it('honors a numeric override', () => {
+    expect(resolveSeedTimeoutMs('60000')).toBe(60_000);
+  });
+
+  it('throws loudly on a non-numeric or non-positive value instead of passing NaN to spawn', () => {
+    expect(() => resolveSeedTimeoutMs('abc')).toThrow('OF_SEED_TIMEOUT_MS must be a positive number');
+    expect(() => resolveSeedTimeoutMs('0')).toThrow('OF_SEED_TIMEOUT_MS must be a positive number');
+    expect(() => resolveSeedTimeoutMs('-5')).toThrow('OF_SEED_TIMEOUT_MS must be a positive number');
   });
 });

@@ -28,15 +28,26 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { isRunDirectly } from '../lib/run-directly.js';
 
-const SEED_TIMEOUT_MS = Number(process.env.OF_SEED_TIMEOUT_MS ?? 180_000);
+// Validated lazily (not at module scope) so importing the module for tests
+// never throws on a stray env var; a bad value fails loud with the actual
+// cause instead of spawn() rejecting NaN as an opaque ERR_OUT_OF_RANGE.
+function resolveSeedTimeoutMs(raw: string | undefined = process.env.OF_SEED_TIMEOUT_MS): number {
+  if (raw === undefined || raw === '') return 180_000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`OF_SEED_TIMEOUT_MS must be a positive number of milliseconds, got: '${raw}'`);
+  }
+  return n;
+}
 
 function parseArgs(argv: string[]): { outDir: string } {
   const outIndex = argv.indexOf('--out');
-  if (outIndex !== -1 && !argv[outIndex + 1]) {
-    // Fail loud, not fall back: silently writing PROVENANCE.md to the
-    // default location on a value-less --out means of-db-reset.sh later
-    // reads the wrong (or stale) file from the unintended directory.
-    throw new Error('--out requires a directory argument (e.g. --out ~/of-golden)');
+  // Fail loud, not fall back: silently writing PROVENANCE.md to the default
+  // location on a value-less --out (or mkdir-ing a directory literally named
+  // '--verbose' when the value is another flag) means of-db-reset.sh later
+  // reads the wrong (or stale) file from an unintended directory.
+  if (outIndex !== -1 && (!argv[outIndex + 1] || argv[outIndex + 1].startsWith('-'))) {
+    throw new Error(`--out requires a directory argument (e.g. --out ~/of-golden), got: '${argv[outIndex + 1] ?? ''}'`);
   }
   const outDir = outIndex !== -1 ? argv[outIndex + 1] : join(homedir(), 'of-golden');
   return { outDir };
@@ -87,6 +98,18 @@ function buildOmniJsPayload(): string {
   sweepFixtures(flattenedFolders);
   sweepFixtures(flattenedTags);
   sweepFixtures(inbox);
+  // Post-sweep verification: the per-delete try/catch above tolerates
+  // cascade-dead references, but that must not hide a delete that failed
+  // for a REAL reason (mid-sync, locked item). If anything FIXTURE-prefixed
+  // survived the sweep, creating a fresh tree would produce exactly the
+  // duplicate-fixture corruption the sweep exists to prevent — fail loud
+  // instead (the throw propagates out of evaluateJavascript to the caller).
+  var leftovers = flattenedFolders.slice().filter(isFixture).length +
+    flattenedTags.slice().filter(isFixture).length +
+    inbox.slice().filter(isFixture).length;
+  if (leftovers > 0) {
+    throw new Error('idempotency sweep left ' + leftovers + ' FIXTURE item(s) behind — refusing to seed a second fixture tree alongside them.');
+  }
   // The custom perspective is handled by reuse-not-recreate below (there is
   // no documented Perspective delete API to sweep with).
 
@@ -345,7 +368,8 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
   // on the MCP server's src/ runtime — the same no-server-dependency rule
   // its sibling of-db-reset.sh states in its header.
   return new Promise<string>((resolve, reject) => {
-    const proc = spawn('osascript', ['-l', 'JavaScript'], { timeout: SEED_TIMEOUT_MS });
+    const timeoutMs = resolveSeedTimeoutMs();
+    const proc = spawn('osascript', ['-l', 'JavaScript'], { timeout: timeoutMs });
     let stdout = '';
     let stderr = '';
     proc.stdout.on('data', (data: Buffer) => {
@@ -359,7 +383,7 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
       if (signal) {
         reject(
           new Error(
-            `osascript killed by ${signal} after ${SEED_TIMEOUT_MS}ms — is OmniFocus blocked by a modal dialog? (OF_SEED_TIMEOUT_MS overrides the bound)`,
+            `osascript killed by ${signal} after ${timeoutMs}ms — is OmniFocus blocked by a modal dialog? (OF_SEED_TIMEOUT_MS overrides the bound)`,
           ),
         );
       } else if (code !== 0) {
@@ -449,4 +473,4 @@ if (isRunDirectly(import.meta.url)) {
 }
 
 // Exported for unit tests (the run-guard above makes importing side-effect-free).
-export { parseArgs, buildOmniJsPayload, renderProvenance, type SeedCounts };
+export { parseArgs, buildOmniJsPayload, renderProvenance, resolveSeedTimeoutMs, type SeedCounts };

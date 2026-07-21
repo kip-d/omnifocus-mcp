@@ -11,8 +11,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { REPO_ROOT, sourceAndRun, spawnScript } from './bash-harness.js';
 
-const REPO_ROOT = join(__dirname, '../../..');
 // Placeholder paths used only as fake env-var VALUES in these tests (never
 // actually written to) — computed rather than literal so no hardcoded
 // world-writable-directory string appears in source (sonarjs/publicly-writable-directories).
@@ -30,22 +30,6 @@ function bashSyntaxOk(script: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** Runs `source <script>; <call>` in a fresh bash subprocess with a
- * controlled environment (default vars stripped unless provided). Sourcing
- * relies on the scripts' sourcing guard (`[[ "${BASH_SOURCE[0]}" == "${0}" ]]`)
- * to skip `main` — only the function/variable definitions load. */
-function sourceAndRun(
-  script: string,
-  call: string,
-  env: Record<string, string> = {},
-): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync('bash', ['-c', `source "$1"; ${call}`, 'bash', script], {
-    env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
-    encoding: 'utf8',
-  });
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
 describe('scripts/kmm — syntax', () => {
@@ -579,15 +563,3 @@ describe('of-kmm-redeploy — env validation', () => {
     }
   });
 });
-
-function spawnScript(
-  script: string,
-  args: string[],
-  env: Record<string, string>,
-): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync('bash', [script, ...args], {
-    env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
-    encoding: 'utf8',
-  });
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
-}
