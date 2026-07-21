@@ -131,6 +131,16 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
     expect(payload).toContain("Perspective.Custom.byName(fixtureName('Custom Perspective')) ||");
   });
 
+  it('sets reviewInterval via read-modify-reassign with plural units, never an object literal', () => {
+    // A plain literal assignment silently no-ops in OmniJS (OMN-41/OMN-58);
+    // production lowers this via readModifyReassign, and units are plural
+    // per defs.ts reviewIntervalUnit().
+    expect(payload).not.toMatch(/reviewInterval\s*=\s*\{/);
+    expect(payload).toContain('var reviewRmr = pReview.reviewInterval;');
+    expect(payload).toContain("reviewRmr.unit = 'weeks';");
+    expect(payload).toContain('pReview.reviewInterval = reviewRmr;');
+  });
+
   it('calls Task.drop() with both required arguments (allOccurrences, dateDropped)', () => {
     // Zero-arg drop() has no documented fallback (unlike markComplete);
     // production defs.ts always passes both.

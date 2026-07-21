@@ -167,7 +167,16 @@ function buildOmniJsPayload(): string {
   pDropped.status = Project.Status.Dropped;
 
   var pReview = new Project(fixtureName('Review Interval Project'), root);
-  pReview.reviewInterval = { unit: 'week', steps: 1 };
+  // Read-modify-reassign, never a plain object literal: OmniJS cannot
+  // construct the typed Project.ReviewInterval, and assigning a literal
+  // silently no-ops (OMN-41/OMN-58 — see mutation/emitter.ts
+  // readModifyReassign). reviewInterval is non-nullable on a fresh project
+  // (OMN-273), so the typed instance exists to modify. Units are PLURAL
+  // ('weeks'), matching defs.ts reviewIntervalUnit().
+  var reviewRmr = pReview.reviewInterval;
+  reviewRmr.unit = 'weeks';
+  reviewRmr.steps = 1;
+  pReview.reviewInterval = reviewRmr;
   pReview.nextReviewDate = daysFromNow(3);
 
   var pDeferDue = new Project(fixtureName('Defer+Due Project'), root);
