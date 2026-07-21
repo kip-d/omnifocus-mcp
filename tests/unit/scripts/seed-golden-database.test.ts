@@ -117,10 +117,7 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
       expect(payload).toContain(swept);
     }
     // The leftover verification must scan the same five collections.
-    for (const checked of [
-      'flattenedProjects.slice().filter(isFixture).length',
-      'flattenedTasks.slice().filter(isFixture).length',
-    ]) {
+    for (const checked of ['flattenedProjects.filter(isFixture).length', 'flattenedTasks.filter(isFixture).length']) {
       expect(payload).toContain(checked);
     }
     // The sweep must run BEFORE the first fixture creation.
@@ -129,6 +126,13 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
 
   it('reuses an existing FIXTURE custom perspective instead of duplicating it on re-seed', () => {
     expect(payload).toContain("Perspective.Custom.byName(fixtureName('Custom Perspective')) ||");
+  });
+
+  it('never references the nonexistent Perspective.FilterRule namespace', () => {
+    // archivedFilterRules is typed as bare Object; no FilterRule enum exists
+    // in OmniFocus.d.ts — referencing one throws inside the try/catch and
+    // silently fails the Perspectives coverage row on every run.
+    expect(payload).not.toContain('Perspective.FilterRule');
   });
 
   it('sets reviewInterval via read-modify-reassign with plural units, never an object literal', () => {

@@ -83,11 +83,12 @@ function buildOmniJsPayload(): string {
   // the first and corrupt whatever golden snapshot gets frozen from it.
   // FLATTENED collections, not top-level ones: a FIXTURE folder/tag nested
   // under a non-fixture parent would be invisible to folders/tags. Deleting
-  // a parent cascades to children already in the slice, so each delete is
+  // a parent cascades to children already in the snapshot, so each delete is
   // try/caught (a dead reference just means the cascade got there first).
-  // Slice first: deleting while iterating a live collection is undefined.
+  // filter() itself returns a fresh array, so iteration never walks the
+  // live collection while deleting — no extra slice() copy needed.
   function sweepFixtures(collection) {
-    collection.slice().filter(isFixture).forEach(function (obj) {
+    collection.filter(isFixture).forEach(function (obj) {
       try {
         deleteObject(obj);
       } catch (e) {
@@ -110,11 +111,11 @@ function buildOmniJsPayload(): string {
   // partial cascade can't hide — creating a fresh tree would produce
   // exactly the duplicate-fixture corruption the sweep exists to prevent;
   // fail loud instead (the throw propagates out of evaluateJavascript).
-  var leftovers = flattenedFolders.slice().filter(isFixture).length +
-    flattenedProjects.slice().filter(isFixture).length +
-    flattenedTags.slice().filter(isFixture).length +
-    flattenedTasks.slice().filter(isFixture).length +
-    inbox.slice().filter(isFixture).length;
+  var leftovers = flattenedFolders.filter(isFixture).length +
+    flattenedProjects.filter(isFixture).length +
+    flattenedTags.filter(isFixture).length +
+    flattenedTasks.filter(isFixture).length +
+    inbox.filter(isFixture).length;
   if (leftovers > 0) {
     throw new Error('idempotency sweep left ' + leftovers + ' FIXTURE item(s) behind — refusing to seed a second fixture tree alongside them.');
   }
@@ -323,7 +324,13 @@ function buildOmniJsPayload(): string {
     var customPerspective =
       Perspective.Custom.byName(fixtureName('Custom Perspective')) ||
       new Perspective.Custom(fixtureName('Custom Perspective'));
-    customPerspective.archivedFilterRules = [Perspective.FilterRule.Flagged];
+    // Plain-object rule format per Omni Automation's documented filter-rule
+    // dictionaries — archivedFilterRules is typed as bare Object in
+    // OmniFocus.d.ts, and the Perspective namespace declares NO filter-rule
+    // enum (referencing one throws, silently failing this block on every
+    // run while the warning below misdirects to licensing). Still
+    // best-effort: the exact rule-dictionary shape is a live-run hypothesis.
+    customPerspective.archivedFilterRules = [{ actionStatus: 'flagged' }];
     perspectiveCreated = true;
   } catch (e) {
     perspectiveCreated = false;
