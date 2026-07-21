@@ -404,7 +404,12 @@ SCOPE FILTERING:
 
   annotations = {
     title: 'Analyze OmniFocus Data',
-    readOnlyHint: true,
+    // OMN-284: this tool is NOT read-only — manage_reviews's mark_reviewed
+    // and set_schedule operations mutate OmniFocus project data. The MCP
+    // spec has no per-operation annotation granularity (ToolAnnotations is
+    // one flat object per tool), so the tool-level hint must reflect the
+    // most permissive case a caller could trigger.
+    readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: true,
