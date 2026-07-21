@@ -32,7 +32,13 @@ const SEED_TIMEOUT_MS = Number(process.env.OF_SEED_TIMEOUT_MS ?? 180_000);
 
 function parseArgs(argv: string[]): { outDir: string } {
   const outIndex = argv.indexOf('--out');
-  const outDir = outIndex !== -1 && argv[outIndex + 1] ? argv[outIndex + 1] : join(homedir(), 'of-golden');
+  if (outIndex !== -1 && !argv[outIndex + 1]) {
+    // Fail loud, not fall back: silently writing PROVENANCE.md to the
+    // default location on a value-less --out means of-db-reset.sh later
+    // reads the wrong (or stale) file from the unintended directory.
+    throw new Error('--out requires a directory argument (e.g. --out ~/of-golden)');
+  }
+  const outDir = outIndex !== -1 ? argv[outIndex + 1] : join(homedir(), 'of-golden');
   return { outDir };
 }
 
@@ -334,6 +340,10 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
   // a ~300-line JSON-escaped payload in a single `-e` argv element invites
   // argv-length/escaping edge cases stdin avoids, and a wedged OmniFocus
   // (modal dialog) would otherwise hang the seeder with no diagnostic.
+  // Deliberately MIRRORS (not imports) OmniAutomation.ts's runner: this is
+  // a standalone ops script (npx tsx, no build step) that must not depend
+  // on the MCP server's src/ runtime — the same no-server-dependency rule
+  // its sibling of-db-reset.sh states in its header.
   return new Promise<string>((resolve, reject) => {
     const proc = spawn('osascript', ['-l', 'JavaScript'], { timeout: SEED_TIMEOUT_MS });
     let stdout = '';

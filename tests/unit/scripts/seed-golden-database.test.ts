@@ -43,6 +43,10 @@ describe('parseArgs', () => {
     expect(parseArgs([]).outDir).toBe(join(homedir(), 'of-golden'));
   });
 
+  it('throws loudly when --out has no value instead of silently defaulting', () => {
+    expect(() => parseArgs(['--out'])).toThrow('--out requires a directory argument');
+  });
+
   it('honors --out override', () => {
     // Computed rather than literal so no hardcoded world-writable-directory
     // string appears in source (sonarjs/publicly-writable-directories).
@@ -70,15 +74,28 @@ describe('buildOmniJsPayload — OmniJS API-shape pins (gate findings)', () => {
     expect(payload).toContain("new Folder(fixtureName('Nested L1'), root)");
   });
 
+  // [^\n]* not [^)]* — the first argument is always a fixtureName(...) call,
+  // whose closing paren would stop a [^)]* class before it ever reached the
+  // position argument, making the not.toMatch a permanent false negative.
+  const TASK_IN_FOLDER = /new Task\([^\n]*,\s*root\)/;
+  const TASK_IN_INBOX_COLLECTION = /new Task\([^\n]*,\s*inbox\)/;
+
+  it('the Task-position pin regexes actually match known-bad code (canary)', () => {
+    // Watched-it-fail guard: if these regexes cannot flag the exact bug
+    // they exist to catch, the pins below prove nothing.
+    expect("var marker = new Task(fixtureName('seed-timestamp'), root);").toMatch(TASK_IN_FOLDER);
+    expect("new Task(fixtureName('inbox task'), inbox);").toMatch(TASK_IN_INBOX_COLLECTION);
+  });
+
   it('never positions a Task in a Folder (marker lives in the Seed Meta project)', () => {
-    expect(payload).not.toMatch(/new Task\([^)]*,\s*root\)/);
+    expect(payload).not.toMatch(TASK_IN_FOLDER);
     expect(payload).toContain("new Project(fixtureName('Seed Meta'), root)");
     expect(payload).toContain("new Task(fixtureName('seed-timestamp'), pMeta)");
   });
 
   it('positions the inbox task at inbox.ending, not the Inbox collection itself', () => {
     expect(payload).toContain('inbox.ending');
-    expect(payload).not.toMatch(/new Task\([^)]*,\s*inbox\)/);
+    expect(payload).not.toMatch(TASK_IN_INBOX_COLLECTION);
   });
 
   it('sweeps prior FIXTURE: data from FLATTENED collections before creating anything (idempotent re-seed)', () => {
