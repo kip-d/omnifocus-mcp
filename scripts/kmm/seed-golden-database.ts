@@ -14,6 +14,12 @@
  *
  * Usage: npx tsx scripts/kmm/seed-golden-database.ts [--out ~/of-golden]
  *
+ * IMPORTANT: --out must be the SAME directory of-db-reset.sh is given as
+ * OF_GOLDEN_DIR (both default-align on ~/of-golden, but of-db-reset.sh has
+ * no default — it requires the env var). A mismatch makes the reset verify
+ * counts against a missing or STALE PROVENANCE.md, silently defeating the
+ * verification the two scripts provide together.
+ *
  * Env: OF_SEED_TIMEOUT_MS bounds the osascript run (default 180000) — a wedged
  * OmniFocus (modal dialog) otherwise hangs the seeder forever (known failure mode,
  * see CLAUDE.md "Script timeouts").
@@ -46,8 +52,13 @@ function parseArgs(argv: string[]): { outDir: string } {
   // location on a value-less --out (or mkdir-ing a directory literally named
   // '--verbose' when the value is another flag) means of-db-reset.sh later
   // reads the wrong (or stale) file from an unintended directory.
+  // The dash check intentionally also rejects a real directory whose name
+  // starts with '-' — reach one as './-name' or an absolute path (both
+  // pass); silently mkdir-ing a flag typo is the worse failure.
   if (outIndex !== -1 && (!argv[outIndex + 1] || argv[outIndex + 1].startsWith('-'))) {
-    throw new Error(`--out requires a directory argument (e.g. --out ~/of-golden), got: '${argv[outIndex + 1] ?? ''}'`);
+    throw new Error(
+      `--out requires a directory argument (e.g. --out ~/of-golden), got: '${argv[outIndex + 1] ?? ''}'. For a directory name starting with '-', use ./ or an absolute path.`,
+    );
   }
   const outDir = outIndex !== -1 ? argv[outIndex + 1] : join(homedir(), 'of-golden');
   return { outDir };
@@ -74,7 +85,10 @@ function buildOmniJsPayload(): string {
     return 'FIXTURE: ' + label;
   }
   function isFixture(obj) {
-    return obj.name.indexOf('FIXTURE: ') === 0;
+    // typeof guard: this predicate runs over every REAL object in the
+    // document during the sweep, and an odd item with a null/undefined
+    // name must read as "not a fixture", not crash the whole run.
+    return typeof obj.name === 'string' && obj.name.indexOf('FIXTURE: ') === 0;
   }
 
   // ---- Idempotency: remove any prior FIXTURE: data before re-seeding -----
