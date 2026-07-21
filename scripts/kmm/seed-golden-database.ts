@@ -404,6 +404,17 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
         resolve(stdout.trim());
       }
     });
+    // Without this, a write to an already-closed pipe (osascript exiting
+    // instantly on a TCC/Automation prompt, or the timeout firing between
+    // spawn and write) emits an unhandled 'error' (EPIPE) that crashes the
+    // seeder with a raw stack trace instead of the diagnostics above.
+    proc.stdin.on('error', (err: Error) => {
+      reject(
+        new Error(
+          `failed to write the payload to osascript stdin — did it exit immediately (TCC/Automation prompt)? ${String(err)}`,
+        ),
+      );
+    });
     proc.stdin.write(jxa);
     proc.stdin.end();
   });
