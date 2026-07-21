@@ -8,21 +8,27 @@
  * reads the resulting entity counts back and writes them to PROVENANCE.md.
  *
  * All dates are computed relative to the moment this script runs (never hardcoded), so
- * the golden DB stays "overdue 12 days" etc. no matter when it's re-seeded.
+ * the golden DB stays "overdue 12 days" etc. no matter when it's re-seeded. Re-seeding
+ * is IDEMPOTENT: the payload first deletes any prior `FIXTURE:`-prefixed folders, tags,
+ * and inbox tasks, so a re-run refreshes the fixture tree instead of duplicating it.
  *
  * Usage: npx tsx scripts/kmm/seed-golden-database.ts [--out ~/of-golden]
+ *
+ * Env: OF_SEED_TIMEOUT_MS bounds the osascript run (default 180000) — a wedged
+ * OmniFocus (modal dialog) otherwise hangs the seeder forever (known failure mode,
+ * see CLAUDE.md "Script timeouts").
  *
  * NOT YET LIVE-VERIFIED — this must run against real OmniFocus on KMM before the
  * database is frozen. Treat every OmniJS API call below as a hypothesis until an
  * actual run confirms it (perspective creation in particular is best-effort).
  */
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import { mkdir, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { join } from 'path';
+import { isRunDirectly } from '../lib/run-directly.js';
 
-const execFileAsync = promisify(execFile);
+const SEED_TIMEOUT_MS = Number(process.env.OF_SEED_TIMEOUT_MS ?? 180_000);
 
 function parseArgs(argv: string[]): { outDir: string } {
   const outIndex = argv.indexOf('--out');
@@ -50,24 +56,44 @@ function buildOmniJsPayload(): string {
   function fixtureName(label) {
     return 'FIXTURE: ' + label;
   }
+  function isFixture(obj) {
+    return obj.name.indexOf('FIXTURE: ') === 0;
+  }
 
-  var root = new Folder(fixtureName('Fixtures'), Folder.ending.None, library.beginning);
-  var nested1 = new Folder(fixtureName('Nested L1'), Folder.ending.None, root);
-  var nested2 = new Folder(fixtureName('Nested L2'), Folder.ending.None, nested1);
-  var droppedFolder = new Folder(fixtureName('Dropped Folder'), Folder.ending.None, root);
+  // ---- Idempotency: remove any prior FIXTURE: data before re-seeding -----
+  // The header advertises re-running this script to refresh relative dates;
+  // without this sweep a re-run would create a SECOND fixture tree alongside
+  // the first and corrupt whatever golden snapshot gets frozen from it.
+  // Deleting a folder cascades to its contained projects/tasks; tags and
+  // inbox tasks live outside the folder tree and are swept separately.
+  // Slice first: deleting while iterating a live collection is undefined.
+  folders.slice().filter(isFixture).forEach(function (f) { deleteObject(f); });
+  tags.slice().filter(isFixture).forEach(function (t) { deleteObject(t); });
+  inbox.slice().filter(isFixture).forEach(function (t) { deleteObject(t); });
+
+  // Folder/Project constructors take (name, position) — position is a parent
+  // Folder or a Folder.ChildInsertionLocation like library.beginning
+  // (src/omnifocus/api/OmniFocus.d.ts). The Folder CLASS has no insertion-
+  // location statics — beginning/ending exist only on instances/library.
+  var root = new Folder(fixtureName('Fixtures'), library.beginning);
+  var nested1 = new Folder(fixtureName('Nested L1'), root);
+  var nested2 = new Folder(fixtureName('Nested L2'), nested1);
+  var droppedFolder = new Folder(fixtureName('Dropped Folder'), root);
   droppedFolder.status = Folder.Status.Dropped;
 
   // ---- Tags ------------------------------------------------------------
-  var tagSingle = new Tag(fixtureName('tag-single'));
-  var tagMultiA = new Tag(fixtureName('tag-multi-a'));
-  var tagMultiB = new Tag(fixtureName('tag-multi-b'));
-  var tagParent = new Tag(fixtureName('tag-parent'));
+  // Tag constructor is (name, position: Tag | Tag.ChildInsertionLocation |
+  // null) — null = top level, explicit per the typedef's required arity.
+  var tagSingle = new Tag(fixtureName('tag-single'), null);
+  var tagMultiA = new Tag(fixtureName('tag-multi-a'), null);
+  var tagMultiB = new Tag(fixtureName('tag-multi-b'), null);
+  var tagParent = new Tag(fixtureName('tag-parent'), null);
   var tagChild = new Tag(fixtureName('tag-child'), tagParent);
-  var tagOnHold = new Tag(fixtureName('tag-on-hold'));
+  var tagOnHold = new Tag(fixtureName('tag-on-hold'), null);
   tagOnHold.status = Tag.Status.OnHold;
-  var tagDropped = new Tag(fixtureName('tag-dropped'));
+  var tagDropped = new Tag(fixtureName('tag-dropped'), null);
   tagDropped.status = Tag.Status.Dropped;
-  var tagUnused = new Tag(fixtureName('tag-zero-tasks'));
+  var tagUnused = new Tag(fixtureName('tag-zero-tasks'), null);
 
   // ---- Projects: types x statuses x features ----------------------------
   var pParallel = new Project(fixtureName('Parallel Project'), root);
@@ -116,7 +142,9 @@ function buildOmniJsPayload(): string {
   new Project(fixtureName('Duplicate Name'), root);
 
   // ---- Task locations: inbox / root / nested action groups --------------
-  new Task(fixtureName('inbox task'), inbox);
+  // Task positions are Project | Task | Task.ChildInsertionLocation — the
+  // Inbox collection itself is not one, but inbox.ending is.
+  new Task(fixtureName('inbox task'), inbox.ending);
 
   var rootTask = new Task(fixtureName('root-level task'), pParallel);
 
@@ -234,7 +262,10 @@ function buildOmniJsPayload(): string {
   }
 
   // ---- Seed-timestamp marker task (conformance suite reset-window precondition) ---
-  var marker = new Task(fixtureName('seed-timestamp'), root);
+  // Tasks cannot live directly in a Folder — the marker gets its own tiny
+  // project so the conformance suite has a stable, named home to read it from.
+  var pMeta = new Project(fixtureName('Seed Meta'), root);
+  var marker = new Task(fixtureName('seed-timestamp'), pMeta);
   marker.note = now.toISOString();
 
   // ---- Count-verify -----------------------------------------------------
@@ -281,8 +312,37 @@ async function runOmniJs(omniJsPayload: string): Promise<string> {
     var result = of.evaluateJavascript(${JSON.stringify(omniJsPayload)});
     result;
   `;
-  const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', jxa]);
-  return stdout.trim();
+  // stdin piping + a hard timeout, mirroring production OmniAutomation.ts:
+  // a ~300-line JSON-escaped payload in a single `-e` argv element invites
+  // argv-length/escaping edge cases stdin avoids, and a wedged OmniFocus
+  // (modal dialog) would otherwise hang the seeder with no diagnostic.
+  return new Promise<string>((resolve, reject) => {
+    const proc = spawn('osascript', ['-l', 'JavaScript'], { timeout: SEED_TIMEOUT_MS });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+    proc.on('error', reject);
+    proc.on('close', (code, signal) => {
+      if (signal) {
+        reject(
+          new Error(
+            `osascript killed by ${signal} after ${SEED_TIMEOUT_MS}ms — is OmniFocus blocked by a modal dialog? (OF_SEED_TIMEOUT_MS overrides the bound)`,
+          ),
+        );
+      } else if (code !== 0) {
+        reject(new Error(`osascript exited ${code}: ${stderr.trim()}`));
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+    proc.stdin.write(jxa);
+    proc.stdin.end();
+  });
 }
 
 function renderProvenance(counts: SeedCounts): string {
@@ -345,7 +405,16 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  console.error('Seeding failed:', err);
-  process.exitCode = 1;
-});
+// Run-guard (scripts/lib/run-directly.ts pattern, same as verify-deploy.ts):
+// without it, merely IMPORTING this module — e.g. a unit test exercising
+// parseArgs/renderProvenance — would fire real OmniFocus mutations against
+// whatever database happens to be open.
+if (isRunDirectly(import.meta.url)) {
+  main().catch((err) => {
+    console.error('Seeding failed:', err);
+    process.exitCode = 1;
+  });
+}
+
+// Exported for unit tests (the run-guard above makes importing side-effect-free).
+export { parseArgs, buildOmniJsPayload, renderProvenance, type SeedCounts };
