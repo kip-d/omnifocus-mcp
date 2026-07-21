@@ -7,7 +7,7 @@
  * or a real KMM machine, per the ticket's own acceptance criteria.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -294,11 +294,9 @@ describe('scripts/kmm — PATH-symlink invocation (SCRIPT_DIR symlink resolution
     try {
       const link = join(dir, 'linked-script');
       symlinkSync(script, link);
-      const result = spawnSync('bash', [link], {
-        env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
-        encoding: 'utf8',
-      });
-      return { status: result.status, stderr: result.stderr };
+      // Delegates to the shared harness so the symlink tests run under the
+      // exact same controlled environment as every other scripts test.
+      return spawnScript(link, [], env);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

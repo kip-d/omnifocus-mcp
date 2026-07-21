@@ -333,15 +333,30 @@ function buildOmniJsPayload(): string {
   var allTags = flattenedTags;
   var allFolders = flattenedFolders;
 
+  // One pass per collection, not one filter() per counter: these totals
+  // cover the WHOLE document (the real database plus fixtures), inside a
+  // timeout-bounded evaluateJavascript call — avoid re-traversing a large
+  // flattenedTasks twice and flattenedProjects twice.
+  var taskTotals = allTasks.reduce(function (acc, t) {
+    if (t.completed) { acc.completed += 1; }
+    if (t.dropped) { acc.dropped += 1; }
+    return acc;
+  }, { completed: 0, dropped: 0 });
+  var projectTotals = allProjects.reduce(function (acc, p) {
+    if (p.status === Project.Status.Dropped) { acc.dropped += 1; }
+    if (p.status === Project.Status.Done) { acc.done += 1; }
+    return acc;
+  }, { dropped: 0, done: 0 });
+
   var counts = {
     tasks: allTasks.length,
     projects: allProjects.length,
     tags: allTags.length,
     folders: allFolders.length,
-    tasks_completed: allTasks.filter(function (t) { return t.completed; }).length,
-    tasks_dropped: allTasks.filter(function (t) { return t.dropped; }).length,
-    projects_dropped: allProjects.filter(function (p) { return p.status === Project.Status.Dropped; }).length,
-    projects_done: allProjects.filter(function (p) { return p.status === Project.Status.Done; }).length,
+    tasks_completed: taskTotals.completed,
+    tasks_dropped: taskTotals.dropped,
+    projects_dropped: projectTotals.dropped,
+    projects_done: projectTotals.done,
     seed_timestamp: now.toISOString(),
     perspective_created: perspectiveCreated,
   };
