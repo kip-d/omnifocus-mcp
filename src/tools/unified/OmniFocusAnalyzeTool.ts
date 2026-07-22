@@ -11,7 +11,7 @@ import {
   OperationTimerV2,
   StandardResponseV2,
 } from '../../utils/response-format.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError, isScriptSuccess, unwrapScriptEnvelope } from '../../omnifocus/script-result-types.js';
 import {
   astEnvelopeSchema,
   listResultSchema,
@@ -3377,16 +3377,6 @@ SCOPE FILTERING:
     }
   }
 
-  // Review-family scripts sometimes wrap their payload in a {data: ...}
-  // envelope (e.g. {ok, v, data}); unwrap it if present, otherwise treat the
-  // raw value as the payload itself. Shared across all four review
-  // operations so the unwrap logic can't drift between them.
-  private unwrapScriptEnvelope<T>(raw: unknown): T {
-    return raw && typeof raw === 'object' && 'data' in raw && (raw as { data?: unknown }).data
-      ? ((raw as { data: T }).data as T)
-      : (raw as T);
-  }
-
   // Both batch review ops are continue-on-error: a not-found/typo'd id becomes
   // its own results.failed[] row rather than aborting the batch. So the count
   // that actually mutated is results.summary.successful_count — NOT the
@@ -3434,7 +3424,7 @@ SCOPE FILTERING:
       );
     }
 
-    const data = this.unwrapScriptEnvelope<ReviewListData>(result.data);
+    const data = unwrapScriptEnvelope<ReviewListData>(result.data);
     const src = data?.projects || data?.items || [];
     if (!Array.isArray(src)) {
       return createErrorResponseV2(
@@ -3564,7 +3554,7 @@ SCOPE FILTERING:
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    const parsedResult = this.unwrapScriptEnvelope<unknown>(result.data);
+    const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
     return createSuccessResponseV2('manage_reviews', { project: parsedResult }, undefined, {
       ...timer.toMetadata(),
@@ -3604,7 +3594,7 @@ SCOPE FILTERING:
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    const parsedResult = this.unwrapScriptEnvelope<unknown>(result.data);
+    const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
       ...timer.toMetadata(),
@@ -3672,7 +3662,7 @@ SCOPE FILTERING:
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    const parsedResult = this.unwrapScriptEnvelope<unknown>(result.data);
+    const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
       ...timer.toMetadata(),

@@ -246,3 +246,23 @@ function unwrapEffects(schema: z.ZodTypeAny): z.ZodTypeAny {
   }
   return s;
 }
+
+/**
+ * Unwrap a script payload from its optional {data: ...} envelope (OMN-287).
+ *
+ * Several script families (review ops, tag management) wrap their payload in
+ * an envelope like {ok, v, data}; others return the payload bare. This is the
+ * ONE unwrap implementation — OmniFocusAnalyzeTool and OmniFocusWriteTool
+ * previously carried byte-identical private copies, so an envelope-shape
+ * change could update one tool and silently leave the other returning a
+ * still-wrapped {data: ...} object.
+ *
+ * Semantics (preserved exactly from both original copies): unwraps ONLY when
+ * `data` exists AND is truthy; a falsy `data` (null/0/'') passes the raw
+ * value through whole.
+ */
+export function unwrapScriptEnvelope<T>(raw: unknown): T {
+  return raw && typeof raw === 'object' && 'data' in raw && (raw as { data?: unknown }).data
+    ? ((raw as { data: T }).data as T)
+    : (raw as T);
+}
