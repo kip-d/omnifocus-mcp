@@ -345,50 +345,6 @@ export interface FolderFilter {
 }
 export type PerspectiveFilter = Record<string, never>;
 
-/**
- * Known project filter property names (for validation)
- */
-export const PROJECT_FILTER_PROPERTY_NAMES = [
-  'id',
-  'status',
-  'flagged',
-  'needsReview',
-  'text',
-  'textOperator', // OMN-142
-  'name', // OMN-142: name-only match (text also matches notes)
-  'nameOperator', // OMN-142
-  'folderId',
-  'folderName',
-  'topLevelOnly', // OMN-96
-  'orBranches', // OMN-171: OR branch compilation on projects
-  'limit',
-  'offset',
-] as const;
-
-/**
- * Validate that a project filter only contains known properties
- */
-export function validateProjectFilterProperties(filter: Record<string, unknown>): string[] {
-  const unknownProps: string[] = [];
-  const knownSet = new Set(PROJECT_FILTER_PROPERTY_NAMES);
-
-  for (const key of Object.keys(filter)) {
-    if (!knownSet.has(key as (typeof PROJECT_FILTER_PROPERTY_NAMES)[number])) {
-      unknownProps.push(key);
-    }
-  }
-
-  return unknownProps;
-}
-
-/**
- * Ensure a project filter object conforms to ProjectFilter
- * Use this when creating filters to get compile-time checking
- */
-export function createProjectFilter(filter: ProjectFilter): ProjectFilter {
-  return filter;
-}
-
 // =============================================================================
 // FILTER METADATA (for response reporting)
 // =============================================================================
@@ -528,6 +484,11 @@ export type NormalizedTaskFilter = Omit<TaskFilter, 'includeCompleted'> & {
 
 /**
  * Type guard to check if a filter has been normalized
+ *
+ * KEEP despite no src/ callers (OMN-281 adjudication): this is a test ORACLE —
+ * QueryCompiler.test.ts and pipeline-isolation.test.ts assert compile() output
+ * satisfies it, pinning the normalize-before-lower invariant on LIVE code.
+ * ts-prune can't see test consumers, so it reports this as an orphan; it isn't.
  */
 export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): filter is NormalizedTaskFilter {
   return (filter as Record<string, unknown>)[NORMALIZED_FILTER_BRAND] === true;

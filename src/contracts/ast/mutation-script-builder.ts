@@ -5,7 +5,7 @@
  * This is the script generation layer for the mutation contracts.
  *
  * Architecture:
- * - TaskMutation → validate → buildScript → JXA script string
+ * - typed mutation data (contracts/mutations.ts) → buildScript → JXA script string
  *
  * TEST SANDBOX GUARD:
  * When NODE_ENV === 'test', all mutations are validated to ensure they only
