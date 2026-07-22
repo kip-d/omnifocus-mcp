@@ -1,4 +1,8 @@
 // src/diagnostics/linear-filer.ts
+// intentionally-exposed-for-CLI (OMN-282): fileDriftIssues is the designed
+// --create-issues DI seam for scripts/diagnose-failures.ts (its RunDiagnosisOpts
+// documents the closure shape; wiring is the tracked Phase-4 step, not built yet).
+// Guardrail behavior is pinned by tests/unit/diagnostics/linear-filer.test.ts.
 //
 // Guardrailed auto-Linear filer for SCHEMA_DRIFT clusters.
 //

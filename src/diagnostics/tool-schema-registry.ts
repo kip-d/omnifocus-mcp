@@ -1,4 +1,8 @@
 // src/diagnostics/tool-schema-registry.ts
+// intentionally-exposed-for-CLI (OMN-282): consumed by scripts/diagnose-failures.ts
+// (the `npm run diagnose-failures` entry the weekly ~/bin/of-mcp-diagnose launchd
+// job runs). scripts/ sits outside tsconfig's src/** include, so ts-prune flags
+// these exports as orphans; they are not.
 import type { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { SystemTool } from '../tools/system/SystemTool.js';

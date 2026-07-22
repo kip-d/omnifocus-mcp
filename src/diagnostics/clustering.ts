@@ -1,4 +1,8 @@
 // src/diagnostics/clustering.ts
+// intentionally-exposed-for-CLI (OMN-282): consumed by scripts/diagnose-failures.ts
+// (the `npm run diagnose-failures` entry the weekly ~/bin/of-mcp-diagnose launchd
+// job runs). scripts/ sits outside tsconfig's src/** include, so ts-prune flags
+// these exports as orphans; they are not.
 import { createHash } from 'crypto';
 import type { FailureRecord } from './failure-log.js';
 import { normalizeErrorMessage, normalizeInputShape } from './normalize.js';
@@ -74,11 +78,6 @@ export function isIgnored(c: FailureCluster): boolean {
   return cat !== undefined && IGNORE_SET.has(cat);
 }
 
-export type CoarseClass = 'VALIDATION' | 'EXECUTION' | 'DATA_ERROR';
-
-/** Coarse pre-classification. The fine SCHEMA_DRIFT/COERCION/DESCRIPTION split happens in the driver
- *  (deterministic via schema-drift) or the LLM agent (residual). */
-export function classifyCluster(c: FailureCluster): CoarseClass {
-  if (isIgnored(c)) return 'DATA_ERROR';
-  return c.example.errorType === 'VALIDATION_ERROR' ? 'VALIDATION' : 'EXECUTION';
-}
+// OMN-282: a coarse pre-classifier (classifyCluster/CoarseClass) lived here but
+// the driver never ran that step — it goes straight from isIgnored() filtering
+// to the fine deterministic/LLM split. Removed as a dead design remnant.
