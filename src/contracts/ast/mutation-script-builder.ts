@@ -440,6 +440,22 @@ export async function validateBatchCreateOps(
 }
 
 /**
+ * Clear all sandbox caches (for testing).
+ *
+ * INTENTIONAL KEEP despite zero production callers: this is the documented
+ * reset hook for the module-level sandbox caches — docs/CONCERNS-RESPONSE-2026-06.md
+ * answers the mutable-module-state concern by pointing at this function for
+ * test hygiene. Vitest's per-FILE module isolation resets these bindings
+ * between files, but tests within one file need this hook. Exercised by
+ * tests/unit/contracts/sandbox-cache-reset.test.ts; do not re-flag as orphan.
+ */
+export function clearSandboxCache(): void {
+  cachedSandboxFolderId = null;
+  validatedTaskIds.clear();
+  validatedProjectIds.clear();
+}
+
+/**
  * Mark a project as validated in sandbox (for batch operations that create projects in sandbox)
  */
 export function markProjectAsValidated(projectId: string): void {
