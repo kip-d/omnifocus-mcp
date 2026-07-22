@@ -117,6 +117,11 @@ export async function getVersionInfo(): Promise<VersionInfo> {
 
 /**
  * Clear cached version (for testing)
+ *
+ * KEEP despite no src/ callers (OMN-283): test infrastructure —
+ * version-detection.test.ts calls this in beforeEach to reset module state
+ * between tests of the live getOmniFocusVersion. ts-prune can't see test
+ * consumers.
  */
 export function clearVersionCache(): void {
   cachedVersionInfo = null;

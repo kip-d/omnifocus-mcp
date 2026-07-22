@@ -16,7 +16,7 @@ import {
 } from '../../src/contracts/ast/filter-generator.js';
 import { emitFolderPathMatch } from '../../src/contracts/ast/folder-path-match.js';
 import { buildFilteredProjectsScript, buildProjectByIdScript } from '../../src/contracts/ast/script-builder.js';
-import { buildTagsScript, buildActiveTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
+import { buildTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import type { ProjectFilter } from '../../src/contracts/filters.js';
 import { runAnalyticsScript, FAKE_TASK_STATUS } from './omnifocus/scripts/analytics/run-analytics-script.js';
 import type { TagQueryOptions } from '../../src/contracts/tag-options.js';
@@ -361,15 +361,6 @@ describe('Phase 3 AST Builders', () => {
       const options: TagQueryOptions = { mode: 'names', limit: 10 };
       const result = buildTagsScript(options);
       expect(result.script).toContain('limitCount = 10');
-    });
-  });
-
-  describe('buildActiveTagsScript', () => {
-    it('should generate script for active tags', () => {
-      const result = buildActiveTagsScript();
-      expect(result.script).toContain('!task.completed');
-      expect(result.script).toContain('activeTags');
-      expect(result.filterDescription).toContain('active tags');
     });
   });
 });
