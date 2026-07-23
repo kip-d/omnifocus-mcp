@@ -5,7 +5,7 @@
  * direct composition by OmniFocusReadTool.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   augmentFilterForMode,
   getDefaultSort,
@@ -716,6 +716,17 @@ describe('scoreForSmartSuggest', () => {
   // screen reasons as structured fields so the caller can re-rank against
   // context the server can't see. Selection behavior is unchanged.
   describe('screen_reasons evidence (OMN-259)', () => {
+    // Pinned mid-morning: the "later today" fixtures below (23:00, 23:59)
+    // fall into the past when the suite runs between 23:00 and midnight,
+    // flipping due_today into overdue_0d.
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-15T10:00:00'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('attaches structured screen reasons per suggested task', () => {
       const fiveDaysAgo = new Date();
       fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);

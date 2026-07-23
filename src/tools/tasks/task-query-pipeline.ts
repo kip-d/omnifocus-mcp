@@ -383,8 +383,6 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
  */
 export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): OmniFocusTask[] {
   const now = new Date();
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
 
   const screen = (task: OmniFocusTask): { score: number; reasons: string[] } => {
     let score = 0;
@@ -393,13 +391,13 @@ export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): Omn
     if (task.dueDate) {
       const dueDate = new Date(task.dueDate);
       const isDueToday = dueDate.toDateString() === now.toDateString();
-      if (dueDate < now) {
+      if (isDueToday) {
+        score += 80;
+        reasons.push('due_today');
+      } else if (dueDate < now) {
         const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
         score += 100 + Math.min(daysOverdue * 10, 200);
         reasons.push(`overdue_${daysOverdue}d`);
-      } else if (isDueToday || dueDate <= todayEnd) {
-        score += 80;
-        reasons.push('due_today');
       }
     }
 
