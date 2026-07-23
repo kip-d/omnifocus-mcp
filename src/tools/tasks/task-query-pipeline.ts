@@ -135,11 +135,12 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
     }),
   },
   // OMN-130: smart_suggest surfaces available next actions, NOT urgency-ranked tasks.
-  // The name/description was previously overstated (implied priority ranking).
-  // Behavior: filters to active (not completed/dropped) tasks, then scoreForSmartSuggest
-  // re-ranks by deadline proximity, flagged status, and quick-win estimate — but the
-  // result is a convenience shortlist for review, not a definitive priority order.
-  // Do NOT change this to a higher-fidelity ranking without a separate ticket.
+  // OMN-259: the screen-not-ranking posture is now the public contract — the
+  // internal score selects a shortlist, and each returned task carries
+  // screen_reasons so the caller re-ranks with the GTD engage criteria
+  // (context → time → energy → priority). The old in-code-only "not a
+  // definitive priority ranking" disclaimer is user-facing in the tool
+  // description. Do NOT reintroduce a server-side priority verdict.
   smart_suggest: {
     augment: () => ({
       completed: false,
@@ -303,6 +304,24 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * Always includes 'id' if any fields are selected.
  */
 /**
+ * Copies `key` from `source` to `projected` iff `shouldCarry` accepts the
+ * source value — the shared shape behind every marker that rides a
+ * projectable field through post-hoc projection (the #204 strip-bug class:
+ * a marker not itself in the field list gets silently dropped otherwise).
+ */
+function carryFieldIf(
+  source: Record<string, unknown>,
+  projected: Record<string, unknown>,
+  key: string,
+  shouldCarry: (value: unknown) => boolean,
+): void {
+  const value = source[key];
+  if (shouldCarry(value)) {
+    projected[key] = value;
+  }
+}
+
+/**
  * OMN-244/OMN-245: noteTruncated is a marker RIDING the note field, not a
  * field of its own — whenever `note` survives a post-hoc projection, the
  * marker must survive with it (the #204 live-verify bug class). ONE carry
@@ -310,9 +329,20 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * never per call site.
  */
 export function carryNoteTruncatedMarker(source: Record<string, unknown>, projected: Record<string, unknown>): void {
-  if ('note' in projected && source.noteTruncated === true) {
-    projected.noteTruncated = true;
+  if ('note' in projected) {
+    carryFieldIf(source, projected, 'noteTruncated', (v) => v === true);
   }
+}
+
+/**
+ * OMN-259: smart_suggest's screen_reasons is EVIDENCE, not a selectable field
+ * (it isn't in TaskFieldEnum) — if the projection dropped it, a caller using
+ * `fields:` would receive a shortlist with no way to see why each task was
+ * selected (the #204 projection-strip class again). Carry it whenever the
+ * source task has it; never invent it.
+ */
+export function carryScreenReasons(source: Record<string, unknown>, projected: Record<string, unknown>): void {
+  carryFieldIf(source, projected, 'screen_reasons', Array.isArray);
 }
 
 export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): (OmniFocusTask | ProjectedTask)[] {
@@ -338,6 +368,7 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
     });
 
     carryNoteTruncatedMarker(task as unknown as Record<string, unknown>, projectedTask as Record<string, unknown>);
+    carryScreenReasons(task as unknown as Record<string, unknown>, projectedTask as Record<string, unknown>);
 
     // OMN-241: return the honest partial shape — no `as OmniFocusTask` cast.
     // Callers that need a specific field beyond `id` must narrow (check
@@ -351,62 +382,88 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
 // =============================================================================
 
 /**
- * Score and rank tasks for smart suggestions.
- * Returns top N tasks sorted by priority score.
+ * Screen tasks for smart suggestions (OMN-259: screen + evidence + model-judges).
  *
- * Scoring algorithm:
- * - Overdue: +100 base, +10 per day overdue (capped at 300)
- * - Due today: +80
- * - Flagged: +50
- * - Available: +30
- * - Quick win (≤15 min): +20
+ * The additive score is INTERNAL — it exists only to pick a small shortlist
+ * under token constraints. It is never returned; instead every suggested task
+ * carries `screen_reasons`, the mechanical signals that selected it, so the
+ * caller can re-rank against context the server can't see (stated intent,
+ * calendar, energy — the GTD engage criteria).
+ *
+ * Internal selection weights (unchanged from the pre-OMN-259 scoring):
+ * - Overdue: +100 base, +10 per day overdue (capped at 300) → 'overdue_<N>d'
+ * - Due today: +80 → 'due_today'
+ * - Flagged: +50 → 'flagged'
+ * - Available: +30 → 'available'
+ * - Quick win (≤15 min): +20 → 'quick_win'
  */
 export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): OmniFocusTask[] {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  const scoredTasks = tasks.map((task) => {
+  const screen = (task: OmniFocusTask): { score: number; reasons: string[] } => {
     let score = 0;
+    const reasons: string[] = [];
 
+    // Overdue-before-due-today mirrors response-format.ts's countTaskStats
+    // classifier (dueDate < now checked first) so screen_reasons and
+    // summary.breakdown never disagree about the same task.
     if (task.dueDate) {
       const dueDate = new Date(task.dueDate);
-      const isDueToday = dueDate.toDateString() === now.toDateString();
       if (dueDate < now) {
         const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
         score += 100 + Math.min(daysOverdue * 10, 200);
-      } else if (isDueToday || dueDate <= todayEnd) {
+        reasons.push(`overdue_${daysOverdue}d`);
+      } else if (dueDate <= todayEnd) {
         score += 80;
+        reasons.push('due_today');
       }
     }
 
-    if (task.flagged) score += 50;
-    if (task.available) score += 30;
-    if (task.estimatedMinutes && task.estimatedMinutes <= 15) score += 20;
+    if (task.flagged) {
+      score += 50;
+      reasons.push('flagged');
+    }
+    if (task.available) {
+      score += 30;
+      reasons.push('available');
+    }
+    if (task.estimatedMinutes != null && task.estimatedMinutes <= 15) {
+      score += 20;
+      reasons.push('quick_win');
+    }
 
-    return { ...task, _score: score };
+    return { score, reasons };
+  };
+
+  const scoredTasks = tasks.map((task) => {
+    const { score, reasons } = screen(task);
+    return { task: { ...task, screen_reasons: reasons }, _score: score };
   });
 
-  let suggestedTasks = scoredTasks
+  const suggestedTasks = scoredTasks
     .filter((t) => t._score > 0)
     .sort((a, b) => b._score - a._score)
     .slice(0, limit)
-    .map(({ _score, ...task }) => task);
+    .map((t) => t.task);
 
   // Ensure at least one due-today task is surfaced
-  const dueTodayCandidate = tasks.find((t) => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString());
+  const dueTodayCandidate = scoredTasks.find(
+    (t) => t.task.dueDate && new Date(t.task.dueDate).toDateString() === now.toDateString(),
+  );
   if (dueTodayCandidate) {
-    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.id);
+    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.task.id);
     if (!alreadyIncluded) {
       if (suggestedTasks.length < limit) {
-        suggestedTasks.push(dueTodayCandidate);
+        suggestedTasks.push(dueTodayCandidate.task);
       } else if (suggestedTasks.length > 0) {
-        suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate;
+        suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate.task;
       }
     }
   }
 
-  return suggestedTasks as OmniFocusTask[];
+  return suggestedTasks;
 }
 
 // =============================================================================

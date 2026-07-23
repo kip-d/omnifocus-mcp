@@ -46,6 +46,11 @@ export interface OmniFocusTask {
   effectivePlannedDate?: string | null; // details:true — OF 4.7+ effective planned date, ISO string, null when task has none
   reason?: 'overdue' | 'due_soon' | 'flagged' | null; // today mode — category the task was bucketed under
   daysOverdue?: number; // today mode — 0 when not overdue
+  // smart_suggest mode (OMN-259) — which mechanical screen signals selected
+  // this task (e.g. 'overdue_5d', 'due_today', 'flagged', 'available',
+  // 'quick_win'). Evidence for the caller's own re-ranking, not a priority
+  // verdict; carried through explicit field projection like noteTruncated.
+  screen_reasons?: string[];
 }
 
 /**
