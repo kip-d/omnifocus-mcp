@@ -36,6 +36,17 @@ describe('screenClarifyCandidates', () => {
     expect(t3.screen_reasons).not.toContain('vague_keyword');
   });
 
+  it('exempts a single-word task that is itself a valid action verb from single_word', () => {
+    const result = screenClarifyCandidates(
+      [mkTask({ id: 't1', name: 'Call' }), mkTask({ id: 't2', name: 'Backup' })],
+      new Map(),
+    );
+
+    const ids = result.candidates.map((c) => c.id);
+    expect(ids).not.toContain('t1');
+    expect(ids).not.toContain('t2');
+  });
+
   it('carries the full evidence bundle per candidate (ids, note, placement, dates, children)', () => {
     const result = screenClarifyCandidates(
       [

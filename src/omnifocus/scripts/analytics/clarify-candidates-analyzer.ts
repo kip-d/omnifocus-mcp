@@ -107,7 +107,10 @@ function screenReasons(name: string): ScreenReason[] {
   if (VAGUE_KEYWORDS.some((keyword) => lowerName.includes(keyword))) {
     reasons.push('vague_keyword');
   }
-  if (words.length === 1) {
+  // A single word that's itself a valid action verb ("Call", "Backup") is
+  // already a clear, minimal task — no clarification needed. Exempt it from
+  // the single_word penalty, same as the pre-OMN-258 analyzer did.
+  if (words.length === 1 && !ACTION_VERBS.includes(words[0])) {
     reasons.push('single_word');
   }
   return reasons;

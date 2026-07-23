@@ -52,7 +52,10 @@ import { buildProjectsForReviewScript } from '../../omnifocus/scripts/reviews/pr
 
 // Pure-JS analyzer imports (for pattern analysis)
 import { analyzeReviewGaps } from '../../omnifocus/scripts/analytics/review-gaps-analyzer.js';
-import { screenClarifyCandidates } from '../../omnifocus/scripts/analytics/clarify-candidates-analyzer.js';
+import {
+  screenClarifyCandidates,
+  CLARIFY_CANDIDATE_CAP,
+} from '../../omnifocus/scripts/analytics/clarify-candidates-analyzer.js';
 import { analyzeWipLimits } from '../../omnifocus/scripts/analytics/wip-limits-analyzer.js';
 import { analyzeDueDateBunching } from '../../omnifocus/scripts/analytics/due-date-bunching-analyzer.js';
 
@@ -2031,9 +2034,8 @@ SCOPE FILTERING:
     // Oldest first — the caller sees the longest-waiting candidates even when capped.
     candidates.sort((a, b) => (a.creation_date ?? '9999').localeCompare(b.creation_date ?? '9999'));
 
-    const cap = 25;
-    const capped = candidates.length > cap;
-    const returned = capped ? candidates.slice(0, cap) : candidates;
+    const capped = candidates.length > CLARIFY_CANDIDATE_CAP;
+    const returned = capped ? candidates.slice(0, CLARIFY_CANDIDATE_CAP) : candidates;
 
     return {
       type: 'waiting_for',
@@ -2046,7 +2048,7 @@ SCOPE FILTERING:
           candidates_total: candidates.length,
           candidates_returned: returned.length,
           capped,
-          cap,
+          cap: CLARIFY_CANDIDATE_CAP,
         },
         candidates: returned,
       },
