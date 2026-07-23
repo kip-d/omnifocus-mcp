@@ -256,9 +256,9 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  * Known non-splice sites, deliberately adjudicated elsewhere:
  * warm-projects-cache normalizes via substring match (adjudicated at that
  * site), and the write-path read-back echo (mutation/defs.ts
- * PROJECT_STATUS_READBACK) deliberately speaks the write TRANSPORT
- * vocabulary ('on_hold'/'completed'), echoing the same enum the write
- * schema accepts — see the adjudication comment at that site (OMN-274).
+ * PROJECT_STATUS_READBACK) — since OMN-278 it speaks this same canonical
+ * vocabulary, but as an inline ternary (an update envelope, not a splice
+ * of this list-shaped snippet); see the comment at that site.
  */
 export const PROJECT_STATUS_STRING_SNIPPET = `function projectStatusString(s) {
             if (s === Project.Status.Active) return 'active';

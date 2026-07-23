@@ -200,8 +200,8 @@ describe('buildUpdateProjectProgram — golden emission', () => {
   it('envelope status is a READ-BACK ternary over Project.Status, not an input echo', () => {
     const omnijs = emit({ status: 'on_hold' });
     expect(omnijs).toContain("proj.status === Project.Status.Active ? 'active'");
-    expect(omnijs).toContain("proj.status === Project.Status.OnHold ? 'on_hold'");
-    expect(omnijs).toContain("proj.status === Project.Status.Done ? 'completed' : 'dropped'");
+    expect(omnijs).toContain("proj.status === Project.Status.OnHold ? 'onHold'");
+    expect(omnijs).toContain("proj.status === Project.Status.Done ? 'done' : 'dropped'");
     expect(omnijs).not.toContain('"on_hold", updated'); // no echo of the requested value in the envelope
   });
 
