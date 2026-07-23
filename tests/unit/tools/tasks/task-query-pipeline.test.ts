@@ -803,6 +803,42 @@ describe('scoreForSmartSuggest', () => {
       expect(backstop).toBeDefined();
       expect(backstop!.screen_reasons).toContain('due_today');
     });
+
+    it('labels a 0-minute task quick_win instead of dropping it via truthy check', () => {
+      const tasks: OmniFocusTask[] = [
+        {
+          id: '1',
+          name: 'Instant task',
+          completed: false,
+          flagged: true,
+          blocked: false,
+          estimatedMinutes: 0,
+        },
+      ];
+
+      const result = scoreForSmartSuggest(tasks, 10);
+      expect(result[0].screen_reasons).toContain('quick_win');
+    });
+
+    it('overdue takes priority over due_today when the due time already passed today', () => {
+      const earlierToday = new Date();
+      earlierToday.setHours(0, 30, 0, 0);
+
+      const tasks: OmniFocusTask[] = [
+        {
+          id: '1',
+          name: 'Due earlier today, still open',
+          completed: false,
+          flagged: false,
+          blocked: false,
+          dueDate: earlierToday.toISOString(),
+        },
+      ];
+
+      const result = scoreForSmartSuggest(tasks, 10);
+      expect(result[0].screen_reasons).toContain('overdue_0d');
+      expect(result[0].screen_reasons?.join()).not.toMatch(/due_today/);
+    });
   });
 });
 

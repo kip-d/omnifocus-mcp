@@ -304,6 +304,24 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * Always includes 'id' if any fields are selected.
  */
 /**
+ * Copies `key` from `source` to `projected` iff `shouldCarry` accepts the
+ * source value — the shared shape behind every marker that rides a
+ * projectable field through post-hoc projection (the #204 strip-bug class:
+ * a marker not itself in the field list gets silently dropped otherwise).
+ */
+function carryFieldIf(
+  source: Record<string, unknown>,
+  projected: Record<string, unknown>,
+  key: string,
+  shouldCarry: (value: unknown) => boolean,
+): void {
+  const value = source[key];
+  if (shouldCarry(value)) {
+    projected[key] = value;
+  }
+}
+
+/**
  * OMN-244/OMN-245: noteTruncated is a marker RIDING the note field, not a
  * field of its own — whenever `note` survives a post-hoc projection, the
  * marker must survive with it (the #204 live-verify bug class). ONE carry
@@ -311,8 +329,8 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
  * never per call site.
  */
 export function carryNoteTruncatedMarker(source: Record<string, unknown>, projected: Record<string, unknown>): void {
-  if ('note' in projected && source.noteTruncated === true) {
-    projected.noteTruncated = true;
+  if ('note' in projected) {
+    carryFieldIf(source, projected, 'noteTruncated', (v) => v === true);
   }
 }
 
@@ -324,9 +342,7 @@ export function carryNoteTruncatedMarker(source: Record<string, unknown>, projec
  * source task has it; never invent it.
  */
 export function carryScreenReasons(source: Record<string, unknown>, projected: Record<string, unknown>): void {
-  if (Array.isArray(source.screen_reasons)) {
-    projected.screen_reasons = source.screen_reasons;
-  }
+  carryFieldIf(source, projected, 'screen_reasons', Array.isArray);
 }
 
 export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): (OmniFocusTask | ProjectedTask)[] {
@@ -383,21 +399,25 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
  */
 export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): OmniFocusTask[] {
   const now = new Date();
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
 
   const screen = (task: OmniFocusTask): { score: number; reasons: string[] } => {
     let score = 0;
     const reasons: string[] = [];
 
+    // Overdue-before-due-today mirrors response-format.ts's countTaskStats
+    // classifier (dueDate < now checked first) so screen_reasons and
+    // summary.breakdown never disagree about the same task.
     if (task.dueDate) {
       const dueDate = new Date(task.dueDate);
-      const isDueToday = dueDate.toDateString() === now.toDateString();
-      if (isDueToday) {
-        score += 80;
-        reasons.push('due_today');
-      } else if (dueDate < now) {
+      if (dueDate < now) {
         const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
         score += 100 + Math.min(daysOverdue * 10, 200);
         reasons.push(`overdue_${daysOverdue}d`);
+      } else if (dueDate <= todayEnd) {
+        score += 80;
+        reasons.push('due_today');
       }
     }
 
@@ -409,7 +429,7 @@ export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): Omn
       score += 30;
       reasons.push('available');
     }
-    if (task.estimatedMinutes && task.estimatedMinutes <= 15) {
+    if (task.estimatedMinutes != null && task.estimatedMinutes <= 15) {
       score += 20;
       reasons.push('quick_win');
     }
@@ -429,15 +449,16 @@ export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): Omn
     .map((t) => t.task);
 
   // Ensure at least one due-today task is surfaced
-  const dueTodayCandidate = tasks.find((t) => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString());
+  const dueTodayCandidate = scoredTasks.find(
+    (t) => t.task.dueDate && new Date(t.task.dueDate).toDateString() === now.toDateString(),
+  );
   if (dueTodayCandidate) {
-    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.id);
+    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.task.id);
     if (!alreadyIncluded) {
-      const withReasons = { ...dueTodayCandidate, screen_reasons: screen(dueTodayCandidate).reasons };
       if (suggestedTasks.length < limit) {
-        suggestedTasks.push(withReasons);
+        suggestedTasks.push(dueTodayCandidate.task);
       } else if (suggestedTasks.length > 0) {
-        suggestedTasks[suggestedTasks.length - 1] = withReasons;
+        suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate.task;
       }
     }
   }
