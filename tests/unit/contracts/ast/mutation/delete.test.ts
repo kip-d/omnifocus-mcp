@@ -22,10 +22,16 @@ import {
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import { DeleteResultSchema, BulkDeleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { clearSandboxCache } from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { expectMatchesSchema } from './assert-schema.js';
 
 beforeEach(() => {
   mockStdoutQueue.length = 0;
+  // OMN-286: reset the sandbox-folder-id/validated-id caches so each guard
+  // test below pushes its OWN complete response sequence instead of relying
+  // on cross-test ordering (fragile under -t / .only — see the comment on
+  // sandbox-guard-notfound.test.ts).
+  clearSandboxCache();
 });
 
 describe('buildDeleteTaskProgram — golden emission', () => {
@@ -98,8 +104,7 @@ describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () =>
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      // Sandbox folder id is already cached from the task-guard test above
-      // (module-scoped cache, same file) — only the bridge lookup is needed.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
       mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
       await expect(dispatchMutation('delete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
         /TEST GUARD/,
@@ -125,9 +130,12 @@ describe('dispatchMutation bulk_delete/task guard (OMN-119/120 non-bypass)', () 
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      // Sandbox folder id already cached from the delete/task test above;
-      // all three ids resolve not_found in this mocked run, mirroring the
-      // documented live-env behavior.
+      // getSandboxFolderId() de-dups concurrent in-flight lookups (OMN-286
+      // follow-up), so the 3 concurrent validateTaskInSandbox calls below
+      // share ONE folder-id resolution, then each does its own bridge
+      // check — 1 + 3 responses total, order-independent since all three
+      // bridge checks return the same not_found shape.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
       mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));

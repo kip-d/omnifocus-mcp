@@ -90,12 +90,22 @@ async function executeGuardJXA<T>(script: string): Promise<T> {
   return JSON.parse(stdout.trim()) as T;
 }
 
+// In-flight dedup: guard routes that pre-flight multiple ids concurrently
+// (Promise.all over validateTaskInSandbox/validateProjectInSandbox) would
+// otherwise each independently see cachedSandboxFolderId === null and fire
+// their own redundant osascript lookup before any of them resolves and
+// caches it. One shared promise, cleared once it settles either way.
+let sandboxFolderIdPromise: Promise<string | null> | null = null;
+
 /**
  * Get the sandbox folder ID (cached)
  */
 async function getSandboxFolderId(): Promise<string | null> {
   if (cachedSandboxFolderId !== null) {
     return cachedSandboxFolderId;
+  }
+  if (sandboxFolderIdPromise) {
+    return sandboxFolderIdPromise;
   }
 
   const script = `
@@ -110,13 +120,18 @@ async function getSandboxFolderId(): Promise<string | null> {
     return JSON.stringify({ folderId: null });
   `;
 
-  try {
-    const result = await executeGuardJXA<{ folderId: string | null }>(script);
-    cachedSandboxFolderId = result.folderId;
-    return cachedSandboxFolderId;
-  } catch {
-    return null;
-  }
+  sandboxFolderIdPromise = (async () => {
+    try {
+      const result = await executeGuardJXA<{ folderId: string | null }>(script);
+      cachedSandboxFolderId = result.folderId;
+      return cachedSandboxFolderId;
+    } catch {
+      return null;
+    } finally {
+      sandboxFolderIdPromise = null;
+    }
+  })();
+  return sandboxFolderIdPromise;
 }
 
 // Cache validated project IDs to avoid repeated sandbox checks
@@ -494,6 +509,7 @@ export async function validateBatchCreateOps(
  */
 export function clearSandboxCache(): void {
   cachedSandboxFolderId = null;
+  sandboxFolderIdPromise = null;
   validatedTaskIds.clear();
   validatedProjectIds.clear();
 }

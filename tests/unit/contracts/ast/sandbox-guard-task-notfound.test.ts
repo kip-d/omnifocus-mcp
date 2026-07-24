@@ -10,8 +10,12 @@
  *
  * The osascript boundary is mocked at child_process.exec (the repo's
  * established pattern); each entry in mockStdoutQueue is one guard-bridge
- * response, consumed in call order (first call resolves the sandbox folder
- * id, which is then cached module-wide).
+ * response, consumed in call order. clearSandboxCache() resets the
+ * module-level sandbox-folder-id/validated-id caches in beforeEach so every
+ * test pushes its OWN complete response sequence (folder id + bridge check)
+ * rather than relying on a prior test in the file having warmed the cache —
+ * that cross-test ordering dependency previously caused false failures
+ * under isolated/filtered runs (-t / .only).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -23,7 +27,11 @@ vi.mock('child_process', () => ({
   }),
 }));
 
-import { validateTaskInSandbox, validateTaskCreate } from '../../../../src/contracts/ast/mutation-script-builder.js';
+import {
+  validateTaskInSandbox,
+  validateTaskCreate,
+  clearSandboxCache,
+} from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
   let priorGuard: string | undefined;
@@ -35,6 +43,7 @@ describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     mockStdoutQueue.length = 0;
+    clearSandboxCache();
   });
 
   afterEach(() => {
@@ -45,7 +54,7 @@ describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
   });
 
   it('passes a not-found id through to the script continue-on-error (no throw)', async () => {
-    // First guard call in this file also resolves the sandbox folder id.
+    // Cache cleared in beforeEach — every test resolves its own folder id.
     mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
 
@@ -53,18 +62,21 @@ describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
   });
 
   it('still throws for a FOUND task outside the sandbox', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
 
     await expect(validateTaskInSandbox('real-outside-task', 'update')).rejects.toThrow(/outside sandbox/);
   });
 
   it('passes a sandboxed task silently', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: true }));
 
     await expect(validateTaskInSandbox('sandboxed-task', 'complete')).resolves.toBeUndefined();
   });
 
   it('a bridge failure still fails CLOSED (treated as outside, not as not-found)', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     // Non-JSON stdout -> executeGuardJXA throws -> guard must throw, never pass through.
     mockStdoutQueue.push('osascript exploded');
 
@@ -82,6 +94,7 @@ describe('validateTaskCreate parentTaskId not-found threading (OMN-286)', () => 
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     mockStdoutQueue.length = 0;
+    clearSandboxCache();
   });
 
   afterEach(() => {
@@ -92,8 +105,7 @@ describe('validateTaskCreate parentTaskId not-found threading (OMN-286)', () => 
   });
 
   it('passes a not-found parentTaskId through — resolveParentTask has no name fallback, so not-found writes nothing', async () => {
-    // Sandbox folder id already cached from the validateTaskInSandbox
-    // describe block above (module-scoped cache, same file).
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
 
     await expect(
@@ -102,6 +114,7 @@ describe('validateTaskCreate parentTaskId not-found threading (OMN-286)', () => 
   });
 
   it('still throws for a FOUND parent task outside the sandbox', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
 
     await expect(validateTaskCreate({ name: '__TEST__ subtask', parentTaskId: 'real-outside-task' })).rejects.toThrow(

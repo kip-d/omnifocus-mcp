@@ -24,10 +24,15 @@ import {
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskUpdateData } from '../../../../../src/contracts/mutations.js';
 import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { clearSandboxCache } from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { expectMatchesSchema } from './assert-schema.js';
 
 beforeEach(() => {
   mockStdoutQueue.length = 0;
+  // OMN-286: reset the sandbox-folder-id/validated-id caches so the guard
+  // test below doesn't implicitly depend on prior-test ordering (fragile
+  // under -t / .only — see the comment on sandbox-guard-notfound.test.ts).
+  clearSandboxCache();
 });
 
 function emit(changes: TaskUpdateData, taskId = 't1'): string {

@@ -8,8 +8,12 @@
  *
  * The osascript boundary is mocked at child_process.exec (the repo's
  * established pattern); each entry in mockStdoutQueue is one guard-bridge
- * response, consumed in call order (first call resolves the sandbox folder
- * id, which is then cached module-wide).
+ * response, consumed in call order. clearSandboxCache() resets the
+ * module-level sandbox-folder-id/validated-id caches in beforeEach so every
+ * test pushes its OWN complete response sequence (folder id + bridge check)
+ * rather than relying on a prior test in the file having warmed the cache —
+ * that cross-test ordering dependency caused false failures/false passes
+ * under isolated/filtered runs (-t / .only) in the sibling task-side file.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -21,7 +25,7 @@ vi.mock('child_process', () => ({
   }),
 }));
 
-import { validateProjectInSandbox } from '../../../../src/contracts/ast/mutation-script-builder.js';
+import { validateProjectInSandbox, clearSandboxCache } from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 describe('validateProjectInSandbox not-found threading (OMN-286)', () => {
   let priorGuard: string | undefined;
@@ -33,6 +37,7 @@ describe('validateProjectInSandbox not-found threading (OMN-286)', () => {
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     mockStdoutQueue.length = 0;
+    clearSandboxCache();
   });
 
   afterEach(() => {
@@ -43,7 +48,7 @@ describe('validateProjectInSandbox not-found threading (OMN-286)', () => {
   });
 
   it('passes a not-found id through to the script continue-on-error (no throw)', async () => {
-    // First guard call in this file also resolves the sandbox folder id.
+    // Cache cleared in beforeEach — every test resolves its own folder id.
     mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
 
@@ -51,18 +56,21 @@ describe('validateProjectInSandbox not-found threading (OMN-286)', () => {
   });
 
   it('still throws for a FOUND project outside the sandbox', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
 
     await expect(validateProjectInSandbox('real-outside-id', 'mark reviewed')).rejects.toThrow(/outside sandbox/);
   });
 
   it('passes a sandboxed project silently', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     mockStdoutQueue.push(JSON.stringify({ inSandbox: true }));
 
     await expect(validateProjectInSandbox('sandboxed-id', 'update')).resolves.toBeUndefined();
   });
 
   it('a bridge failure still fails CLOSED (treated as outside, not as not-found)', async () => {
+    mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
     // Non-JSON stdout -> executeGuardJXA throws -> guard must throw, never pass through.
     mockStdoutQueue.push('osascript exploded');
 

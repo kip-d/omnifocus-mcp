@@ -25,11 +25,17 @@ import {
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
+import { clearSandboxCache } from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { CompleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
 import { expectMatchesSchema } from './assert-schema.js';
 
 beforeEach(() => {
   mockStdoutQueue.length = 0;
+  // OMN-286: reset the sandbox-folder-id/validated-id caches so each guard
+  // test below pushes its OWN complete response sequence instead of relying
+  // on cross-test ordering (fragile under -t / .only — see the comment on
+  // sandbox-guard-notfound.test.ts).
+  clearSandboxCache();
 });
 
 describe('buildCompleteTaskProgram — golden emission', () => {
@@ -99,8 +105,7 @@ describe('dispatchMutation complete/project guard (OMN-119/120 non-bypass)', () 
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      // Sandbox folder id is already cached from the task-guard test above
-      // (module-scoped cache, same file) — only the bridge lookup is needed.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
       mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
       await expect(dispatchMutation('complete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
         /TEST GUARD/,
