@@ -24,6 +24,7 @@
  */
 
 import { ROUND1_HELPER } from '../shared/helpers.js';
+import { IS_PROJECT_ROOT_ROW_SNIPPET } from '../../../contracts/ast/types.js';
 
 export const WORKFLOW_ANALYSIS_V3 = `
   (() => {
@@ -47,6 +48,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
+          ${IS_PROJECT_ROOT_ROW_SNIPPET}
           const nowTime = \${nowTime};
           const analysisDepth = "\${analysisDepth}";
           const focusAreas = \${JSON.stringify(focusAreas)};
@@ -176,8 +178,10 @@ export const WORKFLOW_ANALYSIS_V3 = `
               // project.flattenedTasks. OMN-270: the old gate read the
               // JXA-only child-count property — undefined in OmniJS — so it
               // never fired and every root polluted the task-level metrics.
-              // A non-null task.project is the live root-task marker (PR #227).
-              if (task.project) {
+              // isProjectRootRow (IS_PROJECT_ROOT_ROW_SNIPPET, contracts/ast/
+              // types) is the shared root-row predicate every root-skip site
+              // splices (OMN-290).
+              if (isProjectRootRow(task)) {
                 continue;
               }
 

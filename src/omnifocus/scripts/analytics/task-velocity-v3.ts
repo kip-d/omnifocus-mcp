@@ -11,6 +11,8 @@
  * Pattern based on: list-tasks-omnijs.ts
  */
 
+import { IS_PROJECT_ROOT_ROW_SNIPPET } from '../../../contracts/ast/types.js';
+
 export const TASK_VELOCITY_SCRIPT_V3 = `
   (() => {
     const app = Application('OmniFocus');
@@ -31,6 +33,8 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
 
       const velocityScript = \`
         (() => {
+          ${IS_PROJECT_ROOT_ROW_SNIPPET}
+
           // Parse date range from options
           const rangeStart = new Date('$\{startDateStr}T00:00:00');
           const rangeEnd = new Date('$\{endDateStr}T23:59:59');
@@ -70,14 +74,15 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           flattenedTasks.forEach(task => {
             // OMN-290 (OMN-148 D11/D15): project ROOT rows are never tasks in
             // analytics — a completed project's root row otherwise counts as a
-            // completed task. Non-null task.project is the live root marker
-            // (PR #227). Own try so a corrupted row skips (per-task swallow
-            // convention) instead of aborting the forEach.
-            try {
-              if (task.project) return;
-            } catch (e) {
-              return;
-            }
+            // completed task. isProjectRootRow (IS_PROJECT_ROOT_ROW_SNIPPET,
+            // contracts/ast/types) fails OPEN on a throw — a task whose
+            // task.project read itself errors is still counted below, matching
+            // this script's pre-OMN-290 behavior, instead of silently
+            // vanishing from tasksAnalyzed/totalCompleted/totalCreated all at
+            // once (/code-review of the OMN-290 PR: the original per-task
+            // try/catch here returned on ANY error, gating every metric on a
+            // property read none of them actually need).
+            if (isProjectRootRow(task)) return;
             tasksAnalyzed++;
 
             try {

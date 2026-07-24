@@ -22,6 +22,7 @@
  */
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
+import { IS_PROJECT_ROOT_ROW_SNIPPET } from '../../../contracts/ast/types.js';
 
 export const ANALYZE_OVERDUE_V3 = `
   (() => {
@@ -45,6 +46,7 @@ export const ANALYZE_OVERDUE_V3 = `
         (() => {
           ${ROUND1_HELPER}
           ${TERMINAL_STATUS_HELPER}
+          ${IS_PROJECT_ROOT_ROW_SNIPPET}
           const nowTime = \${nowTime};
           const maxTasks = \${maxTasks};
           const includeRecentlyCompleted = \${includeRecentlyCompleted};
@@ -119,9 +121,10 @@ export const ANALYZE_OVERDUE_V3 = `
               // OMN-290 (OMN-148 D11): project ROOT rows are never tasks in
               // analytics — pre-fix every project inflated totalActive by one
               // phantom row (and an overdue project's root counted as an
-              // overdue task). Non-null task.project is the live root marker
-              // (PR #227); same rule as workflow_analysis (OMN-270).
-              if (task.project) return;
+              // overdue task). isProjectRootRow (IS_PROJECT_ROOT_ROW_SNIPPET,
+              // contracts/ast/types) is the shared predicate every root-skip
+              // site splices; same rule as workflow_analysis (OMN-270).
+              if (isProjectRootRow(task)) return;
 
               // OMN-187: one "active" predicate drives BOTH the overduePercentage
               // denominator (totalActive) and the overdue numerator below, so the

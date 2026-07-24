@@ -20,6 +20,7 @@
 
 import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 import {
+  IS_PROJECT_ROOT_ROW_SNIPPET,
   PROJECT_STATUS_STRING_SNIPPET,
   TASK_COUNTS_BY_PROJECT_PASS_SNIPPET,
   TASK_COUNTS_ZERO_LITERAL,
@@ -84,6 +85,10 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           // vocabulary contract and why String()-ing the enum is forbidden.
           ${PROJECT_STATUS_STRING_SNIPPET}
 
+          // OMN-290: single-definition project-root-row predicate — see
+          // IS_PROJECT_ROOT_ROW_SNIPPET (contracts/ast/types).
+          ${IS_PROJECT_ROOT_ROW_SNIPPET}
+
           // Overall task statistics
           let totalTasks = 0;
           let totalCompleted = 0;
@@ -96,10 +101,11 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             try {
               // OMN-290 (OMN-148 D11/D15): project ROOT rows are never tasks
               // in analytics. The global flattenedTasks includes each
-              // project's root task; a non-null task.project is the live
-              // root marker (PR #227). Same rule as workflow_analysis
-              // (OMN-270) and the shared per-project counts pass.
-              if (task.project) return;
+              // project's root task; isProjectRootRow
+              // (IS_PROJECT_ROOT_ROW_SNIPPET, contracts/ast/types) is the
+              // shared predicate every root-skip site splices — same rule
+              // as workflow_analysis (OMN-270).
+              if (isProjectRootRow(task)) return;
 
               totalTasks++;
 

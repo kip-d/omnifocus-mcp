@@ -239,6 +239,41 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
 export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 }`;
 
 /**
+ * The project-root-row predicate (OMN-290): the global flattenedTasks
+ * collection includes each project's own root task, which reads as
+ * actionable — a non-null `task.project` is the live root marker (PR #227).
+ * Every analytics pass over flattenedTasks must skip these or a project's
+ * root row silently inflates totals (and, for completed/overdue projects,
+ * pollutes the completed/overdue counts too).
+ *
+ * A task whose `task.project` access itself throws is treated as NOT a
+ * root row (fail toward counting it, not dropping it) — the property read
+ * is the only thing being guarded here, not the rest of that task's
+ * analysis; a caller must not let this predicate's own defensiveness
+ * silently exclude an otherwise-readable task from unrelated metrics.
+ *
+ * ONE definition spliced by every emitter that walks flattenedTasks for
+ * task-level analytics (task-velocity-v3, productivity-stats-v3,
+ * analyze-overdue-v3, workflow-analysis-v3) so the root-skip marker and
+ * its failure semantics cannot drift between call paths independently —
+ * three of those four sites hand-rolled their own copy before this
+ * consolidation (/code-review of the OMN-290 PR). Deliberately NOT
+ * spliced into TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below — that snippet
+ * is itself spliced inside a nested block at some call sites
+ * (productivity-stats-v3's includeProjectStats branch) alongside a
+ * top-level splice of this one, and two `function isProjectRootRow`
+ * declarations in the same OmniJS script is unnecessary risk for a
+ * pre-existing, already-vetted pass this PR doesn't touch.
+ */
+export const IS_PROJECT_ROOT_ROW_SNIPPET = `function isProjectRootRow(task) {
+            try {
+              return !!task.project;
+            } catch (e) {
+              return false;
+            }
+          }`;
+
+/**
  * Canonical Project.Status → wire-vocabulary map ('active' | 'onHold' |
  * 'done' | 'dropped', String(s) fail-open for statuses a future OmniFocus
  * adds — never a String()/.replace() of the enum, whose tag stringifies as
