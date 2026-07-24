@@ -120,18 +120,27 @@ async function getSandboxFolderId(): Promise<string | null> {
     return JSON.stringify({ folderId: null });
   `;
 
-  sandboxFolderIdPromise = (async () => {
+  const lookup: Promise<string | null> = (async () => {
     try {
       const result = await executeGuardJXA<{ folderId: string | null }>(script);
       cachedSandboxFolderId = result.folderId;
       return cachedSandboxFolderId;
     } catch {
       return null;
-    } finally {
-      sandboxFolderIdPromise = null;
     }
   })();
-  return sandboxFolderIdPromise;
+  sandboxFolderIdPromise = lookup;
+  // Only clear if we're still the current in-flight lookup — a
+  // clearSandboxCache() (or a fresh lookup started after this one settled)
+  // may already have replaced sandboxFolderIdPromise with a newer one;
+  // nulling it here would orphan that newer lookup's slot and let this
+  // stale result silently overwrite its cached value.
+  void lookup.finally(() => {
+    if (sandboxFolderIdPromise === lookup) {
+      sandboxFolderIdPromise = null;
+    }
+  });
+  return lookup;
 }
 
 // Cache validated project IDs to avoid repeated sandbox checks

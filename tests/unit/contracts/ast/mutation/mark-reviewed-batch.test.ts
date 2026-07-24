@@ -6,15 +6,34 @@
 // ([[feedback_parity_test_tautology]] — these are behavior goldens, not
 // old-vs-new equality).
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock — see complete.test.ts's comment for the full
+// rationale (CI has no osascript; unmocked guard tests fail closed there
+// regardless of which case is under test).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 import {
   buildMarkProjectsReviewedProgram,
   dispatchMutation,
   validateMutationProgram,
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
-import { buildMarkProjectsReviewedScript } from '../../../../../src/contracts/ast/mutation-script-builder.js';
+import {
+  buildMarkProjectsReviewedScript,
+  clearSandboxCache,
+} from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { MARK_REVIEWED_BATCH_TYPED_SCHEMA } from '../../../../../src/omnifocus/response-schemas/write.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+  clearSandboxCache();
+});
 
 interface FakeReviewInterval {
   unit: { name: string };
@@ -245,18 +264,19 @@ describe('buildMarkProjectsReviewedProgram — golden emission', () => {
 // The OMN-119/120 non-bypass property: pre-flight EVERY id before building
 // (mirrors bulk_delete / set-review-schedule/project — spec §2.1).
 describe('dispatchMutation mark-reviewed/projects guard (OMN-119/120 non-bypass)', () => {
-  it('rejects a non-sandbox project id when the sandbox guard is enabled', async () => {
+  it('passes a not-found project id through the guard; build succeeds with per-item continue-on-error (OMN-286)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      await expect(
-        dispatchMutation('mark-reviewed/projects', {
-          projectIds: ['not-a-sandbox-project-id'],
-          reviewDate: REVIEW_DATE,
-          updateNextReviewDate: true,
-        }),
-      ).rejects.toThrow(/TEST GUARD/);
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      const program = await dispatchMutation('mark-reviewed/projects', {
+        projectIds: ['not-a-sandbox-project-id'],
+        reviewDate: REVIEW_DATE,
+        updateNextReviewDate: true,
+      });
+      expect(emitProgram(program)).toContain('error: "Project not found"');
     } finally {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;
