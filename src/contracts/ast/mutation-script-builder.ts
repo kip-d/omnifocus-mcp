@@ -124,12 +124,13 @@ const validatedProjectIds = new Set<string>();
 
 /**
  * OMN-286: tri-state sandbox check. The bridge script has always distinguished
- * "project not found" from "found but outside the sandbox"; the old boolean
- * return collapsed them, which made guarded batch routes abort whole
+ * "not found" from "found but outside the sandbox"; the old boolean return
+ * collapsed them, which made guarded batch routes abort whole
  * continue-on-error batches on a bogus id. Callers decide per-site what
- * not_found means (the id-addressed mutation guards pass it through to the
- * script's own strict-byIdentifier error row; the create-into-project guard
- * stays fail-closed — see each site).
+ * not_found means, based on whether the id resolves strictly (byIdentifier
+ * only — not-found writes nothing, safe to pass through) or flexibly (a name
+ * fallback exists — not-found could still resolve outside the sandbox by
+ * name, so fail-closed is required). See each site's comment.
  */
 type SandboxCheck = 'in_sandbox' | 'outside_sandbox' | 'not_found';
 
@@ -299,19 +300,24 @@ export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
   // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox.
-  // OMN-286: deliberately fail-closed on not_found here, unlike
-  // validateTaskInSandbox — this is a container check for a write (like
-  // validateTaskCreate's data.project case above), not an id-addressed
-  // mutation guard.
+  // OMN-286: a NOT-FOUND parentTaskId passes through, unlike data.project
+  // below. resolveParentTask (an alias for resolveTask) lowers with strict
+  // Task.byIdentifier — no name fallback — so unlike data.project (which
+  // resolves via resolveProjectFlexible and could still land outside the
+  // sandbox by name), a not-found parentTaskId writes nothing: the build
+  // step's own runtime guard ("Parent task not found: ...") catches it.
+  // Fail-closed here would reopen the whole-batch-abort-on-not-found bug
+  // OMN-286 fixed, this time via validateBatchTaskSpecs looping per spec.
+  // Found-but-outside-sandbox still throws; so does any bridge failure.
   if (data.parentTaskId) {
     const parentCheck = await isTaskInSandbox(data.parentTaskId);
-    if (parentCheck !== 'in_sandbox') {
+    if (parentCheck === 'outside_sandbox') {
       throw new Error(
         `TEST GUARD: Parent task "${data.parentTaskId}" is not inside sandbox. ` +
           'Subtasks can only be created under tasks that are in the sandbox.',
       );
     }
-    // Parent task validated, subtask is allowed
+    // Parent task validated (or not-found, passed through), subtask is allowed
     // Fall through to validate tags
   }
   // Case 2: Task in project - validate project is in sandbox

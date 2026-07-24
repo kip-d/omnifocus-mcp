@@ -2,7 +2,18 @@
 // OMN-128 slice 4 — golden + vm-execution + dispatch-guard tests for the
 // update/task lowering (buildUpdateTaskProgram). Mirrors create-task.test.ts.
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock — see complete.test.ts's comment for the full
+// rationale (CI has no osascript; unmocked guard tests fail closed there
+// regardless of which case is under test).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 // Imports go through the barrel deliberately — this file exercises the public
 // surface of src/contracts/ast/mutation/index.ts.
 import {
@@ -14,6 +25,10 @@ import {
 import type { TaskUpdateData } from '../../../../../src/contracts/mutations.js';
 import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
 import { expectMatchesSchema } from './assert-schema.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+});
 
 function emit(changes: TaskUpdateData, taskId = 't1'): string {
   const program = buildUpdateTaskProgram({ taskId, changes });
@@ -459,7 +474,10 @@ describe('dispatchMutation update/task guard (OMN-119/120 non-bypass)', () => {
       // through to the script's own strict-byIdentifier handling (live-
       // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
       // for a FOUND-but-outside-sandbox id is covered by
-      // sandbox-guard-notfound.test.ts's mocked "still throws" case.
+      // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+      // First guard call also resolves (and caches) the sandbox folder id.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       const program = await dispatchMutation('update/task', {
         taskId: 'not-a-sandbox-task-id',
         changes: { name: 'x' },

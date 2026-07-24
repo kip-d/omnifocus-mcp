@@ -23,7 +23,7 @@ vi.mock('child_process', () => ({
   }),
 }));
 
-import { validateTaskInSandbox } from '../../../../src/contracts/ast/mutation-script-builder.js';
+import { validateTaskInSandbox, validateTaskCreate } from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
   let priorGuard: string | undefined;
@@ -69,5 +69,43 @@ describe('validateTaskInSandbox not-found threading (OMN-286)', () => {
     mockStdoutQueue.push('osascript exploded');
 
     await expect(validateTaskInSandbox('error-task', 'delete')).rejects.toThrow(/outside sandbox/);
+  });
+});
+
+describe('validateTaskCreate parentTaskId not-found threading (OMN-286)', () => {
+  let priorGuard: string | undefined;
+  let priorNodeEnv: string | undefined;
+
+  beforeEach(() => {
+    priorGuard = process.env.SANDBOX_GUARD_ENABLED;
+    priorNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    mockStdoutQueue.length = 0;
+  });
+
+  afterEach(() => {
+    if (priorGuard === undefined) delete process.env.SANDBOX_GUARD_ENABLED;
+    else process.env.SANDBOX_GUARD_ENABLED = priorGuard;
+    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = priorNodeEnv;
+  });
+
+  it('passes a not-found parentTaskId through — resolveParentTask has no name fallback, so not-found writes nothing', async () => {
+    // Sandbox folder id already cached from the validateTaskInSandbox
+    // describe block above (module-scoped cache, same file).
+    mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+
+    await expect(
+      validateTaskCreate({ name: '__TEST__ subtask', parentTaskId: 'ghost-parent-1' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('still throws for a FOUND parent task outside the sandbox', async () => {
+    mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
+
+    await expect(validateTaskCreate({ name: '__TEST__ subtask', parentTaskId: 'real-outside-task' })).rejects.toThrow(
+      /not inside sandbox/,
+    );
   });
 });

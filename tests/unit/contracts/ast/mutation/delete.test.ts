@@ -1,7 +1,18 @@
 // tests/unit/contracts/ast/mutation/delete.test.ts
 // OMN-128 slice 5 — golden + vm tests for single + bulk delete lowerings.
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock — see complete.test.ts's comment for the full
+// rationale (CI has no osascript; unmocked guard tests fail closed there
+// regardless of which case is under test).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 import {
   buildDeleteTaskProgram,
   buildDeleteProjectProgram,
@@ -12,6 +23,10 @@ import {
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import { DeleteResultSchema, BulkDeleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
 import { expectMatchesSchema } from './assert-schema.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+});
 
 describe('buildDeleteTaskProgram — golden emission', () => {
   it('captures name BEFORE deleteObject and echoes the requested id (spec §3)', () => {
@@ -64,7 +79,10 @@ describe('dispatchMutation delete/task guard (OMN-119/120 non-bypass)', () => {
       // through to the script's own strict-byIdentifier handling (live-
       // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
       // for a FOUND-but-outside-sandbox id is covered by
-      // sandbox-guard-notfound.test.ts's mocked "still throws" case.
+      // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+      // First guard call also resolves (and caches) the sandbox folder id.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       const program = await dispatchMutation('delete/task', { taskId: 'not-a-sandbox-task-id' });
       expect(emitProgram(program)).toContain('Task not found: not-a-sandbox-task-id');
     } finally {
@@ -80,6 +98,9 @@ describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () =>
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
+      // Sandbox folder id is already cached from the task-guard test above
+      // (module-scoped cache, same file) — only the bridge lookup is needed.
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
       await expect(dispatchMutation('delete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
         /TEST GUARD/,
       );
@@ -104,6 +125,12 @@ describe('dispatchMutation bulk_delete/task guard (OMN-119/120 non-bypass)', () 
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
+      // Sandbox folder id already cached from the delete/task test above;
+      // all three ids resolve not_found in this mocked run, mirroring the
+      // documented live-env behavior.
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       const program = await dispatchMutation('bulk_delete/task', {
         taskIds: ['__test__sandbox-id', 'not-a-sandbox-task-id', '__test__sandbox-id-2'],
       });

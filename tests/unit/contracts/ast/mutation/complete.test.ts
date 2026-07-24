@@ -1,7 +1,23 @@
 // tests/unit/contracts/ast/mutation/complete.test.ts
 // OMN-128 slice 5 — golden + vm-execution tests for the complete lowerings.
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock: the "OMN-119/120 non-bypass" describe blocks
+// below exercise validateTaskInSandbox/validateProjectInSandbox, which shell
+// out to osascript. Unmocked, those tests are only deterministic on macOS
+// with OmniFocus running; on CI (ubuntu-latest, no osascript binary) the
+// call throws ENOENT and the guard fails CLOSED regardless of which case is
+// under test. Mocking child_process.exec makes the not-found/outside-sandbox
+// distinction deterministic everywhere (same pattern as
+// sandbox-guard-notfound.test.ts / sandbox-guard-task-notfound.test.ts).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 import {
   buildCompleteTaskProgram,
   buildCompleteProjectProgram,
@@ -11,6 +27,10 @@ import {
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import { CompleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
 import { expectMatchesSchema } from './assert-schema.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+});
 
 describe('buildCompleteTaskProgram — golden emission', () => {
   it('emits resolve, guard, markComplete, read-back envelope — nothing else', () => {
@@ -60,7 +80,10 @@ describe('dispatchMutation complete/task guard (OMN-119/120 non-bypass)', () => 
       // through to the script's own strict-byIdentifier handling (live-
       // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
       // for a FOUND-but-outside-sandbox id is covered by
-      // sandbox-guard-notfound.test.ts's mocked "still throws" case.
+      // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+      // First guard call also resolves (and caches) the sandbox folder id.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
       const program = await dispatchMutation('complete/task', { taskId: 'not-a-sandbox-task-id' });
       expect(emitProgram(program)).toContain('Task not found: not-a-sandbox-task-id');
     } finally {
@@ -76,6 +99,9 @@ describe('dispatchMutation complete/project guard (OMN-119/120 non-bypass)', () 
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
+      // Sandbox folder id is already cached from the task-guard test above
+      // (module-scoped cache, same file) — only the bridge lookup is needed.
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
       await expect(dispatchMutation('complete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
         /TEST GUARD/,
       );
