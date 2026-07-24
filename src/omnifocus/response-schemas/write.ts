@@ -300,7 +300,9 @@ export const ProjectWriteResultSchema = z.union([
       projectId: z.string(),
       name: z.string(),
       flagged: z.boolean(),
-      status: z.enum(['active', 'on_hold', 'completed', 'dropped']),
+      // OMN-278: canonical vocabulary (matches PROJECT_STATUS_READBACK in
+      // contracts/ast/mutation/defs.ts — the two must move together).
+      status: z.enum(['active', 'onHold', 'done', 'dropped']),
       updated: z.literal(true),
       warnings: warningsArray,
     })
