@@ -1,7 +1,18 @@
 // tests/unit/contracts/ast/mutation/delete.test.ts
 // OMN-128 slice 5 — golden + vm tests for single + bulk delete lowerings.
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock — see complete.test.ts's comment for the full
+// rationale (CI has no osascript; unmocked guard tests fail closed there
+// regardless of which case is under test).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 import {
   buildDeleteTaskProgram,
   buildDeleteProjectProgram,
@@ -11,7 +22,17 @@ import {
   emitProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import { DeleteResultSchema, BulkDeleteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { clearSandboxCache } from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { expectMatchesSchema } from './assert-schema.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+  // OMN-286: reset the sandbox-folder-id/validated-id caches so each guard
+  // test below pushes its OWN complete response sequence instead of relying
+  // on cross-test ordering (fragile under -t / .only — see the comment on
+  // sandbox-guard-notfound.test.ts).
+  clearSandboxCache();
+});
 
 describe('buildDeleteTaskProgram — golden emission', () => {
   it('captures name BEFORE deleteObject and echoes the requested id (spec §3)', () => {
@@ -55,12 +76,21 @@ describe('buildBulkDeleteTasksProgram — golden emission', () => {
 // The OMN-119/120 non-bypass property for the delete family: dispatch runs the
 // sandbox guard BEFORE building (mirrors update-task.test.ts's guard describe).
 describe('dispatchMutation delete/task guard (OMN-119/120 non-bypass)', () => {
-  it('rejects a non-sandbox task id when the sandbox guard is enabled', async () => {
+  it('passes a not-found task id through the guard; build succeeds with the script-level not-found check (OMN-286)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      await expect(dispatchMutation('delete/task', { taskId: 'not-a-sandbox-task-id' })).rejects.toThrow(/TEST GUARD/);
+      // OMN-286: the guard no longer aborts on not-found — it passes
+      // through to the script's own strict-byIdentifier handling (live-
+      // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
+      // for a FOUND-but-outside-sandbox id is covered by
+      // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+      // First guard call also resolves (and caches) the sandbox folder id.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      const program = await dispatchMutation('delete/task', { taskId: 'not-a-sandbox-task-id' });
+      expect(emitProgram(program)).toContain('Task not found: not-a-sandbox-task-id');
     } finally {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;
@@ -74,6 +104,8 @@ describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () =>
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
       await expect(dispatchMutation('delete/project', { projectId: 'not-a-sandbox-project-id' })).rejects.toThrow(
         /TEST GUARD/,
       );
@@ -85,20 +117,32 @@ describe('dispatchMutation delete/project guard (OMN-119/120 non-bypass)', () =>
 });
 
 describe('dispatchMutation bulk_delete/task guard (OMN-119/120 non-bypass)', () => {
-  // In the unit env ALL three ids fail validation (the __TEST__ prefix check runs
-  // against a resolved task's NAME in live OmniFocus; these ids resolve not_found),
-  // so this can't distinguish all-ids pre-flight from a first-id-only guard — the
-  // true mixed-ids case needs real sandbox fixtures (Task 10 integration coverage).
-  it('rejects dispatch when an id fails sandbox validation (all-ids pre-flight proven live in integration)', async () => {
+  // OMN-286: in the unit env all three ids resolve not_found (the __TEST__
+  // prefix check runs against a resolved task's NAME in live OmniFocus, and
+  // the sandbox-folder check needs a real project) — that's no longer a
+  // guard-abort case. The guard passes not-found ids through so the batch
+  // partitions per-item at the script level instead of aborting whole
+  // (live-verified in mark-reviewed-batch-live.test.ts); guard-before-build
+  // for a FOUND-but-outside-sandbox id is covered by
+  // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+  it('passes not-found ids through the guard; build succeeds with per-item continue-on-error', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      await expect(
-        dispatchMutation('bulk_delete/task', {
-          taskIds: ['__test__sandbox-id', 'not-a-sandbox-task-id', '__test__sandbox-id-2'],
-        }),
-      ).rejects.toThrow(/TEST GUARD/);
+      // getSandboxFolderId() de-dups concurrent in-flight lookups (OMN-286
+      // follow-up), so the 3 concurrent validateTaskInSandbox calls below
+      // share ONE folder-id resolution, then each does its own bridge
+      // check — 1 + 3 responses total, order-independent since all three
+      // bridge checks return the same not_found shape.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      const program = await dispatchMutation('bulk_delete/task', {
+        taskIds: ['__test__sandbox-id', 'not-a-sandbox-task-id', '__test__sandbox-id-2'],
+      });
+      expect(emitProgram(program)).toContain('error: "Task not found"');
     } finally {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;

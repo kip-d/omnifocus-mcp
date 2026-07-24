@@ -90,12 +90,22 @@ async function executeGuardJXA<T>(script: string): Promise<T> {
   return JSON.parse(stdout.trim()) as T;
 }
 
+// In-flight dedup: guard routes that pre-flight multiple ids concurrently
+// (Promise.all over validateTaskInSandbox/validateProjectInSandbox) would
+// otherwise each independently see cachedSandboxFolderId === null and fire
+// their own redundant osascript lookup before any of them resolves and
+// caches it. One shared promise, cleared once it settles either way.
+let sandboxFolderIdPromise: Promise<string | null> | null = null;
+
 /**
  * Get the sandbox folder ID (cached)
  */
 async function getSandboxFolderId(): Promise<string | null> {
   if (cachedSandboxFolderId !== null) {
     return cachedSandboxFolderId;
+  }
+  if (sandboxFolderIdPromise) {
+    return sandboxFolderIdPromise;
   }
 
   const script = `
@@ -110,30 +120,62 @@ async function getSandboxFolderId(): Promise<string | null> {
     return JSON.stringify({ folderId: null });
   `;
 
-  try {
-    const result = await executeGuardJXA<{ folderId: string | null }>(script);
-    cachedSandboxFolderId = result.folderId;
-    return cachedSandboxFolderId;
-  } catch {
-    return null;
-  }
+  const lookup: Promise<string | null> = (async () => {
+    try {
+      const result = await executeGuardJXA<{ folderId: string | null }>(script);
+      return result.folderId;
+    } catch {
+      return null;
+    }
+  })();
+  sandboxFolderIdPromise = lookup;
+  // Both handlers below guard on "am I still the current in-flight
+  // lookup?" — a clearSandboxCache() (or a fresh lookup started after this
+  // one was kicked off) may have already replaced sandboxFolderIdPromise
+  // with a newer one. Without this check, a stale lookup settling late
+  // could still overwrite a fresher cachedSandboxFolderId (not just orphan
+  // the promise slot — the earlier version of this fix only guarded the
+  // slot, not the cache write itself).
+  void lookup.then((folderId) => {
+    if (sandboxFolderIdPromise === lookup) {
+      cachedSandboxFolderId = folderId;
+    }
+  });
+  void lookup.finally(() => {
+    if (sandboxFolderIdPromise === lookup) {
+      sandboxFolderIdPromise = null;
+    }
+  });
+  return lookup;
 }
 
 // Cache validated project IDs to avoid repeated sandbox checks
 const validatedProjectIds = new Set<string>();
 
 /**
+ * OMN-286: tri-state sandbox check. The bridge script has always distinguished
+ * "not found" from "found but outside the sandbox"; the old boolean return
+ * collapsed them, which made guarded batch routes abort whole
+ * continue-on-error batches on a bogus id. Callers decide per-site what
+ * not_found means, based on whether the id resolves strictly (byIdentifier
+ * only — not-found writes nothing, safe to pass through) or flexibly (a name
+ * fallback exists — not-found could still resolve outside the sandbox by
+ * name, so fail-closed is required). See each site's comment.
+ */
+type SandboxCheck = 'in_sandbox' | 'outside_sandbox' | 'not_found';
+
+/**
  * Check if a project is inside the sandbox folder
  * Uses O(1) Project.byIdentifier via OmniJS bridge instead of O(n) iteration
  */
-async function isProjectInSandbox(projectId: string): Promise<boolean> {
+async function isProjectInSandbox(projectId: string): Promise<SandboxCheck> {
   // Fast path: already validated this project
   if (validatedProjectIds.has(projectId)) {
-    return true;
+    return 'in_sandbox';
   }
 
   const sandboxId = await getSandboxFolderId();
-  if (!sandboxId) return false;
+  if (!sandboxId) return 'outside_sandbox';
 
   // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
   const script = `
@@ -162,13 +204,16 @@ async function isProjectInSandbox(projectId: string): Promise<boolean> {
   `;
 
   try {
-    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
     if (result.inSandbox) {
       validatedProjectIds.add(projectId);
+      return 'in_sandbox';
     }
-    return result.inSandbox;
+    return result.error === 'not_found' ? 'not_found' : 'outside_sandbox';
   } catch {
-    return false;
+    // Bridge failure fails CLOSED: an unverifiable project must never be
+    // treated as merely not-found (which some callers pass through).
+    return 'outside_sandbox';
   }
 }
 
@@ -177,12 +222,16 @@ const validatedTaskIds = new Set<string>();
 
 /**
  * Check if a task is inside the sandbox (via project) or has __TEST__ prefix
- * Uses O(1) Task.byIdentifier via OmniJS bridge instead of O(n) iteration
+ * Uses O(1) Task.byIdentifier via OmniJS bridge instead of O(n) iteration.
+ *
+ * OMN-286: tri-state, mirroring isProjectInSandbox — see that function's
+ * doc comment for why the boolean collapse broke guarded continue-on-error
+ * batches. Callers decide per-site what not_found means.
  */
-async function isTaskInSandbox(taskId: string): Promise<boolean> {
+async function isTaskInSandbox(taskId: string): Promise<SandboxCheck> {
   // Fast path: already validated this task
   if (validatedTaskIds.has(taskId)) {
-    return true;
+    return 'in_sandbox';
   }
 
   const sandboxId = await getSandboxFolderId();
@@ -223,13 +272,16 @@ async function isTaskInSandbox(taskId: string): Promise<boolean> {
   `;
 
   try {
-    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
     if (result.inSandbox) {
       validatedTaskIds.add(taskId);
+      return 'in_sandbox';
     }
-    return result.inSandbox;
+    return result.error === 'not_found' ? 'not_found' : 'outside_sandbox';
   } catch {
-    return false;
+    // Bridge failure fails CLOSED: an unverifiable task must never be
+    // treated as merely not-found (which some callers pass through).
+    return 'outside_sandbox';
   }
 }
 
@@ -277,22 +329,35 @@ export function validateFolderCreate(data: FolderCreateData): void {
 export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
-  // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox
+  // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox.
+  // OMN-286: a NOT-FOUND parentTaskId passes through, unlike data.project
+  // below. resolveParentTask (an alias for resolveTask) lowers with strict
+  // Task.byIdentifier — no name fallback — so unlike data.project (which
+  // resolves via resolveProjectFlexible and could still land outside the
+  // sandbox by name), a not-found parentTaskId writes nothing: the build
+  // step's own runtime guard ("Parent task not found: ...") catches it.
+  // Fail-closed here would reopen the whole-batch-abort-on-not-found bug
+  // OMN-286 fixed, this time via validateBatchTaskSpecs looping per spec.
+  // Found-but-outside-sandbox still throws; so does any bridge failure.
   if (data.parentTaskId) {
-    const parentInSandbox = await isTaskInSandbox(data.parentTaskId);
-    if (!parentInSandbox) {
+    const parentCheck = await isTaskInSandbox(data.parentTaskId);
+    if (parentCheck === 'outside_sandbox') {
       throw new Error(
         `TEST GUARD: Parent task "${data.parentTaskId}" is not inside sandbox. ` +
           'Subtasks can only be created under tasks that are in the sandbox.',
       );
     }
-    // Parent task validated, subtask is allowed
+    // Parent task validated (or not-found, passed through), subtask is allowed
     // Fall through to validate tags
   }
   // Case 2: Task in project - validate project is in sandbox
   else if (data.project) {
-    const inSandbox = await isProjectInSandbox(data.project);
-    if (!inSandbox) {
+    // OMN-286: deliberately fail-closed on not_found here, unlike the
+    // id-addressed mutation guards. Create resolves `project` by NAME as well
+    // as id in the real script, so a not-found-BY-ID value could still
+    // resolve by name to a project OUTSIDE the sandbox and write there.
+    const check = await isProjectInSandbox(data.project);
+    if (check !== 'in_sandbox') {
       throw new Error(
         `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
           `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
@@ -382,13 +447,20 @@ export function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData):
 }
 
 /**
- * Validate that a task update/delete is on a task inside the sandbox
+ * Validate that a task update/delete is on a task inside the sandbox.
+ *
+ * OMN-286: a NOT-FOUND id passes through without throwing, mirroring
+ * validateProjectInSandbox. These routes lower with strict
+ * Task.byIdentifier (no name fallback), so a not-found id writes nothing —
+ * the script's own continue-on-error reports it as an error row, exactly as
+ * in production (unguarded) runs. Found-but-outside-sandbox still throws;
+ * so does any bridge failure (fails closed as 'outside_sandbox').
  */
 export async function validateTaskInSandbox(taskId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
-  const inSandbox = await isTaskInSandbox(taskId);
-  if (!inSandbox) {
+  const check = await isTaskInSandbox(taskId);
+  if (check === 'outside_sandbox') {
     throw new Error(
       `TEST GUARD: Cannot ${operation} task "${taskId}" outside sandbox. ` +
         `Task must be in a project inside "${SANDBOX_FOLDER_NAME}" or have name starting with "${TEST_INBOX_PREFIX}".`,
@@ -397,13 +469,21 @@ export async function validateTaskInSandbox(taskId: string, operation: string): 
 }
 
 /**
- * Validate that a project update/delete is on a project inside the sandbox
+ * Validate that a project update/delete is on a project inside the sandbox.
+ *
+ * OMN-286: a NOT-FOUND id passes through without throwing. These routes lower
+ * with strict Project.byIdentifier (no name fallback), so a not-found id
+ * writes nothing — the script's own continue-on-error reports it as an error
+ * row, exactly as in production (unguarded) runs. Aborting the whole batch on
+ * it provided no safety and broke the documented partition in guarded
+ * integration runs. Found-but-outside-sandbox still throws; so does any
+ * bridge failure (fails closed as 'outside_sandbox').
  */
 export async function validateProjectInSandbox(projectId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
-  const inSandbox = await isProjectInSandbox(projectId);
-  if (!inSandbox) {
+  const check = await isProjectInSandbox(projectId);
+  if (check === 'outside_sandbox') {
     throw new Error(
       `TEST GUARD: Cannot ${operation} project "${projectId}" outside sandbox. ` +
         `Project must be inside "${SANDBOX_FOLDER_NAME}" folder.`,
@@ -451,6 +531,7 @@ export async function validateBatchCreateOps(
  */
 export function clearSandboxCache(): void {
   cachedSandboxFolderId = null;
+  sandboxFolderIdPromise = null;
   validatedTaskIds.clear();
   validatedProjectIds.clear();
 }

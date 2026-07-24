@@ -2,7 +2,18 @@
 // OMN-128 slice 4 — golden + vm-execution + dispatch-guard tests for the
 // update/task lowering (buildUpdateTaskProgram). Mirrors create-task.test.ts.
 import vm from 'node:vm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OMN-286 guard-boundary mock — see complete.test.ts's comment for the full
+// rationale (CI has no osascript; unmocked guard tests fail closed there
+// regardless of which case is under test).
+const mockStdoutQueue: string[] = [];
+vi.mock('child_process', () => ({
+  exec: vi.fn((_cmd: string, cb: (err: unknown, out: { stdout: string }) => void) => {
+    cb(null, { stdout: mockStdoutQueue.shift() ?? '{}' });
+  }),
+}));
+
 // Imports go through the barrel deliberately — this file exercises the public
 // surface of src/contracts/ast/mutation/index.ts.
 import {
@@ -13,7 +24,16 @@ import {
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskUpdateData } from '../../../../../src/contracts/mutations.js';
 import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
+import { clearSandboxCache } from '../../../../../src/contracts/ast/mutation-script-builder.js';
 import { expectMatchesSchema } from './assert-schema.js';
+
+beforeEach(() => {
+  mockStdoutQueue.length = 0;
+  // OMN-286: reset the sandbox-folder-id/validated-id caches so the guard
+  // test below doesn't implicitly depend on prior-test ordering (fragile
+  // under -t / .only — see the comment on sandbox-guard-notfound.test.ts).
+  clearSandboxCache();
+});
 
 function emit(changes: TaskUpdateData, taskId = 't1'): string {
   const program = buildUpdateTaskProgram({ taskId, changes });
@@ -450,14 +470,24 @@ describe('emitted update-task program executes (vm)', () => {
 // The OMN-119/120 non-bypass property for the update family: dispatch runs the
 // sandbox guard BEFORE building (mirrors create-task.test.ts's guard test).
 describe('dispatchMutation update/task guard (OMN-119/120 non-bypass)', () => {
-  it('rejects a non-sandbox task id when the sandbox guard is enabled', async () => {
+  it('passes a not-found task id through the guard; build succeeds with the script-level not-found check (OMN-286)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      await expect(
-        dispatchMutation('update/task', { taskId: 'not-a-sandbox-task-id', changes: { name: 'x' } }),
-      ).rejects.toThrow(/TEST GUARD/);
+      // OMN-286: the guard no longer aborts on not-found — it passes
+      // through to the script's own strict-byIdentifier handling (live-
+      // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
+      // for a FOUND-but-outside-sandbox id is covered by
+      // sandbox-guard-task-notfound.test.ts's mocked "still throws" case.
+      // First guard call also resolves (and caches) the sandbox folder id.
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false, error: 'not_found' }));
+      const program = await dispatchMutation('update/task', {
+        taskId: 'not-a-sandbox-task-id',
+        changes: { name: 'x' },
+      });
+      expect(emitProgram(program)).toContain('Task not found: not-a-sandbox-task-id');
     } finally {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;

@@ -14,12 +14,12 @@
  *      batch [realId, bogusId] → the batch does NOT abort; realId lands in
  *      results.successful, bogusId in results.failed, projects_updated === 1.
  *      This is the honest count fix (de691ce3) proven live.
- *   3. Guard masks not-found (guarded server — OMN-286 documented behavior):
- *      the same [realId, bogusId] batch on a GUARDED server is rejected whole
- *      by the sandbox pre-flight before the script runs — the identical
- *      guard-masks-not-found property create-paths already documents for
- *      single-op creates. Confirms production (guard off) is the only place
- *      the continue-on-error contract is meant to hold, per OMN-286.
+ *   3. Continue-on-error partition on a GUARDED server (OMN-286 fix): the
+ *      same [realId, bogusId] batch on a GUARDED server now partitions
+ *      exactly like production — validateProjectInSandbox passes not-found
+ *      ids through to the script's own continue-on-error handling instead
+ *      of aborting the whole batch. Only found-but-outside-sandbox ids abort
+ *      pre-flight. Confirms the guard no longer masks the not-found case.
  *
  * Sandbox conventions: projects created in __MCP_TEST_SANDBOX__, run-scoped
  * names, deleted in afterAll.
@@ -167,23 +167,28 @@ describe('Batch mark_reviewed live (OMN-256 / OMN-286)', () => {
     expect(after, 'lastReviewDate must be unchanged after a rejected mark').toBe(before);
   }, 120000);
 
-  // ── 3. Guard masks not-found on a GUARDED server (OMN-286 documented) ──────
-  it('guarded: a not-found id in the batch is rejected whole by the sandbox pre-flight (OMN-286)', async () => {
+  // ── 3. Continue-on-error partition on a GUARDED server (OMN-286 fix) ──────
+  it('guarded: a not-found id partitions into failed[] instead of aborting the whole batch (OMN-286)', async () => {
     const idD = await createSandboxProject('D');
 
-    // On the guarded main server, the pre-flight (Promise.all over
-    // validateProjectInSandbox) treats the not-found id as out-of-sandbox and
-    // rejects the ENTIRE batch before the continue-on-error script runs. This
-    // is the OMN-286 behavior — test-mode only; production (test 2) partitions.
+    // Post-fix: validateProjectInSandbox's pre-flight passes not-found ids
+    // through to the script's own continue-on-error handling instead of
+    // treating them as out-of-sandbox, so the guarded server now partitions
+    // exactly like the unguarded server (test 2) — the guard no longer masks
+    // the not-found case.
     const res = await server.callTool('omnifocus_analyze', {
       analysis: {
         type: 'manage_reviews',
         params: { operation: 'mark_reviewed', projectIds: [idD, BOGUS_PROJECT_ID] },
       },
     });
-    expect(res.success, `guarded mixed batch should be rejected whole: ${JSON.stringify(res).slice(0, 300)}`).toBe(
-      false,
-    );
-    expect(JSON.stringify(res.error ?? res.metadata)).toMatch(/sandbox|not found|guard/i);
+
+    expectOk(res, 'guarded batch mark_reviewed mixed');
+    const results = res.data?.batch?.results;
+    expect(results?.successful?.map((r: { projectId: string }) => r.projectId)).toContain(idD);
+    expect(results?.failed?.map((r: { projectId: string }) => r.projectId)).toContain(BOGUS_PROJECT_ID);
+    expect(res.metadata.projects_updated).toBe(1);
+    expect(results?.summary?.successful_count).toBe(1);
+    expect(results?.summary?.failed_count).toBe(1);
   }, 120000);
 });
