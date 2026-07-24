@@ -1647,10 +1647,11 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data?.deadline_health).toBeUndefined();
     });
 
-    // Round-4 review: analyzeWaitingFor read task.createdDate — a field NO
-    // emitter ever wrote (the wire key is creationDate) — so days_waiting was
-    // silently always 0 and the >30-day warning escalation could never fire.
-    it('waiting_for computes days_waiting from creationDate (red-verified against the createdDate misread)', async () => {
+    // OMN-258: waiting_for is a screen + evidence bundle, not a verdict. Raw
+    // dates ship (creationDate — the wire key, per the PR #227 createdDate
+    // misread lesson); the days_waiting verdict framing is gone. Every
+    // candidate carries an id + evidence so the caller can judge and act.
+    it('waiting_for returns evidence-bundle candidates with raw dates and no verdict fields', async () => {
       const fortyFiveDaysAgo = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
       mockOmni.executeJson.mockResolvedValue(
         createScriptSuccess({
@@ -1661,13 +1662,25 @@ describe('OmniFocusAnalyzeTool', () => {
               completed: false,
               flagged: false,
               status: 'available',
-              tags: [],
+              tags: ['@waiting-for'],
               creationDate: fortyFiveDaysAgo,
               estimatedMinutes: null,
               children: 0,
+              noteHead: 'Emailed 6/30, promised by Friday',
+              projectId: 'p1',
+              project: 'Vendor Migration',
             },
           ],
-          projects: [],
+          projects: [
+            {
+              id: 'p1',
+              name: 'Vendor Migration',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              folder: 'Work',
+            },
+          ],
           tags: [],
         }),
       );
@@ -1676,8 +1689,138 @@ describe('OmniFocusAnalyzeTool', () => {
         analysis: { type: 'pattern_analysis', params: { insights: ['waiting_for'] } },
       });
 
-      const items = res.data.waiting_for.items as Array<{ id: string; days_waiting: number }>;
-      expect(items.find((i) => i.id === 'w1')?.days_waiting).toBeGreaterThanOrEqual(44);
+      const finding = res.data.waiting_for;
+      const candidate = finding.items.candidates.find((c: any) => c.id === 'w1');
+      expect(candidate).toBeDefined();
+      // Evidence bundle: raw dates + note + placement context, no computed verdicts
+      expect(candidate.creation_date).toBe(fortyFiveDaysAgo);
+      expect(candidate.days_waiting).toBeUndefined();
+      expect(candidate.note_head).toBe('Emailed 6/30, promised by Friday');
+      expect(candidate.note_empty).toBe(false);
+      expect(candidate.folder_path).toBe('Work');
+      expect(candidate.screen_reasons).toContain('waiting_tag');
+      // Screen metadata is loud about scope and caps
+      expect(finding.items.screen.candidates_total).toBe(1);
+      expect(finding.items.screen.capped).toBe(false);
+      // Zero canned judgment prose
+      expect(finding.recommendation).toBeUndefined();
+    });
+
+    // OMN-258: next_actions renamed clarify_candidates (break decided by Kip
+    // 2026-07-19 — no alias). The screen is recall-oriented; the response says
+    // candidate, never vague/score, and each candidate is actionable by id.
+    it('clarify_candidates returns screened candidates with evidence bundles and screen reasons', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 'c1',
+              name: 'stuff',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+              projectId: 'p1',
+              project: 'Household',
+            },
+            {
+              id: 'c2',
+              name: 'Call plumber about water heater quote',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: 15,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'p1',
+              name: 'Household',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              folder: 'Personal',
+            },
+          ],
+          tags: [],
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['clarify_candidates'] } },
+      });
+
+      const finding = res.data.clarify_candidates;
+      expect(finding.type).toBe('clarify_candidates');
+      const ids = finding.items.candidates.map((c: any) => c.id);
+      expect(ids).toContain('c1'); // vague keyword + single word + no verb
+      expect(ids).not.toContain('c2'); // clear action task passes the screen
+      const c1 = finding.items.candidates.find((c: any) => c.id === 'c1');
+      expect(c1.screen_reasons).toEqual(expect.arrayContaining(['vague_keyword', 'no_action_verb', 'single_word']));
+      expect(c1.note_empty).toBe(true);
+      expect(c1.folder_path).toBe('Personal');
+      // Verdict fields are gone
+      expect(c1.score).toBeUndefined();
+      expect(c1.suggestion).toBeUndefined();
+      expect(finding.recommendation).toBeUndefined();
+      expect(finding.items.screen.screened_total).toBe(2);
+    });
+
+    it('the retired next_actions key is reported as unrecognized, not silently ignored', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['next_actions'] } },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.next_actions).toBeUndefined();
+      expect(res.metadata.unrecognized_insights).toEqual(['next_actions']);
+    });
+
+    // OMN-258: estimation_bias returns distribution facts (with ids on the
+    // outliers), zero threshold-verdict prose.
+    it('estimation_bias returns pure statistics with actionable outlier ids', async () => {
+      const mkTask = (id: string, name: string, est: number | null) => ({
+        id,
+        name,
+        completed: false,
+        flagged: false,
+        status: 'available',
+        tags: [],
+        estimatedMinutes: est,
+        children: 0,
+      });
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            mkTask('e1', 'A', 30),
+            mkTask('e2', 'B', 30),
+            mkTask('e3', 'C', 60),
+            mkTask('e4', 'D', 480),
+            mkTask('e5', 'E', null),
+          ],
+          projects: [],
+          tags: [],
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['estimation_bias'] } },
+      });
+
+      const finding = res.data.estimation_bias;
+      expect(finding.items.tasks_with_estimates).toBe(4);
+      expect(finding.items.tasks_without_estimates).toBe(1);
+      expect(finding.items.round_number_counts['30']).toBe(2);
+      expect(finding.items.largest[0]).toMatchObject({ id: 'e4', estimated_minutes: 480 });
+      // Verdict prose is gone
+      expect(finding.recommendation).toBeUndefined();
+      expect(JSON.stringify(finding.items)).not.toMatch(/over-reliance|consider breaking|decomposition/i);
     });
 
     it('still succeeds honestly on a genuinely empty (but fetched) database', async () => {
