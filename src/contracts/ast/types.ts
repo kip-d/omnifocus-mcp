@@ -212,6 +212,13 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  * - Root tasks appear in the global collection and read as actionable; a
  *   non-null `t.project` marks a root and it is skipped (live-caught in
  *   PR #227: counting roots turned 12 of 13 stalled projects "healthy").
+ *   The `t.project` read itself is fail-open (OMN-290 /code-review round
+ *   2): a throw is treated as NOT a root, matching the fail-open contract
+ *   of IS_PROJECT_ROOT_ROW_SNIPPET above (whose whole-DB summary this
+ *   pass's per-project totals must agree with) — deliberately NOT via a
+ *   second `function isProjectRootRow` declaration, just the same
+ *   try/return-false shape inlined, since this snippet is spliced
+ *   alongside a top-level splice of that one at some call sites.
  * - `completed` is the task's own completed flag (matching every other
  *   completed-count in the codebase), not effective status.
  * - One bad task costs only itself (inner catch); a failure of the pass
@@ -252,18 +259,31 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  * analysis; a caller must not let this predicate's own defensiveness
  * silently exclude an otherwise-readable task from unrelated metrics.
  *
- * ONE definition spliced by every emitter that walks flattenedTasks for
- * task-level analytics (task-velocity-v3, productivity-stats-v3,
- * analyze-overdue-v3, workflow-analysis-v3) so the root-skip marker and
- * its failure semantics cannot drift between call paths independently —
- * three of those four sites hand-rolled their own copy before this
- * consolidation (/code-review of the OMN-290 PR). Deliberately NOT
- * spliced into TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below — that snippet
- * is itself spliced inside a nested block at some call sites
- * (productivity-stats-v3's includeProjectStats branch) alongside a
- * top-level splice of this one, and two `function isProjectRootRow`
- * declarations in the same OmniJS script is unnecessary risk for a
- * pre-existing, already-vetted pass this PR doesn't touch.
+ * ONE definition spliced by every emitter whose per-task failure handling
+ * matches this predicate's fail-open contract — task-velocity-v3,
+ * productivity-stats-v3, and analyze-overdue-v3 (the three OMN-290 sites,
+ * which had NO root check at all before this PR, so fail-open changes
+ * nothing there) — so the root-skip marker and failure semantics cannot
+ * drift between those call paths independently.
+ *
+ * Deliberately NOT spliced into workflow-analysis-v3, which pre-dates
+ * this predicate and is fail-CLOSED by construction (its root check sits
+ * inside a per-task try/catch that already drops the whole task on ANY
+ * throw, root-check included) — swapping it to this predicate would
+ * silently flip a task.project throw from "task dropped" to "task
+ * counted," a real regression caught in /code-review of the OMN-290 PR.
+ * Fail-open vs fail-closed is a property of what ALREADY happens to a
+ * throwing task at each site, not a style choice — match the existing
+ * contract, don't unify it here.
+ *
+ * Also NOT spliced (as a function declaration) into
+ * TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below, since that snippet is itself
+ * spliced inside a nested block at some call sites alongside a top-level
+ * splice of this one, and two `function isProjectRootRow` declarations in
+ * the same OmniJS script is unnecessary risk — but that snippet's root
+ * check DOES match this predicate's fail-open contract (inlined, see that
+ * snippet's own doc comment), so per-project totals stay consistent with
+ * any whole-DB summary computed via this predicate in the same script.
  */
 export const IS_PROJECT_ROOT_ROW_SNIPPET = `function isProjectRootRow(task) {
             try {
@@ -317,7 +337,16 @@ export const FOLDER_STATUS_STRING_SNIPPET = `function folderStatusString(s) {
 export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = {};
           flattenedTasks.forEach(t => {
             try {
-              if (t.project) return;
+              // OMN-290 /code-review round 2: fail-open on the project read
+              // itself, matching IS_PROJECT_ROOT_ROW_SNIPPET's contract — a
+              // throw here means "not a root," not "drop this task."
+              let isRootRow;
+              try {
+                isRootRow = !!t.project;
+              } catch (e) {
+                isRootRow = false;
+              }
+              if (isRootRow) return;
               const proj = t.containingProject;
               if (!proj) return;
               const pid = proj.id.primaryKey;

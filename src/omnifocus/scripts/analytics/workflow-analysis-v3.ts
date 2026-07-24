@@ -24,7 +24,6 @@
  */
 
 import { ROUND1_HELPER } from '../shared/helpers.js';
-import { IS_PROJECT_ROOT_ROW_SNIPPET } from '../../../contracts/ast/types.js';
 
 export const WORKFLOW_ANALYSIS_V3 = `
   (() => {
@@ -48,7 +47,6 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
-          ${IS_PROJECT_ROOT_ROW_SNIPPET}
           const nowTime = \${nowTime};
           const analysisDepth = "\${analysisDepth}";
           const focusAreas = \${JSON.stringify(focusAreas)};
@@ -178,10 +176,18 @@ export const WORKFLOW_ANALYSIS_V3 = `
               // project.flattenedTasks. OMN-270: the old gate read the
               // JXA-only child-count property — undefined in OmniJS — so it
               // never fired and every root polluted the task-level metrics.
-              // isProjectRootRow (IS_PROJECT_ROOT_ROW_SNIPPET, contracts/ast/
-              // types) is the shared root-row predicate every root-skip site
-              // splices (OMN-290).
-              if (isProjectRootRow(task)) {
+              // A non-null task.project is the live root-task marker (PR
+              // #227). Deliberately NOT the shared isProjectRootRow()
+              // (IS_PROJECT_ROOT_ROW_SNIPPET, contracts/ast/types) here —
+              // that predicate fails OPEN (treats a throw as "not root," so
+              // the task IS counted), but this loop's whole per-task body
+              // already lives in its own try/catch (this one), which has
+              // always failed CLOSED: a task.project read that throws drops
+              // the task from totalTasks and every derived metric, same as
+              // any other per-task read failure. Using the shared predicate
+              // here would silently flip that to fail-open (/code-review
+              // regression, OMN-290 PR).
+              if (task.project) {
                 continue;
               }
 
