@@ -212,13 +212,20 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  * - Root tasks appear in the global collection and read as actionable; a
  *   non-null `t.project` marks a root and it is skipped (live-caught in
  *   PR #227: counting roots turned 12 of 13 stalled projects "healthy").
- *   The `t.project` read itself is fail-open (OMN-290 /code-review round
- *   2): a throw is treated as NOT a root, matching the fail-open contract
- *   of IS_PROJECT_ROOT_ROW_SNIPPET above (whose whole-DB summary this
- *   pass's per-project totals must agree with) — deliberately NOT via a
- *   second `function isProjectRootRow` declaration, just the same
- *   try/return-false shape inlined, since this snippet is spliced
- *   alongside a top-level splice of that one at some call sites.
+ *   This check is fail-CLOSED like the rest of the pass (a `t.project`
+ *   throw propagates to the per-task catch below, dropping that task from
+ *   every counter) — deliberately NOT the fail-open IS_PROJECT_ROOT_ROW_
+ *   SNIPPET predicate above. This snippet is shared by THREE call sites
+ *   (script-builder's includeTaskCounts, productivity-stats-v3,
+ *   projects-for-review), only one of which (productivity-stats-v3) has a
+ *   parallel fail-open whole-DB summary to weigh against; changing this
+ *   snippet's failure mode to chase agreement with that one caller would
+ *   silently change behavior for the other two, untested and out of scope
+ *   for whatever PR touches productivity-stats-v3 (/code-review round 3 of
+ *   the OMN-290 PR: exactly this happened and was reverted). A narrow
+ *   summary/per-project-total disagreement in the rare case where
+ *   `t.project` itself throws is accepted as a pre-existing, bounded
+ *   edge case — not a defect worth a shared-snippet behavior change.
  * - `completed` is the task's own completed flag (matching every other
  *   completed-count in the codebase), not effective status.
  * - One bad task costs only itself (inner catch); a failure of the pass
@@ -276,14 +283,12 @@ export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 
  * throwing task at each site, not a style choice — match the existing
  * contract, don't unify it here.
  *
- * Also NOT spliced (as a function declaration) into
- * TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below, since that snippet is itself
- * spliced inside a nested block at some call sites alongside a top-level
- * splice of this one, and two `function isProjectRootRow` declarations in
- * the same OmniJS script is unnecessary risk — but that snippet's root
- * check DOES match this predicate's fail-open contract (inlined, see that
- * snippet's own doc comment), so per-project totals stay consistent with
- * any whole-DB summary computed via this predicate in the same script.
+ * Also NOT spliced into TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below — that
+ * snippet pre-dates this predicate, is shared by three call sites (only
+ * one of which pairs it with a fail-open whole-DB summary), and stays
+ * fail-CLOSED on its own root check; see that snippet's own doc comment
+ * for why unifying the two would be scope creep into untouched, untested
+ * callers (/code-review round 3 of the OMN-290 PR).
  */
 export const IS_PROJECT_ROOT_ROW_SNIPPET = `function isProjectRootRow(task) {
             try {
@@ -337,16 +342,7 @@ export const FOLDER_STATUS_STRING_SNIPPET = `function folderStatusString(s) {
 export const TASK_COUNTS_BY_PROJECT_PASS_SNIPPET = `const taskCountsByProject = {};
           flattenedTasks.forEach(t => {
             try {
-              // OMN-290 /code-review round 2: fail-open on the project read
-              // itself, matching IS_PROJECT_ROOT_ROW_SNIPPET's contract — a
-              // throw here means "not a root," not "drop this task."
-              let isRootRow;
-              try {
-                isRootRow = !!t.project;
-              } catch (e) {
-                isRootRow = false;
-              }
-              if (isRootRow) return;
+              if (t.project) return;
               const proj = t.containingProject;
               if (!proj) return;
               const pid = proj.id.primaryKey;
