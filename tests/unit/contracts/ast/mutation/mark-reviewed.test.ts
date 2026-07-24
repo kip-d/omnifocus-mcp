@@ -224,4 +224,24 @@ describe('dispatchMutation mark-reviewed/project guard (OMN-119/120 non-bypass)'
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;
     }
   });
+
+  it('still throws for a FOUND project outside the sandbox', async () => {
+    const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
+    process.env.NODE_ENV = 'test';
+    process.env.SANDBOX_GUARD_ENABLED = 'true';
+    try {
+      mockStdoutQueue.push(JSON.stringify({ folderId: 'SBX-FOLDER' }));
+      mockStdoutQueue.push(JSON.stringify({ inSandbox: false }));
+      await expect(
+        dispatchMutation('mark-reviewed/project', {
+          projectId: 'real-outside-id',
+          reviewDate: REVIEW_DATE,
+          updateNextReviewDate: true,
+        }),
+      ).rejects.toThrow(/TEST GUARD/);
+    } finally {
+      process.env.NODE_ENV = prev.NODE_ENV;
+      process.env.SANDBOX_GUARD_ENABLED = prev.SG;
+    }
+  });
 });

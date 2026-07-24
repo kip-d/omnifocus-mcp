@@ -123,18 +123,24 @@ async function getSandboxFolderId(): Promise<string | null> {
   const lookup: Promise<string | null> = (async () => {
     try {
       const result = await executeGuardJXA<{ folderId: string | null }>(script);
-      cachedSandboxFolderId = result.folderId;
-      return cachedSandboxFolderId;
+      return result.folderId;
     } catch {
       return null;
     }
   })();
   sandboxFolderIdPromise = lookup;
-  // Only clear if we're still the current in-flight lookup — a
-  // clearSandboxCache() (or a fresh lookup started after this one settled)
-  // may already have replaced sandboxFolderIdPromise with a newer one;
-  // nulling it here would orphan that newer lookup's slot and let this
-  // stale result silently overwrite its cached value.
+  // Both handlers below guard on "am I still the current in-flight
+  // lookup?" — a clearSandboxCache() (or a fresh lookup started after this
+  // one was kicked off) may have already replaced sandboxFolderIdPromise
+  // with a newer one. Without this check, a stale lookup settling late
+  // could still overwrite a fresher cachedSandboxFolderId (not just orphan
+  // the promise slot — the earlier version of this fix only guarded the
+  // slot, not the cache write itself).
+  void lookup.then((folderId) => {
+    if (sandboxFolderIdPromise === lookup) {
+      cachedSandboxFolderId = folderId;
+    }
+  });
   void lookup.finally(() => {
     if (sandboxFolderIdPromise === lookup) {
       sandboxFolderIdPromise = null;
