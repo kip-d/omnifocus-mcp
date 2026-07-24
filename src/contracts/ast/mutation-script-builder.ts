@@ -191,12 +191,16 @@ const validatedTaskIds = new Set<string>();
 
 /**
  * Check if a task is inside the sandbox (via project) or has __TEST__ prefix
- * Uses O(1) Task.byIdentifier via OmniJS bridge instead of O(n) iteration
+ * Uses O(1) Task.byIdentifier via OmniJS bridge instead of O(n) iteration.
+ *
+ * OMN-286: tri-state, mirroring isProjectInSandbox — see that function's
+ * doc comment for why the boolean collapse broke guarded continue-on-error
+ * batches. Callers decide per-site what not_found means.
  */
-async function isTaskInSandbox(taskId: string): Promise<boolean> {
+async function isTaskInSandbox(taskId: string): Promise<SandboxCheck> {
   // Fast path: already validated this task
   if (validatedTaskIds.has(taskId)) {
-    return true;
+    return 'in_sandbox';
   }
 
   const sandboxId = await getSandboxFolderId();
@@ -237,13 +241,16 @@ async function isTaskInSandbox(taskId: string): Promise<boolean> {
   `;
 
   try {
-    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
     if (result.inSandbox) {
       validatedTaskIds.add(taskId);
+      return 'in_sandbox';
     }
-    return result.inSandbox;
+    return result.error === 'not_found' ? 'not_found' : 'outside_sandbox';
   } catch {
-    return false;
+    // Bridge failure fails CLOSED: an unverifiable task must never be
+    // treated as merely not-found (which some callers pass through).
+    return 'outside_sandbox';
   }
 }
 
@@ -291,10 +298,14 @@ export function validateFolderCreate(data: FolderCreateData): void {
 export async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
-  // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox
+  // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox.
+  // OMN-286: deliberately fail-closed on not_found here, unlike
+  // validateTaskInSandbox — this is a container check for a write (like
+  // validateTaskCreate's data.project case above), not an id-addressed
+  // mutation guard.
   if (data.parentTaskId) {
-    const parentInSandbox = await isTaskInSandbox(data.parentTaskId);
-    if (!parentInSandbox) {
+    const parentCheck = await isTaskInSandbox(data.parentTaskId);
+    if (parentCheck !== 'in_sandbox') {
       throw new Error(
         `TEST GUARD: Parent task "${data.parentTaskId}" is not inside sandbox. ` +
           'Subtasks can only be created under tasks that are in the sandbox.',
@@ -400,13 +411,20 @@ export function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData):
 }
 
 /**
- * Validate that a task update/delete is on a task inside the sandbox
+ * Validate that a task update/delete is on a task inside the sandbox.
+ *
+ * OMN-286: a NOT-FOUND id passes through without throwing, mirroring
+ * validateProjectInSandbox. These routes lower with strict
+ * Task.byIdentifier (no name fallback), so a not-found id writes nothing —
+ * the script's own continue-on-error reports it as an error row, exactly as
+ * in production (unguarded) runs. Found-but-outside-sandbox still throws;
+ * so does any bridge failure (fails closed as 'outside_sandbox').
  */
 export async function validateTaskInSandbox(taskId: string, operation: string): Promise<void> {
   if (!isTestMode()) return;
 
-  const inSandbox = await isTaskInSandbox(taskId);
-  if (!inSandbox) {
+  const check = await isTaskInSandbox(taskId);
+  if (check === 'outside_sandbox') {
     throw new Error(
       `TEST GUARD: Cannot ${operation} task "${taskId}" outside sandbox. ` +
         `Task must be in a project inside "${SANDBOX_FOLDER_NAME}" or have name starting with "${TEST_INBOX_PREFIX}".`,
