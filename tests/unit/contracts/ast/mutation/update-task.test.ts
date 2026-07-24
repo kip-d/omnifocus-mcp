@@ -450,14 +450,21 @@ describe('emitted update-task program executes (vm)', () => {
 // The OMN-119/120 non-bypass property for the update family: dispatch runs the
 // sandbox guard BEFORE building (mirrors create-task.test.ts's guard test).
 describe('dispatchMutation update/task guard (OMN-119/120 non-bypass)', () => {
-  it('rejects a non-sandbox task id when the sandbox guard is enabled', async () => {
+  it('passes a not-found task id through the guard; build succeeds with the script-level not-found check (OMN-286)', async () => {
     const prev = { NODE_ENV: process.env.NODE_ENV, SG: process.env.SANDBOX_GUARD_ENABLED };
     process.env.NODE_ENV = 'test';
     process.env.SANDBOX_GUARD_ENABLED = 'true';
     try {
-      await expect(
-        dispatchMutation('update/task', { taskId: 'not-a-sandbox-task-id', changes: { name: 'x' } }),
-      ).rejects.toThrow(/TEST GUARD/);
+      // OMN-286: the guard no longer aborts on not-found — it passes
+      // through to the script's own strict-byIdentifier handling (live-
+      // verified in mark-reviewed-batch-live.test.ts). Guard-before-build
+      // for a FOUND-but-outside-sandbox id is covered by
+      // sandbox-guard-notfound.test.ts's mocked "still throws" case.
+      const program = await dispatchMutation('update/task', {
+        taskId: 'not-a-sandbox-task-id',
+        changes: { name: 'x' },
+      });
+      expect(emitProgram(program)).toContain('Task not found: not-a-sandbox-task-id');
     } finally {
       process.env.NODE_ENV = prev.NODE_ENV;
       process.env.SANDBOX_GUARD_ENABLED = prev.SG;
