@@ -176,7 +176,17 @@ export const WORKFLOW_ANALYSIS_V3 = `
               // project.flattenedTasks. OMN-270: the old gate read the
               // JXA-only child-count property — undefined in OmniJS — so it
               // never fired and every root polluted the task-level metrics.
-              // A non-null task.project is the live root-task marker (PR #227).
+              // A non-null task.project is the live root-task marker (PR
+              // #227). Deliberately NOT the shared isProjectRootRow()
+              // (IS_PROJECT_ROOT_ROW_SNIPPET, contracts/ast/types) here —
+              // that predicate fails OPEN (treats a throw as "not root," so
+              // the task IS counted), but this loop's whole per-task body
+              // already lives in its own try/catch (this one), which has
+              // always failed CLOSED: a task.project read that throws drops
+              // the task from totalTasks and every derived metric, same as
+              // any other per-task read failure. Using the shared predicate
+              // here would silently flip that to fail-open (/code-review
+              // regression, OMN-290 PR).
               if (task.project) {
                 continue;
               }

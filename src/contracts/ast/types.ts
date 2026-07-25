@@ -212,6 +212,20 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  * - Root tasks appear in the global collection and read as actionable; a
  *   non-null `t.project` marks a root and it is skipped (live-caught in
  *   PR #227: counting roots turned 12 of 13 stalled projects "healthy").
+ *   This check is fail-CLOSED like the rest of the pass (a `t.project`
+ *   throw propagates to the per-task catch below, dropping that task from
+ *   every counter) — deliberately NOT the fail-open IS_PROJECT_ROOT_ROW_
+ *   SNIPPET predicate above. This snippet is shared by THREE call sites
+ *   (script-builder's includeTaskCounts, productivity-stats-v3,
+ *   projects-for-review), only one of which (productivity-stats-v3) has a
+ *   parallel fail-open whole-DB summary to weigh against; changing this
+ *   snippet's failure mode to chase agreement with that one caller would
+ *   silently change behavior for the other two, untested and out of scope
+ *   for whatever PR touches productivity-stats-v3 (/code-review round 3 of
+ *   the OMN-290 PR: exactly this happened and was reverted). A narrow
+ *   summary/per-project-total disagreement in the rare case where
+ *   `t.project` itself throws is accepted as a pre-existing, bounded
+ *   edge case — not a defect worth a shared-snippet behavior change.
  * - `completed` is the task's own completed flag (matching every other
  *   completed-count in the codebase), not effective status.
  * - One bad task costs only itself (inner catch); a failure of the pass
@@ -237,6 +251,52 @@ export const ACTIONABLE_STATUSES_ARRAY_LITERAL = `[${ACTIONABLE_STATUSES.join(',
  * object (/code-review round 3 of the OMN-270 PR).
  */
 export const TASK_COUNTS_ZERO_LITERAL = `{ total: 0, available: 0, completed: 0 }`;
+
+/**
+ * The project-root-row predicate (OMN-290): the global flattenedTasks
+ * collection includes each project's own root task, which reads as
+ * actionable — a non-null `task.project` is the live root marker (PR #227).
+ * Every analytics pass over flattenedTasks must skip these or a project's
+ * root row silently inflates totals (and, for completed/overdue projects,
+ * pollutes the completed/overdue counts too).
+ *
+ * A task whose `task.project` access itself throws is treated as NOT a
+ * root row (fail toward counting it, not dropping it) — the property read
+ * is the only thing being guarded here, not the rest of that task's
+ * analysis; a caller must not let this predicate's own defensiveness
+ * silently exclude an otherwise-readable task from unrelated metrics.
+ *
+ * ONE definition spliced by every emitter whose per-task failure handling
+ * matches this predicate's fail-open contract — task-velocity-v3,
+ * productivity-stats-v3, and analyze-overdue-v3 (the three OMN-290 sites,
+ * which had NO root check at all before this PR, so fail-open changes
+ * nothing there) — so the root-skip marker and failure semantics cannot
+ * drift between those call paths independently.
+ *
+ * Deliberately NOT spliced into workflow-analysis-v3, which pre-dates
+ * this predicate and is fail-CLOSED by construction (its root check sits
+ * inside a per-task try/catch that already drops the whole task on ANY
+ * throw, root-check included) — swapping it to this predicate would
+ * silently flip a task.project throw from "task dropped" to "task
+ * counted," a real regression caught in /code-review of the OMN-290 PR.
+ * Fail-open vs fail-closed is a property of what ALREADY happens to a
+ * throwing task at each site, not a style choice — match the existing
+ * contract, don't unify it here.
+ *
+ * Also NOT spliced into TASK_COUNTS_BY_PROJECT_PASS_SNIPPET below — that
+ * snippet pre-dates this predicate, is shared by three call sites (only
+ * one of which pairs it with a fail-open whole-DB summary), and stays
+ * fail-CLOSED on its own root check; see that snippet's own doc comment
+ * for why unifying the two would be scope creep into untouched, untested
+ * callers (/code-review round 3 of the OMN-290 PR).
+ */
+export const IS_PROJECT_ROOT_ROW_SNIPPET = `function isProjectRootRow(task) {
+            try {
+              return !!task.project;
+            } catch (e) {
+              return false;
+            }
+          }`;
 
 /**
  * Canonical Project.Status → wire-vocabulary map ('active' | 'onHold' |
