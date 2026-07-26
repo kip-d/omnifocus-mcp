@@ -270,10 +270,14 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
   finding before it counts. Any review claiming to substitute must have that shape — so if in-session review is needed,
   run it as a `Workflow` fan-out (finders + verify), never as a single reviewer subagent. This rule names a shape, not a
   vendor: a fan-out built on any reviewer persona qualifies, and a lone reviewer does not, however capable its model.
-- **Slice-stage reviewers — never downgrade.** Per-task spec/quality reviewer subagents inside slice work are wanted,
-  and each must pass an explicit `model` at full capability. This is a _different_ invariant from the merge gate's: an
-  omitted `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL`, and a downgraded reviewer's false REFUTE ships a bug. Model
-  tier is the wrong axis for the gate above, and fan-out is the wrong axis here.
+- **Slice-stage reviewers — state the model, don't inherit it.** Per-task spec/quality reviewer subagents inside slice
+  work are wanted, and every dispatch must pass an explicit `model`. The requirement is _explicitness, not tier_: Sonnet
+  reviewers are fine when the coordinator judges Sonnet can produce a valuable review for that task, and the judgment is
+  the coordinator's to make (`/code-review` itself runs Sonnet finders and Haiku scorers). What is not fine is a blank
+  `model` — that silently inherits `CLAUDE_CODE_SUBAGENT_MODEL`, so nobody chose, and an unchosen downgrade at
+  correctness or verify altitude ships bugs via false REFUTEs. Lean full capability where a missed defect is
+  irrecoverable; go cheaper deliberately and say why. This is a _different_ axis from the merge gate's: model tier is
+  the wrong axis for the gate above, and fan-out is the wrong axis here.
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
