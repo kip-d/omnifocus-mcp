@@ -265,8 +265,11 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 
 - PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
 - Before merge, **stop and have Kip run `/code-review`** (user-invoked slash command → main-loop Opus); gate the merge
-  on a Safe/Approved verdict. Do **not** dispatch a `superpowers:code-reviewer` subagent — `/code-review` can't be
-  model-dispatched, and a `~/.claude` hook blocks the old reviewer (which would also run on the pinned Sonnet model).
+  on a Safe/Approved verdict — `/code-review` cannot be model-dispatched.
+- **Every reviewer subagent must carry an explicit `model: opus`.** Spec/quality reviewers inside the slice pipeline are
+  wanted, but `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` silently downgrades any dispatch that omits `model`, and a downgraded
+  reviewer's false REFUTE ships a bug. A `~/.claude` PreToolUse hook blocks review dispatches that would inherit Sonnet;
+  it matches the reviewer's role text, not `subagent_type`, because upstream renames the type.
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
