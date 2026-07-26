@@ -203,6 +203,13 @@ export default [
       'node_modules/**',
       'coverage/**',
       '.claude/worktrees/**',
+      // Workflow scripts are harness-executed async function BODIES, not modules:
+      // top-level `return` is part of their contract (it is the workflow's return
+      // value), which ESLint's module parser rejects outright as a parse error.
+      // Verified: an explicit-path lint (what lint-staged does) honours this ignore
+      // and exits 0, emitting only a "file ignored" warning — so pre-commit passes.
+      // `npm run lint` runs --max-warnings=0 but does not pass this path.
+      '.claude/workflows/**',
       '.archive/**', // Archived dead code — preserved for reference, not in any tsconfig
       // Generated or vendor TypeScript definitions and API shims
       'src/omnifocus/api/**',
