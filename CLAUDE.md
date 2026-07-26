@@ -264,12 +264,16 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 ## Workflow norms
 
 - PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
-- Before merge, **stop and have Kip run `/code-review`** (user-invoked slash command → main-loop Opus); gate the merge
-  on a Safe/Approved verdict — `/code-review` cannot be model-dispatched.
-- **Every reviewer subagent must carry an explicit `model: opus`.** Spec/quality reviewers inside the slice pipeline are
-  wanted, but `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` silently downgrades any dispatch that omits `model`, and a downgraded
-  reviewer's false REFUTE ships a bug. A `~/.claude` PreToolUse hook blocks review dispatches that would inherit Sonnet;
-  it matches the reviewer's role text, not `subagent_type`, because upstream renames the type.
+- **Merge gate — review must be a fan-out, never one agent's opinion.** Before merge, stop and have Kip run
+  `/code-review`; gate on its Safe/Approved verdict. `/code-review` cannot be model-dispatched. The property that makes
+  it the gate is _architectural_: independent parallel finders plus a separate verification pass that scores each
+  finding before it counts. Any review claiming to substitute must have that shape — so if in-session review is needed,
+  run it as a `Workflow` fan-out (finders + verify), never as a single reviewer subagent. This rule names a shape, not a
+  vendor: a fan-out built on any reviewer persona qualifies, and a lone reviewer does not, however capable its model.
+- **Slice-stage reviewers — never downgrade.** Per-task spec/quality reviewer subagents inside slice work are wanted,
+  and each must pass an explicit `model` at full capability. This is a _different_ invariant from the merge gate's: an
+  omitted `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL`, and a downgraded reviewer's false REFUTE ships a bug. Model
+  tier is the wrong axis for the gate above, and fan-out is the wrong axis here.
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
