@@ -286,15 +286,54 @@ return {
   unscored: unique.slice(MAX_SCORED),
 };
 
-// ---------------------------------------------------------------------------
-// FIRST-RUN MEASUREMENTS (2026-07-26, PR #216 @ f0df756d..b28e7bc5, 351-line diff)
+// ===========================================================================
+// STATUS: DOES NOT YET EARN ITS COST. Read this before using it.
 //
-// Ran as 4 sonnet finders + 12 sonnet scorers, BEFORE the dedup and model changes
-// above. Results, and what each one changed:
+// On a CLEAN target this workflow was beaten by a single Superpowers-template
+// reviewer, at ~20x the token cost. Run 2 below is the trustworthy measurement;
+// run 1's flattering numbers were contamination. Do not reach for this over the
+// real gate, and do not cite run 1's recall.
+// ===========================================================================
 //
-//   Recall:  raised all 6 defects the gate's round 1 found, vs 1 of 6 for a single
-//            Superpowers-template reviewer on OPUS. Fan-out wins on surfacing --
-//            but see the contamination caveat below before trusting the number.
+// RUN 2 -- STERILIZED TARGET (2026-07-26, same diff, shallow clone pinned to the
+// commit so the fix commits do not exist; 4 sonnet finders + 7 OPUS scorers):
+//
+//   Raised   1 of 7 known defects (idempotence, in 3 framings). ZERO of the five
+//            fatal API/runtime bugs. The `correctness` lens -- which produced every
+//            fatal finding in run 1 -- returned one finding, and it was not a
+//            correctness bug.
+//   Confirmed 0 of 7. The Opus scorers rejected the genuine idempotence defect
+//            three times (35/25/40), the one defect both other methods called
+//            Critical and the real gate fixed.
+//   Cost     577,248 subagent tokens, 11 agents, 217s.
+//
+//   Ranking on the clean target: /code-review high 7/7  >>  single Superpowers
+//   reviewer 1/7 (1 confirmed Critical)  >  this workflow 1/7 raised, 0 confirmed.
+//
+// TWO DIAGNOSED CAUSES, both prompt-level and both still present in this file:
+//
+//   1. SCORER PROMPT TEACHES LENIENCY. It says "Default toward the LOWER score when
+//      torn" AND hands each scorer the change's own framing (draft, not-yet-verified,
+//      one-shot script). Skepticism instruction + exculpatory context = a verifier
+//      that hunts for reasons to excuse; one argued from the spec's "Freeze" section
+//      that re-running isn't the intended model. The asymmetry is backwards: a false
+//      REFUTE ships a bug, a false CONFIRM costs one wasted fix cycle, so the rubric
+//      should tilt toward confirming. Blinding must hide the MITIGATING NARRATIVE,
+//      not just the finder's identity.
+//   2. SONNET CORRECTNESS FINDER DOES NOT CHECK API SIGNATURES, even though its lens
+//      brief explicitly tells it to ("does this signature actually exist, and would
+//      the first invocation throw?"). The repo's own OmniFocus.d.ts was present and
+//      sufficient to catch all four constructor bugs. Untested hypothesis for the
+//      next experiment: put the correctness lens on opus and leave the rest cheap.
+//
+// RUN 1 -- CONTAMINATED, DO NOT TRUST (4 sonnet finders + 12 sonnet scorers, run
+// inside the live repo where the fix commit 6524e731 was reachable):
+//
+//   Recall:  appeared to raise all 7 defects vs 1 of 7 for the single reviewer.
+//            2 of 4 finders and 6 of 12 scorers cited the fix commit as
+//            corroboration. Run 1's finder most likely read the answer and then
+//            "verified" it against OmniFocus.d.ts -- post-hoc rationalization that
+//            reads as rigor in the transcript.
 //
 //   Verify:  sonnet scorers FALSE-REFUTED 2 of the 6 real defects (a fatal
 //            Task-in-Folder parent error scored 25; a Tag constructor arity error
@@ -305,12 +344,18 @@ return {
 //            measured 400-550k. Cause: no dedup (one defect adjudicated 3x) and one
 //            full-context scorer per finding. Hence the dedup barrier and MAX_SCORED.
 //
-//   CAVEAT:  that run was contaminated. The subject was a historical commit whose
-//            fixes live in the repo's own later history, and 2 of 4 finders plus 6
-//            of 12 scorers found commit 6524e731 ("address all 6 /code-review
-//            findings") and cited it as corroboration. To re-measure honestly, make
-//            future history UNREACHABLE (shallow clone pinned to the SHA) rather
-//            than merely asking agents not to look. The false-REFUTE result above
-//            survives regardless: leakage biases toward confirming, so a rejection
-//            despite it is robust.
+//   Verify:  sonnet scorers false-refuted 2 of the real defects. This result does
+//            survive the contamination (leakage biases toward CONFIRMING, so a
+//            rejection despite it is robust) and is why SCORER_MODEL defaults to
+//            opus -- though run 2 then showed opus scorers erring the other way for
+//            prompt reasons, see cause 1 above.
+//
+// ISOLATION IS HARDER THAN A CLEAN CHECKOUT. Sterilizing git history was not
+// sufficient. Known leak channels for any evaluation of this kind:
+//   - git history (fixed: shallow clone pinned to the SHA)
+//   - the GitHub API via `gh` (mitigated: explicit instruction only)
+//   - PROJECT MEMORY -- subagents inherit the parent session's memory REGARDLESS of
+//     working directory. A run-2 scorer cited `project_kmm_test_ground` to argue a
+//     finding's severity down. Not currently fixable from inside this script.
+//   - in-tree spec/design docs that record the outcome
 // ---------------------------------------------------------------------------
