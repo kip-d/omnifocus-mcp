@@ -264,26 +264,21 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 ## Workflow norms
 
 - PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
-- **Merge gate — review must be a fan-out, never one agent's opinion.** Before merge, stop and have Kip run
-  `/code-review`; gate on its Safe/Approved verdict. `/code-review` cannot be model-dispatched. The property that makes
-  it the gate is _architectural_: independent parallel finders plus a separate verification pass that scores each
-  finding before it counts. **Nothing substitutes for that run** — not a reviewer subagent, and not a hand-rolled
-  `Workflow` fan-out, however well shaped. In-session review is supplementary: useful for catching defects early, never
-  a reason to skip the gate or to report a slice as reviewed. A measured example of why: a purpose-built fan-out (4
-  finders + blind scorers) raised 1 of 7 known defects on a clean target and confirmed 0, losing to a single reviewer
-  subagent at ~20× the cost, while the real gate found all 7. Shape alone does not buy the gate's results.
-- **Slice-stage reviewers — state the model, don't inherit it.** Per-task spec/quality reviewer subagents inside slice
-  work are wanted, and every dispatch must pass an explicit `model`. The requirement is _explicitness, not tier_: Sonnet
-  reviewers are fine when the coordinator judges Sonnet can produce a valuable review for that task, and the judgment is
-  the coordinator's to make. What is not fine is a blank `model` — that silently inherits `CLAUDE_CODE_SUBAGENT_MODEL`,
-  so nobody chose, and an unchosen downgrade at correctness or verify altitude ships bugs via false REFUTEs. Lean full
-  capability where a missed defect is irrecoverable; go cheaper deliberately and say why. This is a _different_ axis
-  from the merge gate's: model tier is the wrong axis for the gate above, and fan-out is the wrong axis here.
-- **Neither review rule above is machine-enforced.** They are read and followed, not blocked by a hook. A `~/.claude`
-  PreToolUse guard once claimed to enforce the old version of this rule; it silently no-op'd for weeks (it matched a
-  renamed agent type, and was registered against the wrong tool name), then blocked a deliberate, permitted choice once
-  fixed. Machine-local, unversioned enforcement can't be checked by this repo's tests, so don't add a claim here that
-  one exists.
+- **Merge gate:** stop and have Kip run `/code-review`; gate on its Safe/Approved verdict. It cannot be
+  model-dispatched. **Nothing substitutes for that run** — not a reviewer subagent, not a hand-rolled `Workflow`
+  fan-out. In-session review is supplementary, never a reason to skip the gate or call a slice reviewed.
+- **Slice-stage reviewers:** every dispatch states an explicit `model`. Explicitness, not tier — Sonnet is fine when the
+  coordinator judges it adequate. A blank `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL`, so nobody chose, and an
+  unchosen downgrade at verify altitude ships bugs via false REFUTEs. Lean full capability where a miss is
+  irrecoverable.
+- **Neither rule is machine-enforced** — read and followed, not blocked by a hook, deliberately. A `~/.claude` guard
+  once claimed to enforce the older version: it silently no-op'd for weeks, then blocked a permitted choice once fixed.
+  Machine-local enforcement can't be checked by this repo's tests. Don't add a claim here that any exists.
+
+  Why the gate's shape isn't reproducible in-session: a purpose-built fan-out was measured against it and lost badly to
+  even a single reviewer subagent, at far higher cost. See PR #249's history for the runs. Shape alone does not buy the
+  gate's results.
+
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
