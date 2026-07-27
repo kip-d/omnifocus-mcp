@@ -250,22 +250,17 @@ export const OVERDUE_ANALYSIS_V3_SCHEMA = v3EnvelopeSchema(OverdueAnalysisDataSc
 export type OverdueAnalysisV3Data = z.infer<typeof OverdueAnalysisDataSchema>;
 
 /**
- * Workflow analysis insight row.
- * Source: analyze-overdue-v3.ts insights.push({category, insight, priority}).
- */
-const WorkflowInsightSchema = z.object({ category: z.string(), insight: z.string(), priority: z.string() }).strict();
-
-/**
- * Workflow analysis recommendation row.
- * Source: workflow-analysis-v3.ts recommendations.push({category, recommendation, priority}).
- */
-const WorkflowRecommendationSchema = z
-  .object({ category: z.string(), recommendation: z.string(), priority: z.string() })
-  .strict();
-
-/**
  * Workflow analysis data payload — emitted by WORKFLOW_ANALYSIS_V3 data block.
  * Source: workflow-analysis-v3.ts outer return JSON.stringify({ok:true, v:'3', data:{…}}).
+ *
+ * OMN-291: `insights` and `recommendations` are GONE, along with the per-project
+ * healthScore/momentumScore composites and the analysisDepth/focusAreas/maxInsights
+ * metadata echo. workflow_analysis is an evidence bundle: it screens and counts,
+ * and the caller judges (OMN-258's contract, extended to numeric composites).
+ *
+ * This schema is `.strict()` at every level, so a re-introduced `insights` or
+ * `recommendations` key is a VALIDATION FAILURE, not a silently-passed extra —
+ * the removal is pinned, not merely performed.
  *
  * patterns: NOT a name-keyed map. The script always emits exactly three named keys
  *   (workloadDistribution, workflowMetrics, deferralAnalysis) with heterogeneous shapes.
@@ -274,12 +269,9 @@ const WorkflowRecommendationSchema = z
  *
  * data: passthrough of raw task/project/workload data when includeRawData=true;
  *   undefined-dropped (JSON.stringify(undefined)) when false → z.unknown().optional().
- *
- * metadata.note: present from the outer spread. metadata.focusAreas: string[] (from options).
  */
 export const WorkflowAnalysisDataSchema = z
   .object({
-    insights: z.array(WorkflowInsightSchema),
     patterns: z
       .object({
         workloadDistribution: z.unknown(),
@@ -287,7 +279,6 @@ export const WorkflowAnalysisDataSchema = z
         deferralAnalysis: z.unknown(),
       })
       .strict(),
-    recommendations: z.array(WorkflowRecommendationSchema),
     // passthrough: includeRawData echo — raw task/project/workload data; undefined-dropped when false
     data: z.unknown().optional(),
     totalTasks: z.number(),
@@ -296,9 +287,6 @@ export const WorkflowAnalysisDataSchema = z
     dataPoints: z.number(),
     metadata: z
       .object({
-        analysisDepth: z.string(),
-        focusAreas: z.array(z.string()),
-        maxInsights: z.number(),
         method: z.string(),
         optimization: z.string(),
         query_time_ms: z.number(),

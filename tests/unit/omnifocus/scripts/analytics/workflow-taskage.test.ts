@@ -48,12 +48,10 @@ function makeLeafTask(overrides: Partial<FakeTask>): FakeTask {
 
 function runScript(tasks: FakeTask[]): {
   ok: boolean;
-  data: { patterns: { workloadDistribution: { byProject: Record<string, { healthScore: number }> } } };
+  data: { patterns: { workloadDistribution: { byProject: Record<string, { avgAge: number }> } } };
 } {
+  // OMN-291: analysisDepth/focusAreas/maxInsights are gone with the generators.
   const options = {
-    analysisDepth: 'full',
-    focusAreas: ['productivity', 'workload', 'bottlenecks'],
-    maxInsights: 15,
     includeRawData: false,
   };
   return runAnalyticsScript(WORKFLOW_ANALYSIS_V3, options, {
@@ -65,23 +63,27 @@ function runScript(tasks: FakeTask[]): {
   }) as ReturnType<typeof runScript>;
 }
 
+// OMN-291 migration: these pins previously asserted a healthScore DELTA
+// (100 → 85, i.e. "the avgAge>120 penalty fired"). healthScore is deleted, so
+// they now assert the underlying FACT that delta was only ever evidence of —
+// the raw avgAge on the byProject row. Same defect coverage: if taskAge went
+// back to reading the JXA-only names, avgAge would read 0 and these fail.
 describe('OMN-251 — taskAge reads the real OmniJS date properties', () => {
-  it('a 200-day-old task (via `added`) finally triggers the avgAge>120 health penalty', () => {
+  it('a 200-day-old task (via `added`) is reflected in the project avgAge', () => {
     const parsed = runScript([makeLeafTask({ added: new Date(Date.now() - 200 * DAY) })]);
     expect(parsed.ok).toBe(true);
     expect(WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse(parsed).success).toBe(true);
-    // Otherwise-healthy project: 100 minus ONLY the stale-age penalty (15).
-    // Pre-fix the read was undefined → taskAge 0 → healthScore stayed 100.
-    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].healthScore).toBe(85);
+    // Pre-fix the read was undefined → taskAge 0 → avgAge 0.
+    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].avgAge).toBe(200);
   });
 
   it('falls back to `modified` when `added` is absent (the || fallback, real names)', () => {
     const parsed = runScript([makeLeafTask({ modified: new Date(Date.now() - 200 * DAY) })]);
-    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].healthScore).toBe(85);
+    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].avgAge).toBe(200);
   });
 
-  it('a fresh task keeps the project unpenalized (no age → no penalty)', () => {
+  it('a fresh task reports a small avgAge, not a stale one', () => {
     const parsed = runScript([makeLeafTask({ added: new Date(Date.now() - 3 * DAY) })]);
-    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].healthScore).toBe(100);
+    expect(parsed.data.patterns.workloadDistribution.byProject['Aged Project'].avgAge).toBe(3);
   });
 });

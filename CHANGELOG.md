@@ -9,6 +9,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING (analyze response): `workflow_analysis` is demoted to an evidence bundle** (OMN-291) — it screens and
+  counts; it no longer scores, ranks, or recommends. Per OMN-258's contract the server produces evidence and the caller
+  judges, and that now explicitly includes numeric weight-composites, not just prose. **Removed:** `insights[]` and
+  `recommendations[]` (with all their priority labels and the invented "N × 1.5 dependent tasks" multiplier), the
+  per-project `healthScore` (100 minus a hand-tuned 25/20/15/15/−10/+5 weight stack — the weights encode what matters
+  and by how much, which is the caller's call) and `momentumScore` (which additionally _subtracted_ availableRate, so
+  more available work scored _lower_ momentum, contradicting its own prose), the healthy/unhealthy project rollups, and
+  the `analysisDepth`/`focusAreas`/`maxInsights` machinery including three focus-area branches that could never fire.
+  **Kept/added:** whole-DB counters, `workflowMetrics` percentages, `timeBuckets`, per-tag stats, and per-project rows
+  that are purely mechanical — `total`, `completed`, `available`, `overdue`, `blocked`, `estimatedHours`, `overdueRate`,
+  `availableRate`, `avgAge`, and `deferrals { total, over90Days, keywordMatched }`. **Deferral honesty:** the
+  strategic/problematic _verdict_ split (`deferDays <= 90 || nameMatchesKeyword` → good/bad) becomes two **independent**
+  screen counts, `over90Days` and `keywordMatched`. A deferral can be in both, one, or neither — they do not sum to
+  `totalDeferred`, unlike the labels they replace. The keyword list survives only as an explicitly-labelled recall
+  screen (one personal database, English-only), and per-task rows carry `keywordMatched` as a candidate marker rather
+  than a conclusion. Key findings become at most three mechanical restatements of numbers already in the response. The
+  response schema is strict, so a re-introduced `insights`/`recommendations` key is a validation failure — the removal
+  is pinned, not just performed. The cache key is version-bumped to `workflow_analysis_v4` (the old key literally named
+  the deleted machinery), so stale pre-demote entries cannot serve the old shape after deploy.
+
 - **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
   script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary

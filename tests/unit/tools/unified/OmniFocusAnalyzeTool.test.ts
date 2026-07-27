@@ -637,7 +637,7 @@ describe('OmniFocusAnalyzeTool', () => {
   // ==========================================================================
   describe('workflow_analysis', () => {
     it('returns cached results when available', async () => {
-      const cached = { insights: [{ insight: 'Cache' }], recommendations: [], patterns: {} };
+      const cached = { patterns: {}, metadata: { totalTasks: 0 } };
       mockCache.get.mockReturnValue(cached);
 
       const res: any = await tool.execute({
@@ -659,22 +659,26 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.error?.code).toBe('ANALYSIS_FAILED');
     });
 
-    it('returns analytics response with key findings', async () => {
+    // OMN-291: workflow_analysis is an evidence bundle. The response carries
+    // measurements only — insights/recommendations/data and the analysis.depth +
+    // focusAreas echo are ABSENT (asserted as absence, not as empty).
+    it('returns an evidence bundle with mechanical key findings only', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      // OMN-139: executeJson returns ScriptResult; wrap V3 envelope
       mockOmni.executeJson.mockResolvedValue(
         createScriptSuccess({
           ok: true,
           v: '3',
           data: {
-            insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
-            patterns: { bottlenecks: 3, projects: 2 },
-            recommendations: [{ recommendation: 'Batch similar tasks' }],
-            totalTasks: 123,
+            patterns: {
+              workloadDistribution: { byProject: {}, byTag: {}, timeBuckets: {} },
+              workflowMetrics: { availablePercentage: 50, overduePercentage: 10, blockedPercentage: 5 },
+              deferralAnalysis: { totalDeferred: 7, over90Days: 2, keywordMatched: 3 },
+            },
+            totalTasks: 200,
             totalProjects: 12,
             analysisTime: 250,
-            dataPoints: 4000,
+            dataPoints: 200,
           },
         }),
       );
@@ -683,10 +687,67 @@ describe('OmniFocusAnalyzeTool', () => {
         analysis: { type: 'workflow_analysis' },
       });
       expect(res.success).toBe(true);
-      // OMN-200: depth is now reported as 'full' — the analysis always scans the
-      // entire task DB (the 1000-cap + its dead 'deep' escape hatch were removed).
-      expect(res.data.analysis.depth).toBe('full');
-      expect(Array.isArray(res.summary.key_findings)).toBe(true);
+
+      // Verdict surfaces are gone, not emptied.
+      expect(res.data).not.toHaveProperty('insights');
+      expect(res.data).not.toHaveProperty('recommendations');
+      expect(res.data.analysis).not.toHaveProperty('depth');
+      expect(res.data.analysis).not.toHaveProperty('focusAreas');
+
+      // Key findings are <=3 mechanical restatements of numbers already present.
+      const findings: string[] = res.summary.key_findings;
+      expect(findings.length).toBeLessThanOrEqual(3);
+      expect(findings).toEqual(
+        expect.arrayContaining(['100 of 200 tasks available (50%)', '20 overdue (10%), 7 deferred', '10 blocked (5%)']),
+      );
+      // No advice verbs or grades anywhere in the findings.
+      expect(findings.some((f) => /consider|should|review |recommend|excellent|health/i.test(f))).toBe(false);
+    });
+
+    it('does not leak per-project healthScore/momentumScore anywhere in the response', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            patterns: {
+              workloadDistribution: {
+                byProject: {
+                  P: {
+                    total: 4,
+                    completed: 1,
+                    available: 2,
+                    overdue: 1,
+                    blocked: 0,
+                    estimatedHours: 3,
+                    overdueRate: 25,
+                    availableRate: 50,
+                    avgAge: 12,
+                    deferrals: { total: 1, over90Days: 1, keywordMatched: 0 },
+                  },
+                },
+                byTag: {},
+                timeBuckets: {},
+              },
+              workflowMetrics: { availablePercentage: 50, overduePercentage: 25, blockedPercentage: 0 },
+              deferralAnalysis: { totalDeferred: 1, over90Days: 1, keywordMatched: 0 },
+            },
+            totalTasks: 4,
+            totalProjects: 1,
+            analysisTime: 10,
+            dataPoints: 4,
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({ analysis: { type: 'workflow_analysis' } });
+      const raw = JSON.stringify(res);
+      expect(raw).not.toMatch(/healthScore/);
+      expect(raw).not.toMatch(/momentumScore/);
+      expect(raw).not.toMatch(/strategicDefer/);
+      expect(raw).not.toMatch(/problematicDefer/);
     });
 
     it('extractKeyFindings falls back to default message', async () => {
