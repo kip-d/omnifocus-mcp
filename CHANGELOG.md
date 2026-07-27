@@ -9,6 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
+  `productivity_stats` surfaces three computed fields it was discarding** (OMN-289) — the response now contains exactly
+  what was actually computed: nothing real hidden, nothing fake shipped. **Added to `velocity`:** `averageCreated`,
+  `backlogGrowthRate` (negative means a shrinking backlog), `medianCompletionHours`, `tasksAnalyzed` — all four were
+  computed by the script and discarded by the tool-layer reshape. Parsed from the script's `toFixed` strings to numbers,
+  matching the existing `averagePerDay`/ `predictedCapacity` convention. **Added to `stats.overview`:**
+  `completedInPeriod`, `dailyAverage`, `daysInPeriod` (same silent-omission class as the OMN-254 `availableTasks`
+  rescue). **Removed:** `velocity.peakDay` (always `{date:null,count:0}`), `velocity.trend` (always `'stable'`), the
+  `patterns` block (always three empty containers), and `insights` (always `[]`). Every one was a hardcoded constant
+  that advertised analysis which did not exist — the OMN-273 acceptable-break class, since no client can have derived
+  value from a field that only ever held one constant. The dead code riding on them goes too: the peak-day and
+  most-productive-day collectors (whose guards could never pass), the top-project collector, and the
+  `increasing`/`decreasing` trend labels (only the `'stable'` fallback was reachable). The velocity cache key is
+  version-bumped (`velocity_v2_*` → `velocity_v3_*`) because that cache stores the reshaped response object, so stale
+  entries would otherwise serve the old shape until TTL expiry after deploy.
+
 - **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
   script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary

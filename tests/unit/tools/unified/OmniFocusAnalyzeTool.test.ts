@@ -310,6 +310,103 @@ describe('OmniFocusAnalyzeTool', () => {
   // ==========================================================================
   // Task Velocity
   // ==========================================================================
+  // ==========================================================================
+  // OMN-289 (OMN-148 D7/D10): the response contains exactly what was actually
+  // computed — nothing real hidden, nothing fabricated shipped.
+  // ==========================================================================
+  describe('OMN-289 response completeness', () => {
+    it('productivity overview surfaces the period fields the script already computed', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 200,
+          completedTasks: 150,
+          availableTasks: 30,
+          completionRate: 0.75,
+          activeProjects: 12,
+          overdueCount: 5,
+          completedInPeriod: 42,
+          dailyAverage: 6,
+          daysInPeriod: 7,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({ analysis: { type: 'productivity_stats' } });
+
+      expect(res.success).toBe(true);
+      const overview = res.data.stats.overview;
+      // Computed by the script, dropped by the reshape until now.
+      expect(overview.completedInPeriod).toBe(42);
+      expect(overview.dailyAverage).toBe(6);
+      expect(overview.daysInPeriod).toBe(7);
+    });
+
+    it('velocity surfaces the four computed numbers, parsed from the script strings', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            throughput: { totalCompleted: 90, intervals: [] },
+            velocity: {
+              dailyVelocity: '3.0',
+              averageCreated: '4.5',
+              backlogGrowthRate: '-1.5',
+            },
+            breakdown: { medianCompletionHours: '18.2', tasksAnalyzed: 300 },
+            projections: { tasksPerWeek: '21.0' },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({ analysis: { type: 'task_velocity' } });
+
+      expect(res.success).toBe(true);
+      const v = res.data.velocity;
+      // Script emits toFixed strings; the tool layer parses to numbers, matching
+      // the existing averagePerDay/predictedCapacity convention.
+      expect(v.averageCreated).toBe(4.5);
+      expect(v.backlogGrowthRate).toBe(-1.5); // may be negative: shrinking backlog
+      expect(v.medianCompletionHours).toBe(18.2);
+      expect(v.tasksAnalyzed).toBe(300);
+    });
+
+    it('velocity no longer ships the fabricated fields (absence, not emptiness)', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            throughput: { totalCompleted: 90, intervals: [] },
+            velocity: { dailyVelocity: '3.0', averageCreated: '4.5', backlogGrowthRate: '0.0' },
+            breakdown: { medianCompletionHours: '18.2', tasksAnalyzed: 300 },
+            projections: { tasksPerWeek: '21.0' },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({ analysis: { type: 'task_velocity' } });
+
+      // peakDay was always {date:null,count:0}; trend was always 'stable';
+      // patterns was always all-empty; insights was always []. Constants, never
+      // computed — deleted rather than left as decorative shapes.
+      expect(res.data.velocity).not.toHaveProperty('peakDay');
+      expect(res.data.velocity).not.toHaveProperty('trend');
+      expect(res.data).not.toHaveProperty('patterns');
+      expect(res.data).not.toHaveProperty('insights');
+
+      // And no finding invented from them.
+      const findings: string[] = res.summary.key_findings;
+      expect(findings.some((f) => /peak day|most productive day|trending/i.test(f))).toBe(false);
+    });
+  });
+
   describe('task_velocity', () => {
     it('returns cached results when available', async () => {
       const cached = {
