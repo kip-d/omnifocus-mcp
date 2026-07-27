@@ -316,7 +316,7 @@ export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, unknown
   description = `Analyze OmniFocus data for insights, patterns, and specialized operations.
 
 ANALYSIS TYPES:
-- productivity_stats: GTD health metrics (completion rates, velocity)
+- productivity_stats: completion counts and rates (incl. completionPercent, the all-time completion rate)
 - task_velocity: Completion trends over time
 - overdue_analysis: Bottleneck identification
 - pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions).
@@ -479,9 +479,12 @@ SCOPE FILTERING:
       const includeTagStats = true;
 
       // Cache key
-      const cacheKey = `productivity_v2_${period}_${includeProjectStats}_${includeTagStats}`;
+      // OMN-292: version-bumped v2 -> v3. This cache stores the RESHAPED response
+      // object, so entries written before the healthScore -> completionPercent rename
+      // would keep serving the old field name until TTL expiry after deploy.
+      const cacheKey = `productivity_v3_${period}_${includeProjectStats}_${includeTagStats}`;
 
-      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; healthScore?: number }>(
+      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; completionPercent?: number }>(
         'analytics',
         cacheKey,
       );
@@ -492,7 +495,7 @@ SCOPE FILTERING:
           cached,
           'Productivity Analysis',
           this.extractProductivityKeyFindings(
-            cached as { period?: string; stats?: Record<string, unknown>; healthScore?: number },
+            cached as { period?: string; stats?: Record<string, unknown>; completionPercent?: number },
           ),
           { from_cache: true, period, ...timer.toMetadata() },
         );
@@ -540,7 +543,11 @@ SCOPE FILTERING:
           tagStats: tagStatsArray,
         },
         insights: { recommendations: insights },
-        healthScore: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
+        // OMN-292: named `healthScore` until this rename, but the formula is literally
+        // the all-time completion rate as a percentage — no health composite involved.
+        // The name now states what is computed. (pattern_analysis.health_score is a
+        // real multi-factor composite and is deliberately untouched.)
+        completionPercent: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
       };
 
       this.cache.set('analytics', cacheKey, responseData);
@@ -655,7 +662,7 @@ SCOPE FILTERING:
       };
       projectStats?: Array<{ name: string; completedCount: number }>;
     };
-    healthScore?: number;
+    completionPercent?: number;
     insights?: { recommendations?: string[] };
   }): string[] {
     const findings: string[] = [];
@@ -668,13 +675,11 @@ SCOPE FILTERING:
       }
     }
 
-    if (typeof data.healthScore === 'number') {
-      const score = Math.round(data.healthScore);
-      let assessment = 'Needs attention';
-      if (score >= 80) assessment = 'Excellent';
-      else if (score >= 60) assessment = 'Good';
-      else if (score >= 40) assessment = 'Fair';
-      findings.push(`GTD Health Score: ${score}/100 (${assessment})`);
+    // OMN-292: was `GTD Health Score: N/100 (Excellent/Good/Fair/Needs attention)`.
+    // The number is the all-time completion rate, and the four grade bands were
+    // invented here — the script grades nothing. Report the fact; let the caller judge.
+    if (typeof data.completionPercent === 'number') {
+      findings.push(`All-time completion rate: ${Math.round(data.completionPercent)}%`);
     }
 
     if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
@@ -687,20 +692,15 @@ SCOPE FILTERING:
       }
     }
 
+    // OMN-292: a "contradiction filter" used to arbitrate here, dropping script insights
+    // containing "excellent" when the score was < 60 and "low completion"/"needs attention"
+    // when it was >= 60. It was unreachable against real script output: the script emits
+    // "Excellent completion rate" only above 0.80 (score >= 81, never < 60) and "Low
+    // completion rate" only below 0.30 (score <= 29, never >= 60), and never emits any
+    // string containing "needs attention". Its 60 threshold belonged to neither scale —
+    // a third, invented grade band. Deleted; the script's own insight passes through.
     if (data.insights && Array.isArray(data.insights.recommendations) && data.insights.recommendations.length > 0) {
-      // Cross-check: filter out recommendations that contradict the data
-      const score = data.healthScore ?? 0;
-      const filteredRecs = data.insights.recommendations.filter((rec) => {
-        const recLower = rec.toLowerCase();
-        // Don't say "excellent" if health score is low
-        if (recLower.includes('excellent') && score < 60) return false;
-        // Don't say "low" or "needs attention" if health score is high
-        if ((recLower.includes('low completion') || recLower.includes('needs attention')) && score >= 60) return false;
-        return true;
-      });
-      if (filteredRecs.length > 0) {
-        findings.push(filteredRecs[0]);
-      }
+      findings.push(data.insights.recommendations[0]);
     }
 
     return findings.length > 0 ? findings : ['No productivity data available for this period'];

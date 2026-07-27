@@ -9,6 +9,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING (analyze-response field): `productivity_stats.healthScore` is renamed to `completionPercent`** (OMN-292) —
+  the field was never a health composite: it is `round(completionRate * 100)`, the all-time completion rate, and the
+  name now says so. The graded key finding `GTD Health Score: N/100 (Excellent/Good/Fair/Needs attention)` becomes the
+  plain fact `All-time completion rate: N%`; the four grade bands were invented at the tool layer (the script grades
+  nothing) and are deleted. **No alias period** — carrying both names would advertise two names for one number and
+  re-create the collision this change exists to end. `pattern_analysis.health_score`/`health_rating` is a genuine
+  multi-factor composite and is untouched; after this change it is the only "health" surface in the analyze tool. The
+  productivity cache key is version-bumped (`productivity_v2_*` → `productivity_v3_*`) because that cache stores the
+  reshaped response, so stale entries would otherwise keep serving `healthScore` until TTL expiry after deploy. Also
+  removed: an unreachable "contradiction filter" that dropped script insights containing `excellent` below a score of 60
+  and `low completion`/`needs attention` at or above it. Against real script output it could never fire — the script
+  emits `Excellent completion rate` only above 0.80 and `Low completion rate` only below 0.30, and emits no string
+  containing `needs attention` — and its threshold of 60 belonged to neither scale. The script's own first insight now
+  passes through unchanged.
+
 - **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
   script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary
