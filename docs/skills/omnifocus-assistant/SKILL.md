@@ -24,17 +24,23 @@ User wants GTD guidance → Provide advice (no tool call needed)
 The detail lives in `references/`. Read a file when its trigger fires — never read them all up front. Read more than one
 when a request spans them (a weekly review needs the workflow file _and_ the GTD file).
 
-| Trigger                                                                                                                                      | Read                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Turning any request into a tool call — the natural-language to `omnifocus_read` / `_write` / `_analyze` mapping                              | `references/intent-to-tool-calls.md`    |
-| GTD guidance asked for, or a workflow needs GTD definitions (stalled project, waiting-for, someday/maybe)                                    | `references/gtd-methodology.md`         |
-| "Process my inbox"                                                                                                                           | `references/workflow-process-inbox.md`  |
-| "Weekly review"                                                                                                                              | `references/workflow-weekly-review.md`  |
-| "What's on for today?" / daily planning                                                                                                      | `references/workflow-daily-planning.md` |
-| "What should I work on now?" / choosing among available tasks                                                                                | `references/workflow-engage.md`         |
-| Creating or rewriting a task or project — naming, time estimates, tags, sequencing                                                           | `references/task-creation.md`           |
-| Non-trivial queries — date ranges, tag combinations, projections, counts, pagination; also **exports** (there is no server-side export tool) | `references/advanced-queries.md`        |
-| Reading back an `omnifocus_analyze` result — productivity stats, `parse_meeting_notes`, pattern analysis, judgment detectors                 | `references/interpreting-results.md`    |
+**When no row clearly matches, do not answer from general knowledge.** These files hold project-specific conventions
+that used to be unconditionally in context, so a miss silently substitutes generic advice for Kip's actual conventions.
+On an ambiguous or compound request, read `references/intent-to-tool-calls.md` first — it maps phrasing to tools and
+usually disambiguates — then the closest-matching row above. Reading one file too many costs a few hundred tokens;
+reading one too few silently changes the answer.
+
+| Trigger                                                                                                                                                                                                        | Read                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Turning any request into a tool call — the natural-language to `omnifocus_read` / `_write` / `_analyze` mapping                                                                                                | `references/intent-to-tool-calls.md`    |
+| GTD guidance asked for, or a workflow needs GTD definitions (waiting-for, someday/maybe, defer-vs-due)                                                                                                         | `references/gtd-methodology.md`         |
+| "Process my inbox"                                                                                                                                                                                             | `references/workflow-process-inbox.md`  |
+| "Weekly review"                                                                                                                                                                                                | `references/workflow-weekly-review.md`  |
+| "What's on for today?" / daily planning                                                                                                                                                                        | `references/workflow-daily-planning.md` |
+| "What should I work on now?" / choosing among available tasks                                                                                                                                                  | `references/workflow-engage.md`         |
+| Creating or rewriting a task or project — naming, time estimates, tags, sequencing                                                                                                                             | `references/task-creation.md`           |
+| Non-trivial queries — date ranges, tag combinations, projections, counts, pagination; also **exports** (there is no server-side export tool)                                                                   | `references/advanced-queries.md`        |
+| Reading back an `omnifocus_analyze` result — productivity stats, `parse_meeting_notes`, pattern analysis, judgment detectors; also **stalled / stale projects** (30+ days unchanged) and what to do about them | `references/interpreting-results.md`    |
 
 ## Date Conversion (Critical)
 
