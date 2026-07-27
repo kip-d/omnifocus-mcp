@@ -168,10 +168,7 @@ pipeline — other docs should link here rather than restate it.
 
 ## Code & Writing Standards
 
-- **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase. One carve-out:
-  `.claude/workflows/*.js`. Those are harness-executed async function _bodies_, not modules — top-level `return` is
-  their contract and injected globals (`agent`, `parallel`, `log`, `args`) have no import. Converting one to `.ts`
-  breaks it; `eslint.config.js` ignores the directory for the same reason.
+- **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
 - **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
 - **Run integration tests** before considering features complete
 
@@ -270,9 +267,11 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 - **Merge gate — review must be a fan-out, never one agent's opinion.** Before merge, stop and have Kip run
   `/code-review`; gate on its Safe/Approved verdict. `/code-review` cannot be model-dispatched. The property that makes
   it the gate is _architectural_: independent parallel finders plus a separate verification pass that scores each
-  finding before it counts. Any review claiming to substitute must have that shape — so if in-session review is needed,
-  run it as a `Workflow` fan-out (finders + verify), never as a single reviewer subagent. This rule names a shape, not a
-  vendor: a fan-out built on any reviewer persona qualifies, and a lone reviewer does not, however capable its model.
+  finding before it counts. **Nothing substitutes for that run** — not a reviewer subagent, and not a hand-rolled
+  `Workflow` fan-out, however well shaped. In-session review is supplementary: useful for catching defects early, never
+  a reason to skip the gate or to report a slice as reviewed. A measured example of why: a purpose-built fan-out (4
+  finders + blind scorers) raised 1 of 7 known defects on a clean target and confirmed 0, losing to a single reviewer
+  subagent at ~20× the cost, while the real gate found all 7. Shape alone does not buy the gate's results.
 - **Slice-stage reviewers — state the model, don't inherit it.** Per-task spec/quality reviewer subagents inside slice
   work are wanted, and every dispatch must pass an explicit `model`. The requirement is _explicitness, not tier_: Sonnet
   reviewers are fine when the coordinator judges Sonnet can produce a valuable review for that task, and the judgment is
