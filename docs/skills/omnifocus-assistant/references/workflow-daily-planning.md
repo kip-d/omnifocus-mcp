@@ -18,6 +18,8 @@ When user asks "what should I focus on today" or "help me plan my day":
    omnifocus_read({ query: { type: "tasks", mode: "smart_suggest", limit: 5 } })
 ```
 
-Summarize: "You have X tasks due today, Y overdue. Here are top priorities..."
+Summarize: "You have X tasks due today, Y overdue. Some candidates worth considering..." — then give YOUR ordering with
+the reason for each. Do **not** call the `smart_suggest` output "top priorities" and do not present its returned order
+as a ranking; it is a mechanical screen (see the Result-reading hazards in `SKILL.md`).
 
 ---

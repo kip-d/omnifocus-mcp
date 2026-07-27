@@ -30,17 +30,32 @@ On an ambiguous or compound request, read `references/intent-to-tool-calls.md` f
 usually disambiguates — then the closest-matching row above. Reading one file too many costs a few hundred tokens;
 reading one too few silently changes the answer.
 
-| Trigger                                                                                                                                                                                                        | Read                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Turning any request into a tool call — the natural-language to `omnifocus_read` / `_write` / `_analyze` mapping                                                                                                | `references/intent-to-tool-calls.md`    |
-| GTD guidance asked for, or a workflow needs GTD definitions (waiting-for, someday/maybe, defer-vs-due)                                                                                                         | `references/gtd-methodology.md`         |
-| "Process my inbox"                                                                                                                                                                                             | `references/workflow-process-inbox.md`  |
-| "Weekly review"                                                                                                                                                                                                | `references/workflow-weekly-review.md`  |
-| "What's on for today?" / daily planning                                                                                                                                                                        | `references/workflow-daily-planning.md` |
-| "What should I work on now?" / choosing among available tasks                                                                                                                                                  | `references/workflow-engage.md`         |
-| Creating or rewriting a task or project — naming, time estimates, tags, sequencing                                                                                                                             | `references/task-creation.md`           |
-| Non-trivial queries — date ranges, tag combinations, projections, counts, pagination; also **exports** (there is no server-side export tool)                                                                   | `references/advanced-queries.md`        |
-| Reading back an `omnifocus_analyze` result — productivity stats, `parse_meeting_notes`, pattern analysis, judgment detectors; also **stalled / stale projects** (30+ days unchanged) and what to do about them | `references/interpreting-results.md`    |
+| Trigger                                                                                                                                                                                                                                                                                                                                       | Read                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Turning any request into a tool call — the natural-language to `omnifocus_read` / `_write` / `_analyze` mapping                                                                                                                                                                                                                               | `references/intent-to-tool-calls.md`    |
+| GTD guidance asked for, or a workflow needs GTD definitions (waiting-for, someday/maybe, defer-vs-due)                                                                                                                                                                                                                                        | `references/gtd-methodology.md`         |
+| "Process my inbox" — read `references/task-creation.md` too before the Execute step (batch-create has a silent `project` limitation)                                                                                                                                                                                                          | `references/workflow-process-inbox.md`  |
+| "Weekly review" — a full review spans four files: also read `references/gtd-methodology.md`, `references/workflow-process-inbox.md` (step 1 empties the inbox) and `references/interpreting-results.md` (step 12 reads productivity stats)                                                                                                    | `references/workflow-weekly-review.md`  |
+| "What's on for today?" / daily planning                                                                                                                                                                                                                                                                                                       | `references/workflow-daily-planning.md` |
+| "What should I work on now?" / choosing among available tasks                                                                                                                                                                                                                                                                                 | `references/workflow-engage.md`         |
+| Creating or rewriting a task or project — naming, time estimates, tags, sequencing, **repetition / recurrence rules**, project **review intervals**                                                                                                                                                                                           | `references/task-creation.md`           |
+| Non-trivial queries — date ranges, tag combinations, projections, counts, pagination; also **exports** (there is no server-side export tool)                                                                                                                                                                                                  | `references/advanced-queries.md`        |
+| `omnifocus_analyze` in either direction — **read this BEFORE calling `parse_meeting_notes`** (you must structure the items yourself, not paste raw prose), and after any analyze call to read back productivity stats, pattern analysis, judgment detectors; also **stalled / stale projects** (30+ days unchanged) and what to do about them | `references/interpreting-results.md`    |
+
+## Result-reading hazards (always apply)
+
+These three produce a **silently wrong answer** — no error, nothing in the response flags them — so they stay here
+rather than in a reference file. Each file below carries the fuller context.
+
+- **`smart_suggest` is a screen, not a ranking (OMN-259).** The list ORDER is not a priority verdict. Re-rank the
+  candidates yourself using `screen_reasons` plus context the server can't see (stated intent, calendar, energy), and
+  explain your ordering in terms of those reasons. Never present the returned order as "top priorities". Detail:
+  `references/workflow-engage.md`.
+- **`completionRate` is a decimal**, not a percentage — `0.75` means 75%. Reporting it verbatim is an order-of-magnitude
+  error. Detail: `references/interpreting-results.md`.
+- **Batch-create may silently drop the `project` field** when assigning to an existing project by name. Use
+  `parentTempId` for a project created in the same batch, or create individually. Nothing in the batch response reports
+  this. Detail: `references/task-creation.md`.
 
 ## Date Conversion (Critical)
 
@@ -117,7 +132,8 @@ Ask when user request is ambiguous:
 
 ## Quick Reference: Patterns Not Covered Above
 
-These patterns supplement the intent mapping table and workflow sections.
+These patterns supplement the intent mapping table (`references/intent-to-tool-calls.md`) and the workflow files — read
+those rather than assuming they are already in context.
 
 ```javascript
 // Move task to inbox
