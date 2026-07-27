@@ -168,7 +168,10 @@ pipeline — other docs should link here rather than restate it.
 
 ## Code & Writing Standards
 
-- **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
+- **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase. One carve-out:
+  `.claude/workflows/*.js`. Those are harness-executed async function _bodies_, not modules — top-level `return` is
+  their contract and injected globals (`agent`, `parallel`, `log`, `args`) have no import. Converting one to `.ts`
+  breaks it; `eslint.config.js` ignores the directory for the same reason.
 - **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
 - **Run integration tests** before considering features complete
 
@@ -273,11 +276,15 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 - **Slice-stage reviewers — state the model, don't inherit it.** Per-task spec/quality reviewer subagents inside slice
   work are wanted, and every dispatch must pass an explicit `model`. The requirement is _explicitness, not tier_: Sonnet
   reviewers are fine when the coordinator judges Sonnet can produce a valuable review for that task, and the judgment is
-  the coordinator's to make (`/code-review` itself runs Sonnet finders and Haiku scorers). What is not fine is a blank
-  `model` — that silently inherits `CLAUDE_CODE_SUBAGENT_MODEL`, so nobody chose, and an unchosen downgrade at
-  correctness or verify altitude ships bugs via false REFUTEs. Lean full capability where a missed defect is
-  irrecoverable; go cheaper deliberately and say why. This is a _different_ axis from the merge gate's: model tier is
-  the wrong axis for the gate above, and fan-out is the wrong axis here.
+  the coordinator's to make. What is not fine is a blank `model` — that silently inherits `CLAUDE_CODE_SUBAGENT_MODEL`,
+  so nobody chose, and an unchosen downgrade at correctness or verify altitude ships bugs via false REFUTEs. Lean full
+  capability where a missed defect is irrecoverable; go cheaper deliberately and say why. This is a _different_ axis
+  from the merge gate's: model tier is the wrong axis for the gate above, and fan-out is the wrong axis here.
+- **Neither review rule above is machine-enforced.** They are read and followed, not blocked by a hook. A `~/.claude`
+  PreToolUse guard once claimed to enforce the old version of this rule; it silently no-op'd for weeks (it matched a
+  renamed agent type, and was registered against the wrong tool name), then blocked a deliberate, permitted choice once
+  fixed. Machine-local, unversioned enforcement can't be checked by this repo's tests, so don't add a claim here that
+  one exists.
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).

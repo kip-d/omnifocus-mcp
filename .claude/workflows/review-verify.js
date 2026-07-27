@@ -30,11 +30,16 @@ export const meta = {
 // no implementer rationale. A scorer that knows "the correctness finder flagged
 // this" inherits that finder's confidence and stops being independent.
 //
-// args: { base, head, files?, context?, finderModel?, scorerModel?, lenses? }
+// args: { base, head, files?, context?, finderModel?, scorerModel?, maxScored?, workdir?, lenses? }
 //   base/head    - git range to review (required)
 //   context      - optional task spec / plan / PR description for spec-conformance
 //   finderModel  - default 'sonnet' (tier is a judgment call; state it deliberately)
-//   scorerModel  - default 'sonnet'
+//   scorerModel  - default 'opus'. NOT a cost-symmetric knob: measured, sonnet
+//                  scorers false-refuted 2 of 6 real defects including a fatal one.
+//                  Lowering it trades accuracy for tokens -- see MEASURED DEFAULTS below.
+//   maxScored    - default 12; cap on findings sent to Verify. 0 is honored (skips
+//                  the whole Verify stage), so it must not be falsy-coerced.
+//   workdir      - sterilized checkout for evaluation runs; see `isolation` below
 //   lenses       - override the default lens set
 
 // args can arrive as an object or as a JSON string depending on how the caller
@@ -54,7 +59,9 @@ const SCORER_MODEL = a.scorerModel || 'opus';
 // Cost guard. The verify stage is bounded by how many claims the finders emit, not
 // by the diff, so it can run away without a cap. First run: 12 findings -> 12
 // scorers -> 819k subagent tokens, worse than the full gate it was meant to undercut.
-const MAX_SCORED = a.maxScored || 12;
+// `??` not `||`: maxScored: 0 is a meaningful request (skip Verify entirely, return
+// raw findings unscored) and `0 || 12` would silently run 12 scorers instead.
+const MAX_SCORED = a.maxScored ?? 12;
 
 const DEFAULT_LENSES = [
   {
@@ -192,23 +199,38 @@ ${rangeBlock}
   ),
 );
 
-// Dedup on file + normalized title shape. Two lenses describing the same defect in
-// different words still collide on the file plus the salient identifiers, which is
-// good enough to halve the verify bill without merging genuinely distinct claims.
+// Dedup on file + normalized title shape, to avoid paying for the same defect twice
+// when several lenses land on it.
+//
+// The key is deliberately STRICT: every salient word of the title (not a 6-word
+// slice), sorted. The asymmetry matters -- a MISSED merge costs one extra scorer
+// agent, while a FALSE merge silently destroys a real, distinct defect. So when the
+// key is uncertain, err toward treating findings as distinct.
+//
+// Nothing is ever discarded either way: a merged-away finding keeps its full record
+// in `mergedAway` and is returned to the caller, and each merge is logged with both
+// titles so a wrong merge is visible rather than silent.
 const seen = new Map();
+const mergedAway = [];
+const salientKey = (f) =>
+  `${f.file}::${(f.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(/\s+/)
+    .filter((w) => w.length > 4)
+    .sort()
+    .join('-')}`;
+
 for (const r of raw.filter(Boolean)) {
   for (const f of r.findings) {
-    const key = `${f.file}::${(f.title || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]/g, '')
-      .split(/\s+/)
-      .filter((w) => w.length > 4)
-      .sort()
-      .slice(0, 6)
-      .join('-')}`;
+    const key = salientKey(f);
     const prior = seen.get(key);
     if (prior) {
       prior.lenses.push(r.lens);
+      mergedAway.push({ ...f, lens: r.lens, mergedInto: prior.title });
+      log(
+        `review-verify: merged [${r.lens}] "${f.title}" into [${prior.lens}] "${prior.title}" — verify if these differ`,
+      );
     } else {
       seen.set(key, { ...f, lens: r.lens, lenses: [r.lens] });
     }
@@ -217,8 +239,12 @@ for (const r of raw.filter(Boolean)) {
 const unique = [...seen.values()];
 const toScore = unique.slice(0, MAX_SCORED);
 const dropped = unique.length - toScore.length;
+// Computed once and reused by both the log line and the returned counts, so the two
+// can never drift apart.
+const rawCount = raw.filter(Boolean).reduce((n, r) => n + r.findings.length, 0);
 log(
-  `review-verify: ${raw.filter(Boolean).reduce((n, r) => n + r.findings.length, 0)} raw -> ${unique.length} unique` +
+  `review-verify: ${rawCount} raw -> ${unique.length} unique` +
+    (mergedAway.length > 0 ? ` (${mergedAway.length} merged, returned in mergedAway)` : '') +
     (dropped > 0 ? ` -> scoring ${toScore.length}, DROPPED ${dropped} unscored (maxScored=${MAX_SCORED})` : ''),
 );
 
@@ -272,8 +298,9 @@ return {
   models: { finder: FINDER_MODEL, scorer: SCORER_MODEL },
   lenses: LENSES.map((l) => l.key),
   counts: {
-    raw: raw.filter(Boolean).reduce((n, r) => n + r.findings.length, 0),
+    raw: rawCount,
     unique: unique.length,
+    merged: mergedAway.length,
     scored: scored.length,
     unscored_dropped: dropped,
     confirmed: confirmed.length,
@@ -284,6 +311,9 @@ return {
   // Findings that never got adjudicated because of MAX_SCORED. Surfaced, never
   // silently truncated -- an unmentioned cap reads as "we covered everything".
   unscored: unique.slice(MAX_SCORED),
+  // Findings collapsed into another by the dedup key. Returned so a false merge is
+  // recoverable instead of lost; each carries `mergedInto` naming its survivor.
+  mergedAway,
 };
 
 // ===========================================================================
