@@ -1,7 +1,7 @@
 # GTD methodology guide
 
-> Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. Content below
-> is verbatim from the pre-split SKILL.md.
+> Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
+> canonical for its topic; edit it directly.
 
 ## GTD Methodology Guide
 

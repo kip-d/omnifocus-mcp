@@ -1,7 +1,7 @@
 # Interpreting results
 
-> Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. Content below
-> is verbatim from the pre-split SKILL.md.
+> Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
+> canonical for its topic; edit it directly.
 
 ## Interpreting Results
 
@@ -57,7 +57,7 @@ accurately than the server's heuristic. The tool's job is the read-only pre-flig
 
 1. Read the notes and produce structured items, one per real action:
    `{ name, project?, tags?, dueDate?, deferDate?, estimatedMinutes?, flagged?, note? }` (convert dates to `YYYY-MM-DD`
-   / `YYYY-MM-DD HH:mm` first — see Date Conversion).
+   / `YYYY-MM-DD HH:mm` first — see Date Conversion in `SKILL.md`).
 2. Call `omnifocus_analyze` type `parse_meeting_notes` with `params.items`. It returns a preview per item
    (`project.match` exact/partial/none, `tags.existing`/`new`, `duplicateOf`, `readyToCreate`), a `summary`, and a
    ready-to-send **`batchPayload`**.
