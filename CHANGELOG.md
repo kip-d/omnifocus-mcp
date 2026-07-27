@@ -9,6 +9,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING (analyze input surface): `omnifocus_analyze` no longer accepts `scope` except on `task_velocity`, and no
+  longer accepts `params.metrics` at all** (OMN-288) — six analysis types advertised a full `scope` object
+  (`dateRange`/`tags`/`projects`/`includeCompleted`/`includeDropped`), but exactly one field on one op was ever read:
+  `task_velocity`'s `scope.dateRange`. Every other combination was accepted and silently ignored, so a caller scoping by
+  tag received a whole-database answer that reported success. Per OMN-273, inputs the platform does not honor are
+  deleted from the schema so they reject loudly (`VALIDATION_ERROR` naming the key) and the diagnose-failures pipeline
+  records the mismatch, rather than returning a confidently wrong answer. `productivity_stats`, `overdue_analysis`,
+  `workflow_analysis`, `pattern_analysis`, and `recurring_tasks` now take no `scope`; `task_velocity` accepts
+  `scope.dateRange` only. The shared `AnalysisScopeSchema` is renamed `VelocityScopeSchema` to say where it applies. The
+  `inputSchema` advertisement and the tool description move with it (the old "SCOPE FILTERING — use tags/projects to
+  focus analysis" paragraph described behavior that never existed). Actual scope _filtering_ remains future work
+  (OMN-293). Also removes dead plumbing (D3): the overdue handler passed `includeRecentlyCompleted`/`groupBy` into the
+  script, which bound them into OmniJS consts nothing ever read. Response shape, response metadata, and the overdue
+  cache key are unchanged.
+
 - **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
   script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary
