@@ -264,9 +264,21 @@ corrective follow-ups (a preventable defect lineage) when reviewing project heal
 ## Workflow norms
 
 - PRs target `kip-d/omnifocus-mcp` (use `--repo kip-d/omnifocus-mcp`), not any upstream fork.
-- Before merge, **stop and have Kip run `/code-review`** (user-invoked slash command → main-loop Opus); gate the merge
-  on a Safe/Approved verdict. Do **not** dispatch a `superpowers:code-reviewer` subagent — `/code-review` can't be
-  model-dispatched, and a `~/.claude` hook blocks the old reviewer (which would also run on the pinned Sonnet model).
+- **Merge gate:** stop and have Kip run `/code-review`; gate on its Safe/Approved verdict. It cannot be
+  model-dispatched. **Nothing substitutes for that run** — not a reviewer subagent, not a hand-rolled `Workflow`
+  fan-out. In-session review is supplementary, never a reason to skip the gate or call a slice reviewed.
+- **Slice-stage reviewers:** every dispatch states an explicit `model`. Explicitness, not tier — Sonnet is fine when the
+  coordinator judges it adequate. A blank `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL`, so nobody chose, and an
+  unchosen downgrade at verify altitude ships bugs via false REFUTEs. Lean full capability where a miss is
+  irrecoverable.
+- **Neither rule is machine-enforced** — read and followed, not blocked by a hook, deliberately. A `~/.claude` guard
+  once claimed to enforce the older version: it silently no-op'd for weeks, then blocked a permitted choice once fixed.
+  Machine-local enforcement can't be checked by this repo's tests. Don't add a claim here that any exists.
+
+  Why the gate's shape isn't reproducible in-session: a purpose-built fan-out was measured against it and lost badly to
+  even a single reviewer subagent, at far higher cost. See PR #249's history for the runs. Shape alone does not buy the
+  gate's results.
+
 - Merge via `gh pr merge --squash` after Kip's explicit per-PR go-ahead — never `--admin`. The repo has auto-merge
   disabled, so `--auto` fails with "Auto merge is not allowed"; wait for CI green, then merge plainly.
 - `git pull --rebase` before `git push` (work spans multiple machines/sessions).
