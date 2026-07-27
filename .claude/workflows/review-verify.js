@@ -130,6 +130,24 @@ const VERDICT_SCHEMA = {
   },
 };
 
+// `workdir` exists for evaluation runs on a sterilized checkout. Reviewing a
+// HISTORICAL commit inside the live repo leaks the answer: the commits that fixed
+// the defects are reachable from the same object store, and agents find them and
+// cite them as corroboration (measured: 2 of 4 finders, 6 of 12 scorers, first run).
+// Point this at a shallow clone pinned to the commit so the future does not exist.
+const isolation = a.workdir
+  ? `
+## Where to work
+
+Run every command in \`${a.workdir}\`. This is a checkout pinned to the revision under review.
+
+- Do NOT read, cd into, or run git commands against any other clone of this project.
+- Do NOT use \`gh\`, \`curl\`, web search, or any network access to look up this change, its pull request, or its review history.
+
+Judge the code in front of you on its own merits. Any external record of how this change turned out is off-limits for this review.
+`
+  : '';
+
 const rangeBlock = `
 ## Git range
 
@@ -141,7 +159,7 @@ Read the diff yourself:
 git diff --stat ${a.base}..${a.head}
 git diff ${a.base}..${a.head}
 \`\`\`
-${a.files ? `\nChanged files of interest: ${a.files}\n` : ''}
+${isolation}${a.files ? `\nChanged files of interest: ${a.files}\n` : ''}
 ${a.context ? `\n## What this change is meant to do\n\n${a.context}\n` : ''}`;
 
 log(
