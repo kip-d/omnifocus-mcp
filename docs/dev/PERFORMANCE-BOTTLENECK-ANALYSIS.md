@@ -122,7 +122,7 @@ const tasks = JSON.parse(resultJson);
 
 1. **Fixed script size**: Script doesn't embed task IDs (avoids Issue #27)
 2. **Massive speed boost**: Property access ~16,000x faster
-3. **Single bridge call**: One `evaluateJavascript()` call replaces all 450 Apple Event round trips
+3. **Single bridge call**: One bridge call (`app.evaluateJavascript()`) replaces all 450 Apple Event round trips
 4. **Simpler code**: No complex JXA iteration and error handling
 
 ### Available OmniJS Global Collections
