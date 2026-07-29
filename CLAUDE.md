@@ -169,13 +169,17 @@ pipeline — other docs should link here rather than restate it.
 ## Code & Writing Standards
 
 - **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
-- **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
+- **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice. This
+  is the single authoritative statement of prose style — other sections link here rather than restate it.
+- **One term per concept** - Never alternate synonyms for the same thing. The OmniJS escape hatch is the _bridge_
+  everywhere; not "the shim", not "the `evaluateJavascript` call". Reuse the term this doc already uses, verbatim.
+  JXA/OmniJS/bridge terminology drift is a recurring source of confusion in reviews and generated scripts.
 - **Run integration tests** before considering features complete
 
 ## Documentation
 
 - Archive obsolete docs to `.archive/` → push to https://github.com/kip-d/omnifocus-mcp-archive
-- Follow Strunk's Elements of Style (tables > prose, omit needless words, active voice)
+- Prose style: see **Code & Writing Standards** above.
 - **Don't hardcode the current version in prose.** `package.json` and `CHANGELOG.md` are the single source of truth.
   Historical references like "introduced in v3.0.0" are fine — descriptive labels like "(current v4.1.0)" go stale on
   every release.
