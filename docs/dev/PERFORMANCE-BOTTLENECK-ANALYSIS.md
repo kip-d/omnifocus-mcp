@@ -75,8 +75,8 @@ for (let i = 0; i < allTasks.length; i++) {
 
 ### Why This Is Slow
 
-1. **JXA bridge overhead**: Each `task.property()` call crosses the JXA/OmniFocus bridge
-2. **Accumulation**: 45 tasks × 10 properties = 450 bridge crossings
+1. **Apple Events overhead**: Each `task.property()` call is a separate Apple Event round trip to OmniFocus
+2. **Accumulation**: 45 tasks × 10 properties = 450 Apple Event round trips
 3. **JavaScript processing**: Complex plugin system for recurring task analysis adds 85% overhead
 
 ## Solution: OmniJS-First Architecture
@@ -122,7 +122,7 @@ const tasks = JSON.parse(resultJson);
 
 1. **Fixed script size**: Script doesn't embed task IDs (avoids Issue #27)
 2. **Massive speed boost**: Property access ~16,000x faster
-3. **Single bridge crossing**: One `evaluateJavascript()` call instead of 450
+3. **Single bridge call**: One `evaluateJavascript()` call replaces all 450 Apple Event round trips
 4. **Simpler code**: No complex JXA iteration and error handling
 
 ### Available OmniJS Global Collections
@@ -152,7 +152,7 @@ const allTasks = doc.flattenedTasks();
 for (let i = 0; i < allTasks.length; i++) {
   if (matchesFilter(task, filter)) {
     // 3. Access properties via JXA (SLOW!)
-    const taskObj = buildTaskObject(task); // 450 bridge crossings!
+    const taskObj = buildTaskObject(task); // 450 Apple Event round trips!
     tasks.push(taskObj);
   }
 }

@@ -97,7 +97,7 @@ function buildAST(filter: TaskFilter): FilterNode {
 }
 ```
 
-### Step 3: OmniJS Code Generation
+### Step 3: OmniJS Emission
 
 ```typescript
 // Emit OmniJS code from AST
