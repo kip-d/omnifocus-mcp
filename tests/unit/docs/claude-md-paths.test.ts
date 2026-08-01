@@ -1,43 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { extractRefs as extractRefsWithPrefixes, normalizeRef, classifyRef as classify } from './markdown-path-refs.js';
 
-// ---- Pure helpers (exported for fixture tests) ----
+// ---- Thin bindings over the shared matcher (see markdown-path-refs.ts) ----
+
+const PREFIXES = ['src', 'docs'];
+const ALLOWED_EXT = /\.(ts|js|md|dot|json)$/;
 
 /** Extract candidate path strings from inline code, fenced code, and markdown link targets only. */
 export function extractRefs(markdown: string): string[] {
-  const spans: string[] = [];
-  // Fenced code blocks first, then remove them so inline regex doesn't re-scan.
-  let rest = markdown.replace(/```[\s\S]*?```/g, (m) => {
-    spans.push(m);
-    return '';
-  });
-  for (const m of rest.matchAll(/`[^`\n]+`/g)) spans.push(m[0]);
-  // Markdown link targets: take the (...) target string FIRST, then tokenize.
-  for (const m of markdown.matchAll(/\]\(([^)]+)\)/g)) spans.push(m[1]);
-  const refs: string[] = [];
-  for (const span of spans) {
-    for (const m of span.matchAll(/(?<=^|[\s`([\]])\/?(?:src|docs)\/[^\s`)]+/g)) refs.push(m[0]);
-  }
-  return refs;
+  return extractRefsWithPrefixes(markdown, PREFIXES);
 }
 
-/** Normalize a raw token: strip leading '/', trailing :NN[:CC], trailing sentence punctuation. */
-export function normalizeRef(token: string): string {
-  let t = token.replace(/^\//, ''); // leading '/' => repo-root
-  t = t.replace(/:\d+(?::\d+)?$/, ''); // strip :NN or :NN:CC
-  t = t.replace(/[.,);:]+$/, ''); // strip trailing sentence punctuation
-  return t;
-}
-
-const ALLOWED_EXT = /\.(ts|js|md|dot|json)$/;
-
-/** 'dir' | 'file' | 'malformed' */
 export function classifyRef(norm: string): 'dir' | 'file' | 'malformed' {
-  if (norm.endsWith('/')) return 'dir';
-  if (ALLOWED_EXT.test(norm)) return 'file';
-  return 'malformed';
+  return classify(norm, ALLOWED_EXT);
 }
+
+export { normalizeRef };
 
 describe('claude-md path matcher', () => {
   it('extracts only from code spans and link targets, not bare prose or link text', () => {

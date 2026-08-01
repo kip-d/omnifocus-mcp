@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { extractRefs, normalizeRef, classifyRef as classify } from './markdown-path-refs.js';
 
 /**
  * Guards the progressive-disclosure link web under docs/skills/**.
@@ -11,7 +12,10 @@ import { join } from 'node:path';
  * claude-md-paths.test.ts scans only the repo-root CLAUDE.md.
  */
 
-// ---- Pure helpers (exported for fixture tests) ----
+// ---- Thin bindings over the shared matcher (see markdown-path-refs.ts) ----
+
+const PREFIXES = ['references', 'docs'];
+const ALLOWED_EXT = /\.md$/;
 
 /**
  * Extract `references/...` and `docs/...` tokens from inline code, fenced code, and
@@ -19,34 +23,14 @@ import { join } from 'node:path';
  * sentences that merely discuss a filename.
  */
 export function extractSkillRefs(markdown: string): string[] {
-  const spans: string[] = [];
-  let rest = markdown.replace(/```[\s\S]*?```/g, (m) => {
-    spans.push(m);
-    return '';
-  });
-  for (const m of rest.matchAll(/`[^`\n]+`/g)) spans.push(m[0]);
-  for (const m of markdown.matchAll(/\]\(([^)]+)\)/g)) spans.push(m[1]);
-  const refs: string[] = [];
-  for (const span of spans) {
-    for (const m of span.matchAll(/(?<=^|[\s`([\]])\/?(?:references|docs)\/[^\s`)]*/g)) refs.push(m[0]);
-  }
-  return refs;
+  return extractRefs(markdown, PREFIXES);
 }
 
-/** Strip leading '/', trailing :NN[:CC], and trailing sentence punctuation. */
-export function normalizeRef(token: string): string {
-  return token
-    .replace(/^\//, '')
-    .replace(/:\d+(?::\d+)?$/, '')
-    .replace(/[.,);:]+$/, '');
-}
-
-/** 'dir' | 'file' | 'malformed' */
 export function classifyRef(norm: string): 'dir' | 'file' | 'malformed' {
-  if (norm.endsWith('/')) return 'dir';
-  if (/\.md$/.test(norm)) return 'file';
-  return 'malformed';
+  return classify(norm, ALLOWED_EXT);
 }
+
+export { normalizeRef };
 
 /** `references/` resolves against the skill dir; `docs/` against the repo root. */
 export function resolveBase(norm: string, root: string, skillDir: string): string {
@@ -71,6 +55,14 @@ describe('skill reference matcher', () => {
 
   it('matches a bare directory mention', () => {
     expect(extractSkillRefs('detail lives in `references/`')).toEqual(['references/']);
+  });
+
+  it('strips a #anchor so section links are not mistaken for malformed paths', () => {
+    // `file.md#section` is a valid link whose on-disk target is `file.md`. Before this
+    // was handled the guard failed CLOSED on valid input, which reads in CI exactly
+    // like a broken link and is worse than not checking at all.
+    expect(normalizeRef('references/gtd-methodology.md#the-five-stages')).toBe('references/gtd-methodology.md');
+    expect(classifyRef(normalizeRef('references/a.md#x'))).toBe('file');
   });
 
   it('classifies dir, file, malformed', () => {
