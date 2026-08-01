@@ -3,9 +3,7 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Interpreting Results
-
-### Productivity Stats
+## Productivity Stats
 
 **Note:** `completionRate` is returned as a decimal (e.g., 0.75 = 75%). Health score varies 0-100 based on overdue
 count, inbox size, and completion rate.
@@ -17,7 +15,7 @@ count, inbox size, and completion rate.
 | Overdue count   | 0-5           | > 10 system trust eroding |
 | Available tasks | 10-30         | > 50 overwhelming         |
 
-### Analysis Types Reference
+## Analysis Types Reference
 
 | Type                  | Best for                                  | Performance   |
 | --------------------- | ----------------------------------------- | ------------- |
@@ -33,7 +31,7 @@ count, inbox size, and completion rate.
 All analysis types accept an optional `scope` with `dateRange`, `tags`, `projects`, `includeCompleted`, and
 `includeDropped`.
 
-### Judgment detectors return screens + evidence, not verdicts (`pattern_analysis`)
+## Judgment detectors return screens + evidence, not verdicts (`pattern_analysis`)
 
 Three `pattern_analysis` insights — `clarify_candidates` (formerly `next_actions`), `waiting_for`, and `estimation_bias`
 — follow a **screen → evidence-bundle → you-judge** contract:
@@ -50,7 +48,7 @@ Three `pattern_analysis` insights — `clarify_candidates` (formerly `next_actio
 - Act by `id` via `omnifocus_write` — every candidate is directly actionable, no search-by-name needed.
 - The `next_actions` key is retired: sending it returns `metadata.unrecognized_insights` rather than data.
 
-### Parsing Meeting Notes (`parse_meeting_notes`)
+## Parsing Meeting Notes (`parse_meeting_notes`)
 
 **Extract the action items yourself, then pass `items[]` — do not paste raw prose.** You read the notes far more
 accurately than the server's heuristic. The tool's job is the read-only pre-flight only the server can do.
@@ -71,7 +69,7 @@ accurately than the server's heuristic. The tool's job is the read-only pre-flig
 surfaces anything it couldn't parse in `unparsed[]` (nothing is silently dropped). Provide exactly one of
 `items`/`text`.
 
-### Pattern Analysis
+## Pattern Analysis
 
 **Stale projects** (no changes 30+ days):
 

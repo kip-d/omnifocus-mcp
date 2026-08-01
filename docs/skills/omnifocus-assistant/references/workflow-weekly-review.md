@@ -3,8 +3,6 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Workflow: Weekly Review
-
 Execute in sequence — each step: run the MCP call, act on results:
 
 **1. Empty inbox** — Process before anything else

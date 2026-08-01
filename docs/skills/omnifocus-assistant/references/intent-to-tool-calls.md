@@ -3,8 +3,6 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Mapping natural language to tool calls
-
 Step 1 (the information / action / insight split) stays in `SKILL.md`; this is the step-2 lookup table.
 
 | User Says                                    | Intent                 | Tool Call                                                                                |

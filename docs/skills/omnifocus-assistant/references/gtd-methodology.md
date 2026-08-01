@@ -3,9 +3,7 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## GTD Methodology Guide
-
-### The Five Stages
+## The Five Stages
 
 | Stage        | GTD Purpose                        | OmniFocus Action                |
 | ------------ | ---------------------------------- | ------------------------------- |
@@ -15,7 +13,7 @@
 | **Review**   | Keep system current                | Weekly review workflow          |
 | **Engage**   | Context → time → energy → priority | Context tag filters             |
 
-### Defer Date vs Due Date
+## Defer Date vs Due Date
 
 | Defer Date                                 | Due Date                  |
 | ------------------------------------------ | ------------------------- |
@@ -24,7 +22,7 @@
 | Hides task until relevant                  | Shows urgency             |
 | Default: 8:00 AM                           | Default: 5:00 PM          |
 
-### Recommended Context Tags
+## Recommended Context Tags
 
 **Location**: `@computer`, `@phone`, `@office`, `@home`, `@errands`, `@anywhere`
 
@@ -36,12 +34,12 @@
 
 **Priority**: `@urgent`, `@important`, `@someday`
 
-### Someday/Maybe Management
+## Someday/Maybe Management
 
 Tag with `@someday`, place in an on-hold project, defer far in the future. Review during weekly review — activate or
 drop items that no longer resonate.
 
-### Waiting-For Tracking
+## Waiting-For Tracking
 
 Tag `@waiting-for`, note who/what/when, defer 3–7 days for follow-up. Review during weekly review.
 
@@ -52,7 +50,7 @@ User: "I emailed John about the budget, waiting on his reply"
   note: "Emailed John on {today}, waiting for budget approval"
 ```
 
-### Reference Material
+## Reference Material
 
 Not everything captured is actionable. Non-actionable reference material belongs in **Obsidian**, not OmniFocus.
 

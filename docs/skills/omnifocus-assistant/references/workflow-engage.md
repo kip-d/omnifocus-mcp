@@ -3,8 +3,6 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Workflow: Engage (Choosing What to Do)
-
 Apply GTD's four criteria in order — each narrows the list:
 
 **1. Context** — What's available where you are now? `filters: { tags: { any: ["@computer"] } }` (or @phone, @office,

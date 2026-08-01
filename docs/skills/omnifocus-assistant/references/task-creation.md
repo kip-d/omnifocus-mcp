@@ -3,9 +3,7 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Task Creation Best Practices
-
-### Naming Rules
+## Naming Rules
 
 **Start with action verb:**
 
@@ -24,7 +22,7 @@
 - ❌ "Research, decide, and order supplies" (3 tasks!)
 - ✅ Break into project with sequential tasks
 
-### When to Create Projects
+## When to Create Projects
 
 Create a project when:
 
@@ -38,7 +36,7 @@ Single task when:
 - No dependencies
 - Can be done in one sitting
 
-### Enriching Tasks
+## Enriching Tasks
 
 **Estimated minutes** — enables time-based filtering ("show me quick wins") and capacity planning:
 
@@ -63,7 +61,7 @@ Single task when:
 | `deferDate`        | When the task becomes visible   | `"{next Monday}"`       |
 | `dueDate`          | Hard deadline (only real ones!) | `"{end of month}"`      |
 
-### Suggesting Time Estimates
+## Suggesting Time Estimates
 
 After creating tasks or a project, **proactively offer time estimates** as a batch. Don't ask during capture (that slows
 it down). Instead, create the tasks first, then present estimates for confirmation.
@@ -110,7 +108,7 @@ omnifocus_write({
 });
 ```
 
-### Batch Creation
+## Batch Creation
 
 When user mentions multiple related items, use batch operation:
 
@@ -132,7 +130,7 @@ omnifocus_write({
 project field may not be applied. Use `parentTempId` to reference a project created in the same batch, or create tasks
 individually when assigning to existing projects.
 
-### Batch Mixed Operations
+## Batch Mixed Operations
 
 Batch supports create + update + complete + delete in a single call:
 
@@ -156,7 +154,7 @@ omnifocus_write({
 
 Remove `dryRun` to execute for real. Use `atomicOperation: 'true'` for all-or-nothing execution.
 
-### Subtasks
+## Subtasks
 
 Use `parentTaskId` to create or move tasks as subtasks:
 
@@ -177,7 +175,7 @@ Use `parentTaskId` to create or move tasks as subtasks:
 } } }
 ```
 
-### Tag Operations
+## Tag Operations
 
 **Nested hierarchy syntax** — create tag paths in any mutation:
 
@@ -214,7 +212,7 @@ Use `parentTaskId` to create or move tasks as subtasks:
 | `addTags`    | Add to existing, preserve current |
 | `removeTags` | Remove specific, preserve others  |
 
-### Repetition Rules
+## Repetition Rules
 
 When users want recurring tasks, set `repetitionRule` on create or update:
 

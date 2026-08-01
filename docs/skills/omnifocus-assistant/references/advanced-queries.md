@@ -3,9 +3,7 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Advanced Queries
-
-### Sort and Pagination
+## Sort and Pagination
 
 ```javascript
 // Sort by due date ascending, then by name
@@ -26,7 +24,7 @@ rows), and `metadata.truncated: true` appears whenever `offset + returned_count 
 whether to raise `limit` or page with `offset`; a separate `countOnly` query is no longer needed just to detect
 truncation.
 
-### Logical Operators
+## Logical Operators
 
 Combine filters with `AND`, `OR`, `NOT` — one level only (no nesting operators inside operators):
 
@@ -55,7 +53,7 @@ Combine filters with `AND`, `OR`, `NOT` — one level only (no nesting operators
 exclusion, use `tags: { none: [...] }` directly. Items inside AND/OR/NOT cannot contain nested logical operators. OR/NOT
 are **tasks-only** — projects queries reject them with a steering error (use one query per alternative).
 
-### Planned Date
+## Planned Date
 
 Planned dates are distinct from due/defer — they represent when you **intend** to work on something:
 
@@ -64,7 +62,7 @@ Planned dates are distinct from due/defer — they represent when you **intend**
 { query: { type: "tasks", filters: { plannedDate: { between: ["{today}", "{today}"] } } } }
 ```
 
-### Search Mode
+## Search Mode
 
 ```javascript
 // Full search (names + notes)
@@ -74,7 +72,7 @@ Planned dates are distinct from due/defer — they represent when you **intend**
 { query: { type: "tasks", mode: "search", filters: { text: { contains: "budget" } }, fastSearch: true } }
 ```
 
-### Exports
+## Exports
 
 There is **no export tool** — exporting/backing up the database is a job for the OmniFocus app, not the MCP server.
 Direct the user there:
@@ -88,7 +86,7 @@ Why no server-side export: a full export either dumps the whole database into th
 a large library) or just repeats a query you can already run. If a user genuinely needs an ad-hoc file, run a _targeted_
 query for exactly the rows they want and write that small result to a file — don't reach for a bulk dump.
 
-### Project Queries
+## Project Queries
 
 Project queries support their own `fields` parameter for field projection:
 
@@ -101,7 +99,7 @@ Project queries support their own `fields` parameter for field projection:
 **Project fields:** `id`, `name`, `status`, `flagged`, `note`, `dueDate`, `deferDate`, `completedDate`, `folder`,
 `folderPath`, `folderId`, `sequential`, `lastReviewDate`, `nextReviewDate`, `defaultSingletonActionHolder`
 
-### Perspectives and Folders
+## Perspectives and Folders
 
 ```javascript
 // List all perspectives
@@ -111,7 +109,7 @@ omnifocus_read({ query: { type: 'perspectives' } });
 omnifocus_read({ query: { type: 'folders' } });
 ```
 
-### Filter Reference
+## Filter Reference
 
 | Filter    | Type       | Purpose                                                                      |
 | --------- | ---------- | ---------------------------------------------------------------------------- |

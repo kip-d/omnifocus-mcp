@@ -30,6 +30,14 @@ On an ambiguous or compound request, read `references/intent-to-tool-calls.md` f
 usually disambiguates — then the closest-matching row above. Reading one file too many costs a few hundred tokens;
 reading one too few silently changes the answer.
 
+**What belongs in a `references/` file** (the extraction rule, adopted from `wrap-up` PR #7): content whose trigger
+fires **no later than the earliest moment that needs it**. The test is direction, not how many places use the content —
+a file may serve several triggers, so long as every one of them precedes a use. What a reference file may **never**
+carry is anything needed _before_ it would be opened: a reader who loads it on the "creating a task" trigger never sees
+it while deciding whether to create one at all. That content stays resident here — which is why Date Conversion and the
+three result-reading hazards below are in this file rather than in the topic files they belong to. Group by _when it's
+needed_, not by which topic it concerns.
+
 | Trigger                                                                                                                                                                                                                                                                                                                                       | Read                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | Turning any request into a tool call — the natural-language to `omnifocus_read` / `_write` / `_analyze` mapping                                                                                                                                                                                                                               | `references/intent-to-tool-calls.md`    |

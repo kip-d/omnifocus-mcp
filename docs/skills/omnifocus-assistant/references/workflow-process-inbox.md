@@ -3,8 +3,6 @@
 > Reference for the `omnifocus-assistant` skill. Loaded on demand — see the reference map in `SKILL.md`. This file is
 > canonical for its topic; edit it directly.
 
-## Workflow: Process Inbox
-
 When user says "process my inbox" or "help me with inbox":
 
 ```
