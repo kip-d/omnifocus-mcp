@@ -11,7 +11,10 @@
  * (`changes.status || 'active'`) with a LIVE status read-back inside the
  * mutation script, and that response-side contract is itself under test —
  * proven by an update that does NOT touch status still reporting the
- * persisted 'on_hold', which the legacy echo could never do.
+ * persisted on-hold state, which the legacy echo could never do. Since
+ * OMN-278 that read-back speaks the CANONICAL vocabulary ('onHold'), while
+ * write INPUT still takes the transport enum ('on_hold') — asymmetric by
+ * design; PROJECT_STATUS_READBACK is the authority.
  *
  * Coverage matrix (plan Task 10):
  *   1. rename + flag             → read shows new name + flagged true
@@ -20,18 +23,22 @@
  *   4. addTags then removeTags   → read shows union, then difference
  *   5. move to project / inbox   → read shows projectId == fixture project's
  *                                  ID (not name), then inInbox true
- *   6. not-found target (guarded)→ TEST GUARD refusal — see below
- *   7. project rename + on_hold  → read shows status persisted; §2.4 envelope
+ *   6. not-found target (guarded)→ script-level not-found — see below
+ *   7. project rename + on_hold  → read shows status persisted as canonical
+ *                                  'onHold'; §2.4 envelope
  *   8. project folder move       → read shows persisted parent folder (tied
  *                                  to the destination folder's ID)
  *
- * GUARD INTERACTION on row 6 (OMN-46): the sandbox guard's update pre-flight
- * is ID-only (`Task.byIdentifier`) and runs BEFORE the mutation script — an
- * unknown id resolves to nothing, is therefore "outside sandbox", and the
- * guard REFUSES it. The script-level loud `Task not found:` guard is
- * unreachable on a guarded server; this suite asserts the refusal. The
- * unguarded not-found probes (script-level `Task not found:` /
- * `Project not found:`) belong to Task 11's live /verify matrix.
+ * GUARD INTERACTION on row 6 (OMN-46, revised by OMN-286): the update
+ * pre-flight is ID-only (`Task.byIdentifier`) and runs BEFORE the mutation
+ * script. OMN-286 made the check a tri-state
+ * ('in_sandbox' | 'outside_sandbox' | 'not_found') rather than a boolean, so an
+ * unknown id is 'not_found' and is deliberately PASSED THROUGH — it resolves
+ * strictly and therefore writes nothing, making the script-level loud
+ * `Task not found:` envelope the correct live result on a guarded server. This
+ * row asserted a TEST GUARD refusal until OMN-300, back when the boolean
+ * collapsed 'not_found' into 'outside_sandbox'. An id that genuinely resolves
+ * outside the sandbox is still refused.
  *
  * SKIPPED matrix row (carried from the Task-7 review): "composed failure —
  * status apply fails while other changes succeed". Not reproducible against
@@ -315,47 +322,57 @@ describe('OMN-138: live update paths (task + project, persisted read-backs)', ()
     expect(back.projectId).toBeNull();
   }, 120000);
 
-  // ── 6. not-found target on the guarded server: TEST GUARD refusal ────────
+  // ── 6. not-found target on the guarded server: guard PASSES THROUGH ──────
   //
-  // The guard's ID-only pre-flight (Task.byIdentifier) refuses unknown ids
-  // BEFORE the mutation script runs — the script-level 'Task not found:'
-  // envelope is unreachable here (it belongs to Task 11's unguarded /verify
-  // matrix). The refusal IS the guarded server's contract for this input.
-  it('update of an unknown task id is refused by the sandbox guard (not a script-level not-found)', async () => {
+  // Pre-OMN-286 this row asserted a TEST GUARD refusal, because the guard's
+  // boolean check collapsed "not found" into "outside sandbox". OMN-286 made
+  // it a tri-state: update is ID-ADDRESSED and resolves strictly via
+  // Task.byIdentifier, so a miss writes nothing and is safe to pass through —
+  // the script-level 'Task not found:' envelope is now the correct live
+  // behavior on the guarded server, not an escape. Fail-closed is retained
+  // only where a NAME fallback could reach outside the sandbox.
+  it('update of an unknown task id passes the guard and surfaces a script-level not-found (OMN-286)', async () => {
     const res = await client.callTool('omnifocus_write', {
       mutation: { operation: 'update', target: 'task', id: BOGUS_TASK_ID, changes: { flagged: true } },
     });
 
-    expect(res.success, `expected guard refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.success, `expected failure, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
     const errText = JSON.stringify(res.error);
-    expect(errText).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    // And NOT the script-level envelope — the guard fired pre-script.
-    expect(errText).not.toContain('Task not found');
+    expect(errText).toContain('Task not found');
+    // Pass-through, NOT a refusal — the discriminating half of the tri-state.
+    expect(errText).not.toContain('TEST GUARD');
   }, 120000);
 
   // ── 7. update-project rename + status on_hold (incl. the §2.4 envelope) ──
   it('project rename + status on_hold persists; the response carries the LIVE status read-back, not an echo', async () => {
     const projId = await createProject(UPD_PROJECT_NAME);
 
+    // Input stays the TRANSPORT enum ('on_hold'); the echo comes back CANONICAL.
     const res = await updateProject(projId, { name: UPD_PROJECT_NEW_NAME, status: 'on_hold' });
-    // §2.4 deliberate response check: the envelope status is read back from
-    // the live object post-apply (transport vocab 'on_hold').
-    expect(res.data.status).toBe('on_hold');
+    // §2.4 deliberate response check: the envelope status is read back from the
+    // live object post-apply. Since OMN-278 that read-back speaks the canonical
+    // read/analytics vocabulary ('active'|'onHold'|'done'|'dropped'), matching
+    // what a subsequent read of the same project returns. Input and echo are
+    // asymmetric BY DESIGN — see the adjudication comment at
+    // PROJECT_STATUS_READBACK in src/contracts/ast/mutation/defs.ts, which is
+    // the authority here. Do not "restore" this to 'on_hold': that reintroduces
+    // the mixed-vocabulary hazard the OMN-274 spec's POST-BUILD REVERSAL warns of.
+    expect(res.data.status).toBe('onHold');
 
-    // Independent read-back — the persisted truth. Read projection vocab is
-    // canonical 'onHold' (OMN-274), distinct from the transport enum the
-    // write envelope echoes ('on_hold' — see PROJECT_STATUS_READBACK).
+    // Independent read-back — the persisted truth. Same canonical vocabulary as
+    // the envelope above; post-OMN-278 the two agree rather than differing.
     const project = await readProjectInFolder(projId, ['name', 'status'], SANDBOX_FOLDER_NAME);
     expect(project, `project ${projId} not found in sandbox on read-back`).toBeTruthy();
     expect(project.name).toBe(UPD_PROJECT_NEW_NAME);
     expect(project.status).toBe('onHold');
 
     // No-stale-echo proof: an update that does NOT touch status must still
-    // report the persisted 'on_hold'. The legacy envelope echoed
-    // `changes.status || 'active'` — it would say 'active' here.
+    // report the persisted on-hold state. The legacy envelope echoed
+    // `changes.status || 'active'` — it would say 'active' here. This assertion
+    // discriminates live-read-back from echo regardless of vocabulary; only the
+    // expected spelling moved with OMN-278.
     const res2 = await updateProject(projId, { note: `omn138u-note-${TS}` });
-    expect(res2.data.status, 'envelope status is a stale echo, not a live read-back').toBe('on_hold');
+    expect(res2.data.status, 'envelope status is a stale echo, not a live read-back').toBe('onHold');
   }, 120000);
 
   // ── 8. update-project folder move into a sandbox subfolder ───────────────

@@ -80,10 +80,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary
   (`active`/`onHold`/`done`/`dropped`) used by every analytics endpoint. Unknown future statuses now fail OPEN
   (`String(s)`) instead of silently misreporting as `active`/`dropped`, and folder status gains the same treatment via
-  the new `FOLDER_STATUS_STRING_SNIPPET`. Filter INPUTS are unchanged (`status: "on_hold"` transport form), and the
-  write envelope's status read-back deliberately keeps the transport vocabulary (`on_hold`/`completed`) — adjudication
-  comment at `PROJECT_STATUS_READBACK`. The `generateProjectSummary` dual-key tolerance for the old hyphen form is
-  removed.
+  the new `FOLDER_STATUS_STRING_SNIPPET`. Filter INPUTS are unchanged (`status: "on_hold"` transport form). The write
+  envelope's status read-back **also speaks this canonical vocabulary** as of OMN-278 — write INPUTS still take the
+  transport enum (`on_hold`/`completed`), so input and echo are asymmetric by design; adjudication comment at
+  `PROJECT_STATUS_READBACK`. (This sentence previously said the write echo kept the transport vocabulary. That was true
+  when written and falsified by OMN-278 four days later; corrected under OMN-301.) The `generateProjectSummary` dual-key
+  tolerance for the old hyphen form is removed.
 
 ### Added
 
