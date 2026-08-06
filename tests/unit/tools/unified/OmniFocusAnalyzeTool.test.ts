@@ -54,7 +54,7 @@ describe('OmniFocusAnalyzeTool', () => {
       const cached = {
         period: 'week',
         stats: { overview: { totalTasks: 100, completedTasks: 75, completionRate: 0.75 } },
-        healthScore: 85,
+        completionPercent: 85,
       };
       mockCache.get.mockReturnValue(cached);
 
@@ -105,9 +105,40 @@ describe('OmniFocusAnalyzeTool', () => {
 
       expect(res.success).toBe(true);
       expect(res.data.period).toBe('week');
-      expect(res.data.healthScore).toBe(75);
+      // OMN-292: healthScore renamed to completionPercent — the field is literally
+      // round(completionRate * 100), so the name now says what the formula computes.
+      expect(res.data.completionPercent).toBe(75);
+      expect(res.data).not.toHaveProperty('healthScore');
       expect(res.data.stats.overview.totalTasks).toBe(200);
       expect(Array.isArray(res.summary.key_findings)).toBe(true);
+    });
+
+    // OMN-292: the graded "GTD Health Score: N/100 (Excellent…)" finding is replaced
+    // by a plain fact. No grade bands, no "GTD Health" framing anywhere in findings.
+    it('reports completion rate as a plain fact, with no grade language', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 200,
+          completedTasks: 150,
+          completionRate: 0.75,
+          activeProjects: 12,
+          overdueCount: 5,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({ analysis: { type: 'productivity_stats' } });
+
+      expect(res.success).toBe(true);
+      const keyFindings: string[] = res.summary.key_findings;
+      expect(keyFindings).toEqual(expect.arrayContaining(['All-time completion rate: 75%']));
+
+      const graded = keyFindings.filter((f) =>
+        /GTD Health|Health Score|Excellent|Needs attention|\bFair\b|\/100/i.test(f),
+      );
+      expect(graded).toEqual([]);
     });
 
     it('surfaces the most productive project from the script map (OMN-252)', async () => {
@@ -156,7 +187,7 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(mockCache.set.mock.calls[0][0]).toBe('analytics');
     });
 
-    it('calculates healthScore correctly from decimal completionRate', async () => {
+    it('calculates completionPercent correctly from decimal completionRate', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({
@@ -176,9 +207,9 @@ describe('OmniFocusAnalyzeTool', () => {
 
       expect(res.success).toBe(true);
       // completionRate 0.151 * 100 = 15.1, rounded = 15
-      expect(res.data.healthScore).toBe(15);
+      expect(res.data.completionPercent).toBe(15);
       // Should NOT be 100 (the old bug where 15.1 * 100 = 1510 clamped to 100)
-      expect(res.data.healthScore).not.toBe(100);
+      expect(res.data.completionPercent).not.toBe(100);
     });
 
     it('includes overdueCount in response when script returns it', async () => {
@@ -251,7 +282,20 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.stats.overview.availableTasks).toBe(15);
     });
 
-    it('does not produce contradictory recommendations', async () => {
+    // OMN-292: replaces 'does not produce contradictory recommendations'.
+    //
+    // That test fed the reshape a combination the script CANNOT emit — completionRate
+    // 0.15 alongside an "Excellent completion rate" insight — to prove the contradiction
+    // filter fired. Against real script output the filter was unreachable: the script
+    // emits "Excellent completion rate" only above 0.80 (score >= 81, never < 60) and
+    // "Low completion rate" only below 0.30 (score <= 29, never >= 60), and emits no
+    // string containing "needs attention" at all. The filter also keyed off a THIRD
+    // threshold (60) belonging to neither scale — an invented grade band, which is the
+    // dishonesty this ticket exists to remove.
+    //
+    // The filter is deleted. This test pins what replaces it: the script's first insight
+    // reaches key findings unchanged, with no arbitration applied.
+    it("passes the script's first insight through to key findings unchanged", async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({
@@ -262,8 +306,7 @@ describe('OmniFocusAnalyzeTool', () => {
           activeProjects: 3,
           overdueCount: 10,
         },
-        // Script says "Excellent" but completionRate is only 15% — contradictory
-        insights: ['Excellent completion rate: 85.0%'],
+        insights: ['Low completion rate - many tasks remain incomplete'],
       });
 
       const res: any = await tool.execute({
@@ -271,17 +314,14 @@ describe('OmniFocusAnalyzeTool', () => {
       });
 
       expect(res.success).toBe(true);
-      // healthScore = 0.15 * 100 = 15
-      expect(res.data.healthScore).toBe(15);
-      // The "Excellent" recommendation should be filtered out since healthScore < 60
+      expect(res.data.completionPercent).toBe(15);
+
       const keyFindings: string[] = res.summary.key_findings;
-      const hasExcellentWithLowScore = keyFindings.some(
-        (f: string) => f.toLowerCase().includes('excellent') && !f.includes('Health Score'),
-      );
-      expect(hasExcellentWithLowScore).toBe(false);
+      expect(keyFindings).toEqual(expect.arrayContaining(['Low completion rate - many tasks remain incomplete']));
+      expect(keyFindings).toEqual(expect.arrayContaining(['All-time completion rate: 15%']));
     });
 
-    it('healthScore is 0 when no tasks exist', async () => {
+    it('completionPercent is 0 when no tasks exist', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({
@@ -300,10 +340,10 @@ describe('OmniFocusAnalyzeTool', () => {
       });
 
       expect(res.success).toBe(true);
-      expect(res.data.healthScore).toBe(0);
-      // Verify the health score finding is included even when score is 0
+      expect(res.data.completionPercent).toBe(0);
+      // The completion-rate fact is still reported at 0 (it is a fact, not a grade).
       const keyFindings: string[] = res.summary.key_findings;
-      expect(keyFindings).toEqual(expect.arrayContaining([expect.stringContaining('GTD Health Score: 0/100')]));
+      expect(keyFindings).toEqual(expect.arrayContaining(['All-time completion rate: 0%']));
     });
   });
 
@@ -2123,10 +2163,16 @@ describe('OmniFocusAnalyzeTool', () => {
       const analysis = (schema as any).properties?.analysis;
       expect(analysis).toBeDefined();
 
-      // Should have type enum and loose scope/params objects
+      // Should have type enum and a loose params object
       expect(analysis.properties.type).toBeDefined();
-      expect(analysis.properties.scope).toEqual({ type: 'object' });
       expect(analysis.properties.params).toEqual({ type: 'object' });
+
+      // OMN-288: scope is no longer advertised as a generic `{ type: 'object' }`.
+      // It is task_velocity-only and dateRange-only, and says so — the old generic
+      // form implied a tags/projects filter that was never honored anywhere.
+      expect(analysis.properties.scope.type).toBe('object');
+      expect(analysis.properties.scope.description).toMatch(/task_velocity ONLY/);
+      expect(Object.keys(analysis.properties.scope.properties)).toEqual(['dateRange']);
 
       // Should NOT have oneOf (which duplicates scope across 8 branches)
       expect(analysis.oneOf).toBeUndefined();
