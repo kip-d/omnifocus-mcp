@@ -316,14 +316,16 @@ export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, unknown
   description = `Analyze OmniFocus data for insights, patterns, and specialized operations.
 
 ANALYSIS TYPES:
-- productivity_stats: GTD health metrics (completion rates, velocity)
+- productivity_stats: completion counts and rates (incl. completionPercent, the all-time completion rate)
 - task_velocity: Completion trends over time
 - overdue_analysis: Bottleneck identification
 - pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions).
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
   the screen does not judge; YOU judge each candidate from its evidence and act by id.
-- workflow_analysis: Deep workflow analysis
+- workflow_analysis: Workflow EVIDENCE — whole-DB counters, per-project counts/rates/avgAge, and
+  deferral facts (incl. two independent screen counts: over90Days, keywordMatched). It reports
+  measurements only; it does not score, rank, or recommend. YOU draw the conclusions.
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Structure meeting action items into OmniFocus.
   PREFERRED: extract the action items YOURSELF, then pass params.items[] —
@@ -353,9 +355,10 @@ PERFORMANCE WARNINGS:
 - workflow_analysis: ~20-45s — scans the ENTIRE task database (no cap); scales with DB size
 - Most others: <1 second with caching
 
-SCOPE FILTERING:
-- Use dateRange for time-based analysis
-- Use tags/projects to focus analysis`;
+TIME-WINDOW SCOPING:
+- task_velocity accepts scope.dateRange ({ start, end }) — the only honored scope input.
+- All other analysis types take no scope and run against the whole database.
+- Passing scope elsewhere (or scope.tags/projects anywhere) is rejected, not ignored.`;
 
   schema = AnalyzeSchema;
 
@@ -387,7 +390,21 @@ SCOPE FILTERING:
                 'manage_reviews',
               ],
             },
-            scope: { type: 'object' },
+            // OMN-288: `scope` is task_velocity-only and dateRange-only. Every
+            // other op rejects it (it was accepted-and-ignored before). Advertised
+            // with its real shape rather than the old generic `{ type: 'object' }`,
+            // which implied a tags/projects filter that never existed.
+            scope: {
+              type: 'object',
+              description:
+                'task_velocity ONLY. Time window: { dateRange: { start, end } }. Other analysis types accept no scope.',
+              properties: {
+                dateRange: {
+                  type: 'object',
+                  properties: { start: { type: 'string' }, end: { type: 'string' } },
+                },
+              },
+            },
             params: { type: 'object' },
           },
           required: ['type'],
@@ -479,9 +496,12 @@ SCOPE FILTERING:
       const includeTagStats = true;
 
       // Cache key
-      const cacheKey = `productivity_v2_${period}_${includeProjectStats}_${includeTagStats}`;
+      // OMN-292: version-bumped v2 -> v3. This cache stores the RESHAPED response
+      // object, so entries written before the healthScore -> completionPercent rename
+      // would keep serving the old field name until TTL expiry after deploy.
+      const cacheKey = `productivity_v3_${period}_${includeProjectStats}_${includeTagStats}`;
 
-      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; healthScore?: number }>(
+      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; completionPercent?: number }>(
         'analytics',
         cacheKey,
       );
@@ -492,7 +512,7 @@ SCOPE FILTERING:
           cached,
           'Productivity Analysis',
           this.extractProductivityKeyFindings(
-            cached as { period?: string; stats?: Record<string, unknown>; healthScore?: number },
+            cached as { period?: string; stats?: Record<string, unknown>; completionPercent?: number },
           ),
           { from_cache: true, period, ...timer.toMetadata() },
         );
@@ -540,7 +560,11 @@ SCOPE FILTERING:
           tagStats: tagStatsArray,
         },
         insights: { recommendations: insights },
-        healthScore: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
+        // OMN-292: named `healthScore` until this rename, but the formula is literally
+        // the all-time completion rate as a percentage — no health composite involved.
+        // The name now states what is computed. (pattern_analysis.health_score is a
+        // real multi-factor composite and is deliberately untouched.)
+        completionPercent: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
       };
 
       this.cache.set('analytics', cacheKey, responseData);
@@ -671,7 +695,7 @@ SCOPE FILTERING:
       };
       projectStats?: Array<{ name: string; completedCount: number }>;
     };
-    healthScore?: number;
+    completionPercent?: number;
     insights?: { recommendations?: string[] };
   }): string[] {
     const findings: string[] = [];
@@ -684,13 +708,11 @@ SCOPE FILTERING:
       }
     }
 
-    if (typeof data.healthScore === 'number') {
-      const score = Math.round(data.healthScore);
-      let assessment = 'Needs attention';
-      if (score >= 80) assessment = 'Excellent';
-      else if (score >= 60) assessment = 'Good';
-      else if (score >= 40) assessment = 'Fair';
-      findings.push(`GTD Health Score: ${score}/100 (${assessment})`);
+    // OMN-292: was `GTD Health Score: N/100 (Excellent/Good/Fair/Needs attention)`.
+    // The number is the all-time completion rate, and the four grade bands were
+    // invented here — the script grades nothing. Report the fact; let the caller judge.
+    if (typeof data.completionPercent === 'number') {
+      findings.push(`All-time completion rate: ${Math.round(data.completionPercent)}%`);
     }
 
     if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
@@ -703,20 +725,15 @@ SCOPE FILTERING:
       }
     }
 
+    // OMN-292: a "contradiction filter" used to arbitrate here, dropping script insights
+    // containing "excellent" when the score was < 60 and "low completion"/"needs attention"
+    // when it was >= 60. It was unreachable against real script output: the script emits
+    // "Excellent completion rate" only above 0.80 (score >= 81, never < 60) and "Low
+    // completion rate" only below 0.30 (score <= 29, never >= 60), and never emits any
+    // string containing "needs attention". Its 60 threshold belonged to neither scale —
+    // a third, invented grade band. Deleted; the script's own insight passes through.
     if (data.insights && Array.isArray(data.insights.recommendations) && data.insights.recommendations.length > 0) {
-      // Cross-check: filter out recommendations that contradict the data
-      const score = data.healthScore ?? 0;
-      const filteredRecs = data.insights.recommendations.filter((rec) => {
-        const recLower = rec.toLowerCase();
-        // Don't say "excellent" if health score is low
-        if (recLower.includes('excellent') && score < 60) return false;
-        // Don't say "low" or "needs attention" if health score is high
-        if ((recLower.includes('low completion') || recLower.includes('needs attention')) && score >= 60) return false;
-        return true;
-      });
-      if (filteredRecs.length > 0) {
-        findings.push(filteredRecs[0]);
-      }
+      findings.push(data.insights.recommendations[0]);
     }
 
     return findings.length > 0 ? findings : ['No productivity data available for this period'];
@@ -918,6 +935,10 @@ SCOPE FILTERING:
     const timer = new OperationTimerV2();
 
     try {
+      // OMN-288 (D3): these two are no longer passed to the script — it bound them
+      // into consts it never read. They remain here only as the cache-key and
+      // response-metadata values they have always reported, so neither the cache
+      // key nor the response shape changes. `limit` IS read by the script.
       const includeRecentlyCompleted = true;
       const groupBy = 'project';
       const limit = 100;
@@ -937,7 +958,7 @@ SCOPE FILTERING:
       }
 
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_SCRIPT, {
-        options: { includeRecentlyCompleted, groupBy, limit },
+        options: { limit },
       });
       const result = await this.execJson(script, OVERDUE_ANALYSIS_V3_SCHEMA);
 
@@ -2165,22 +2186,19 @@ SCOPE FILTERING:
     const wfLogger = createLogger('workflow_analysis');
 
     try {
-      // OMN-200: 'full' — workflow_analysis always scans the entire task DB (the
-      // 1000-task cap and its unreachable 'deep' branch were removed). The label is
-      // informational only; it no longer gates any behavior.
-      const analysisDepth = 'full';
-      const focusAreas = ['productivity', 'workload', 'bottlenecks'];
-      const maxInsights = 15;
       const includeRawData = false;
 
-      wfLogger.info(`Starting workflow analysis with depth: ${analysisDepth}, focus: ${focusAreas.join(', ')}`);
+      wfLogger.info('Starting workflow analysis (whole-database evidence bundle)');
 
-      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort((a, b) => a.localeCompare(b)).join('_')}_${maxInsights}`;
+      // OMN-291: the old key was
+      // `workflow_analysis_full_bottlenecks_productivity_workload_15` — every
+      // component named machinery this ticket deletes. Version-bumped to v4 so
+      // entries written before the demote can never serve the old shape after
+      // deploy; the stale v3 entries simply age out by TTL.
+      const cacheKey = 'workflow_analysis_v4';
 
       const cached = this.cache.get<{
-        insights?: Array<string | { insight?: string; message?: string }>;
-        recommendations?: Array<string | { recommendation?: string; message?: string }>;
-        patterns?: unknown[];
+        patterns?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
       }>('analytics', cacheKey);
       if (cached) {
@@ -2192,15 +2210,13 @@ SCOPE FILTERING:
           this.extractWorkflowKeyFindings(cached),
           {
             from_cache: true,
-            analysis_depth: analysisDepth,
-            focus_areas: focusAreas,
             ...timer.toMetadata(),
           },
         );
       }
 
       const script = this.omniAutomation.buildScript(WORKFLOW_ANALYSIS_V3, {
-        options: { analysisDepth, focusAreas, maxInsights, includeRawData },
+        options: { includeRawData },
       });
 
       const result = await this.execJson(script, WORKFLOW_ANALYSIS_V3_SCHEMA);
@@ -2230,15 +2246,14 @@ SCOPE FILTERING:
         );
       }
 
+      // OMN-291: `insights`, `recommendations`, and the analysis.depth/focusAreas
+      // echo are DELETED from the response — not emptied, absent. Tests assert
+      // absence, and the strict response schema rejects their reappearance.
       const responseData = {
         analysis: {
-          depth: analysisDepth,
-          focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: v3Data.insights || [],
         patterns: v3Data.patterns || {},
-        recommendations: v3Data.recommendations || [],
         data: includeRawData ? v3Data.data : undefined,
         metadata: {
           totalTasks: v3Data.totalTasks || 0,
@@ -2255,8 +2270,6 @@ SCOPE FILTERING:
       const keyFindings = this.extractWorkflowKeyFindings(responseData);
 
       return createAnalyticsResponseV2('workflow_analysis', responseData, 'Workflow Analysis Results', keyFindings, {
-        analysis_depth: analysisDepth,
-        focus_areas: focusAreas,
         include_raw_data: includeRawData,
         ...timer.toMetadata(),
       });
@@ -2296,55 +2309,46 @@ SCOPE FILTERING:
     }
   }
 
+  /**
+   * OMN-291: mechanical restatements only.
+   *
+   * Was: the first 3 insights + first 2 recommendations (verdict prose the
+   * generators produced) + "Found N pattern categories in your workflow".
+   * Those generators are deleted, so key findings become at most three plain
+   * restatements of numbers the response already carries. No advice verbs, no
+   * grades, no priorities — the caller reads the evidence and judges.
+   */
   private extractWorkflowKeyFindings(data: {
-    insights?: Array<string | { category?: string; insight?: string; message?: string; priority?: string }>;
-    recommendations?: Array<
-      string | { category?: string; recommendation?: string; message?: string; priority?: string }
-    >;
     patterns?: unknown;
-    metadata?: { score?: number; totalTasks?: number; totalProjects?: number };
+    metadata?: { totalTasks?: number; totalProjects?: number };
   }): string[] {
     const findings: string[] = [];
 
-    if (data.insights && Array.isArray(data.insights)) {
+    const metrics = (data.patterns as { workflowMetrics?: Record<string, unknown> } | undefined)?.workflowMetrics;
+    const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+
+    const total = data.metadata?.totalTasks ?? 0;
+    const availablePct = num(metrics?.availablePercentage);
+    const overduePct = num(metrics?.overduePercentage);
+    const blockedPct = num(metrics?.blockedPercentage);
+
+    if (total > 0 && availablePct !== undefined) {
+      findings.push(`${Math.round((availablePct / 100) * total)} of ${total} tasks available (${availablePct}%)`);
+    }
+
+    if (total > 0 && overduePct !== undefined) {
+      const overdueCount = Math.round((overduePct / 100) * total);
+      const deferral = (data.patterns as { deferralAnalysis?: { totalDeferred?: number } } | undefined)
+        ?.deferralAnalysis;
       findings.push(
-        ...(data.insights as unknown[]).slice(0, 3).map((i) => {
-          if (typeof i === 'string') return i;
-          if (typeof i === 'object' && i !== null) {
-            const insight =
-              (i as { insight?: string; message?: string }).insight ||
-              (i as { insight?: string; message?: string }).message;
-            return insight || JSON.stringify(i);
-          }
-          return JSON.stringify(i);
-        }),
+        deferral?.totalDeferred !== undefined
+          ? `${overdueCount} overdue (${overduePct}%), ${deferral.totalDeferred} deferred`
+          : `${overdueCount} overdue (${overduePct}%)`,
       );
     }
 
-    if (data.recommendations && Array.isArray(data.recommendations)) {
-      findings.push(
-        ...(data.recommendations as unknown[]).slice(0, 2).map((r) => {
-          if (typeof r === 'string') return r;
-          if (typeof r === 'object' && r !== null) {
-            const rec =
-              (r as { recommendation?: string; message?: string }).recommendation ||
-              (r as { recommendation?: string; message?: string }).message;
-            return rec || JSON.stringify(r);
-          }
-          return JSON.stringify(r);
-        }),
-      );
-    }
-
-    if (data.patterns && typeof data.patterns === 'object') {
-      const patternCount = Object.keys(data.patterns).length;
-      if (patternCount > 0) {
-        findings.push(`Found ${patternCount} pattern categories in your workflow`);
-      }
-    }
-
-    if (data.metadata?.totalTasks && data.metadata.totalTasks > 0) {
-      findings.push(`Analyzed ${data.metadata.totalTasks} tasks across ${data.metadata.totalProjects || 0} projects`);
+    if (total > 0 && blockedPct !== undefined) {
+      findings.push(`${Math.round((blockedPct / 100) * total)} blocked (${blockedPct}%)`);
     }
 
     return findings.length > 0 ? findings : ['Analysis completed successfully'];

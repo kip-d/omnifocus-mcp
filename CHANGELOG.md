@@ -25,6 +25,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   version-bumped (`velocity_v2_*` → `velocity_v3_*`) because that cache stores the reshaped response object, so stale
   entries would otherwise serve the old shape until TTL expiry after deploy.
 
+- **BREAKING (analyze response): `workflow_analysis` is demoted to an evidence bundle** (OMN-291) — it screens and
+  counts; it no longer scores, ranks, or recommends. Per OMN-258's contract the server produces evidence and the caller
+  judges, and that now explicitly includes numeric weight-composites, not just prose. **Removed:** `insights[]` and
+  `recommendations[]` (with all their priority labels and the invented "N × 1.5 dependent tasks" multiplier), the
+  per-project `healthScore` (100 minus a hand-tuned 25/20/15/15/−10/+5 weight stack — the weights encode what matters
+  and by how much, which is the caller's call) and `momentumScore` (which additionally _subtracted_ availableRate, so
+  more available work scored _lower_ momentum, contradicting its own prose), the healthy/unhealthy project rollups, and
+  the `analysisDepth`/`focusAreas`/`maxInsights` machinery including three focus-area branches that could never fire.
+  **Kept/added:** whole-DB counters, `workflowMetrics` percentages, `timeBuckets`, per-tag stats, and per-project rows
+  that are purely mechanical — `total`, `completed`, `available`, `overdue`, `blocked`, `estimatedHours`, `overdueRate`,
+  `availableRate`, `avgAge`, and `deferrals { total, over90Days, keywordMatched }`. **Deferral honesty:** the
+  strategic/problematic _verdict_ split (`deferDays <= 90 || nameMatchesKeyword` → good/bad) becomes two **independent**
+  screen counts, `over90Days` and `keywordMatched`. A deferral can be in both, one, or neither — they do not sum to
+  `totalDeferred`, unlike the labels they replace. The keyword list survives only as an explicitly-labelled recall
+  screen (one personal database, English-only), and per-task rows carry `keywordMatched` as a candidate marker rather
+  than a conclusion. Key findings become at most three mechanical restatements of numbers already in the response. The
+  response schema is strict, so a re-introduced `insights`/`recommendations` key is a validation failure — the removal
+  is pinned, not just performed. The cache key is version-bumped to `workflow_analysis_v4` (the old key literally named
+  the deleted machinery), so stale pre-demote entries cannot serve the old shape after deploy.
+
+- **BREAKING (analyze input surface): `omnifocus_analyze` no longer accepts `scope` except on `task_velocity`, and no
+  longer accepts `params.metrics` at all** (OMN-288) — six analysis types advertised a full `scope` object
+  (`dateRange`/`tags`/`projects`/`includeCompleted`/`includeDropped`), but exactly one field on one op was ever read:
+  `task_velocity`'s `scope.dateRange`. Every other combination was accepted and silently ignored, so a caller scoping by
+  tag received a whole-database answer that reported success. Per OMN-273, inputs the platform does not honor are
+  deleted from the schema so they reject loudly (`VALIDATION_ERROR` naming the key) and the diagnose-failures pipeline
+  records the mismatch, rather than returning a confidently wrong answer. `productivity_stats`, `overdue_analysis`,
+  `workflow_analysis`, `pattern_analysis`, and `recurring_tasks` now take no `scope`; `task_velocity` accepts
+  `scope.dateRange` only. The shared `AnalysisScopeSchema` is renamed `VelocityScopeSchema` to say where it applies. The
+  `inputSchema` advertisement and the tool description move with it (the old "SCOPE FILTERING — use tags/projects to
+  focus analysis" paragraph described behavior that never existed). Actual scope _filtering_ remains future work
+  (OMN-293). Also removes dead plumbing (D3): the overdue handler passed `includeRecentlyCompleted`/`groupBy` into the
+  script, which bound them into OmniJS consts nothing ever read. Response shape, response metadata, and the overdue
+  cache key are unchanged.
+
+- **BREAKING (analyze-response field): `productivity_stats.healthScore` is renamed to `completionPercent`** (OMN-292) —
+  the field was never a health composite: it is `round(completionRate * 100)`, the all-time completion rate, and the
+  name now says so. The graded key finding `GTD Health Score: N/100 (Excellent/Good/Fair/Needs attention)` becomes the
+  plain fact `All-time completion rate: N%`; the four grade bands were invented at the tool layer (the script grades
+  nothing) and are deleted. **No alias period** — carrying both names would advertise two names for one number and
+  re-create the collision this change exists to end. `pattern_analysis.health_score`/`health_rating` is a genuine
+  multi-factor composite and is untouched; after this change it is the only "health" surface in the analyze tool. The
+  productivity cache key is version-bumped (`productivity_v2_*` → `productivity_v3_*`) because that cache stores the
+  reshaped response, so stale entries would otherwise keep serving `healthScore` until TTL expiry after deploy. Also
+  removed: an unreachable "contradiction filter" that dropped script insights containing `excellent` below a score of 60
+  and `low completion`/`needs attention` at or above it. Against real script output it could never fire — the script
+  emits `Excellent completion rate` only above 0.80 and `Low completion rate` only below 0.30, and emits no string
+  containing `needs attention` — and its threshold of 60 belonged to neither scale. The script's own first insight now
+  passes through unchanged.
+
 - **BREAKING (read-response value): `omnifocus_read` project status is now `"onHold"`, was `"on-hold"`** (OMN-274) —
   script-builder's three inline Project.Status maps (filtered projects, project-by-id, folder listing's project rows)
   now splice the canonical `PROJECT_STATUS_STRING_SNIPPET`, converging the read path on the OMN-272 wire vocabulary

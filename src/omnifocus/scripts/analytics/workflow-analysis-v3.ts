@@ -11,16 +11,18 @@
  *
  * Converted from helper-based to pure OmniJS following v3 pattern.
  *
- * Original script features (ALL PRESERVED):
- * - Cross-project pattern analysis
- * - Workload distribution analysis
- * - Time pattern discovery
- * - Bottleneck identification
- * - Productivity insights
- * - Project health assessment
- * - Strategic vs problematic deferral analysis
- * - Tag bottleneck tracking
- * - Multiple focus areas (productivity, workload, bottlenecks, project_health, time_patterns, opportunities)
+ * OMN-291: demoted to an EVIDENCE BUNDLE. This script screens and counts; it no
+ * longer judges. The insight/recommendation generators, the per-project
+ * healthScore/momentumScore composites, and the focus-area machinery are deleted
+ * — per OMN-258's contract the server screens and evidences, and the caller
+ * applies judgment. That now includes numeric weight-composites, not just prose.
+ *
+ * What it emits:
+ * - Whole-DB counters (overdue/flagged/blocked/available/inbox/estimated time)
+ * - workflowMetrics percentages, timeBuckets, per-tag stats
+ * - Per-project mechanical rows: counts, rates, avgAge, deferral screen counts
+ * - deferralAnalysis: totals plus two INDEPENDENT screen counts (over90Days,
+ *   keywordMatched) and a top-10 detail list carrying a keywordMatched marker
  */
 
 import { ROUND1_HELPER } from '../shared/helpers.js';
@@ -38,9 +40,9 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const nowTime = now.getTime();
 
       // Extract options in JXA context to pass to OmniJS
-      const analysisDepth = options.analysisDepth || 'full'; // OMN-200: full-DB is the only mode now
-      const focusAreas = options.focusAreas || ['productivity', 'workload', 'bottlenecks'];
-      const maxInsights = options.maxInsights || 15;
+      // OMN-291: analysisDepth / focusAreas / maxInsights are gone. They only ever
+      // gated and capped the insight+recommendation generators, which this ticket
+      // deletes — workflow_analysis is an evidence bundle now, not a verdict source.
       const includeRawData = options.includeRawData || false;
 
       // Build comprehensive OmniJS script for ALL workflow analysis in one bridge call
@@ -48,17 +50,27 @@ export const WORKFLOW_ANALYSIS_V3 = `
         (() => {
           ${ROUND1_HELPER}
           const nowTime = \${nowTime};
-          const analysisDepth = "\${analysisDepth}";
-          const focusAreas = \${JSON.stringify(focusAreas)};
-          const maxInsights = \${maxInsights};
           const includeRawData = \${includeRawData};
+
+          // OMN-291: a RECALL SCREEN, not a classifier. These substrings were derived
+          // from one personal database and are locale-bound (English-only), so a hit
+          // means "worth a look", never "this deferral is strategic". Rows report
+          // keywordMatched as a candidate marker and the caller judges. Kept as one
+          // shared const so the two loops below cannot drift apart.
+          const DEFERRAL_KEYWORD_SCREEN = ['renewal', 'movie', 'annual', 'seasonal', 'quarterly', 'monthly'];
+          const matchesDeferralKeyword = function (lowerName) {
+            for (let k = 0; k < DEFERRAL_KEYWORD_SCREEN.length; k++) {
+              if (lowerName.indexOf(DEFERRAL_KEYWORD_SCREEN[k]) !== -1) return true;
+            }
+            return false;
+          };
 
           const now = new Date(nowTime);
 
           // Initialize analysis structures
-          const insights = [];
+          // OMN-291: the insights[] and recommendations[] accumulators are gone
+          // along with the generators that filled them.
           const patterns = {};
-          const recommendations = [];
           // OMN-208: data.tasks is capped independently of the full-population
           // metrics loop below (maxTasksToProcess stays = totalTasks). This cap
           // only protects the raw-record echo (currently unreachable in prod —
@@ -118,8 +130,11 @@ export const WORKFLOW_ANALYSIS_V3 = `
           let totalInboxTasks = 0;
 
           // Deferral analysis - distinguish good vs. problematic deferrals
-          let strategicDeferrals = 0;
-          let problematicDeferrals = 0;
+          // OMN-291 (D16): the old strategic/problematic VERDICT split becomes two
+          // independent, honestly-named screen counts. A deferral can match both,
+          // or neither — they are not complements, unlike the labels they replace.
+          let deferralsOver90Days = 0;
+          let deferralsKeywordMatched = 0;
           const deferredTaskDetails = [];
 
           // Project analysis - focus on momentum and health
@@ -241,31 +256,22 @@ export const WORKFLOW_ANALYSIS_V3 = `
               if (deferDate && deferDate.getTime() > nowTime) {
                 totalDeferredTasks++;
 
-                // Analyze if this is a strategic deferral or problematic
+                // OMN-291 (D16): measure, do not conclude. Two independent facts —
+                // how far out the deferral reaches, and whether its name hit the
+                // recall screen. The old isStrategic collapsed both into a verdict.
                 const deferDays = Math.floor((deferDate.getTime() - nowTime) / (1000 * 60 * 60 * 24));
                 const taskName = task.name || 'Unnamed Task';
-                const taskNameLower = taskName.toLowerCase();
+                const keywordMatched = matchesDeferralKeyword(taskName.toLowerCase());
+                const over90Days = deferDays > 90;
 
-                // Strategic deferrals: time-based, seasonal, or dependency-based
-                const isStrategic = deferDays <= 90 || // Within 3 months (reasonable planning horizon)
-                                   taskNameLower.includes('renewal') ||
-                                   taskNameLower.includes('movie') ||
-                                   taskNameLower.includes('annual') ||
-                                   taskNameLower.includes('seasonal') ||
-                                   taskNameLower.includes('quarterly') ||
-                                   taskNameLower.includes('monthly');
-
-                if (isStrategic) {
-                  strategicDeferrals++;
-                } else {
-                  problematicDeferrals++;
-                }
+                if (over90Days) deferralsOver90Days++;
+                if (keywordMatched) deferralsKeywordMatched++;
 
                 // Store deferral details for pattern analysis
                 deferredTaskDetails.push({
                   name: taskName,
                   deferDays: deferDays,
-                  isStrategic: isStrategic,
+                  keywordMatched: keywordMatched,
                   project: projectName
                 });
               }
@@ -288,13 +294,16 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 if (!projectStats[projectName]) {
                   projectStats[projectName] = {
                     total: 0,
+                    completed: 0,
                     overdue: 0,
                     flagged: 0,
                     blocked: 0,
                     available: 0,
                     deferred: 0,
-                    strategicDeferred: 0,
-                    problematicDeferred: 0,
+                    // OMN-291 (D16): honest screen counts, replacing the
+                    // strategicDeferred/problematicDeferred verdict split.
+                    deferredOver90Days: 0,
+                    deferredKeywordMatched: 0,
                     estimatedTime: 0,
                     avgAge: 0,
                     totalAge: 0
@@ -302,6 +311,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 }
 
                 projectStats[projectName].total++;
+                if (completed) projectStats[projectName].completed++;
                 if (overdueDays > 0) projectStats[projectName].overdue++;
                 if (flagged) projectStats[projectName].flagged++;
                 if (blocked) projectStats[projectName].blocked++;
@@ -311,21 +321,14 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 if (deferDate && deferDate.getTime() > nowTime) {
                   projectStats[projectName].deferred++;
 
+                  // OMN-291 (D16): same two independent facts as the global pass,
+                  // computed through the same shared screen so they cannot drift.
                   const deferDays = Math.floor((deferDate.getTime() - nowTime) / (1000 * 60 * 60 * 24));
                   const taskName = task.name || 'Unnamed Task';
-                  const taskNameLower = taskName.toLowerCase();
-                  const isStrategic = deferDays <= 90 ||
-                                     taskNameLower.includes('renewal') ||
-                                     taskNameLower.includes('movie') ||
-                                     taskNameLower.includes('annual') ||
-                                     taskNameLower.includes('seasonal') ||
-                                     taskNameLower.includes('quarterly') ||
-                                     taskNameLower.includes('monthly');
 
-                  if (isStrategic) {
-                    projectStats[projectName].strategicDeferred++;
-                  } else {
-                    projectStats[projectName].problematicDeferred++;
+                  if (deferDays > 90) projectStats[projectName].deferredOver90Days++;
+                  if (matchesDeferralKeyword(taskName.toLowerCase())) {
+                    projectStats[projectName].deferredKeywordMatched++;
                   }
                 }
 
@@ -420,390 +423,59 @@ export const WORKFLOW_ANALYSIS_V3 = `
             stats.availableRate = availableRate;
             stats.overdueRate = overdueRate;
 
-            // Project workflow health scoring - focus on system efficiency
-            let healthScore = 100;
-
-            // Overdue tasks hurt workflow health
-            if (stats.overdue > 0) healthScore -= (stats.overdue / stats.total) * 25;
-
-            // Blocked tasks slow down the system
-            if (stats.blocked > 0) healthScore -= (stats.blocked / stats.total) * 20;
-
-            // Very old projects may be stale
-            if (avgAge > 120) healthScore -= 15;
-
-            // Smart deferral analysis - only penalize problematic deferrals
-            if (stats.problematicDeferred > 0) {
-              const problematicDeferralRate = stats.problematicDeferred / stats.total;
-              if (problematicDeferralRate > 0.2) healthScore -= 15; // High problematic deferral rate
-            }
-
-            // Strategic deferrals are actually GOOD - don't penalize
-            if (stats.strategicDeferred > 0) {
-              // This might actually improve the score slightly
-              healthScore = Math.min(100, healthScore + 5);
-            }
-
-            // Low available tasks suggest project may be stalled
-            if (availableRate < 20) healthScore -= 10;
-
-            stats.healthScore = Math.max(0, healthScore);
-
-            // Calculate momentum (how much forward progress is possible)
-            const momentumScore = Math.max(0, 100 - (overdueRate * 0.5) - (availableRate * 0.3));
-            stats.momentumScore = momentumScore;
+            // OMN-291 (D19): healthScore and momentumScore are DELETED here.
+            //
+            // healthScore was 100 minus a hand-tuned weight stack (overdue 25,
+            // blocked 20, stale-age 15, problematic-deferral 15, low-available 10,
+            // +5 strategic bonus). A weighted composite IS a verdict — the weights
+            // encode what matters and by how much, which is the caller's judgment
+            // to make, not the server's. Its components all survive as separate
+            // facts below (overdue, blocked, avgAge, availableRate, deferrals).
+            //
+            // momentumScore additionally had a direction bug: it SUBTRACTED
+            // availableRate, so a project with more available work scored LOWER
+            // momentum, contradicting the prose that shipped alongside it.
+            // Deleting it makes that bug historical rather than something to fix.
           });
 
-          // PHASE 5: Generate insights based on focus areas
-          if (focusAreas.includes('productivity')) {
-            const availableRate = totalTasks > 0 ? round1(availableTasks / totalTasks * 100) : 0;
-            insights.push({
-              category: 'productivity',
-              insight: availableRate + '% of tasks are ready to work on (' + availableTasks + ' of ' + totalTasks + ' tasks)',
-              priority: 'medium'
-            });
-
-            if (overdueTasks > 0) {
-              const avgOverdue = Math.round(totalOverdueDays / overdueTasks);
-              insights.push({
-                category: 'productivity',
-                insight: overdueTasks + ' tasks are overdue, averaging ' + avgOverdue + ' days late',
-                priority: 'high'
-              });
-            }
-
-            if (totalDeferredTasks > 0) {
-              const deferredRate = totalTasks > 0 ? round1(totalDeferredTasks / totalTasks * 100) : 0;
-              const strategicRate = totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0;
-              const problematicRate = totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0;
-
-              insights.push({
-                category: 'productivity',
-                insight: deferredRate + '% of tasks are deferred (' + totalDeferredTasks + ' total)',
-                priority: 'medium'
-              });
-
-              if (strategicDeferrals > 0) {
-                insights.push({
-                  category: 'productivity',
-                  insight: strategicRate + '% are strategic deferrals (' + strategicDeferrals + ' tasks) - Good GTD practice!',
-                  priority: 'low'
-                });
-              }
-
-              if (problematicDeferrals > 0) {
-                insights.push({
-                  category: 'productivity',
-                  insight: problematicRate + '% are problematic deferrals (' + problematicDeferrals + ' tasks) - May need attention',
-                  priority: 'medium'
-                });
-              }
-            }
-          }
-
-          if (focusAreas.includes('workload')) {
-            const totalHours = Math.round(totalEstimatedTime / 60);
-            insights.push({
-              category: 'workload',
-              insight: 'Total estimated workload: ' + totalHours + ' hours across ' + totalProjects + ' projects',
-              priority: 'medium'
-            });
-
-            // Find projects with high momentum (many available tasks)
-            const highMomentumProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.available > 0 && (stats.available / stats.total) > 0.3) {
-                highMomentumProjects.push({ name, stats });
-              }
-            });
-            highMomentumProjects.sort((a, b) => (b.stats.available / b.stats.total) - (a.stats.available / a.stats.total));
-
-            if (highMomentumProjects.length > 0) {
-              const top3 = highMomentumProjects.slice(0, 3);
-              const projectList = top3.map(p => p.name + ' (' + p.stats.available + ' available tasks)').join(', ');
-              insights.push({
-                category: 'workload',
-                insight: 'High-momentum projects: ' + projectList,
-                priority: 'medium'
-              });
-            }
-
-            // Find projects with problematic deferral patterns
-            const problematicDeferralProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.problematicDeferred > 0 && (stats.problematicDeferred / stats.total) > 0.3) {
-                problematicDeferralProjects.push({ name, stats });
-              }
-            });
-            problematicDeferralProjects.sort((a, b) =>
-              (b.stats.problematicDeferred / b.stats.total) - (a.stats.problematicDeferred / a.stats.total)
-            );
-
-            if (problematicDeferralProjects.length > 0) {
-              const top3 = problematicDeferralProjects.slice(0, 3);
-              const projectList = top3.map(p =>
-                p.name + ' (' + Math.round((p.stats.problematicDeferred / p.stats.total) * 100) + '% problematic deferrals)'
-              ).join(', ');
-              insights.push({
-                category: 'workload',
-                insight: 'Projects with high problematic deferral rates: ' + projectList,
-                priority: 'high'
-              });
-            }
-
-            // Celebrate projects with good strategic deferral practices
-            const strategicDeferralProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.strategicDeferred > 0 && stats.problematicDeferred === 0) {
-                strategicDeferralProjects.push({ name, stats });
-              }
-            });
-            strategicDeferralProjects.sort((a, b) =>
-              (b.stats.strategicDeferred / b.stats.total) - (a.stats.strategicDeferred / a.stats.total)
-            );
-
-            if (strategicDeferralProjects.length > 0) {
-              const top3 = strategicDeferralProjects.slice(0, 3);
-              const projectList = top3.map(p =>
-                p.name + ' (' + Math.round((p.stats.strategicDeferred / p.stats.total) * 100) + '% strategic deferrals)'
-              ).join(', ');
-              insights.push({
-                category: 'workload',
-                insight: 'Projects with good deferral practices: ' + projectList,
-                priority: 'low'
-              });
-            }
-          }
-
-          if (focusAreas.includes('bottlenecks')) {
-            if (blockedTasks > 0) {
-              insights.push({
-                category: 'bottlenecks',
-                insight: blockedTasks + ' tasks are blocked, potentially slowing down ' + Math.round(blockedTasks * 1.5) + ' dependent tasks',
-                priority: 'high'
-              });
-            }
-
-            // Find projects with high overdue rates
-            const problematicProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.overdue > 0 && (stats.overdue / stats.total) > 0.3) {
-                problematicProjects.push({ name, stats });
-              }
-            });
-            problematicProjects.sort((a, b) =>
-              (b.stats.overdue / b.stats.total) - (a.stats.overdue / a.stats.total)
-            );
-
-            if (problematicProjects.length > 0) {
-              const top3 = problematicProjects.slice(0, 3);
-              const projectList = top3.map(p =>
-                p.name + ' (' + Math.round((p.stats.overdue / p.stats.total) * 100) + '%)'
-              ).join(', ');
-              insights.push({
-                category: 'bottlenecks',
-                insight: 'Projects with high overdue rates: ' + projectList,
-                priority: 'high'
-              });
-            }
-          }
-
-          if (focusAreas.includes('project_health')) {
-            let healthyProjects = 0;
-            let unhealthyProjects = 0;
-            let highMomentumProjects = 0;
-
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.healthScore >= 80) healthyProjects++;
-              if (stats.healthScore < 50) unhealthyProjects++;
-              if (stats.momentumScore >= 80) highMomentumProjects++;
-            });
-
-            insights.push({
-              category: 'project_health',
-              insight: 'Workflow health: ' + healthyProjects + ' healthy projects, ' + unhealthyProjects + ' need attention',
-              priority: 'medium'
-            });
-
-            insights.push({
-              category: 'project_health',
-              insight: highMomentumProjects + ' projects have high momentum (ready for progress)',
-              priority: 'medium'
-            });
-          }
-
-          if (focusAreas.includes('time_patterns')) {
-            let mostOverdueBucket = null;
-            let maxCount = 0;
-
-            Object.keys(timeBuckets).forEach(bucket => {
-              if (timeBuckets[bucket] > maxCount) {
-                maxCount = timeBuckets[bucket];
-                mostOverdueBucket = bucket;
-              }
-            });
-
-            if (mostOverdueBucket && maxCount > 0) {
-              insights.push({
-                category: 'time_patterns',
-                insight: 'Most overdue tasks cluster in: ' + mostOverdueBucket + ' (' + maxCount + ' tasks)',
-                priority: 'medium'
-              });
-            }
-          }
-
-          if (focusAreas.includes('opportunities')) {
-            if (availableTasks > 0) {
-              insights.push({
-                category: 'opportunities',
-                insight: availableTasks + ' tasks are ready to work on now',
-                priority: 'low'
-              });
-            }
-
-            // Find projects with high momentum
-            const momentumProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.momentumScore >= 75) {
-                momentumProjects.push({ name, stats });
-              }
-            });
-            momentumProjects.sort((a, b) => b.stats.momentumScore - a.stats.momentumScore);
-
-            if (momentumProjects.length > 0) {
-              const top3 = momentumProjects.slice(0, 3);
-              const projectList = top3.map(p =>
-                p.name + ' (momentum: ' + Math.round(p.stats.momentumScore) + ')'
-              ).join(', ');
-              insights.push({
-                category: 'opportunities',
-                insight: 'High-momentum projects ready for focus: ' + projectList,
-                priority: 'low'
-              });
-            }
-
-            // Find projects that could benefit from attention
-            const attentionProjects = [];
-            Object.keys(projectStats).forEach(name => {
-              const stats = projectStats[name];
-              if (stats.momentumScore < 50 && stats.blocked === 0) {
-                attentionProjects.push({ name, stats });
-              }
-            });
-            attentionProjects.sort((a, b) => a.stats.momentumScore - b.stats.momentumScore);
-
-            if (attentionProjects.length > 0) {
-              const top3 = attentionProjects.slice(0, 3);
-              const projectList = top3.map(p =>
-                p.name + ' (momentum: ' + Math.round(p.stats.momentumScore) + ')'
-              ).join(', ');
-              insights.push({
-                category: 'opportunities',
-                insight: 'Projects that could use attention: ' + projectList,
-                priority: 'medium'
-              });
-            }
-          }
-
-          // Generate recommendations focused on workflow health
-          if (overdueTasks > totalTasks * 0.15) {
-            recommendations.push({
-              category: 'workflow_management',
-              recommendation: 'High overdue rate suggests workflow bottlenecks - consider reviewing task flow and dependencies',
-              priority: 'high'
-            });
-          }
-
-          if (blockedTasks > 0) {
-            recommendations.push({
-              category: 'dependency_management',
-              recommendation: 'Review blocked tasks to identify and resolve dependencies that slow down your system',
-              priority: 'high'
-            });
-          }
-
-          // Smart deferral recommendations
-          if (problematicDeferrals > totalTasks * 0.15) {
-            recommendations.push({
-              category: 'deferral_optimization',
-              recommendation: 'High problematic deferral rate suggests avoidance or overwhelm - review if these tasks are truly necessary or if you need to break them down',
-              priority: 'high'
-            });
-          }
-
-          if (strategicDeferrals > 0 && strategicDeferrals > problematicDeferrals * 2) {
-            recommendations.push({
-              category: 'deferral_practice',
-              recommendation: 'Your strategic deferral practices are excellent! You are using deferrals appropriately for time-based and seasonal tasks',
-              priority: 'low'
-            });
-          }
-
-          if (totalInboxTasks > 50) {
-            recommendations.push({
-              category: 'inbox_management',
-              recommendation: 'Large inbox suggests processing backlog - consider batch processing to clear the way',
-              priority: 'medium'
-            });
-          }
-
-          // Calculate average project health
-          let totalHealthScore = 0;
-          let projectCount = 0;
-          Object.keys(projectStats).forEach(name => {
-            totalHealthScore += projectStats[name].healthScore;
-            projectCount++;
-          });
-          const avgProjectHealth = projectCount > 0 ? totalHealthScore / projectCount : 0;
-
-          if (avgProjectHealth < 70) {
-            recommendations.push({
-              category: 'workflow_optimization',
-              recommendation: 'Overall workflow health is low - consider reviewing project portfolio and task flow',
-              priority: 'medium'
-            });
-          }
-
-          // Calculate average momentum
-          let totalMomentum = 0;
-          Object.keys(projectStats).forEach(name => {
-            totalMomentum += projectStats[name].momentumScore;
-          });
-          const avgMomentum = projectCount > 0 ? totalMomentum / projectCount : 0;
-
-          if (avgMomentum < 60) {
-            recommendations.push({
-              category: 'momentum_building',
-              recommendation: 'Low project momentum suggests focus issues - consider concentrating on fewer, high-impact projects',
-              priority: 'medium'
-            });
-          }
-
-          // Limit insights to requested maximum
-          if (insights.length > maxInsights) {
-            insights.splice(maxInsights);
-          }
-          // Cap recommendations at 10
-          if (recommendations.length > 10) {
-            recommendations.splice(10);
-          }
-
+          // OMN-291 (D-GTD + D20 + D21): PHASE 5 (the productivity / workload /
+          // bottlenecks / project_health / time_patterns / opportunities insight
+          // generators) and the recommendation block that followed it are DELETED,
+          // live branches and dead ones alike.
+          //
+          // Per OMN-258's contract the server SCREENS and EVIDENCES; it does not
+          // rank by embedded judgment. That now explicitly includes numeric
+          // weight-composites, not just prose. Everything these blocks emitted was
+          // a verdict wearing a data shape: priority labels the caller never chose,
+          // an invented "N x 1.5 dependent tasks" multiplier with no basis (D21),
+          // and three focus-area branches (project_health, time_patterns,
+          // opportunities) that could never fire because the handler only ever
+          // passed productivity/workload/bottlenecks (D20).
+          //
+          // The facts they were computed FROM all survive in the evidence bundle
+          // below. The caller applies its own thresholds and priorities.
           // Build patterns object focused on workflow health
+          // OMN-291: mechanical rows only. Every field is a count, a rate, or a mean
+          // — no composite, no grade, no label. avgAge is the mean of day-ages (live
+          // since OMN-251) and is a FACT; the caller applies any staleness threshold.
           const workloadByProject = {};
           Object.keys(projectStats).forEach(name => {
             const stats = projectStats[name];
             workloadByProject[name] = {
-              totalTasks: stats.total,
+              total: stats.total,
+              completed: stats.completed,
+              available: stats.available,
+              overdue: stats.overdue,
+              blocked: stats.blocked,
               estimatedHours: Math.round(stats.estimatedTime / 60),
+              overdueRate: stats.overdueRate,
               availableRate: stats.availableRate,
-              momentumScore: stats.momentumScore,
-              healthScore: stats.healthScore
+              avgAge: stats.avgAge,
+              deferrals: {
+                total: stats.deferred,
+                over90Days: stats.deferredOver90Days,
+                keywordMatched: stats.deferredKeywordMatched
+              }
             };
           });
 
@@ -819,18 +491,22 @@ export const WORKFLOW_ANALYSIS_V3 = `
             flaggedPercentage: totalTasks > 0 ? round1(flaggedTasks / totalTasks * 100) : 0,
             blockedPercentage: totalTasks > 0 ? round1(blockedTasks / totalTasks * 100) : 0,
             deferredPercentage: totalTasks > 0 ? round1(totalDeferredTasks / totalTasks * 100) : 0,
-            strategicDeferredPercentage: totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0,
-            problematicDeferredPercentage: totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0,
+            // OMN-291 (D16): screen counts, not the old strategic/problematic verdict.
+            deferredOver90DaysPercentage: totalTasks > 0 ? round1(deferralsOver90Days / totalTasks * 100) : 0,
+            deferredKeywordMatchedPercentage: totalTasks > 0 ? round1(deferralsKeywordMatched / totalTasks * 100) : 0,
             inboxPercentage: totalTasks > 0 ? round1(totalInboxTasks / totalTasks * 100) : 0
           };
 
           // Add deferral pattern analysis
           patterns.deferralAnalysis = {
             totalDeferred: totalDeferredTasks,
-            strategicDeferrals: strategicDeferrals,
-            problematicDeferrals: problematicDeferrals,
-            strategicRate: totalTasks > 0 ? round1(strategicDeferrals / totalTasks * 100) : 0,
-            problematicRate: totalTasks > 0 ? round1(problematicDeferrals / totalTasks * 100) : 0,
+            // OMN-291 (D16): two independent screen counts. A deferral can be in
+            // both, or neither — they do NOT sum to totalDeferred, unlike the
+            // strategic/problematic split they replace.
+            over90Days: deferralsOver90Days,
+            keywordMatched: deferralsKeywordMatched,
+            over90DaysRate: totalTasks > 0 ? round1(deferralsOver90Days / totalTasks * 100) : 0,
+            keywordMatchedRate: totalTasks > 0 ? round1(deferralsKeywordMatched / totalTasks * 100) : 0,
             // True "Top 10": rank by deferral magnitude (longest defer first), not DB iteration order
             deferralDetails: deferredTaskDetails.slice().sort(function(a, b) { return b.deferDays - a.deferDays; }).slice(0, 10)
           };
@@ -845,19 +521,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
             ? rawDataTaskCount - data.tasks.length
             : 0;
 
+          // OMN-291: insights and recommendations are gone from the payload.
           return JSON.stringify({
-            insights: insights,
             patterns: patterns,
-            recommendations: recommendations,
             data: includeRawData ? data : undefined,
             totalTasks: totalTasks,
             totalProjects: totalProjects,
-            dataPoints: maxTasksToProcess,
-            metadata: {
-              analysisDepth: analysisDepth,
-              focusAreas: focusAreas,
-              maxInsights: maxInsights
-            }
+            dataPoints: maxTasksToProcess
           });
         })()
       \`;
@@ -874,16 +544,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
         ok: true,
         v: '3',
         data: {
-          insights: analysis.insights,
           patterns: analysis.patterns,
-          recommendations: analysis.recommendations,
           data: analysis.data,
           totalTasks: analysis.totalTasks,
           totalProjects: analysis.totalProjects,
           analysisTime: analysisTime,
           dataPoints: analysis.dataPoints,
           metadata: {
-            ...analysis.metadata,
             method: 'omnijs_v3_single_bridge',
             optimization: 'omnijs_v3',
             query_time_ms: analysisTime,

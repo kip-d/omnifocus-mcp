@@ -10,8 +10,18 @@ import { coerceObject } from '../../schemas/coercion-helpers.js';
 // failures pipeline never records the LLM↔schema mismatch, and the same
 // blind spot OMN-76 closed for create/update would persist for analyze.
 
-// Scope schema for filtering analysis (shared across most analysis types)
-const AnalysisScopeSchema = z
+// OMN-288: this was `AnalysisScopeSchema`, shared by six analysis types and
+// carrying dateRange/tags/projects/includeCompleted/includeDropped. Exactly ONE
+// field on ONE op was ever read: task_velocity's `scope.dateRange`. Every other
+// combination was accepted and silently ignored, so a caller scoping by tag got
+// a whole-database answer that reported success.
+//
+// Per OMN-273, an input the platform does not honor is DELETED from the schema
+// rather than accepted-and-ignored, so it rejects loudly and the diagnose-
+// failures pipeline records the mismatch (the OMN-90 rationale above).
+//
+// Renamed to say where it applies. Real scope FILTERING is OMN-293, post-migration.
+const VelocityScopeSchema = z
   .object({
     dateRange: z
       .object({
@@ -20,10 +30,6 @@ const AnalysisScopeSchema = z
       })
       .strict()
       .optional(),
-    tags: z.array(z.string()).optional(),
-    projects: z.array(z.string()).optional(),
-    includeCompleted: z.boolean().optional(),
-    includeDropped: z.boolean().optional(),
   })
   .strict();
 
@@ -58,25 +64,24 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('productivity_stats'),
-      scope: AnalysisScopeSchema.optional(),
+      // OMN-288: no `scope` (never read) and no `params.metrics` (never read).
       params: z
         .object({
           groupBy: z.enum(['day', 'week', 'month']).optional(),
-          metrics: z.array(z.string()).optional(),
         })
         .strict()
         .optional(),
     })
     .strict(),
-  // Task velocity
+  // Task velocity — the ONLY op that reads any scope (dateRange).
   z
     .object({
       type: z.literal('task_velocity'),
-      scope: AnalysisScopeSchema.optional(),
+      scope: VelocityScopeSchema.optional(),
+      // OMN-288: `metrics` removed here too — accepted and ignored.
       params: z
         .object({
           groupBy: z.enum(['day', 'week', 'month']).optional(),
-          metrics: z.array(z.string()).optional(),
         })
         .strict()
         .optional(),
@@ -86,7 +91,7 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('overdue_analysis'),
-      scope: AnalysisScopeSchema.optional(),
+      // OMN-288: no `scope` — whole-database by construction.
       params: z.object({}).strict().optional(),
     })
     .strict(),
@@ -94,7 +99,8 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('pattern_analysis'),
-      scope: AnalysisScopeSchema.optional(),
+      // OMN-288 (Kip decision D-1, 2026-07-27): outside the original decided set,
+      // but the same accept-then-ignore class — shrunk in the same pass.
       params: z
         .object({
           insights: z.array(z.string()).optional(),
@@ -107,7 +113,7 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('workflow_analysis'),
-      scope: AnalysisScopeSchema.optional(),
+      // OMN-288: no `scope` — whole-database by construction.
       params: z.object({}).strict().optional(),
     })
     .strict(),
@@ -115,7 +121,7 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('recurring_tasks'),
-      scope: AnalysisScopeSchema.optional(),
+      // OMN-288 (Kip decision D-1): same accept-then-ignore class as pattern_analysis.
       params: z
         .object({
           operation: z.enum(['analyze', 'patterns']).optional(),

@@ -150,7 +150,7 @@ QueryTasksTool remains for CacheWarmer and internal use, but the public path byp
 
 ## Related Documentation
 
-- **[AST_ARCHITECTURE.md](AST_ARCHITECTURE.md)** — Deep dive on layers 3-4 (AST construction and code generation)
+- **[AST_ARCHITECTURE.md](AST_ARCHITECTURE.md)** — Deep dive on layers 3-4 (AST construction and emission)
 - **[API-COMPACT-UNIFIED.md](../api/API-COMPACT-UNIFIED.md)** — API schema reference (layer 1)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — JXA/OmniJS execution model (what runs after the emitter)
 - **[PATTERNS.md](PATTERNS.md)** — Symptom-based debugging guide
