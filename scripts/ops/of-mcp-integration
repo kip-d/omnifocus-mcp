@@ -100,15 +100,27 @@ set -e
 # tasks, and a scheduled job is the worst possible place to override a safety
 # decision made in response to an incident. Detect and report; a human runs
 # `npm run test:cleanup -- --apply`.
+#
+# Read the EXIT CODE, which scripts/test-cleanup.ts defines for exactly this
+# purpose ("Dry-run exits non-zero if leaks found — makes the scan usable as a
+# CI/teardown gate"):
+#   0 = clean   1 = fixtures found   2 = scan failed (OmniFocus unreachable, …)
+# An earlier version grepped the printed category labels instead. That
+# re-implemented a signal the script already publishes, and did it fragilely:
+# relabelling any category would have silently produced "none detected" forever,
+# and a scan ERROR prints no category lines at all — so a failed scan would have
+# reported CLEAN. Distinguishing 2 from 0 is the point: "could not determine" is
+# not "nothing there".
 set +e
-cleanup_out="$(npm run test:cleanup 2>&1)"
+npm run test:cleanup >> "$LOG" 2>&1
+cleanup_rc=$?
 set -e
-printf '%s\n' "$cleanup_out" >> "$LOG"
 
-leaked="no"
-if printf '%s' "$cleanup_out" | grep -qE '^(Inbox tasks|Orphan tasks|Sandbox projects|Orphan projects|Sandbox folders|Test tags).*: [1-9]'; then
-  leaked="yes"
-fi
+case "$cleanup_rc" in
+  0) leak_state="clean" ;;
+  1) leak_state="leaked" ;;
+  *) leak_state="unknown" ;;
+esac
 
 # --- 5. Verdict ---------------------------------------------------------------
 if [ "$suite_rc" -eq 0 ]; then
@@ -116,11 +128,17 @@ if [ "$suite_rc" -eq 0 ]; then
 else
   log "STATUS: FAILED — suite exit $suite_rc. Grep this log for 'FAIL ' and 'Tests  '."
 fi
-if [ "$leaked" = "yes" ]; then
-  log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
-  log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)"
-else
-  log "LEAK: none detected"
-fi
+case "$leak_state" in
+  leaked)
+    log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
+    log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)" ;;
+  clean)
+    log "LEAK: none detected" ;;
+  *)
+    # Never report "none" here. The scan itself failed, so the honest statement
+    # is that the question is unanswered.
+    log "LEAK: UNKNOWN — the cleanup scan itself failed (exit $cleanup_rc); leak status not determined."
+    log "  Re-check by hand: (cd $REPO_DIR && npm run test:cleanup)" ;;
+esac
 
 exit "$suite_rc"

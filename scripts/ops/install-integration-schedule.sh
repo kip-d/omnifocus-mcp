@@ -5,7 +5,7 @@
 # launchd plist (generated from the .template) to ~/Library/LaunchAgents, then
 # (re)loads the job. Idempotent: safe to re-run after editing the canonical
 # sources. Sibling of install-diagnose-schedule.sh and deliberately shaped the
-# same way. See tests/integration/README.md § Scheduled runs (OMN-302).
+# same way. See docs/dev/integration-scheduling.md.
 #
 # Usage:
 #   scripts/ops/install-integration-schedule.sh            # install / reload
@@ -107,8 +107,26 @@ if [ "$MODE" = "verify" ]; then
   # "last exit code" persists from the PRIOR run until this one ends. Reading it
   # immediately would latch a stale value (e.g. a stale 0, masking the very 127
   # PATH bug --verify exists to catch). Wait for the instance to disappear first.
+  #
+  # RETRY the pid read. kickstart returns when the spawn request is ACCEPTED, so
+  # the next `launchctl print` can beat launchd to registering the pid. Reading
+  # once and finding it empty would skip the entire wait below on iteration 1,
+  # then compare mtimes against a suite that has not written anything yet — and
+  # report "the job did not execute" while it is in fact running unsupervised
+  # against the live database. A false failure that also hides a real run.
+  pid=""
+  for _ in $(seq 1 20); do
+    pid="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/^[[:space:]]*pid =/{print $NF; exit}')"
+    [ -n "$pid" ] && break
+    sleep 0.5
+  done
+  if [ -z "$pid" ]; then
+    # Either the job finished faster than we could observe it (impossible for a
+    # ~15-min suite, so treat as suspicious) or it never started. Fall through:
+    # the mtime check below is the authority and will catch a non-run.
+    echo "  note: never observed a pid for the spawned job; relying on the run-log check."
+  fi
   # Budget covers build + ~15 min suite + cleanup scan, polled at 5s.
-  pid="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/^[[:space:]]*pid =/{print $NF; exit}')"
   for _ in $(seq 1 360); do
     { [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; } || break
     sleep 5
