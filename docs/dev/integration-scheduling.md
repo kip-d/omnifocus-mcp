@@ -52,6 +52,15 @@ that cries wolf trains its owner to ignore it.
 **The suite's exit code is read directly, never through a pipe.** `npm ... | tail` yields _tail's_ status. On 2026-08-06
 that exact mistake made a 7-failure run report exit 0 — the wrapper would have reported green forever.
 
+**Every long step is time-bounded, not just the preflight.** OmniFocus can wedge at any moment, not only before the run
+starts. An unbounded wedge mid-suite is this job's worst failure: the wrapper blocks forever, never writes a `STATUS:`
+line, and stays alive under launchd — which will not start a new instance of a `StartCalendarInterval` job while the
+previous one is still running, so **every subsequent Saturday is silently skipped, indefinitely**. That recreates the
+exact blind spot this job exists to close. Build, suite, and cleanup each run under a timeout (`OF_MCP_SUITE_TIMEOUT`,
+default 2700s; `OF_MCP_CLEANUP_TIMEOUT`, default 600s — hang-breakers, not performance budgets). A timeout reports
+`WEDGED`, not `FAILED`, and still attempts the leak scan, since a suite killed mid-flight is _more_ likely to have left
+fixtures behind.
+
 **Leaks are detected, not auto-deleted.** The suite's cleanup is folder-scoped and has left `__TEST__` inbox tasks
 behind. `npm run test:cleanup` is dry-run by default _because loose substring matching once deleted real user tasks_
 (OMN-46). A scheduled unattended job is the worst possible place to override a safety default adopted after an incident,

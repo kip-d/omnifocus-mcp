@@ -34,11 +34,55 @@ export PATH
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 LOG="${OF_MCP_INTEGRATION_LOG:-$HOME/.omnifocus-mcp/integration.log}"
 PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
+# Generous against a ~15-minute suite: this is a hang-breaker, not a perf budget.
+SUITE_TIMEOUT="${OF_MCP_SUITE_TIMEOUT:-2700}"
+CLEANUP_TIMEOUT="${OF_MCP_CLEANUP_TIMEOUT:-600}"
 
 mkdir -p "$(dirname "$LOG")"
 cd "$REPO_DIR" || { echo "of-mcp-integration: repo dir not found: $REPO_DIR" >&2; exit 1; }
 
 log() { echo "$*" >> "$LOG"; }
+
+# EVERY step that talks to OmniFocus must be bounded. The preflight probe was,
+# but the suite and the cleanup scan were not — and OmniFocus can wedge at any
+# moment, not only before the run starts. An unbounded wedge mid-suite is the
+# worst outcome this job has: the wrapper blocks forever, never writes a STATUS
+# line, and stays alive under launchd. launchd will NOT start a new instance of a
+# StartCalendarInterval job while the previous one is still running, so every
+# subsequent Saturday is silently skipped — indefinitely. That recreates the very
+# 13-day blind spot this job exists to close, permanently, until someone notices
+# a stuck process by hand.
+#
+# Returns 124 on timeout, matching GNU timeout, so callers can tell "wedged" from
+# "failed". Uses coreutils timeout when available (--foreground so signals reach
+# the child from a non-interactive shell; -k follows TERM with KILL); otherwise
+# falls back to the same background-watchdog shape the preflight uses.
+TIMEOUT_CMD=""
+for c in timeout gtimeout; do
+  command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+done
+
+run_bounded() {
+  local secs="$1"; shift
+  local rc=0
+  if [ -n "$TIMEOUT_CMD" ]; then
+    "$TIMEOUT_CMD" --foreground -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
+    return "$rc"
+  fi
+  "$@" >> "$LOG" 2>&1 &
+  local child=$!
+  ( sleep "$secs"; kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
+  local wd=$!
+  disown "$wd" 2>/dev/null || true
+  wait "$child" 2>/dev/null || rc=$?
+  if kill "$wd" 2>/dev/null; then
+    : # watchdog still pending -> the child finished on its own
+  else
+    # Watchdog already fired: SIGKILL surfaces as 137. Report it as a timeout.
+    [ "$rc" -eq 137 ] && rc=124
+  fi
+  return "$rc"
+}
 
 log ""
 log "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') ====="
@@ -97,8 +141,19 @@ fi
 log "preflight: OmniFocus running and answering"
 
 # --- 2. Build (the suite runs against dist/) ----------------------------------
-if ! npm run build >> "$LOG" 2>&1; then
-  log "STATUS: FAILED — build failed; suite not run."
+set +e
+run_bounded "$CLEANUP_TIMEOUT" npm run build
+build_rc=$?
+set -e
+if [ "$build_rc" -ne 0 ]; then
+  # Bounded too: a hung build blocks every future Saturday exactly like a hung
+  # suite does. 124 means it hung rather than failed; say which.
+  if [ "$build_rc" -eq 124 ]; then
+    log "STATUS: WEDGED — build exceeded ${CLEANUP_TIMEOUT}s and was killed; suite not run."
+  else
+    log "STATUS: FAILED — build failed (exit $build_rc); suite not run."
+  fi
+  [ "$build_rc" -eq 124 ] && exit 0
   exit 1
 fi
 
@@ -108,9 +163,30 @@ fi
 # would report success while the suite failed — observed for real on 2026-08-06,
 # where a 7-failure run reported exit 0. Redirect, then read $? directly.
 set +e
-npm run test:integration >> "$LOG" 2>&1
+run_bounded "$SUITE_TIMEOUT" npm run test:integration
 suite_rc=$?
 set -e
+
+if [ "$suite_rc" -eq 124 ]; then
+  # Mid-run wedge: same class as the preflight wedge — the environment failed,
+  # not the code — so exit 0 rather than crying wolf. Still attempt the leak scan
+  # (bounded), because a suite killed mid-flight is MORE likely to have left
+  # fixtures behind, not less.
+  log "STATUS: WEDGED — the suite exceeded ${SUITE_TIMEOUT}s and was killed."
+  log "  Preflight passed, so OmniFocus wedged DURING the run (dialog? sync stall?)."
+  log "  Fixtures were probably left behind — see the LEAK line below."
+  set +e
+  run_bounded "$CLEANUP_TIMEOUT" npm run test:cleanup
+  cleanup_rc=$?
+  set -e
+  case "$cleanup_rc" in
+    0) log "LEAK: none detected" ;;
+    1) log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
+       log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)" ;;
+    *) log "LEAK: UNKNOWN — the cleanup scan failed or timed out (exit $cleanup_rc)." ;;
+  esac
+  exit 0
+fi
 
 # --- 4. Leak check ------------------------------------------------------------
 #
@@ -132,7 +208,7 @@ set -e
 # reported CLEAN. Distinguishing 2 from 0 is the point: "could not determine" is
 # not "nothing there".
 set +e
-npm run test:cleanup >> "$LOG" 2>&1
+run_bounded "$CLEANUP_TIMEOUT" npm run test:cleanup
 cleanup_rc=$?
 set -e
 
