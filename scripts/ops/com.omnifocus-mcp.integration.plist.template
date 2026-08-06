@@ -10,10 +10,18 @@
     <key>Label</key>
     <string>com.omnifocus-mcp.integration</string>
     <!-- launchd's default PATH omits Homebrew → npm not found → exit 127. -->
+    <!-- OF_MCP_REPO_DIR must be passed explicitly: launchd starts the job with a
+         bare environment, so an installer-time override would otherwise be lost
+         and the wrapper would silently fall back to its ~/omnifocus-mcp default
+         — running the weekly suite against a different checkout than the
+         operator configured. (The sibling diagnose plist has this same gap; not
+         touched here, since changing it means reinstalling a working job.) -->
     <key>EnvironmentVariables</key>
     <dict>
       <key>PATH</key>
       <string>__PATH_VALUE__</string>
+      <key>OF_MCP_REPO_DIR</key>
+      <string>__REPO_DIR__</string>
     </dict>
     <key>ProgramArguments</key>
     <array>

@@ -28,6 +28,9 @@ TEMPLATE="$SCRIPT_DIR/$PLIST_NAME.template"
 WRAPPER_SRC="$SCRIPT_DIR/of-mcp-integration"
 
 BIN_DIR="${OF_MCP_BIN_DIR:-$HOME/bin}"
+# Resolved here (not just consumed by the wrapper's own default) because it is
+# baked into the plist — see the EnvironmentVariables comment in the template.
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
 WRAPPER_DEST="$BIN_DIR/of-mcp-integration"
@@ -81,10 +84,12 @@ mkdir -p "$LAUNCH_AGENTS" "$(dirname "$LAUNCHD_LOG")"
 sed -e "s|__WRAPPER_PATH__|$WRAPPER_DEST|g" \
     -e "s|__LAUNCHD_LOG__|$LAUNCHD_LOG|g" \
     -e "s|__PATH_VALUE__|$PATH_VALUE|g" \
+    -e "s|__REPO_DIR__|$REPO_DIR|g" \
     "$TEMPLATE" > "$PLIST_DEST"
 plutil -lint "$PLIST_DEST" >/dev/null
 echo "Installed plist   → $PLIST_DEST"
 echo "  PATH = $PATH_VALUE"
+echo "  repo = $REPO_DIR"
 
 # --- 3. (Re)load the job ------------------------------------------------------
 # bootout is async; bootstrap can race it. Poll until the old instance is gone,
@@ -100,52 +105,50 @@ echo "Loaded job $LABEL (weekly, Saturday 08:00)."
 # --- 4. Optional verification -------------------------------------------------
 if [ "$MODE" = "verify" ]; then
   echo "Verifying via kickstart (runs the FULL suite now through launchd, ~15 min) ..."
-  before_mtime="$(stat -f %m "$RUN_LOG" 2>/dev/null || echo 0)"
+
+  # WAIT ON THIS RUN'S OWN OUTPUT, not on a pid.
+  #
+  # Every previous approach here keyed off `launchctl print`'s pid, and every one
+  # was only probabilistic: kickstart returns when the spawn is ACCEPTED, so the
+  # pid may not be registered yet; retrying merely narrows that window. Whenever
+  # the pid came back empty, the wait loop broke on iteration 1 and verification
+  # read `last exit code`, `STATUS:` and `LEAK:` seconds after kickstart — all of
+  # which persist from the PREVIOUS run. That reports last week's verdict for a
+  # job still running unsupervised against the live database, and it can report
+  # PASS just as easily as FAIL.
+  #
+  # The wrapper writes exactly one `STATUS:` line, at the very end of a run. So
+  # remember where the log ends now, and wait for a STATUS line to appear BEYOND
+  # that point. That is this run's completion signal by construction — no pid, no
+  # race, and stale content is unreadable because we only ever look past the mark.
+  before_lines="$(wc -l < "$RUN_LOG" 2>/dev/null || echo 0)"
+  before_lines="${before_lines// /}"
 
   launchctl kickstart -k "$GUI/$LABEL"
-  # kickstart returns once the job is SPAWNED, not when it exits — and launchd's
-  # "last exit code" persists from the PRIOR run until this one ends. Reading it
-  # immediately would latch a stale value (e.g. a stale 0, masking the very 127
-  # PATH bug --verify exists to catch). Wait for the instance to disappear first.
-  #
-  # RETRY the pid read. kickstart returns when the spawn request is ACCEPTED, so
-  # the next `launchctl print` can beat launchd to registering the pid. Reading
-  # once and finding it empty would skip the entire wait below on iteration 1,
-  # then compare mtimes against a suite that has not written anything yet — and
-  # report "the job did not execute" while it is in fact running unsupervised
-  # against the live database. A false failure that also hides a real run.
-  pid=""
-  for _ in $(seq 1 20); do
-    pid="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/^[[:space:]]*pid =/{print $NF; exit}')"
-    [ -n "$pid" ] && break
-    sleep 0.5
-  done
-  if [ -z "$pid" ]; then
-    # Either the job finished faster than we could observe it (impossible for a
-    # ~15-min suite, so treat as suspicious) or it never started. Fall through:
-    # the mtime check below is the authority and will catch a non-run.
-    echo "  note: never observed a pid for the spawned job; relying on the run-log check."
-  fi
+
   # Budget covers build + ~15 min suite + cleanup scan, polled at 5s.
+  new_region=""
   for _ in $(seq 1 360); do
-    { [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; } || break
+    new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
+    printf '%s' "$new_region" | grep -qaE '^STATUS: ' && break
+    new_region=""
     sleep 5
   done
 
-  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
-  after_mtime="$(stat -f %m "$RUN_LOG" 2>/dev/null || echo 0)"
-  echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
-
-  # Corroborate execution BEFORE judging the code. An unchanged run log means
-  # nothing executed, so a 0 here is stale rather than green — check this first
-  # so "exit 0 + didn't run" can never read as success.
-  if [ "$after_mtime" = "$before_mtime" ]; then
-    echo "  VERIFY FAILED — run log unchanged ($RUN_LOG); the job did not execute." >&2
+  if [ -z "$new_region" ]; then
+    echo "  VERIFY FAILED — no STATUS line appeared in $RUN_LOG within the budget;" >&2
+    echo "  the job either never executed or is still running. Check $LAUNCHD_LOG." >&2
     exit 1
   fi
 
-  status_line="$(grep -aE '^STATUS: ' "$RUN_LOG" | tail -1 || true)"
-  leak_line="$(grep -aE '^LEAK: ' "$RUN_LOG" | tail -1 || true)"
+  # Safe to read now: a STATUS line for THIS run exists, so the job has finished
+  # writing and launchd's exit code refers to it rather than the previous run.
+  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
+  echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
+
+  # Read the verdict ONLY from this run's region of the log.
+  status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
+  leak_line="$(printf '%s' "$new_region" | grep -aE '^LEAK: ' | tail -1 || true)"
   echo "  ${status_line:-STATUS: (none recorded)}"
   echo "  ${leak_line:-LEAK: (none recorded)}"
 
