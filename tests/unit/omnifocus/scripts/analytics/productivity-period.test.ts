@@ -79,8 +79,13 @@ describe('OMN-250 — productivity_stats period vocabulary', () => {
     // after 11pm in a DST-observing zone, not a once-a-year edge. (Verified by
     // brute force over 2024-2027 in America/Detroit: 113 such days, all 33.)
     // CI runners are UTC and never see it; a dev machine does.
-    // Floor stays 28 as a safe under-estimate — spring-forward shortens the span,
-    // and the smallest value actually reachable is 29 (28-day February).
+    // Floor is 28 and 28 is genuinely reachable: run at exactly midnight in March
+    // and February's 28-day span is exactly 28.0, so ceil gives 28 — no DST needed.
+    // Spring-forward shortens the span too, which keeps it there rather than below.
+    // (Both ends brute-forced at 5-minute resolution over 2024-2027 in
+    // America/Detroit: min 28, max 33. An earlier pass sampled at 00:00:00.001 and
+    // reported a min of 29 — the 1ms pushed every sample over the boundary it was
+    // meant to measure. Sample the edge itself, not one tick past it.)
     expect(parsed.data.summary.daysInPeriod).toBeGreaterThanOrEqual(28);
     expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(33);
   });
