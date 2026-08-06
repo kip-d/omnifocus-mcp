@@ -127,12 +127,20 @@ if [ "$MODE" = "verify" ]; then
   # that form printed "No such file or directory" into the install output and
   # left before_lines EMPTY rather than 0 (observed on the first real install,
   # 2026-08-06). Test for the file instead of trying to silence the redirect.
-  if [ -f "$RUN_LOG" ]; then
-    before_lines="$(wc -l < "$RUN_LOG")"
+  # Use -r (readable), not -f (exists). -f is true for a file the caller cannot
+  # read — created by a prior root/sudo run, or a stray chmod — and then the
+  # unguarded `wc` fails on the SHELL's redirection and `set -e` kills the whole
+  # install before kickstart is even reached. That was a regression introduced by
+  # the first version of this fix, which handled "missing" and broke "present but
+  # unreadable": the mirror-image half of the same problem. Keep the `|| echo 0`
+  # too, so the race between testing and reading degrades instead of aborting.
+  if [ -r "$RUN_LOG" ]; then
+    before_lines="$(wc -l < "$RUN_LOG" 2>/dev/null || echo 0)"
   else
     before_lines=0
   fi
   before_lines="${before_lines// /}"
+  [ -n "$before_lines" ] || before_lines=0
 
   launchctl kickstart -k "$GUI/$LABEL"
 
