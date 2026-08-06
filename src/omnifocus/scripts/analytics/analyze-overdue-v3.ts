@@ -37,9 +37,11 @@ export const ANALYZE_OVERDUE_V3 = `
       const nowTime = now.getTime();
 
       // Extract options in JXA context to pass to OmniJS
+      // OMN-288 (D3): includeRecentlyCompleted and groupBy were extracted here and
+      // bound into the OmniJS program below as consts that nothing ever read — dead
+      // plumbing the caller had no way to detect. Removed. The limit option IS real.
+      // (No backticks in this comment: it sits inside a template literal.)
       const maxTasks = options.limit || 100;
-      const includeRecentlyCompleted = options.includeRecentlyCompleted || false;
-      const groupBy = options.groupBy || 'project';
 
       // Build comprehensive OmniJS script for ALL overdue analysis in one bridge call
       const analysisScript = \`
@@ -49,8 +51,6 @@ export const ANALYZE_OVERDUE_V3 = `
           ${IS_PROJECT_ROOT_ROW_SNIPPET}
           const nowTime = \${nowTime};
           const maxTasks = \${maxTasks};
-          const includeRecentlyCompleted = \${includeRecentlyCompleted};
-          const groupBy = "\${groupBy}";
 
           const now = new Date(nowTime);
           const overdueTasks = [];

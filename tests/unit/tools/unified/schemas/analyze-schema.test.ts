@@ -3,24 +3,86 @@ import { AnalyzeSchema } from '../../../../../src/tools/unified/schemas/analyze-
 
 describe('AnalyzeSchema', () => {
   it('should validate productivity stats analysis', () => {
+    // OMN-288: productivity_stats no longer accepts `scope` or `params.metrics` —
+    // neither was ever honored. `params.groupBy` is the whole input surface.
     const input = {
       analysis: {
         type: 'productivity_stats',
-        scope: {
-          dateRange: {
-            start: '2025-01-01',
-            end: '2025-01-31',
-          },
-        },
         params: {
           groupBy: 'week',
-          metrics: ['completed', 'velocity'],
         },
       },
     };
 
     const result = AnalyzeSchema.safeParse(input);
     expect(result.success).toBe(true);
+  });
+
+  // ==========================================================================
+  // OMN-288: shrink the advertised surface to what is actually honored.
+  //
+  // Six analyze ops accepted a full `scope` object. Exactly one read any of it:
+  // task_velocity reads `scope.dateRange`. Everything else was accepted and
+  // silently ignored, so a caller filtering by tag got a whole-database answer
+  // that looked successful. Per OMN-273, inputs the platform does not honor are
+  // DELETED from the schema so they reject loudly instead.
+  // ==========================================================================
+  describe('OMN-288 scope/metrics shrink', () => {
+    const parse = (analysis: Record<string, unknown>) => AnalyzeSchema.safeParse({ analysis });
+
+    const errorKeys = (result: ReturnType<typeof parse>) => (result.success ? '' : JSON.stringify(result.error.issues));
+
+    describe('scope is rejected on every op that never honored it', () => {
+      // pattern_analysis and recurring_tasks are included per Kip's decision D-1
+      // (2026-07-27): same accept-then-ignore class, same PR, no golden interaction.
+      for (const type of [
+        'productivity_stats',
+        'overdue_analysis',
+        'workflow_analysis',
+        'pattern_analysis',
+        'recurring_tasks',
+      ]) {
+        it(`rejects scope on ${type}`, () => {
+          const result = parse({ type, scope: { tags: ['work'] } });
+          expect(result.success).toBe(false);
+          expect(errorKeys(result)).toContain('scope');
+        });
+      }
+    });
+
+    describe('task_velocity keeps dateRange only — the one honored scope read', () => {
+      it('accepts scope.dateRange', () => {
+        const result = parse({
+          type: 'task_velocity',
+          scope: { dateRange: { start: '2025-01-01', end: '2025-01-31' } },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      for (const key of ['tags', 'projects', 'includeCompleted', 'includeDropped']) {
+        it(`rejects scope.${key} (never honored, even on velocity)`, () => {
+          const value = key === 'tags' || key === 'projects' ? ['x'] : true;
+          const result = parse({ type: 'task_velocity', scope: { [key]: value } });
+          expect(result.success).toBe(false);
+          expect(errorKeys(result)).toContain(key);
+        });
+      }
+    });
+
+    describe('params.metrics is rejected — it was accepted and ignored on both ops', () => {
+      for (const type of ['productivity_stats', 'task_velocity']) {
+        it(`rejects params.metrics on ${type}`, () => {
+          const result = parse({ type, params: { metrics: ['completed'] } });
+          expect(result.success).toBe(false);
+          expect(errorKeys(result)).toContain('metrics');
+        });
+      }
+    });
+
+    it('still accepts params.groupBy on both ops (the honored input)', () => {
+      expect(parse({ type: 'productivity_stats', params: { groupBy: 'week' } }).success).toBe(true);
+      expect(parse({ type: 'task_velocity', params: { groupBy: 'day' } }).success).toBe(true);
+    });
   });
 
   it('should validate parse meeting notes', () => {
@@ -486,16 +548,27 @@ describe('AnalyzeSchema', () => {
       expect(result.success).toBe(false);
     });
 
+    // OMN-288: this test used to pin scope.tags/includeCompleted + params.metrics on
+    // productivity_stats as "the documented surface". That surface was the defect —
+    // documented, accepted, and never honored. It now pins the honest surface, and
+    // task_velocity carries the one scope read that survives.
     it('still accepts the documented analyze surface (no regression — productivity_stats)', () => {
       const input = {
         analysis: {
           type: 'productivity_stats',
-          scope: {
-            dateRange: { start: '2026-01-01', end: '2026-01-31' },
-            tags: ['work'],
-            includeCompleted: true,
-          },
-          params: { groupBy: 'week', metrics: ['completed', 'velocity'] },
+          params: { groupBy: 'week' },
+        },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts the documented analyze surface (no regression — task_velocity dateRange)', () => {
+      const input = {
+        analysis: {
+          type: 'task_velocity',
+          scope: { dateRange: { start: '2026-01-01', end: '2026-01-31' } },
+          params: { groupBy: 'week' },
         },
       };
       const result = AnalyzeSchema.safeParse(input);

@@ -2102,10 +2102,16 @@ describe('OmniFocusAnalyzeTool', () => {
       const analysis = (schema as any).properties?.analysis;
       expect(analysis).toBeDefined();
 
-      // Should have type enum and loose scope/params objects
+      // Should have type enum and a loose params object
       expect(analysis.properties.type).toBeDefined();
-      expect(analysis.properties.scope).toEqual({ type: 'object' });
       expect(analysis.properties.params).toEqual({ type: 'object' });
+
+      // OMN-288: scope is no longer advertised as a generic `{ type: 'object' }`.
+      // It is task_velocity-only and dateRange-only, and says so — the old generic
+      // form implied a tags/projects filter that was never honored anywhere.
+      expect(analysis.properties.scope.type).toBe('object');
+      expect(analysis.properties.scope.description).toMatch(/task_velocity ONLY/);
+      expect(Object.keys(analysis.properties.scope.properties)).toEqual(['dateRange']);
 
       // Should NOT have oneOf (which duplicates scope across 8 branches)
       expect(analysis.oneOf).toBeUndefined();

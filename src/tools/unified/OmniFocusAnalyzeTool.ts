@@ -353,9 +353,10 @@ PERFORMANCE WARNINGS:
 - workflow_analysis: ~20-45s — scans the ENTIRE task database (no cap); scales with DB size
 - Most others: <1 second with caching
 
-SCOPE FILTERING:
-- Use dateRange for time-based analysis
-- Use tags/projects to focus analysis`;
+TIME-WINDOW SCOPING:
+- task_velocity accepts scope.dateRange ({ start, end }) — the only honored scope input.
+- All other analysis types take no scope and run against the whole database.
+- Passing scope elsewhere (or scope.tags/projects anywhere) is rejected, not ignored.`;
 
   schema = AnalyzeSchema;
 
@@ -387,7 +388,21 @@ SCOPE FILTERING:
                 'manage_reviews',
               ],
             },
-            scope: { type: 'object' },
+            // OMN-288: `scope` is task_velocity-only and dateRange-only. Every
+            // other op rejects it (it was accepted-and-ignored before). Advertised
+            // with its real shape rather than the old generic `{ type: 'object' }`,
+            // which implied a tags/projects filter that never existed.
+            scope: {
+              type: 'object',
+              description:
+                'task_velocity ONLY. Time window: { dateRange: { start, end } }. Other analysis types accept no scope.',
+              properties: {
+                dateRange: {
+                  type: 'object',
+                  properties: { start: { type: 'string' }, end: { type: 'string' } },
+                },
+              },
+            },
             params: { type: 'object' },
           },
           required: ['type'],
@@ -930,6 +945,10 @@ SCOPE FILTERING:
     const timer = new OperationTimerV2();
 
     try {
+      // OMN-288 (D3): these two are no longer passed to the script — it bound them
+      // into consts it never read. They remain here only as the cache-key and
+      // response-metadata values they have always reported, so neither the cache
+      // key nor the response shape changes. `limit` IS read by the script.
       const includeRecentlyCompleted = true;
       const groupBy = 'project';
       const limit = 100;
@@ -949,7 +968,7 @@ SCOPE FILTERING:
       }
 
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_SCRIPT, {
-        options: { includeRecentlyCompleted, groupBy, limit },
+        options: { limit },
       });
       const result = await this.execJson(script, OVERDUE_ANALYSIS_V3_SCHEMA);
 
