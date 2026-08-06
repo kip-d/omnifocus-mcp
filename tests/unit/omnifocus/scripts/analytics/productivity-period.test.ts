@@ -71,10 +71,18 @@ describe('OMN-250 — productivity_stats period vocabulary', () => {
     };
     expect(parsed.ok).toBe(true);
     expect(parsed.data.summary.daysInPeriod).toBe(expectedDaysInMonthPeriod());
-    // Independent sanity bound, so a mirrored-helper bug can't pass unnoticed:
-    // 28 (Feb predecessor, exactly midnight) .. 32 (31-day predecessor, +1).
+    // Independent sanity bound, so a mirrored-helper bug can't pass unnoticed.
+    // The ceiling is 33, not 32: `ceil(elapsed_ms / 86_400_000)` counts fixed
+    // 24h units, but the span is WALL-CLOCK. A DST fall-back repeats an hour, so
+    // a November run (predecessor October, 31 days) reaches 31d + h + 1h, which
+    // crosses 32 once the local clock passes ~23:00 — i.e. every November night
+    // after 11pm in a DST-observing zone, not a once-a-year edge. (Verified by
+    // brute force over 2024-2027 in America/Detroit: 113 such days, all 33.)
+    // CI runners are UTC and never see it; a dev machine does.
+    // Floor stays 28 as a safe under-estimate — spring-forward shortens the span,
+    // and the smallest value actually reachable is 29 (28-day February).
     expect(parsed.data.summary.daysInPeriod).toBeGreaterThanOrEqual(28);
-    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(32);
+    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(33);
   });
 
   it('an unknown period fails LOUD with the error envelope (never a silent no-match)', () => {
