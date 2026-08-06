@@ -141,8 +141,20 @@ if [ "$MODE" = "verify" ]; then
     exit 1
   fi
 
-  # Safe to read now: a STATUS line for THIS run exists, so the job has finished
-  # writing and launchd's exit code refers to it rather than the previous run.
+  # A STATUS line exists, but the wrapper is NOT done: it still writes the LEAK:
+  # line and then exits, and launchd only updates "last exit code" once the
+  # process actually terminates. Reading it here would race that exit and see an
+  # empty or previous-run value — reporting VERIFY FAILED for a run that passed.
+  # (Detecting STATUS closed the read-too-early-after-SPAWN half of this race;
+  # this closes the read-too-early-before-TERMINATION half.)
+  #
+  # Wait for the job to leave launchd's running set. `pid =` is present only
+  # while an instance is alive, so its absence is the termination signal.
+  for _ in $(seq 1 60); do
+    launchctl print "$GUI/$LABEL" 2>/dev/null | grep -qE '^[[:space:]]*pid =' || break
+    sleep 1
+  done
+
   rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
   echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
 
@@ -161,11 +173,27 @@ if [ "$MODE" = "verify" ]; then
       exit 3 ;;
   esac
 
-  if [ "${rc:-}" != "0" ]; then
-    echo "  VERIFY FAILED — see $RUN_LOG and $LAUNCHD_LOG" >&2
-    exit 1
-  fi
-  echo "  OK (job executed and the suite passed)."
+  # Judge on the STATUS line the wrapper WROTE for this run, not on launchd's
+  # cached exit code. The wrapper is the authority: it computed the verdict and
+  # recorded it in the region we just read. rc is corroboration — and it can
+  # legitimately be unreadable (launchd may not surface it promptly, or at all,
+  # for a job that has already exited), which must not by itself manufacture a
+  # failure for a run whose own STATUS says PASS. The "did it run at all?" case
+  # is already handled above: no STATUS line means we exited 1 before reaching
+  # here, so rc can no longer be a stale value standing in for a run that never
+  # happened.
+  case "$status_line" in
+    *"STATUS: PASS"*)
+      if [ -n "${rc:-}" ] && [ "$rc" != "0" ]; then
+        echo "  VERIFY FAILED — the wrapper logged PASS but launchd reports exit $rc;" >&2
+        echo "  these disagree, so the run is not trustworthy. See $RUN_LOG and $LAUNCHD_LOG" >&2
+        exit 1
+      fi
+      echo "  OK (job executed and the suite passed)." ;;
+    *)
+      echo "  VERIFY FAILED — see $RUN_LOG and $LAUNCHD_LOG" >&2
+      exit 1 ;;
+  esac
 fi
 
 echo

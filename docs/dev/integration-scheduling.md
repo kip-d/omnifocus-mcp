@@ -73,6 +73,15 @@ LEAK: none detected                  # or LEAK: test fixtures remain …
 ```
 
 `--verify` distinguishes the three outcomes: exit 0 (job ran, suite passed), exit 1 (job ran, suite failed), exit 3
-(**inconclusive** — OmniFocus was unreachable, so the suite never ran; the job itself is fine). It also checks the run
-log's mtime _before_ trusting the exit code, because launchd's "last exit code" persists from the previous run — a stale
-0 would otherwise read as success for a job that never executed.
+(**inconclusive** — OmniFocus was unreachable, so the suite never ran; the job itself is fine).
+
+How it avoids reading a previous run's result, since launchd's "last exit code" persists between runs: it records the
+run log's **line count** before `kickstart`, then waits for a `STATUS:` line to appear _beyond that mark_. The wrapper
+writes exactly one `STATUS:` line, at the very end of a run, so that is this run's completion signal by construction —
+and anything written earlier is unreadable, because nothing before the mark is examined. Keying on the spawned pid
+instead would only narrow the race, never close it: `kickstart` returns when the spawn is accepted, so the pid may not
+be registered yet.
+
+Once the marker appears the wrapper is still finishing (it writes `LEAK:` and then exits), so `--verify` waits for the
+job to leave launchd's running set before reading the exit code. The verdict comes from the `STATUS:` line the wrapper
+wrote — it is the authority — with the exit code as corroboration; a disagreement between the two fails verification.

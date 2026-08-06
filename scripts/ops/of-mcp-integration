@@ -52,9 +52,29 @@ log "repo: $REPO_DIR @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 # wedge (the app is up but stops answering events — a known recurring blocker).
 # Either produces a wall of red that looks exactly like a regression.
 #
-# So: round-trip one real AppleEvent first. Failure here exits 0 with a WEDGED
-# banner — the job did not run, and says so, rather than reporting a fake failure.
-# A hang is capped by a watchdog because a wedged OmniFocus can block forever.
+# Two-step, and the ORDER matters.
+#
+# Step 1 asks System Events whether an OmniFocus process exists. It must NOT be
+# `tell application "OmniFocus" to ...`: AppleScript auto-LAUNCHES the target of
+# a `tell`, so that phrasing cannot detect "not running" — it silently starts the
+# app instead, then the wrapper runs a 15-minute MUTATING suite against a
+# cold-started, possibly still-syncing database, unattended, at 08:00 on a
+# Saturday. The System Events form is verified not to launch: it returns false
+# for a quit app and leaves it quit.
+#
+# Step 2 only then round-trips a real AppleEvent, which is what distinguishes
+# "running and answering" from the TCC/AppleEvent wedge. Watchdogged, because a
+# wedged OmniFocus blocks forever.
+#
+# Either step failing exits 0 with a WEDGED banner naming which blocker it was —
+# the job did not run, and says so, rather than reporting a fake test failure.
+if ! osascript -e 'tell application "System Events" to return (name of processes) contains "OmniFocus"' 2>/dev/null | grep -q '^true$'; then
+  log "STATUS: WEDGED — OmniFocus is not running. The suite was NOT run."
+  log "  Deliberately not started: launching it here would run a mutating suite"
+  log "  against a cold, possibly still-syncing database. Start it and re-run."
+  exit 0
+fi
+
 osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
 probe_pid=$!
 ( sleep "$PREFLIGHT_TIMEOUT"; kill -9 "$probe_pid" 2>/dev/null ) >/dev/null 2>&1 &
@@ -69,12 +89,12 @@ wait "$probe_pid" 2>/dev/null || preflight_rc=$?
 kill "$watchdog_pid" 2>/dev/null || true
 
 if [ "$preflight_rc" -ne 0 ]; then
-  log "STATUS: WEDGED — OmniFocus did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
+  log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
   log "  The suite was NOT run. This is an environment blocker, not a test result."
-  log "  Check: OmniFocus running? a modal dialog open? Automation permission still granted?"
+  log "  Check: a modal dialog open? Automation/TCC permission still granted?"
   exit 0
 fi
-log "preflight: OmniFocus reachable"
+log "preflight: OmniFocus running and answering"
 
 # --- 2. Build (the suite runs against dist/) ----------------------------------
 if ! npm run build >> "$LOG" 2>&1; then
