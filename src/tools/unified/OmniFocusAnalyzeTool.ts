@@ -323,7 +323,9 @@ ANALYSIS TYPES:
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
   the screen does not judge; YOU judge each candidate from its evidence and act by id.
-- workflow_analysis: Deep workflow analysis
+- workflow_analysis: Workflow EVIDENCE — whole-DB counters, per-project counts/rates/avgAge, and
+  deferral facts (incl. two independent screen counts: over90Days, keywordMatched). It reports
+  measurements only; it does not score, rank, or recommend. YOU draw the conclusions.
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Structure meeting action items into OmniFocus.
   PREFERRED: extract the action items YOURSELF, then pass params.items[] —
@@ -2196,22 +2198,19 @@ TIME-WINDOW SCOPING:
     const wfLogger = createLogger('workflow_analysis');
 
     try {
-      // OMN-200: 'full' — workflow_analysis always scans the entire task DB (the
-      // 1000-task cap and its unreachable 'deep' branch were removed). The label is
-      // informational only; it no longer gates any behavior.
-      const analysisDepth = 'full';
-      const focusAreas = ['productivity', 'workload', 'bottlenecks'];
-      const maxInsights = 15;
       const includeRawData = false;
 
-      wfLogger.info(`Starting workflow analysis with depth: ${analysisDepth}, focus: ${focusAreas.join(', ')}`);
+      wfLogger.info('Starting workflow analysis (whole-database evidence bundle)');
 
-      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort((a, b) => a.localeCompare(b)).join('_')}_${maxInsights}`;
+      // OMN-291: the old key was
+      // `workflow_analysis_full_bottlenecks_productivity_workload_15` — every
+      // component named machinery this ticket deletes. Version-bumped to v4 so
+      // entries written before the demote can never serve the old shape after
+      // deploy; the stale v3 entries simply age out by TTL.
+      const cacheKey = 'workflow_analysis_v4';
 
       const cached = this.cache.get<{
-        insights?: Array<string | { insight?: string; message?: string }>;
-        recommendations?: Array<string | { recommendation?: string; message?: string }>;
-        patterns?: unknown[];
+        patterns?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
       }>('analytics', cacheKey);
       if (cached) {
@@ -2223,15 +2222,13 @@ TIME-WINDOW SCOPING:
           this.extractWorkflowKeyFindings(cached),
           {
             from_cache: true,
-            analysis_depth: analysisDepth,
-            focus_areas: focusAreas,
             ...timer.toMetadata(),
           },
         );
       }
 
       const script = this.omniAutomation.buildScript(WORKFLOW_ANALYSIS_V3, {
-        options: { analysisDepth, focusAreas, maxInsights, includeRawData },
+        options: { includeRawData },
       });
 
       const result = await this.execJson(script, WORKFLOW_ANALYSIS_V3_SCHEMA);
@@ -2261,15 +2258,14 @@ TIME-WINDOW SCOPING:
         );
       }
 
+      // OMN-291: `insights`, `recommendations`, and the analysis.depth/focusAreas
+      // echo are DELETED from the response — not emptied, absent. Tests assert
+      // absence, and the strict response schema rejects their reappearance.
       const responseData = {
         analysis: {
-          depth: analysisDepth,
-          focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: v3Data.insights || [],
         patterns: v3Data.patterns || {},
-        recommendations: v3Data.recommendations || [],
         data: includeRawData ? v3Data.data : undefined,
         metadata: {
           totalTasks: v3Data.totalTasks || 0,
@@ -2286,8 +2282,6 @@ TIME-WINDOW SCOPING:
       const keyFindings = this.extractWorkflowKeyFindings(responseData);
 
       return createAnalyticsResponseV2('workflow_analysis', responseData, 'Workflow Analysis Results', keyFindings, {
-        analysis_depth: analysisDepth,
-        focus_areas: focusAreas,
         include_raw_data: includeRawData,
         ...timer.toMetadata(),
       });
@@ -2327,55 +2321,46 @@ TIME-WINDOW SCOPING:
     }
   }
 
+  /**
+   * OMN-291: mechanical restatements only.
+   *
+   * Was: the first 3 insights + first 2 recommendations (verdict prose the
+   * generators produced) + "Found N pattern categories in your workflow".
+   * Those generators are deleted, so key findings become at most three plain
+   * restatements of numbers the response already carries. No advice verbs, no
+   * grades, no priorities — the caller reads the evidence and judges.
+   */
   private extractWorkflowKeyFindings(data: {
-    insights?: Array<string | { category?: string; insight?: string; message?: string; priority?: string }>;
-    recommendations?: Array<
-      string | { category?: string; recommendation?: string; message?: string; priority?: string }
-    >;
     patterns?: unknown;
-    metadata?: { score?: number; totalTasks?: number; totalProjects?: number };
+    metadata?: { totalTasks?: number; totalProjects?: number };
   }): string[] {
     const findings: string[] = [];
 
-    if (data.insights && Array.isArray(data.insights)) {
+    const metrics = (data.patterns as { workflowMetrics?: Record<string, unknown> } | undefined)?.workflowMetrics;
+    const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+
+    const total = data.metadata?.totalTasks ?? 0;
+    const availablePct = num(metrics?.availablePercentage);
+    const overduePct = num(metrics?.overduePercentage);
+    const blockedPct = num(metrics?.blockedPercentage);
+
+    if (total > 0 && availablePct !== undefined) {
+      findings.push(`${Math.round((availablePct / 100) * total)} of ${total} tasks available (${availablePct}%)`);
+    }
+
+    if (total > 0 && overduePct !== undefined) {
+      const overdueCount = Math.round((overduePct / 100) * total);
+      const deferral = (data.patterns as { deferralAnalysis?: { totalDeferred?: number } } | undefined)
+        ?.deferralAnalysis;
       findings.push(
-        ...(data.insights as unknown[]).slice(0, 3).map((i) => {
-          if (typeof i === 'string') return i;
-          if (typeof i === 'object' && i !== null) {
-            const insight =
-              (i as { insight?: string; message?: string }).insight ||
-              (i as { insight?: string; message?: string }).message;
-            return insight || JSON.stringify(i);
-          }
-          return JSON.stringify(i);
-        }),
+        deferral?.totalDeferred !== undefined
+          ? `${overdueCount} overdue (${overduePct}%), ${deferral.totalDeferred} deferred`
+          : `${overdueCount} overdue (${overduePct}%)`,
       );
     }
 
-    if (data.recommendations && Array.isArray(data.recommendations)) {
-      findings.push(
-        ...(data.recommendations as unknown[]).slice(0, 2).map((r) => {
-          if (typeof r === 'string') return r;
-          if (typeof r === 'object' && r !== null) {
-            const rec =
-              (r as { recommendation?: string; message?: string }).recommendation ||
-              (r as { recommendation?: string; message?: string }).message;
-            return rec || JSON.stringify(r);
-          }
-          return JSON.stringify(r);
-        }),
-      );
-    }
-
-    if (data.patterns && typeof data.patterns === 'object') {
-      const patternCount = Object.keys(data.patterns).length;
-      if (patternCount > 0) {
-        findings.push(`Found ${patternCount} pattern categories in your workflow`);
-      }
-    }
-
-    if (data.metadata?.totalTasks && data.metadata.totalTasks > 0) {
-      findings.push(`Analyzed ${data.metadata.totalTasks} tasks across ${data.metadata.totalProjects || 0} projects`);
+    if (total > 0 && blockedPct !== undefined) {
+      findings.push(`${Math.round((blockedPct / 100) * total)} blocked (${blockedPct}%)`);
     }
 
     return findings.length > 0 ? findings : ['Analysis completed successfully'];

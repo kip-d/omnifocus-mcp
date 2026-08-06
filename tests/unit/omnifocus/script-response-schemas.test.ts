@@ -2432,24 +2432,19 @@ describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
   const minimalPayload = {
     ok: true,
     v: '3',
+    // OMN-291: the evidence-bundle shape. No insights, no recommendations, and
+    // no analysisDepth/focusAreas/maxInsights metadata echo.
     data: {
-      insights: [{ category: 'productivity', insight: '75% of tasks are ready', priority: 'medium' }],
       patterns: {
         workloadDistribution: { byProject: {}, byTag: {}, timeBuckets: {} },
         workflowMetrics: { availablePercentage: '75.0', overduePercentage: '5.0' },
-        deferralAnalysis: { totalDeferred: 10, strategicDeferrals: 8, problematicDeferrals: 2 },
+        deferralAnalysis: { totalDeferred: 10, over90Days: 2, keywordMatched: 8 },
       },
-      recommendations: [
-        { category: 'dependency_management', recommendation: 'Review blocked tasks', priority: 'high' },
-      ],
       totalTasks: 200,
       totalProjects: 15,
       analysisTime: 1200,
       dataPoints: 200,
       metadata: {
-        analysisDepth: 'full', // OMN-200: full-DB scan is the only mode now
-        focusAreas: ['productivity', 'workload'],
-        maxInsights: 15,
         method: 'omnijs_v3_single_bridge',
         optimization: 'omnijs_v3',
         query_time_ms: 1200,
@@ -2473,12 +2468,37 @@ describe('WORKFLOW_ANALYSIS_V3_SCHEMA', () => {
     expect(result.success).toBe(true);
   });
 
-  it('(b) rejects wrong-typed insight (priority not string)', () => {
+  // OMN-291: the demote is PINNED, not merely performed. A re-introduced
+  // insights/recommendations key is a schema VIOLATION, so a future change that
+  // quietly restores verdict prose fails here instead of shipping.
+  it('(b) rejects a re-introduced insights key (the demote is pinned)', () => {
     const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
       ...minimalPayload,
       data: {
         ...minimalPayload.data,
-        insights: [{ category: 'productivity', insight: 'x', priority: 5 }],
+        insights: [{ category: 'productivity', insight: 'x', priority: 'high' }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects a re-introduced recommendations key (the demote is pinned)', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        recommendations: [{ category: 'x', recommendation: 'y', priority: 'high' }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(b) rejects the old analysisDepth/focusAreas/maxInsights metadata echo', () => {
+    const result = WORKFLOW_ANALYSIS_V3_SCHEMA.safeParse({
+      ...minimalPayload,
+      data: {
+        ...minimalPayload.data,
+        metadata: { ...minimalPayload.data.metadata, analysisDepth: 'full' },
       },
     });
     expect(result.success).toBe(false);

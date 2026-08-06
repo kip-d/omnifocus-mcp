@@ -58,15 +58,14 @@ function runScript(tasks: FakeTask[]): {
   data: {
     totalTasks: number;
     patterns: {
-      workloadDistribution: { byProject: Record<string, { totalTasks: number }> };
+      // OMN-291: the byProject row's task count is `total` now (mechanical row).
+      workloadDistribution: { byProject: Record<string, { total: number }> };
       workflowMetrics: { availablePercentage: number };
     };
   };
 } {
+  // OMN-291: analysisDepth/focusAreas/maxInsights are gone with the generators.
   const options = {
-    analysisDepth: 'full',
-    focusAreas: ['productivity', 'workload', 'bottlenecks'],
-    maxInsights: 15,
     includeRawData: false,
   };
   return runAnalyticsScript(WORKFLOW_ANALYSIS_V3, options, { flattenedTasks: tasks }) as ReturnType<typeof runScript>;
@@ -83,7 +82,7 @@ describe('OMN-270 — workflow_analysis skips project root tasks in task-level m
 
     // Pre-fix: the root was processed as a task → per-project total 3 and
     // availablePercentage 66.7 (root + available leaf, over 3).
-    expect(parsed.data.patterns.workloadDistribution.byProject['P'].totalTasks).toBe(2);
+    expect(parsed.data.patterns.workloadDistribution.byProject['P'].total).toBe(2);
     // /code-review of this PR (round 1): the denominator must move WITH the
     // numerators — skipping roots only in the counters while totalTasks kept
     // counting them understated every workflowMetrics percentage (the OMN-200
