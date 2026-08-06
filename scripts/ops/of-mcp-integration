@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# of-mcp-integration — launchd wrapper for the live integration suite (OMN-302).
+#
+# Canonical source: scripts/ops/of-mcp-integration in the omnifocus-mcp repo.
+# Deploy with scripts/ops/install-integration-schedule.sh, which copies this file
+# to ~/bin and installs the launchd plist. Do NOT hand-edit the deployed copy —
+# edit here and re-run the installer, or the next deploy will clobber your change.
+#
+# WHY THIS EXISTS (OMN-302): `npm run test:integration` is the project's only
+# layer-6 (live-bridge) check, and CI cannot run it — OmniFocus is macOS-only and
+# the GitHub job is `if: false` by design. Nothing else triggered it, so contract
+# changes rotted in it silently: OMN-278 and OMN-286 each shipped a behavior
+# change without sweeping the suite, and both sat undetected for 13 days until a
+# hand-run on 2026-08-06 surfaced 7 failures at once. This job closes that gap to
+# a week.
+#
+# THIS JOB WRITES TO THE REAL OMNIFOCUS DATABASE. The suite creates, mutates, and
+# deletes fixtures inside the __MCP_TEST_SANDBOX__ folder and __TEST__-prefixed
+# inbox tasks. That is inherent to a live-bridge check; it is not a bug.
+set -euo pipefail
+
+# launchd runs with a minimal PATH that omits Homebrew → npm not found → exit 127.
+# Same probe-fixed-dirs approach (and same order) as of-mcp-diagnose, so scheduled
+# and manual runs resolve npm/node to the same prefix.
+brew_dirs=()
+for d in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$d" ] && brew_dirs+=("$d")
+done
+if [ ${#brew_dirs[@]} -gt 0 ]; then
+  PATH="$(IFS=:; printf '%s' "${brew_dirs[*]}"):$PATH"
+fi
+export PATH
+
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LOG="${OF_MCP_INTEGRATION_LOG:-$HOME/.omnifocus-mcp/integration.log}"
+PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
+
+mkdir -p "$(dirname "$LOG")"
+cd "$REPO_DIR" || { echo "of-mcp-integration: repo dir not found: $REPO_DIR" >&2; exit 1; }
+
+log() { echo "$*" >> "$LOG"; }
+
+log ""
+log "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') ====="
+log "repo: $REPO_DIR @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+# --- 1. Pre-flight: is OmniFocus actually reachable? --------------------------
+#
+# A WEDGE IS NOT A TEST FAILURE, and conflating them is how a scheduled job
+# trains its owner to ignore it. Two distinct blockers make the suite unrunnable
+# through no fault of the code: OmniFocus not running, and the AppleEvent/TCC
+# wedge (the app is up but stops answering events — a known recurring blocker).
+# Either produces a wall of red that looks exactly like a regression.
+#
+# So: round-trip one real AppleEvent first. Failure here exits 0 with a WEDGED
+# banner — the job did not run, and says so, rather than reporting a fake failure.
+# A hang is capped by a watchdog because a wedged OmniFocus can block forever.
+osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
+probe_pid=$!
+( sleep "$PREFLIGHT_TIMEOUT"; kill -9 "$probe_pid" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog_pid=$!
+# Drop the watchdog from the job table BEFORE killing it. Without this, bash
+# announces "Terminated: 15" on stderr every healthy run — which lands in the
+# launchd log and reads like an error in a job whose whole point is that its
+# output gets trusted.
+disown "$watchdog_pid" 2>/dev/null || true
+preflight_rc=0
+wait "$probe_pid" 2>/dev/null || preflight_rc=$?
+kill "$watchdog_pid" 2>/dev/null || true
+
+if [ "$preflight_rc" -ne 0 ]; then
+  log "STATUS: WEDGED — OmniFocus did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
+  log "  The suite was NOT run. This is an environment blocker, not a test result."
+  log "  Check: OmniFocus running? a modal dialog open? Automation permission still granted?"
+  exit 0
+fi
+log "preflight: OmniFocus reachable"
+
+# --- 2. Build (the suite runs against dist/) ----------------------------------
+if ! npm run build >> "$LOG" 2>&1; then
+  log "STATUS: FAILED — build failed; suite not run."
+  exit 1
+fi
+
+# --- 3. Run the suite ---------------------------------------------------------
+#
+# NEVER pipe this. `npm ... | tail` yields tail's exit status, so the wrapper
+# would report success while the suite failed — observed for real on 2026-08-06,
+# where a 7-failure run reported exit 0. Redirect, then read $? directly.
+set +e
+npm run test:integration >> "$LOG" 2>&1
+suite_rc=$?
+set -e
+
+# --- 4. Leak check ------------------------------------------------------------
+#
+# The suite's own cleanup is folder-scoped and has historically left __TEST__
+# inbox tasks behind. test:cleanup is DRY-RUN by default and stays that way here:
+# that default was chosen after loose substring matching once deleted real user
+# tasks, and a scheduled job is the worst possible place to override a safety
+# decision made in response to an incident. Detect and report; a human runs
+# `npm run test:cleanup -- --apply`.
+set +e
+cleanup_out="$(npm run test:cleanup 2>&1)"
+set -e
+printf '%s\n' "$cleanup_out" >> "$LOG"
+
+leaked="no"
+if printf '%s' "$cleanup_out" | grep -qE '^(Inbox tasks|Orphan tasks|Sandbox projects|Orphan projects|Sandbox folders|Test tags).*: [1-9]'; then
+  leaked="yes"
+fi
+
+# --- 5. Verdict ---------------------------------------------------------------
+if [ "$suite_rc" -eq 0 ]; then
+  log "STATUS: PASS (suite exit 0)"
+else
+  log "STATUS: FAILED — suite exit $suite_rc. Grep this log for 'FAIL ' and 'Tests  '."
+fi
+if [ "$leaked" = "yes" ]; then
+  log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
+  log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)"
+else
+  log "LEAK: none detected"
+fi
+
+exit "$suite_rc"
