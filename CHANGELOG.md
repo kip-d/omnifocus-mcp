@@ -9,6 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
+  `productivity_stats` surfaces three computed fields it was discarding** (OMN-289) — the response now contains exactly
+  what was actually computed: nothing real hidden, nothing fake shipped. **Added to `velocity`:** `averageCreated`,
+  `backlogGrowthRate` (negative means a shrinking backlog), `medianCompletionHours`, `tasksAnalyzed` — all four were
+  computed by the script and discarded by the tool-layer reshape. Parsed from the script's `toFixed` strings to numbers,
+  matching the existing `averagePerDay`/ `predictedCapacity` convention. **Added to `stats.overview`:**
+  `completedInPeriod`, `dailyAverage`, `daysInPeriod` (same silent-omission class as the OMN-254 `availableTasks`
+  rescue). **Removed:** `velocity.peakDay` (always `{date:null,count:0}`), `velocity.trend` (always `'stable'`), the
+  `patterns` block (always three empty containers), and `insights` (always `[]`). Every one was a hardcoded constant
+  that advertised analysis which did not exist — the OMN-273 acceptable-break class, since no client can have derived
+  value from a field that only ever held one constant. The dead code riding on them goes too: the peak-day and
+  most-productive-day collectors (whose guards could never pass), the top-project collector, and the
+  `increasing`/`decreasing` trend labels (only the `'stable'` fallback was reachable). The velocity cache key is
+  version-bumped (`velocity_v2_*` → `velocity_v3_*`) because that cache stores the reshaped response object, so stale
+  entries would otherwise serve the old shape until TTL expiry after deploy.
+
 - **BREAKING (analyze response): `workflow_analysis` is demoted to an evidence bundle** (OMN-291) — it screens and
   counts; it no longer scores, ranks, or recommends. Per OMN-258's contract the server produces evidence and the caller
   judges, and that now explicitly includes numeric weight-composites, not just prose. **Removed:** `insights[]` and

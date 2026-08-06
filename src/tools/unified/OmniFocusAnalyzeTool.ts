@@ -605,6 +605,10 @@ TIME-WINDOW SCOPING:
       completionRate: number;
       activeProjects: number;
       overdueCount: number;
+      // OMN-289 (D7): computed by the script's summary, previously dropped here.
+      completedInPeriod: number;
+      dailyAverage: number;
+      daysInPeriod: number;
     };
     projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
     tagStatsArray: Record<string, unknown>;
@@ -617,6 +621,9 @@ TIME-WINDOW SCOPING:
       completionRate?: number;
       activeProjects?: number;
       overdueCount?: number;
+      completedInPeriod?: number;
+      dailyAverage?: number;
+      daysInPeriod?: number;
     }
     interface ScriptData {
       summary?: ScriptOverview;
@@ -642,6 +649,9 @@ TIME-WINDOW SCOPING:
       completionRate: 0,
       activeProjects: 0,
       overdueCount: 0,
+      completedInPeriod: 0,
+      dailyAverage: 0,
+      daysInPeriod: 0,
     };
     if (!actualData || typeof actualData !== 'object' || !('summary' in actualData)) {
       return { overview: empty, projectStatsArray: [], tagStatsArray: {}, insights: [] };
@@ -660,6 +670,12 @@ TIME-WINDOW SCOPING:
         completionRate: summary.completionRate || 0,
         activeProjects: summary.activeProjects || 0,
         overdueCount: summary.overdueCount || 0,
+        // OMN-289 (D7): the script computed all three and the reshape dropped
+        // them — the same silent-omission class as the OMN-254 availableTasks
+        // rescue directly above, whose `|| 0` guard style this mirrors.
+        completedInPeriod: summary.completedInPeriod || 0,
+        dailyAverage: summary.dailyAverage || 0,
+        daysInPeriod: summary.daysInPeriod || 0,
       },
       projectStatsArray: includeProjectStats ? typedScriptData.projectStats || [] : [],
       tagStatsArray: includeTagStats ? typedScriptData.tagStats || {} : {},
@@ -750,12 +766,15 @@ TIME-WINDOW SCOPING:
         rangeEnd = now.toISOString().split('T')[0];
       }
 
-      const cacheKey = `velocity_v2_${rangeStart}_${rangeEnd}_${groupBy}_${includeWeekends}`;
+      // OMN-289: version-bumped v2 -> v3. This cache stores the RESHAPED response
+      // object (see `cache.set(..., responseData)` below), NOT the script envelope,
+      // so entries written before this change would keep serving the old shape —
+      // peakDay/trend/patterns/insights present, the four real numbers missing —
+      // until TTL expiry after deploy. Same class as OMN-292's productivity bump.
+      const cacheKey = `velocity_v3_${rangeStart}_${rangeEnd}_${groupBy}_${includeWeekends}`;
 
       const cached = this.cache.get<{
         velocity?: { period?: string; tasksCompleted?: number; averagePerDay?: number };
-        patterns?: unknown;
-        insights?: string[];
       }>('analytics', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached task velocity');
@@ -799,22 +818,34 @@ TIME-WINDOW SCOPING:
       const averagePerDay = parseFloat(scriptData?.velocity?.dailyVelocity || '0');
       const predictedCapacity = parseFloat(scriptData?.projections?.tasksPerWeek || '0');
 
-      const peak = { date: null, count: 0 };
-      const trend = 'stable' as const;
       const daily = scriptData?.throughput?.intervals || [];
+
+      // OMN-289 (D10): the script emits these as toFixed strings; the tool layer
+      // parses them to numbers, matching the averagePerDay/predictedCapacity
+      // convention directly above. All four were computed and then discarded.
+      const averageCreated = parseFloat(scriptData?.velocity?.averageCreated || '0');
+      const backlogGrowthRate = parseFloat(scriptData?.velocity?.backlogGrowthRate || '0');
+      const medianCompletionHours = parseFloat(scriptData?.breakdown?.medianCompletionHours || '0');
 
       const responseData = {
         velocity: {
           period: groupBy,
           tasksCompleted,
           averagePerDay: typeof averagePerDay === 'number' ? averagePerDay : Number(averagePerDay) || 0,
-          peakDay: peak,
-          trend,
           predictedCapacity: typeof predictedCapacity === 'number' ? predictedCapacity : Number(predictedCapacity) || 0,
+          averageCreated,
+          // Negative means the backlog is shrinking — completed outpaces created.
+          backlogGrowthRate,
+          medianCompletionHours,
+          tasksAnalyzed: scriptData?.breakdown?.tasksAnalyzed ?? 0,
         },
         daily,
-        patterns: { byDayOfWeek: {}, byTimeOfDay: {}, byProject: [] },
-        insights: [],
+        // OMN-289 (D10): `peakDay` ({date:null,count:0}), `trend` ('stable'),
+        // `patterns` (three empty containers) and `insights` ([]) are DELETED.
+        // Every one was a hardcoded constant — never computed from anything — so
+        // they advertised analysis that did not exist. This is the OMN-273
+        // acceptable-break class: no client can have derived value from a field
+        // that only ever held the same constant.
       };
 
       this.cache.set('analytics', cacheKey, responseData);
@@ -842,20 +873,28 @@ TIME-WINDOW SCOPING:
     }
   }
 
+  /**
+   * OMN-289 (D10): trimmed to findings that can actually fire.
+   *
+   * Removed with the fabricated fields they read:
+   * - collectPeakDayFinding — `peakDay` was the constant {date:null,count:0},
+   *   so the `peakDay?.date &&` guard could never pass.
+   * - collectMostProductiveDayFinding — `patterns.byDayOfWeek` was always {},
+   *   so `days.length > 0` could never pass.
+   * - collectTopProjectFinding — `patterns.byProject` was always [], same.
+   * - The TREND_LABELS map's increasing/decreasing entries — `trend` was
+   *   hardcoded 'stable', so only the 'Velocity stable' fallback was reachable.
+   *   With trend deleted there is no trend claim to make at all.
+   * - The `insights[0]` push — velocity's insights array was always [].
+   */
   private extractVelocityKeyFindings(data: {
     velocity?: {
       period?: string;
       tasksCompleted?: number;
       averagePerDay?: number;
-      peakDay?: { date: string | null; count: number };
-      trend?: string;
       predictedCapacity?: number;
+      backlogGrowthRate?: number;
     };
-    patterns?: {
-      byDayOfWeek?: Record<string, number>;
-      byProject?: Array<{ name: string; completed: number }>;
-    };
-    insights?: string[];
   }): string[] {
     const findings: string[] = [];
 
@@ -863,77 +902,26 @@ TIME-WINDOW SCOPING:
       this.collectVelocityFindings(data.velocity, findings);
     }
 
-    this.collectPeakDayFinding(data.velocity?.peakDay, findings);
-    this.collectMostProductiveDayFinding(data.patterns?.byDayOfWeek, findings);
-    this.collectTopProjectFinding(data.patterns?.byProject, findings);
-
-    if (data.insights && Array.isArray(data.insights) && data.insights.length > 0) {
-      findings.push(data.insights[0]);
-    }
-
     return findings.length > 0 ? findings : ['No velocity data available for this period'];
   }
-
-  private static readonly TREND_LABELS: Record<string, string> = {
-    increasing: 'Velocity trending upward',
-    decreasing: 'Velocity trending downward',
-  };
 
   private collectVelocityFindings(
     velocity: {
       tasksCompleted?: number;
       averagePerDay?: number;
-      trend?: string;
       predictedCapacity?: number;
     },
     findings: string[],
   ): void {
-    const { tasksCompleted, averagePerDay, trend, predictedCapacity } = velocity;
+    const { tasksCompleted, averagePerDay, predictedCapacity } = velocity;
 
     if (tasksCompleted && tasksCompleted > 0) {
       const avgPerDay = averagePerDay || 0;
       findings.push(`Completed ${tasksCompleted} tasks (avg ${avgPerDay.toFixed(1)}/day)`);
     }
 
-    findings.push(OmniFocusAnalyzeTool.TREND_LABELS[trend ?? ''] ?? 'Velocity stable');
-
     if (predictedCapacity && predictedCapacity > 0) {
       findings.push(`Predicted capacity: ${Math.round(predictedCapacity)} tasks/week`);
-    }
-  }
-
-  private collectPeakDayFinding(peakDay: { date: string | null; count: number } | undefined, findings: string[]): void {
-    if (peakDay?.date && peakDay.count > 0) {
-      findings.push(`Peak day: ${peakDay.date} (${peakDay.count} tasks)`);
-    }
-  }
-
-  private collectMostProductiveDayFinding(byDayOfWeek: Record<string, number> | undefined, findings: string[]): void {
-    if (!byDayOfWeek) return;
-
-    const days = Object.entries(byDayOfWeek).sort((a, b) => {
-      const aVal = typeof a[1] === 'number' ? a[1] : 0;
-      const bVal = typeof b[1] === 'number' ? b[1] : 0;
-      return bVal - aVal;
-    });
-
-    if (days.length > 0) {
-      const dayCount = typeof days[0][1] === 'number' ? days[0][1] : 0;
-      if (dayCount > 0) {
-        findings.push(`Most productive: ${days[0][0]}s`);
-      }
-    }
-  }
-
-  private collectTopProjectFinding(
-    byProject: Array<{ name: string; completed: number }> | undefined,
-    findings: string[],
-  ): void {
-    if (!Array.isArray(byProject) || byProject.length === 0) return;
-
-    const topProject = byProject[0];
-    if (topProject && topProject.completed > 0) {
-      findings.push(`Fastest moving project: ${topProject.name}`);
     }
   }
 
