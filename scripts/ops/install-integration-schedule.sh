@@ -126,9 +126,19 @@ if [ "$MODE" = "verify" ]; then
 
   launchctl kickstart -k "$GUI/$LABEL"
 
-  # Budget covers build + ~15 min suite + cleanup scan, polled at 5s.
+  # DERIVE the budget from the wrapper's own timeouts instead of hardcoding one.
+  # A fixed 360x5s = 30 min was shorter than the wrapper's worst case (build 600
+  # + suite 2700 + cleanup 600 = 65 min), so a merely-slow-but-healthy run —
+  # still well inside its own SUITE_TIMEOUT, not hung — was reported as
+  # "VERIFY FAILED: the job did not execute" while it ran on unattended against
+  # the live database. Read the same env vars with the same defaults, sum them,
+  # and add 20% slack; a hardcoded number here silently rots the moment any of
+  # those defaults change.
+  verify_budget=$(( (${OF_MCP_BUILD_TIMEOUT:-600} + ${OF_MCP_SUITE_TIMEOUT:-2700} + ${OF_MCP_CLEANUP_TIMEOUT:-600}) * 12 / 10 ))
+  verify_polls=$(( verify_budget / 5 + 1 ))
+  echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
   new_region=""
-  for _ in $(seq 1 360); do
+  for _ in $(seq 1 "$verify_polls"); do
     new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
     printf '%s' "$new_region" | grep -qaE '^STATUS: ' && break
     new_region=""

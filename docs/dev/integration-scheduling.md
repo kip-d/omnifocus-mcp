@@ -56,10 +56,21 @@ that exact mistake made a 7-failure run report exit 0 — the wrapper would have
 starts. An unbounded wedge mid-suite is this job's worst failure: the wrapper blocks forever, never writes a `STATUS:`
 line, and stays alive under launchd — which will not start a new instance of a `StartCalendarInterval` job while the
 previous one is still running, so **every subsequent Saturday is silently skipped, indefinitely**. That recreates the
-exact blind spot this job exists to close. Build, suite, and cleanup each run under a timeout (`OF_MCP_SUITE_TIMEOUT`,
-default 2700s; `OF_MCP_CLEANUP_TIMEOUT`, default 600s — hang-breakers, not performance budgets). A timeout reports
-`WEDGED`, not `FAILED`, and still attempts the leak scan, since a suite killed mid-flight is _more_ likely to have left
-fixtures behind.
+exact blind spot this job exists to close. Each step has its **own** timeout — sharing one knob means tuning the leak
+scan silently retunes the build:
+
+| Env override               | Default | Bounds                     |
+| -------------------------- | ------- | -------------------------- |
+| `OF_MCP_PREFLIGHT_TIMEOUT` | 30s     | the AppleEvent round-trip  |
+| `OF_MCP_BUILD_TIMEOUT`     | 600s    | `npm run build`            |
+| `OF_MCP_SUITE_TIMEOUT`     | 2700s   | `npm run test:integration` |
+| `OF_MCP_CLEANUP_TIMEOUT`   | 600s    | `npm run test:cleanup`     |
+
+These are hang-breakers, not performance budgets. A timeout reports `WEDGED`, not `FAILED`, and still attempts the leak
+scan, since a suite killed mid-flight is _more_ likely to have left fixtures behind. The kill targets the whole process
+group: `npm` forks vitest, which forks node, and killing only the top-level process would leave workers writing to the
+live database after the wrapper had already logged its verdict and exited. (`--verify` derives its own wait from these
+values, so raising one cannot leave the installer reporting a false failure.)
 
 **Leaks are detected, not auto-deleted.** The suite's cleanup is folder-scoped and has left `__TEST__` inbox tasks
 behind. `npm run test:cleanup` is dry-run by default _because loose substring matching once deleted real user tasks_

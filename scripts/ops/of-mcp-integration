@@ -34,8 +34,13 @@ export PATH
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 LOG="${OF_MCP_INTEGRATION_LOG:-$HOME/.omnifocus-mcp/integration.log}"
 PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
-# Generous against a ~15-minute suite: this is a hang-breaker, not a perf budget.
+# Generous against a ~15-minute suite: these are hang-breakers, not perf budgets.
+# Each step gets its OWN knob. The build previously borrowed CLEANUP_TIMEOUT,
+# which meant tuning the leak scan down silently retuned the build — a healthy
+# build over the shortened bound would be killed and the weekly suite would stop
+# running, with nothing actually wedged.
 SUITE_TIMEOUT="${OF_MCP_SUITE_TIMEOUT:-2700}"
+BUILD_TIMEOUT="${OF_MCP_BUILD_TIMEOUT:-600}"
 CLEANUP_TIMEOUT="${OF_MCP_CLEANUP_TIMEOUT:-600}"
 
 mkdir -p "$(dirname "$LOG")"
@@ -54,24 +59,48 @@ log() { echo "$*" >> "$LOG"; }
 # a stuck process by hand.
 #
 # Returns 124 on timeout, matching GNU timeout, so callers can tell "wedged" from
-# "failed". Uses coreutils timeout when available (--foreground so signals reach
-# the child from a non-interactive shell; -k follows TERM with KILL); otherwise
-# falls back to the same background-watchdog shape the preflight uses.
+# "failed".
+#
+# KILLING THE WHOLE PROCESS GROUP IS THE POINT, not just the command we spawned.
+# `npm` forks vitest, which forks node, which may have an osascript outstanding.
+# Killing only the top-level npm leaves those children alive, still mutating the
+# live OmniFocus database, while this wrapper has already logged WEDGED, run the
+# leak scan CONCURRENTLY against a database still being written to (so the
+# inventory is wrong by construction), and exited.
+#
+# coreutils path: deliberately NOT --foreground. Its man page is explicit — "in
+# this mode, children of COMMAND will not be timed out" — so that flag, which an
+# earlier version of this file passed, disables the very group-kill wanted here.
+# Without it, timeout runs the command in its own process group and signals the
+# group. -k follows TERM with KILL for anything ignoring TERM.
+#
+# fallback path: `set -m` puts the child in its own process group (PGID == PID),
+# so `kill -9 -PID` reaches the whole tree; the bare-PID kill is a last resort if
+# the group is already gone.
+# OF_MCP_FORCE_FALLBACK exists so the fallback branch can actually be exercised
+# on a machine that HAS coreutils. Without it the fallback is unreachable here
+# and its process-group kill can only be asserted, never tested — and it is the
+# branch that runs on a stock macOS with no Homebrew coreutils, i.e. the one
+# least likely to be exercised by accident and most likely to leak orphans.
 TIMEOUT_CMD=""
-for c in timeout gtimeout; do
-  command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
-done
+if [ -z "${OF_MCP_FORCE_FALLBACK:-}" ]; then
+  for c in timeout gtimeout; do
+    command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+  done
+fi
 
 run_bounded() {
   local secs="$1"; shift
   local rc=0
   if [ -n "$TIMEOUT_CMD" ]; then
-    "$TIMEOUT_CMD" --foreground -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
+    "$TIMEOUT_CMD" -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
     return "$rc"
   fi
+  set -m
   "$@" >> "$LOG" 2>&1 &
   local child=$!
-  ( sleep "$secs"; kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
+  set +m
+  ( sleep "$secs"; kill -9 -"$child" 2>/dev/null || kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
   local wd=$!
   disown "$wd" 2>/dev/null || true
   wait "$child" 2>/dev/null || rc=$?
@@ -142,14 +171,14 @@ log "preflight: OmniFocus running and answering"
 
 # --- 2. Build (the suite runs against dist/) ----------------------------------
 set +e
-run_bounded "$CLEANUP_TIMEOUT" npm run build
+run_bounded "$BUILD_TIMEOUT" npm run build
 build_rc=$?
 set -e
 if [ "$build_rc" -ne 0 ]; then
   # Bounded too: a hung build blocks every future Saturday exactly like a hung
   # suite does. 124 means it hung rather than failed; say which.
   if [ "$build_rc" -eq 124 ]; then
-    log "STATUS: WEDGED — build exceeded ${CLEANUP_TIMEOUT}s and was killed; suite not run."
+    log "STATUS: WEDGED — build exceeded ${BUILD_TIMEOUT}s and was killed; suite not run."
   else
     log "STATUS: FAILED — build failed (exit $build_rc); suite not run."
   fi
