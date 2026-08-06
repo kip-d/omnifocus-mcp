@@ -24,6 +24,20 @@ function expectedDaysInPeriod(backDays: number): number {
   return Math.ceil((now.getTime() - start.getTime()) / 86400000);
 }
 
+/** Mirror the script's 'month' anchor, which uses setMonth — NOT a fixed day count.
+ * The span is the length of the PRECEDING calendar month, plus the same midnight-anchor
+ * +1 that expectedDaysInPeriod documents. A 31-day predecessor therefore yields 32,
+ * which is why the naive `28..31` range this test used to assert failed in every month
+ * whose predecessor has 31 days: Jan, Feb, Apr, Jun, Aug, Sep, Nov. It passed on merge
+ * day (June — a 30-day predecessor) and rotted silently from there. */
+function expectedDaysInMonthPeriod(): number {
+  const now = new Date();
+  const start = new Date();
+  start.setMonth(now.getMonth() - 1);
+  start.setHours(0, 0, 0, 0);
+  return Math.ceil((now.getTime() - start.getTime()) / 86400000);
+}
+
 describe('OMN-250 — productivity_stats period vocabulary', () => {
   it("period 'day' (a legal Zod value) produces a VALID envelope with midnight-today semantics", () => {
     const parsed = runScript({ period: 'day', includeProjectStats: false, includeTagStats: false }) as {
@@ -56,8 +70,11 @@ describe('OMN-250 — productivity_stats period vocabulary', () => {
       data: { summary: { daysInPeriod: number } };
     };
     expect(parsed.ok).toBe(true);
+    expect(parsed.data.summary.daysInPeriod).toBe(expectedDaysInMonthPeriod());
+    // Independent sanity bound, so a mirrored-helper bug can't pass unnoticed:
+    // 28 (Feb predecessor, exactly midnight) .. 32 (31-day predecessor, +1).
     expect(parsed.data.summary.daysInPeriod).toBeGreaterThanOrEqual(28);
-    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(31);
+    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(32);
   });
 
   it('an unknown period fails LOUD with the error envelope (never a silent no-match)', () => {
