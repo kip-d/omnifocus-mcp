@@ -121,7 +121,17 @@ if [ "$MODE" = "verify" ]; then
   # remember where the log ends now, and wait for a STATUS line to appear BEYOND
   # that point. That is this run's completion signal by construction — no pid, no
   # race, and stale content is unreadable because we only ever look past the mark.
-  before_lines="$(wc -l < "$RUN_LOG" 2>/dev/null || echo 0)"
+  # `wc -l < "$RUN_LOG" 2>/dev/null` does NOT guard this: the failure is the
+  # SHELL's input redirection, which happens before wc runs and before its
+  # stderr is redirected. On a first-ever install the log does not exist yet, so
+  # that form printed "No such file or directory" into the install output and
+  # left before_lines EMPTY rather than 0 (observed on the first real install,
+  # 2026-08-06). Test for the file instead of trying to silence the redirect.
+  if [ -f "$RUN_LOG" ]; then
+    before_lines="$(wc -l < "$RUN_LOG")"
+  else
+    before_lines=0
+  fi
   before_lines="${before_lines// /}"
 
   launchctl kickstart -k "$GUI/$LABEL"

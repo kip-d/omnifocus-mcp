@@ -127,26 +127,40 @@ log "repo: $REPO_DIR @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 #
 # Two-step, and the ORDER matters.
 #
-# Step 1 asks System Events whether an OmniFocus process exists. It must NOT be
-# `tell application "OmniFocus" to ...`: AppleScript auto-LAUNCHES the target of
-# a `tell`, so that phrasing cannot detect "not running" — it silently starts the
-# app instead, then the wrapper runs a 15-minute MUTATING suite against a
-# cold-started, possibly still-syncing database, unattended, at 08:00 on a
-# Saturday. The System Events form is verified not to launch: it returns false
-# for a quit app and leaves it quit.
+# Step 1 asks the PROCESS TABLE, via pgrep, whether OmniFocus is running.
 #
-# Step 2 only then round-trips a real AppleEvent, which is what distinguishes
-# "running and answering" from the TCC/AppleEvent wedge. Watchdogged, because a
-# wedged OmniFocus blocks forever.
+# It must not be `tell application "OmniFocus" to ...`: AppleScript auto-LAUNCHES
+# the target of a `tell`, so that phrasing cannot detect "not running" — it
+# silently starts the app, then the wrapper runs a 15-minute MUTATING suite
+# against a cold, possibly still-syncing database, unattended.
 #
-# Either step failing exits 0 with a WEDGED banner naming which blocker it was —
-# the job did not run, and says so, rather than reporting a fake test failure.
-if ! osascript -e 'tell application "System Events" to return (name of processes) contains "OmniFocus"' 2>/dev/null | grep -q '^true$'; then
+# And it must not be System Events either, which is what the first version used.
+# That works from an interactive shell and FAILS from launchd — verified on the
+# first real install (2026-08-06): the same command returned `true` in a terminal
+# and produced nothing under launchd, while OmniFocus was running the whole time,
+# so the job reported "OmniFocus is not running" and advised starting an app that
+# was already open. Whether the cause is TCC/Automation or GUI-session isolation,
+# an AppleScript-based liveness probe is not reliable from a launchd context.
+#
+# pgrep needs no AppleEvents, no TCC grant, and no GUI session — it reads the
+# process table — so it answers the same question in both contexts. It also
+# CANNOT launch anything, which was the property that mattered originally.
+if ! pgrep -x OmniFocus >/dev/null 2>&1; then
   log "STATUS: WEDGED — OmniFocus is not running. The suite was NOT run."
   log "  Deliberately not started: launching it here would run a mutating suite"
   log "  against a cold, possibly still-syncing database. Start it and re-run."
   exit 0
 fi
+
+# Step 2 only then round-trips a real AppleEvent, which is what distinguishes
+# "running and answering" from the TCC/AppleEvent wedge. Watchdogged, because a
+# wedged OmniFocus blocks forever.
+#
+# Note this step DOES depend on Automation permission, and a launchd job may not
+# have it even when a terminal does. That is reported honestly as a wedge rather
+# than a test failure, and the message names the permission explicitly, because
+# "OmniFocus isn't answering" and "this context was never granted permission to
+# ask" look identical from here and need different fixes.
 
 osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
 probe_pid=$!
@@ -164,7 +178,12 @@ kill "$watchdog_pid" 2>/dev/null || true
 if [ "$preflight_rc" -ne 0 ]; then
   log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
   log "  The suite was NOT run. This is an environment blocker, not a test result."
-  log "  Check: a modal dialog open? Automation/TCC permission still granted?"
+  log "  Two different causes look identical here and need different fixes:"
+  log "    1. OmniFocus is genuinely wedged — a modal dialog, or a sync stall."
+  log "    2. THIS context lacks Automation permission. A launchd job is a"
+  log "       different TCC context than your terminal, so a probe that works"
+  log "       by hand can still be denied here. Check System Settings >"
+  log "       Privacy & Security > Automation for the scheduled job's parent."
   exit 0
 fi
 log "preflight: OmniFocus running and answering"
