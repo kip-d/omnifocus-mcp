@@ -24,6 +24,20 @@ function expectedDaysInPeriod(backDays: number): number {
   return Math.ceil((now.getTime() - start.getTime()) / 86400000);
 }
 
+/** Mirror the script's 'month' anchor, which uses setMonth — NOT a fixed day count.
+ * The span is the length of the PRECEDING calendar month, plus the same midnight-anchor
+ * +1 that expectedDaysInPeriod documents. A 31-day predecessor therefore yields 32,
+ * which is why the naive `28..31` range this test used to assert failed in every month
+ * whose predecessor has 31 days: Jan, Feb, Apr, Jun, Aug, Sep, Nov. It passed on merge
+ * day (June — a 30-day predecessor) and rotted silently from there. */
+function expectedDaysInMonthPeriod(): number {
+  const now = new Date();
+  const start = new Date();
+  start.setMonth(now.getMonth() - 1);
+  start.setHours(0, 0, 0, 0);
+  return Math.ceil((now.getTime() - start.getTime()) / 86400000);
+}
+
 describe('OMN-250 — productivity_stats period vocabulary', () => {
   it("period 'day' (a legal Zod value) produces a VALID envelope with midnight-today semantics", () => {
     const parsed = runScript({ period: 'day', includeProjectStats: false, includeTagStats: false }) as {
@@ -56,8 +70,24 @@ describe('OMN-250 — productivity_stats period vocabulary', () => {
       data: { summary: { daysInPeriod: number } };
     };
     expect(parsed.ok).toBe(true);
+    expect(parsed.data.summary.daysInPeriod).toBe(expectedDaysInMonthPeriod());
+    // Independent sanity bound, so a mirrored-helper bug can't pass unnoticed.
+    // The ceiling is 33, not 32: `ceil(elapsed_ms / 86_400_000)` counts fixed
+    // 24h units, but the span is WALL-CLOCK. A DST fall-back repeats an hour, so
+    // a November run (predecessor October, 31 days) reaches 31d + h + 1h, which
+    // crosses 32 once the local clock passes ~23:00 — i.e. every November night
+    // after 11pm in a DST-observing zone, not a once-a-year edge. (Verified by
+    // brute force over 2024-2027 in America/Detroit: 113 such days, all 33.)
+    // CI runners are UTC and never see it; a dev machine does.
+    // Floor is 28 and 28 is genuinely reachable: run at exactly midnight in March
+    // and February's 28-day span is exactly 28.0, so ceil gives 28 — no DST needed.
+    // Spring-forward shortens the span too, which keeps it there rather than below.
+    // (Both ends brute-forced at 5-minute resolution over 2024-2027 in
+    // America/Detroit: min 28, max 33. An earlier pass sampled at 00:00:00.001 and
+    // reported a min of 29 — the 1ms pushed every sample over the boundary it was
+    // meant to measure. Sample the edge itself, not one tick past it.)
     expect(parsed.data.summary.daysInPeriod).toBeGreaterThanOrEqual(28);
-    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(31);
+    expect(parsed.data.summary.daysInPeriod).toBeLessThanOrEqual(33);
   });
 
   it('an unknown period fails LOUD with the error envelope (never a silent no-match)', () => {

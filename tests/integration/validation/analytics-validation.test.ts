@@ -128,10 +128,17 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(statsData.stats.overview.completionRate).toBeGreaterThanOrEqual(0);
       expect(statsData.stats.overview.completionRate).toBeLessThanOrEqual(100);
 
-      // Validate healthScore is calculated
-      expect(typeof statsData.healthScore).toBe('number');
-      expect(statsData.healthScore).toBeGreaterThanOrEqual(0);
-      expect(statsData.healthScore).toBeLessThanOrEqual(100);
+      // Validate completionPercent is calculated (OMN-292: renamed from
+      // `healthScore`, no alias — the old name is gone, not deprecated).
+      expect(typeof statsData.completionPercent).toBe('number');
+      expect(statsData.completionPercent).toBeGreaterThanOrEqual(0);
+      expect(statsData.completionPercent).toBeLessThanOrEqual(100);
+
+      // Negative pin for the rename: CI skips this suite, so a stale `healthScore`
+      // assertion here would only surface during the post-merge live verify it is
+      // meant to support. Assert the old name is absent so a partial revert or a
+      // cache entry written before the key bump fails loudly here instead.
+      expect(statsData).not.toHaveProperty('healthScore');
 
       // Also validate non-zero stats (regression test for bug where all stats were 0)
       expect(statsData.stats.overview.totalTasks).toBeGreaterThan(0);
