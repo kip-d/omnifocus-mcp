@@ -153,6 +153,16 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
   }
 
   /**
+   * Read-back: task by id WITHOUT asserting presence. readTaskById above pins
+   * the task as found, which is wrong for rows that assert a task is gone.
+   */
+  async function readTaskByIdRaw(id: string, fields: string[]): Promise<any> {
+    return client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { id }, fields: ['id', ...fields] },
+    });
+  }
+
+  /**
    * Read-back: project by id. Project.byIdentifier is status-agnostic, so
    * completed projects are found without a special filter. Returns undefined
    * when the project does not exist (NOT_FOUND path).
@@ -315,38 +325,33 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
     );
   }, 120000);
 
-  // ── 5. bulk_delete mixed real+bogus ids → whole-dispatch guard refusal ─────
+  // ── 5. bulk_delete mixed real+bogus ids → the batch PARTITIONS ────────────
   //
-  // GUARD INTERACTION (LOAD-BEARING assertion, note carefully):
+  // GUARD INTERACTION (LOAD-BEARING assertion, note carefully). This row
+  // asserted whole-dispatch refusal before OMN-286; that is no longer the
+  // contract, and the change was the entire point of that ticket.
   //
-  // In test mode, MUTATION_DEFS['bulk_delete/task'].guard runs:
-  //   Promise.all(taskIds.map(id => validateTaskInSandbox(id, 'bulk delete')))
+  // In test mode, MUTATION_DEFS['bulk_delete/task'].guard pre-flights every id.
+  // Pre-OMN-286 the check returned a boolean, so a bogus id was
+  // indistinguishable from an out-of-sandbox one: the guard threw, Promise.all
+  // propagated, and the ENTIRE dispatch was refused with successCount:0 — even
+  // though the batch is a continue-on-error route. OMN-286 made the check a
+  // tri-state ('in_sandbox' | 'outside_sandbox' | 'not_found') so that a
+  // strictly-resolved miss PASSES THROUGH: it writes nothing, so it is safe,
+  // and the batch now partitions the way it does in production — real ids
+  // delete, the bogus one lands in errors[].
   //
-  // A bogus id resolves to not_found → isTaskInSandbox returns false → throws.
-  // Promise.all propagates the first rejection → the guard throw bubbles up
-  // through buildBulkDeleteTasksScript → is caught by handleBulkDeleteTasks'
-  // outer try/catch → error ends up in errors[] → ENTIRE dispatch refused
-  // with successCount:0.
-  //
-  // NOTE ON RESPONSE SHAPE (OMN-144): a fully-refused bulk delete now returns
-  // top-level success:false with error.code BULK_DELETE_FAILED — consistent
-  // with the single-op guard envelope for the same refusal. Per-item detail
-  // (successCount/errorCount/errors) rides error.details. Partial success
-  // remains success:true with loud data.errors[] (OMN-137 contract).
-  //
-  // This whole-dispatch refusal IS the OMN-120 non-bypass contract (guard must
-  // cover every id before any mutation executes). The unguarded per-item
-  // continue-on-error behavior (provided by the AST emitter's bulkDeleteItem
-  // try/continue-on-error unroll) is correct in production mode and is covered
-  // by unit tests; it is unreachable in test mode because the guard pre-flighted
-  // all ids.
+  // Still true, and NOT what this row covers: an id that resolves OUTSIDE the
+  // sandbox is 'outside_sandbox', still fails closed, and still refuses the
+  // whole dispatch (the OMN-120 non-bypass contract). That case cannot be
+  // staged from here — the guard forbids creating a fixture outside the
+  // sandbox in the first place — so it lives in unit coverage.
   //
   // The test asserts:
-  //   (a) the write response is a top-level failure (success:false,
-  //       BULK_DELETE_FAILED) with the TEST GUARD error text in the error
-  //       and per-item detail in error.details (successCount:0)
-  //   (b) BOTH real task fixtures still exist (read-back succeeds for each)
-  it('bulk_delete with a bogus id in the list: whole-dispatch guard refusal is a top-level failure (OMN-144); both real fixtures survive', async () => {
+  //   (a) partial success: success:true with the bogus id loud in data.errors[]
+  //       (OMN-137 contract), NOT a top-level BULK_DELETE_FAILED
+  //   (b) BOTH real task fixtures are GONE — the batch proceeded past the miss
+  it('bulk_delete with a bogus id in the list: the batch partitions — real ids delete, the bogus one errors (OMN-286)', async () => {
     const idA = await createTask({ name: BULK_TASK_A_NAME });
     const idB = await createTask({ name: BULK_TASK_B_NAME });
 
@@ -358,83 +363,86 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
       },
     });
 
-    // (a) Zero deletes + errors → top-level success:false, matching the
-    // single-op envelope for the same guard refusal (OMN-144).
-    expect(writeRes.success, `expected top-level failure, got: ${JSON.stringify(writeRes).slice(0, 400)}`).toBe(false);
-    expect(writeRes.error?.code, `expected BULK_DELETE_FAILED, got: ${writeRes.error?.code}`).toBe(
-      'BULK_DELETE_FAILED',
-    );
-    // Guard error text surfaces in the top-level error (message and/or details).
-    const errText = JSON.stringify(writeRes.error ?? {});
-    expect(errText, `guard error text not in error: ${errText.slice(0, 400)}`).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    // Per-item detail preserved in error.details.
-    const details = writeRes.error?.details as { successCount?: number; errorCount?: number };
-    expect(details?.successCount, `expected zero deletes due to guard refusal, got: ${details?.successCount}`).toBe(0);
-    expect(
-      details?.errorCount,
-      `expected one guard error entry, got errorCount: ${details?.errorCount}`,
-    ).toBeGreaterThanOrEqual(1);
+    // (a) Partial success, not a whole-dispatch refusal.
+    expect(writeRes.success, `expected partial success, got: ${JSON.stringify(writeRes).slice(0, 400)}`).toBe(true);
+    const resText = JSON.stringify(writeRes);
+    // The miss is reported, not swallowed — silence here would be the real bug.
+    expect(resText, `bogus id not reported anywhere in response: ${resText.slice(0, 400)}`).toContain(BOGUS_TASK_ID);
+    // And it passed through the guard rather than being refused by it.
+    expect(resText).not.toContain('TEST GUARD');
 
-    // (b) Both real tasks survive — guard ran before any delete script.
-    const taskA = await readTaskById(idA, ['name']);
-    expect(taskA.name).toBe(BULK_TASK_A_NAME);
-    const taskB = await readTaskById(idB, ['name']);
-    expect(taskB.name).toBe(BULK_TASK_B_NAME);
+    // (b) Both real tasks are gone — the batch did NOT abort on the miss.
+    // Pin the error CODE: a transient SCRIPT_ERROR would also be success:false
+    // but must not false-green "deleted".
+    for (const [id, label] of [
+      [idA, BULK_TASK_A_NAME],
+      [idB, BULK_TASK_B_NAME],
+    ] as const) {
+      const readRes = await readTaskByIdRaw(id, ['name']);
+      const stillThere = readRes.success && tasksOf(readRes).some((t: any) => t.id === id);
+      expect(stillThere, `task ${label} (${id}) survived a bulk_delete that should have removed it`).toBe(false);
+    }
   }, 120000);
 
   // ── 6. not-found single ops: complete + delete with bogus ids ─────────────
   //
-  // GUARD INTERACTION: same as update-paths row 6. The guard's pre-flight
-  // (validateTaskInSandbox → isTaskInSandbox → Task.byIdentifier → null →
-  // "outside sandbox") fires BEFORE the mutation script. Script-level
-  // "Task not found:" / "Project not found:" are unreachable on the guarded
-  // server. The refusal IS the correct live behavior in test mode.
-  it('complete a non-existent task id is refused by the sandbox guard (not a script-level not-found)', async () => {
+  // GUARD INTERACTION (OMN-286 tri-state; these rows previously asserted the
+  // pre-OMN-286 collapsed boolean). The guard distinguishes three states, not
+  // two: 'in_sandbox' | 'outside_sandbox' | 'not_found'. For ID-ADDRESSED
+  // mutations the id resolves STRICTLY via byIdentifier, so a miss writes
+  // nothing and 'not_found' is deliberately PASSED THROUGH — the script-level
+  // "Task not found:" / "Project not found:" is the correct live behavior, not
+  // a guard escape. (Fail-closed is still required where a NAME fallback
+  // exists — e.g. create-with-project — because a not-found-by-id value could
+  // resolve by name to something outside the sandbox. That path is asserted in
+  // the create tests and in unit coverage.)
+  //
+  // These rows therefore assert the INVERSE of the guard refusal: the
+  // not-found surfaces, and TEST GUARD does NOT — which is what pins the
+  // pass-through half of the tri-state. See src/contracts/ast/
+  // mutation-script-builder.ts (SandboxCheck) for the adjudication.
+  it('complete a non-existent task id passes the guard and surfaces a script-level not-found (OMN-286)', async () => {
     const res = await client.callTool('omnifocus_write', {
       mutation: { operation: 'complete', target: 'task', id: BOGUS_TASK_ID },
     });
 
-    expect(res.success, `expected guard refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.success, `expected failure, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
     const errText = JSON.stringify(res.error ?? res);
-    expect(errText).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    expect(errText).not.toContain('Task not found');
+    expect(errText).toContain('Task not found');
+    // Pass-through, NOT a refusal — the discriminating half of the tri-state.
+    expect(errText).not.toContain('TEST GUARD');
   }, 120000);
 
-  it('delete a non-existent task id is refused by the sandbox guard (not a script-level not-found)', async () => {
+  it('delete a non-existent task id passes the guard and surfaces a script-level not-found (OMN-286)', async () => {
     const res = await client.callTool('omnifocus_write', {
       mutation: { operation: 'delete', target: 'task', id: BOGUS_TASK_ID },
     });
 
-    expect(res.success, `expected guard refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.success, `expected failure, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
     const errText = JSON.stringify(res.error ?? res);
-    expect(errText).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    expect(errText).not.toContain('Task not found');
+    expect(errText).toContain('Task not found');
+    expect(errText).not.toContain('TEST GUARD');
   }, 120000);
 
-  it('complete a non-existent project id is refused by the sandbox guard', async () => {
+  it('complete a non-existent project id passes the guard and surfaces a script-level not-found (OMN-286)', async () => {
     const res = await client.callTool('omnifocus_write', {
       mutation: { operation: 'complete', target: 'project', id: BOGUS_PROJ_ID },
     });
 
-    expect(res.success, `expected guard refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.success, `expected failure, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
     const errText = JSON.stringify(res.error ?? res);
-    expect(errText).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    expect(errText).not.toContain('Project not found');
+    expect(errText).toContain('Project not found');
+    expect(errText).not.toContain('TEST GUARD');
   }, 120000);
 
-  it('delete a non-existent project id is refused by the sandbox guard', async () => {
+  it('delete a non-existent project id passes the guard and surfaces a script-level not-found (OMN-286)', async () => {
     const res = await client.callTool('omnifocus_write', {
       mutation: { operation: 'delete', target: 'project', id: BOGUS_PROJ_ID },
     });
 
-    expect(res.success, `expected guard refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.success, `expected failure, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
     const errText = JSON.stringify(res.error ?? res);
-    expect(errText).toContain('TEST GUARD');
-    expect(errText).toContain('outside sandbox');
-    expect(errText).not.toContain('Project not found');
+    expect(errText).toContain('Project not found');
+    expect(errText).not.toContain('TEST GUARD');
   }, 120000);
 });
