@@ -1,11 +1,18 @@
 #!/bin/sh
 
-# Pre-push: run typecheck, lint, and unit tests before pushing
+# Pre-push: run typecheck, format check, lint, and unit tests before pushing
 # This ensures no broken code reaches the remote
 echo "Running pre-push checks..."
 
 # Typecheck first (catches type errors that tests might miss)
 npm run typecheck || exit 1
+
+# Formatting. CI runs this over **/*.{ts,js,json,md}, so it covers markdown and
+# JSON that `npm run lint` (eslint over src/ only) never sees. Added 2026-08-06
+# after a docs-only change passed build + lint + typecheck + the whole unit suite
+# locally and still failed CI on Prettier — the local gate simply did not check
+# the file type that changed. ~7s, comparable to lint.
+npm run format:check || exit 1
 
 # Lint and test
 npm run lint && npm run test:unit
