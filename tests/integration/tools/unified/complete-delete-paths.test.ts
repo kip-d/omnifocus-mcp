@@ -2,42 +2,48 @@
  * OMN-138 (OMN-128 slice 5) — live complete/delete/bulk_delete coverage for the
  * OmniJS-native mutation AST: task complete (with completionDate), project
  * complete, task delete, project delete, bulk task delete (mixed real+bogus ids),
- * and guard-refused not-found single ops. All paths use the new AST lowerings
+ * and not-found single ops. All paths use the new AST lowerings
  * (buildCompleteScript / buildDeleteScript / buildBulkDeleteTasksScript) wired
  * in slice 5.
  *
  * CARDINAL RULE (the slice-3 vacuous-parentage lesson): every assertion reads
  * back the PERSISTED value via a follow-up omnifocus_read call — never the
  * write response's own echo. Single deliberate exceptions: the delete read-backs
- * are NOT_FOUND assertions (the object no longer exists), and the guard-refused
- * probes assert the refusal envelope shape.
+ * are NOT_FOUND assertions (the object no longer exists), and the not-found
+ * probes assert the error envelope shape.
  *
  * Coverage matrix:
  *   1. complete task with completionDate → read back completed:true + date-part
  *   2. complete project → read back status "done" (project id lookup)
  *   3. delete task → read back NOT_FOUND
  *   4. delete project → read back NOT_FOUND
- *   5. bulk_delete mixed real+bogus ids → whole-dispatch guard refusal (see below)
- *   6. not-found single ops (complete + delete bogus id) → TEST GUARD refusal
+ *   5. bulk_delete mixed real+bogus ids → batch PARTITIONS (see below)
+ *   6. not-found single ops (complete + delete bogus id) → script-level not-found
  *
- * GUARD INTERACTION on rows 5–6 (OMN-46 + OMN-120 fix):
+ * GUARD INTERACTION on rows 5–6 (OMN-46 + OMN-120, revised by OMN-286):
  *
- * Single ops (complete, delete): the sandbox guard's pre-flight
- * (validateTaskInSandbox → isTaskInSandbox → Task.byIdentifier) runs BEFORE the
- * mutation script. An unknown id resolves to nothing → "outside sandbox" → guard
- * REFUSES (success:false). Script-level "Task not found:" is unreachable on a
- * guarded server. Same pattern as update-paths row 6.
+ * OMN-286 replaced the guard's boolean with a tri-state —
+ * 'in_sandbox' | 'outside_sandbox' | 'not_found' — because collapsing the last
+ * two made a single bogus id abort an entire continue-on-error batch. Rows 5–6
+ * assert the post-OMN-286 contract; they asserted the collapsed one until
+ * OMN-300.
  *
- * Bulk delete (row 5): the bulk_delete/task guard runs Promise.all over ALL ids
- * (spec §2.1, MUTATION_DEFS 'bulk_delete/task') before any delete executes. One
- * bogus id causes the guard to throw → caught by handleBulkDeleteTasks' outer
- * catch → error ends up in data.errors[]. Response shape: success:true with
- * successCount:0 and errorCount:1. This differs from single-op guard refusals
- * (which return success:false) because the bulk handler collects all errors into
- * data.errors regardless of source — documented current behavior; envelope
- * follow-up tracked in OMN-144. Both real fixtures survive. The per-item
- * continue-on-error behavior (AST emitter) is reachable only in production mode;
- * unit tests cover that path.
+ * Single ops (complete, delete): these are ID-ADDRESSED, resolving strictly via
+ * Task.byIdentifier. A miss writes nothing, so 'not_found' is deliberately
+ * PASSED THROUGH and the script-level "Task not found:" envelope is the correct
+ * live result — not a guard escape. Same pattern as update-paths row 6.
+ *
+ * Bulk delete (row 5): the guard still pre-flights ALL ids (spec §2.1,
+ * MUTATION_DEFS 'bulk_delete/task'), but a bogus id now passes through instead
+ * of throwing, so the batch partitions: the real ids delete and the miss lands
+ * in errors[], with the response staying success:true (OMN-137 partial-success
+ * contract). Both real fixtures are therefore GONE, not surviving.
+ *
+ * Still fail-closed, and NOT covered here: an id resolving OUTSIDE the sandbox
+ * is 'outside_sandbox' and still refuses the whole dispatch (the OMN-120
+ * non-bypass contract). That case cannot be staged from this file — the guard
+ * forbids creating a fixture outside the sandbox — so it lives in unit coverage,
+ * as does the production-mode per-item continue-on-error unroll.
  *
  * Read-back idioms:
  *   - Completed task: filters { id, completed: true } — without 'completed:true'
@@ -372,15 +378,25 @@ describe('OMN-138: live complete/delete/bulk_delete paths (task + project, persi
     expect(resText).not.toContain('TEST GUARD');
 
     // (b) Both real tasks are gone — the batch did NOT abort on the miss.
-    // Pin the error CODE: a transient SCRIPT_ERROR would also be success:false
-    // but must not false-green "deleted".
+    //
+    // Same idiom as the single delete rows above: an id lookup for a deleted
+    // task returns success:false with code NOT_FOUND (verified live — it does
+    // NOT return success:true with an empty array). Pin the CODE, not just the
+    // false: a transient SCRIPT_ERROR is also success:false and must not
+    // false-green "deleted" when the task may still exist.
     for (const [id, label] of [
       [idA, BULK_TASK_A_NAME],
       [idB, BULK_TASK_B_NAME],
     ] as const) {
       const readRes = await readTaskByIdRaw(id, ['name']);
-      const stillThere = readRes.success && tasksOf(readRes).some((t: any) => t.id === id);
-      expect(stillThere, `task ${label} (${id}) survived a bulk_delete that should have removed it`).toBe(false);
+      expect(
+        readRes.success,
+        `task ${label} (${id}) survived a bulk_delete that should have removed it: ${JSON.stringify(readRes).slice(0, 300)}`,
+      ).toBe(false);
+      expect(
+        readRes.error?.code,
+        `expected NOT_FOUND for deleted ${label}, got: ${JSON.stringify(readRes.error).slice(0, 300)}`,
+      ).toBe('NOT_FOUND');
     }
   }, 120000);
 

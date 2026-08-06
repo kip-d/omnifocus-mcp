@@ -11,7 +11,10 @@
  * (`changes.status || 'active'`) with a LIVE status read-back inside the
  * mutation script, and that response-side contract is itself under test —
  * proven by an update that does NOT touch status still reporting the
- * persisted 'on_hold', which the legacy echo could never do.
+ * persisted on-hold state, which the legacy echo could never do. Since
+ * OMN-278 that read-back speaks the CANONICAL vocabulary ('onHold'), while
+ * write INPUT still takes the transport enum ('on_hold') — asymmetric by
+ * design; PROJECT_STATUS_READBACK is the authority.
  *
  * Coverage matrix (plan Task 10):
  *   1. rename + flag             → read shows new name + flagged true
@@ -20,18 +23,22 @@
  *   4. addTags then removeTags   → read shows union, then difference
  *   5. move to project / inbox   → read shows projectId == fixture project's
  *                                  ID (not name), then inInbox true
- *   6. not-found target (guarded)→ TEST GUARD refusal — see below
- *   7. project rename + on_hold  → read shows status persisted; §2.4 envelope
+ *   6. not-found target (guarded)→ script-level not-found — see below
+ *   7. project rename + on_hold  → read shows status persisted as canonical
+ *                                  'onHold'; §2.4 envelope
  *   8. project folder move       → read shows persisted parent folder (tied
  *                                  to the destination folder's ID)
  *
- * GUARD INTERACTION on row 6 (OMN-46): the sandbox guard's update pre-flight
- * is ID-only (`Task.byIdentifier`) and runs BEFORE the mutation script — an
- * unknown id resolves to nothing, is therefore "outside sandbox", and the
- * guard REFUSES it. The script-level loud `Task not found:` guard is
- * unreachable on a guarded server; this suite asserts the refusal. The
- * unguarded not-found probes (script-level `Task not found:` /
- * `Project not found:`) belong to Task 11's live /verify matrix.
+ * GUARD INTERACTION on row 6 (OMN-46, revised by OMN-286): the update
+ * pre-flight is ID-only (`Task.byIdentifier`) and runs BEFORE the mutation
+ * script. OMN-286 made the check a tri-state
+ * ('in_sandbox' | 'outside_sandbox' | 'not_found') rather than a boolean, so an
+ * unknown id is 'not_found' and is deliberately PASSED THROUGH — it resolves
+ * strictly and therefore writes nothing, making the script-level loud
+ * `Task not found:` envelope the correct live result on a guarded server. This
+ * row asserted a TEST GUARD refusal until OMN-300, back when the boolean
+ * collapsed 'not_found' into 'outside_sandbox'. An id that genuinely resolves
+ * outside the sandbox is still refused.
  *
  * SKIPPED matrix row (carried from the Task-7 review): "composed failure —
  * status apply fails while other changes succeed". Not reproducible against
