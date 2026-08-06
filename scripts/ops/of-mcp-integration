@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# of-mcp-integration — launchd wrapper for the live integration suite (OMN-302).
+#
+# Canonical source: scripts/ops/of-mcp-integration in the omnifocus-mcp repo.
+# Deploy with scripts/ops/install-integration-schedule.sh, which copies this file
+# to ~/bin and installs the launchd plist. Do NOT hand-edit the deployed copy —
+# edit here and re-run the installer, or the next deploy will clobber your change.
+#
+# WHY THIS EXISTS (OMN-302): `npm run test:integration` is the project's only
+# layer-6 (live-bridge) check, and CI cannot run it — OmniFocus is macOS-only and
+# the GitHub job is `if: false` by design. Nothing else triggered it, so contract
+# changes rotted in it silently: OMN-278 and OMN-286 each shipped a behavior
+# change without sweeping the suite, and both sat undetected for 13 days until a
+# hand-run on 2026-08-06 surfaced 7 failures at once. This job closes that gap to
+# a week.
+#
+# THIS JOB WRITES TO THE REAL OMNIFOCUS DATABASE. The suite creates, mutates, and
+# deletes fixtures inside the __MCP_TEST_SANDBOX__ folder and __TEST__-prefixed
+# inbox tasks. That is inherent to a live-bridge check; it is not a bug.
+set -euo pipefail
+
+# launchd runs with a minimal PATH that omits Homebrew → npm not found → exit 127.
+# Same probe-fixed-dirs approach (and same order) as of-mcp-diagnose, so scheduled
+# and manual runs resolve npm/node to the same prefix.
+brew_dirs=()
+for d in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$d" ] && brew_dirs+=("$d")
+done
+if [ ${#brew_dirs[@]} -gt 0 ]; then
+  PATH="$(IFS=:; printf '%s' "${brew_dirs[*]}"):$PATH"
+fi
+export PATH
+
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LOG="${OF_MCP_INTEGRATION_LOG:-$HOME/.omnifocus-mcp/integration.log}"
+PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
+# Generous against a ~15-minute suite: these are hang-breakers, not perf budgets.
+# Each step gets its OWN knob. The build previously borrowed CLEANUP_TIMEOUT,
+# which meant tuning the leak scan down silently retuned the build — a healthy
+# build over the shortened bound would be killed and the weekly suite would stop
+# running, with nothing actually wedged.
+SUITE_TIMEOUT="${OF_MCP_SUITE_TIMEOUT:-2700}"
+BUILD_TIMEOUT="${OF_MCP_BUILD_TIMEOUT:-600}"
+CLEANUP_TIMEOUT="${OF_MCP_CLEANUP_TIMEOUT:-600}"
+
+mkdir -p "$(dirname "$LOG")"
+cd "$REPO_DIR" || { echo "of-mcp-integration: repo dir not found: $REPO_DIR" >&2; exit 1; }
+
+log() { echo "$*" >> "$LOG"; }
+
+# EVERY step that talks to OmniFocus must be bounded. The preflight probe was,
+# but the suite and the cleanup scan were not — and OmniFocus can wedge at any
+# moment, not only before the run starts. An unbounded wedge mid-suite is the
+# worst outcome this job has: the wrapper blocks forever, never writes a STATUS
+# line, and stays alive under launchd. launchd will NOT start a new instance of a
+# StartCalendarInterval job while the previous one is still running, so every
+# subsequent Saturday is silently skipped — indefinitely. That recreates the very
+# 13-day blind spot this job exists to close, permanently, until someone notices
+# a stuck process by hand.
+#
+# Returns 124 on timeout, matching GNU timeout, so callers can tell "wedged" from
+# "failed".
+#
+# KILLING THE WHOLE PROCESS GROUP IS THE POINT, not just the command we spawned.
+# `npm` forks vitest, which forks node, which may have an osascript outstanding.
+# Killing only the top-level npm leaves those children alive, still mutating the
+# live OmniFocus database, while this wrapper has already logged WEDGED, run the
+# leak scan CONCURRENTLY against a database still being written to (so the
+# inventory is wrong by construction), and exited.
+#
+# coreutils path: deliberately NOT --foreground. Its man page is explicit — "in
+# this mode, children of COMMAND will not be timed out" — so that flag, which an
+# earlier version of this file passed, disables the very group-kill wanted here.
+# Without it, timeout runs the command in its own process group and signals the
+# group. -k follows TERM with KILL for anything ignoring TERM.
+#
+# fallback path: `set -m` puts the child in its own process group (PGID == PID),
+# so `kill -9 -PID` reaches the whole tree; the bare-PID kill is a last resort if
+# the group is already gone.
+# OF_MCP_FORCE_FALLBACK exists so the fallback branch can actually be exercised
+# on a machine that HAS coreutils. Without it the fallback is unreachable here
+# and its process-group kill can only be asserted, never tested — and it is the
+# branch that runs on a stock macOS with no Homebrew coreutils, i.e. the one
+# least likely to be exercised by accident and most likely to leak orphans.
+TIMEOUT_CMD=""
+if [ -z "${OF_MCP_FORCE_FALLBACK:-}" ]; then
+  for c in timeout gtimeout; do
+    command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+  done
+fi
+
+run_bounded() {
+  local secs="$1"; shift
+  local rc=0
+  if [ -n "$TIMEOUT_CMD" ]; then
+    "$TIMEOUT_CMD" -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
+    return "$rc"
+  fi
+  set -m
+  "$@" >> "$LOG" 2>&1 &
+  local child=$!
+  set +m
+  ( sleep "$secs"; kill -9 -"$child" 2>/dev/null || kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
+  local wd=$!
+  disown "$wd" 2>/dev/null || true
+  wait "$child" 2>/dev/null || rc=$?
+  if kill "$wd" 2>/dev/null; then
+    : # watchdog still pending -> the child finished on its own
+  else
+    # Watchdog already fired: SIGKILL surfaces as 137. Report it as a timeout.
+    [ "$rc" -eq 137 ] && rc=124
+  fi
+  return "$rc"
+}
+
+log ""
+log "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') ====="
+log "repo: $REPO_DIR @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+# --- 1. Pre-flight: is OmniFocus actually reachable? --------------------------
+#
+# A WEDGE IS NOT A TEST FAILURE, and conflating them is how a scheduled job
+# trains its owner to ignore it. Two distinct blockers make the suite unrunnable
+# through no fault of the code: OmniFocus not running, and the AppleEvent/TCC
+# wedge (the app is up but stops answering events — a known recurring blocker).
+# Either produces a wall of red that looks exactly like a regression.
+#
+# Two-step, and the ORDER matters.
+#
+# Step 1 asks System Events whether an OmniFocus process exists. It must NOT be
+# `tell application "OmniFocus" to ...`: AppleScript auto-LAUNCHES the target of
+# a `tell`, so that phrasing cannot detect "not running" — it silently starts the
+# app instead, then the wrapper runs a 15-minute MUTATING suite against a
+# cold-started, possibly still-syncing database, unattended, at 08:00 on a
+# Saturday. The System Events form is verified not to launch: it returns false
+# for a quit app and leaves it quit.
+#
+# Step 2 only then round-trips a real AppleEvent, which is what distinguishes
+# "running and answering" from the TCC/AppleEvent wedge. Watchdogged, because a
+# wedged OmniFocus blocks forever.
+#
+# Either step failing exits 0 with a WEDGED banner naming which blocker it was —
+# the job did not run, and says so, rather than reporting a fake test failure.
+if ! osascript -e 'tell application "System Events" to return (name of processes) contains "OmniFocus"' 2>/dev/null | grep -q '^true$'; then
+  log "STATUS: WEDGED — OmniFocus is not running. The suite was NOT run."
+  log "  Deliberately not started: launching it here would run a mutating suite"
+  log "  against a cold, possibly still-syncing database. Start it and re-run."
+  exit 0
+fi
+
+osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
+probe_pid=$!
+( sleep "$PREFLIGHT_TIMEOUT"; kill -9 "$probe_pid" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog_pid=$!
+# Drop the watchdog from the job table BEFORE killing it. Without this, bash
+# announces "Terminated: 15" on stderr every healthy run — which lands in the
+# launchd log and reads like an error in a job whose whole point is that its
+# output gets trusted.
+disown "$watchdog_pid" 2>/dev/null || true
+preflight_rc=0
+wait "$probe_pid" 2>/dev/null || preflight_rc=$?
+kill "$watchdog_pid" 2>/dev/null || true
+
+if [ "$preflight_rc" -ne 0 ]; then
+  log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
+  log "  The suite was NOT run. This is an environment blocker, not a test result."
+  log "  Check: a modal dialog open? Automation/TCC permission still granted?"
+  exit 0
+fi
+log "preflight: OmniFocus running and answering"
+
+# --- 2. Build (the suite runs against dist/) ----------------------------------
+set +e
+run_bounded "$BUILD_TIMEOUT" npm run build
+build_rc=$?
+set -e
+if [ "$build_rc" -ne 0 ]; then
+  # Bounded too: a hung build blocks every future Saturday exactly like a hung
+  # suite does. 124 means it hung rather than failed; say which.
+  if [ "$build_rc" -eq 124 ]; then
+    log "STATUS: WEDGED — build exceeded ${BUILD_TIMEOUT}s and was killed; suite not run."
+  else
+    log "STATUS: FAILED — build failed (exit $build_rc); suite not run."
+  fi
+  [ "$build_rc" -eq 124 ] && exit 0
+  exit 1
+fi
+
+# --- 3. Run the suite ---------------------------------------------------------
+#
+# NEVER pipe this. `npm ... | tail` yields tail's exit status, so the wrapper
+# would report success while the suite failed — observed for real on 2026-08-06,
+# where a 7-failure run reported exit 0. Redirect, then read $? directly.
+set +e
+run_bounded "$SUITE_TIMEOUT" npm run test:integration
+suite_rc=$?
+set -e
+
+if [ "$suite_rc" -eq 124 ]; then
+  # Mid-run wedge: same class as the preflight wedge — the environment failed,
+  # not the code — so exit 0 rather than crying wolf. Still attempt the leak scan
+  # (bounded), because a suite killed mid-flight is MORE likely to have left
+  # fixtures behind, not less.
+  log "STATUS: WEDGED — the suite exceeded ${SUITE_TIMEOUT}s and was killed."
+  log "  Preflight passed, so OmniFocus wedged DURING the run (dialog? sync stall?)."
+  log "  Fixtures were probably left behind — see the LEAK line below."
+  set +e
+  run_bounded "$CLEANUP_TIMEOUT" npm run test:cleanup
+  cleanup_rc=$?
+  set -e
+  case "$cleanup_rc" in
+    0) log "LEAK: none detected" ;;
+    1) log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
+       log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)" ;;
+    *) log "LEAK: UNKNOWN — the cleanup scan failed or timed out (exit $cleanup_rc)." ;;
+  esac
+  exit 0
+fi
+
+# --- 4. Leak check ------------------------------------------------------------
+#
+# The suite's own cleanup is folder-scoped and has historically left __TEST__
+# inbox tasks behind. test:cleanup is DRY-RUN by default and stays that way here:
+# that default was chosen after loose substring matching once deleted real user
+# tasks, and a scheduled job is the worst possible place to override a safety
+# decision made in response to an incident. Detect and report; a human runs
+# `npm run test:cleanup -- --apply`.
+#
+# Read the EXIT CODE, which scripts/test-cleanup.ts defines for exactly this
+# purpose ("Dry-run exits non-zero if leaks found — makes the scan usable as a
+# CI/teardown gate"):
+#   0 = clean   1 = fixtures found   2 = scan failed (OmniFocus unreachable, …)
+# An earlier version grepped the printed category labels instead. That
+# re-implemented a signal the script already publishes, and did it fragilely:
+# relabelling any category would have silently produced "none detected" forever,
+# and a scan ERROR prints no category lines at all — so a failed scan would have
+# reported CLEAN. Distinguishing 2 from 0 is the point: "could not determine" is
+# not "nothing there".
+set +e
+run_bounded "$CLEANUP_TIMEOUT" npm run test:cleanup
+cleanup_rc=$?
+set -e
+
+case "$cleanup_rc" in
+  0) leak_state="clean" ;;
+  1) leak_state="leaked" ;;
+  *) leak_state="unknown" ;;
+esac
+
+# --- 5. Verdict ---------------------------------------------------------------
+if [ "$suite_rc" -eq 0 ]; then
+  log "STATUS: PASS (suite exit 0)"
+else
+  log "STATUS: FAILED — suite exit $suite_rc. Grep this log for 'FAIL ' and 'Tests  '."
+fi
+case "$leak_state" in
+  leaked)
+    log "LEAK: test fixtures remain in OmniFocus — see the inventory above."
+    log "  Clean up with: (cd $REPO_DIR && npm run test:cleanup -- --apply)" ;;
+  clean)
+    log "LEAK: none detected" ;;
+  *)
+    # Never report "none" here. The scan itself failed, so the honest statement
+    # is that the question is unanswered.
+    log "LEAK: UNKNOWN — the cleanup scan itself failed (exit $cleanup_rc); leak status not determined."
+    log "  Re-check by hand: (cd $REPO_DIR && npm run test:cleanup)" ;;
+esac
+
+exit "$suite_rc"

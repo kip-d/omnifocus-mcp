@@ -1,0 +1,107 @@
+# Scheduled integration runs (OMN-302)
+
+`npm run test:integration` is the project's only layer-6 (live-bridge) check. **CI cannot run it** — OmniFocus is
+macOS-only, so the GitHub job is `if: false` on `ubuntu-latest` by design. Until OMN-302 nothing else triggered it
+either, so contract changes rotted in the suite silently.
+
+That is not hypothetical. A hand-run on 2026-08-06 — the first in roughly two weeks — returned **7 failures**, from
+three unrelated merges, none of which had swept the suite:
+
+| Source         | Merged     | Undetected for   | Outcome                                  |
+| -------------- | ---------- | ---------------- | ---------------------------------------- |
+| OMN-286 (#246) | 2026-07-24 | 13 days          | 6 stale guard expectations (OMN-300)     |
+| OMN-278 (#240) | 2026-07-24 | 13 days          | 1 stale vocabulary expectation (OMN-301) |
+| OMN-292 (#251) | 2026-08-05 | caught at review | stale `healthScore` assertion            |
+
+The weekly job closes that window to a week. It does not replace running the suite when you change a public contract —
+CLAUDE.md still requires that, and that requirement is exactly what failed three times.
+
+## Layout
+
+Committed under `scripts/ops/` and deployed by a script; the runtime locations are install targets, not sources of
+truth. Edit the canonical files and re-run the installer — never hand-edit a deployed copy. Same shape as the diagnose
+job (see `mcp-failure-diagnosis.md` § Scheduling).
+
+| Committed source                                           | Deployed to                                                  | Role                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| `scripts/ops/of-mcp-integration`                           | `~/bin/of-mcp-integration`                                   | launchd wrapper: preflight → build → suite → leak check. |
+| `scripts/ops/com.omnifocus-mcp.integration.plist.template` | `~/Library/LaunchAgents/com.omnifocus-mcp.integration.plist` | Job definition (paths substituted).                      |
+| `scripts/ops/install-integration-schedule.sh`              | —                                                            | Installs both, (re)loads the job.                        |
+
+```bash
+scripts/ops/install-integration-schedule.sh             # install / reload
+scripts/ops/install-integration-schedule.sh --verify    # also run it now (~15 min)
+scripts/ops/install-integration-schedule.sh --uninstall # bootout + remove plist
+```
+
+Runs **Saturday 08:00**, offset from the diagnose job (Sunday 09:00) so the two never contend for OmniFocus.
+
+## What the wrapper does, and why
+
+**It writes to the real OmniFocus database.** The suite creates, mutates, and deletes fixtures in the
+`__MCP_TEST_SANDBOX__` folder and `__TEST__`-prefixed inbox tasks. That is inherent to a live-bridge check.
+
+Three design choices exist because the obvious implementation would have been quietly wrong:
+
+**A wedge is reported as WEDGED, not FAILED.** Two environment blockers make the suite unrunnable through no fault of
+the code: OmniFocus not running, and the AppleEvent/TCC wedge (app up, stops answering events). Either produces a wall
+of red indistinguishable from a regression. The wrapper round-trips one real AppleEvent first, capped by a watchdog
+because a wedged OmniFocus can block forever; failure exits **0** with a WEDGED banner saying the suite never ran. A job
+that cries wolf trains its owner to ignore it.
+
+**The suite's exit code is read directly, never through a pipe.** `npm ... | tail` yields _tail's_ status. On 2026-08-06
+that exact mistake made a 7-failure run report exit 0 — the wrapper would have reported green forever.
+
+**Every long step is time-bounded, not just the preflight.** OmniFocus can wedge at any moment, not only before the run
+starts. An unbounded wedge mid-suite is this job's worst failure: the wrapper blocks forever, never writes a `STATUS:`
+line, and stays alive under launchd — which will not start a new instance of a `StartCalendarInterval` job while the
+previous one is still running, so **every subsequent Saturday is silently skipped, indefinitely**. That recreates the
+exact blind spot this job exists to close. Each step has its **own** timeout — sharing one knob means tuning the leak
+scan silently retunes the build:
+
+| Env override               | Default | Bounds                     |
+| -------------------------- | ------- | -------------------------- |
+| `OF_MCP_PREFLIGHT_TIMEOUT` | 30s     | the AppleEvent round-trip  |
+| `OF_MCP_BUILD_TIMEOUT`     | 600s    | `npm run build`            |
+| `OF_MCP_SUITE_TIMEOUT`     | 2700s   | `npm run test:integration` |
+| `OF_MCP_CLEANUP_TIMEOUT`   | 600s    | `npm run test:cleanup`     |
+
+These are hang-breakers, not performance budgets. A timeout reports `WEDGED`, not `FAILED`, and still attempts the leak
+scan, since a suite killed mid-flight is _more_ likely to have left fixtures behind. The kill targets the whole process
+group: `npm` forks vitest, which forks node, and killing only the top-level process would leave workers writing to the
+live database after the wrapper had already logged its verdict and exited. (`--verify` derives its own wait from these
+values, so raising one cannot leave the installer reporting a false failure.)
+
+**Leaks are detected, not auto-deleted.** The suite's cleanup is folder-scoped and has left `__TEST__` inbox tasks
+behind. `npm run test:cleanup` is dry-run by default _because loose substring matching once deleted real user tasks_
+(OMN-46). A scheduled unattended job is the worst possible place to override a safety default adopted after an incident,
+so it reports an inventory and leaves the deletion to a human:
+
+```bash
+npm run test:cleanup -- --apply
+```
+
+## Reading the result
+
+Durable log: `~/.omnifocus-mcp/integration.log` (launchd's own stdout/stderr: `integration-launchd.log`).
+
+Every run ends with two lines:
+
+```
+STATUS: PASS (suite exit 0)          # or FAILED — suite exit N / WEDGED — …
+LEAK: none detected                  # or LEAK: test fixtures remain …
+```
+
+`--verify` distinguishes the three outcomes: exit 0 (job ran, suite passed), exit 1 (job ran, suite failed), exit 3
+(**inconclusive** — OmniFocus was unreachable, so the suite never ran; the job itself is fine).
+
+How it avoids reading a previous run's result, since launchd's "last exit code" persists between runs: it records the
+run log's **line count** before `kickstart`, then waits for a `STATUS:` line to appear _beyond that mark_. The wrapper
+writes exactly one `STATUS:` line, at the very end of a run, so that is this run's completion signal by construction —
+and anything written earlier is unreadable, because nothing before the mark is examined. Keying on the spawned pid
+instead would only narrow the race, never close it: `kickstart` returns when the spawn is accepted, so the pid may not
+be registered yet.
+
+Once the marker appears the wrapper is still finishing (it writes `LEAK:` and then exits), so `--verify` waits for the
+job to leave launchd's running set before reading the exit code. The verdict comes from the `STATUS:` line the wrapper
+wrote — it is the authority — with the exit code as corroboration; a disagreement between the two fails verification.

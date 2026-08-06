@@ -25,13 +25,15 @@ here.)_
 - **Public field/operation changes** walk the Vertical Contract Matrix below — every layer done or explicitly N/A.
 - **Measure before optimizing;** bulk operations are NOT the same as multiple single queries — check how the batch route
   actually lowers before assuming equivalence.
-- **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail), and
-  `npm run test:unit` pass locally; `grep -rn 'console\.log' src/` shows no hits beyond the known `--help` printer in
-  `src/utils/cli.ts` (runs and exits before stdio mode) — ESLint's `no-console` is deliberately off here, and a stray
-  `console.log` on a stdio MCP server corrupts JSON-RPC framing for every client (`console.error`/`console.warn` write
-  to stderr and are safe); TODO comments you touched still reflect reality. Features additionally need integration tests
-  before they're considered complete (long-running — see `tests/integration/PERFORMANCE.md`; run in the background,
-  never inside fleet builds).
+- **Before declaring a task complete:** `npm run build`, `npm run lint` (`--max-warnings=0` — warnings fail),
+  `npm run format:check`, and `npm run test:unit` pass locally — `format:check` covers `**/*.{ts,js,json,md}`, so it is
+  the ONLY one of these that sees markdown and JSON (`lint` is eslint over `src/` alone); a docs-only change can pass
+  every other check here and still fail CI without it. `npm run ci:local` runs the whole set;
+  `grep -rn 'console\.log' src/` shows no hits beyond the known `--help` printer in `src/utils/cli.ts` (runs and exits
+  before stdio mode) — ESLint's `no-console` is deliberately off here, and a stray `console.log` on a stdio MCP server
+  corrupts JSON-RPC framing for every client (`console.error`/`console.warn` write to stderr and are safe); TODO
+  comments you touched still reflect reality. Features additionally need integration tests before they're considered
+  complete (long-running — see `tests/integration/PERFORMANCE.md`; run in the background, never inside fleet builds).
 - **Changes spanning >10 files:** STOP and get explicit approval of the blast radius before proceeding.
 
 **Full docs:** [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
