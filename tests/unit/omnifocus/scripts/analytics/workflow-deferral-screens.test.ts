@@ -32,13 +32,22 @@ interface FakeTask {
   id: { primaryKey: string };
 }
 
+// The script recomputes `nowTime` when it runs, which is strictly AFTER this
+// helper reads Date.now(). A bare `Date.now() + deferInDays * DAY` therefore
+// arrives as `deferInDays * DAY - ε`, and the script's
+// `Math.floor((deferDate - nowTime) / DAY)` yields deferInDays - 1. Invisible
+// for the 200/10/5 fixtures, fatal exactly on the 90/91 boundary case.
+// The cushion makes the helper's contract exact: the script floors to
+// deferInDays for any start delay under a minute.
+const CLOCK_SKEW_CUSHION = 60 * 1000;
+
 function deferredTask(name: string, deferInDays: number, id: string): FakeTask {
   return {
     completed: false,
     flagged: false,
     taskStatus: FAKE_TASK_STATUS.Available,
     dueDate: null,
-    deferDate: new Date(Date.now() + deferInDays * DAY),
+    deferDate: new Date(Date.now() + deferInDays * DAY + CLOCK_SKEW_CUSHION),
     added: new Date(Date.now() - DAY),
     modified: null,
     estimatedMinutes: 0,
