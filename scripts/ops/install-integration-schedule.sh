@@ -121,12 +121,22 @@ if [ "$MODE" = "verify" ]; then
   # remember where the log ends now, and wait for a STATUS line to appear BEYOND
   # that point. That is this run's completion signal by construction — no pid, no
   # race, and stale content is unreadable because we only ever look past the mark.
-  # `wc -l < "$RUN_LOG" 2>/dev/null` does NOT guard this: the failure is the
+  # `wc -l < "$RUN_LOG" 2>/dev/null` does NOT keep this quiet: the failure is the
   # SHELL's input redirection, which happens before wc runs and before its
   # stderr is redirected. On a first-ever install the log does not exist yet, so
-  # that form printed "No such file or directory" into the install output and
-  # left before_lines EMPTY rather than 0 (observed on the first real install,
-  # 2026-08-06). Test for the file instead of trying to silence the redirect.
+  # that form printed "No such file or directory" into the install output
+  # (observed on the first real install, 2026-08-06). Test for the file instead
+  # of trying to silence the redirect.
+  #
+  # What that form did NOT do is leave before_lines empty. An earlier version of
+  # this comment said it did; that was INFERRED from the leaked stderr line
+  # rather than measured, and it is false. Re-tested under `set -euo pipefail`:
+  # the `|| echo 0` fires and before_lines comes back "0" for a missing file, a
+  # missing parent directory, and an unreadable one — identically in bash 3.2.57
+  # (what `#!/usr/bin/env bash` resolves to here), /bin/sh, dash, zsh and ksh. So
+  # the mark was never actually wrong, and the reason to prefer a file test is
+  # the stderr noise in the install output, not a corrupted offset.
+  #
   # Use -r (readable), not -f (exists). -f is true for a file the caller cannot
   # read — created by a prior root/sudo run, or a stray chmod — and then the
   # unguarded `wc` fails on the SHELL's redirection and `set -e` kills the whole
@@ -140,6 +150,12 @@ if [ "$MODE" = "verify" ]; then
     before_lines=0
   fi
   before_lines="${before_lines// /}"
+  # Backstop for a case we have NOT demonstrated, kept deliberately rather than
+  # removed with the claim that motivated it. What it protects is the consumer
+  # below — `tail -n "+$((before_lines + 1))"`. An empty value there expands to
+  # `+1`, which scans the log from line 1 and can accept a PREVIOUS run's STATUS
+  # line as this run's verdict: precisely the stale read the mark-and-scan design
+  # above exists to prevent. Cheap insurance against a silent wrong answer.
   [ -n "$before_lines" ] || before_lines=0
 
   launchctl kickstart -k "$GUI/$LABEL"
