@@ -19,7 +19,8 @@ const KEY_COVERAGE = {
   tagsOperator: 'exempt',
   text: 'described',
   textOperator: 'exempt',
-  search: 'described',
+  // OMN-307: `search` removed — it was a lowering-only alias for `text` with no
+  // key in the read schema, so no client could set it.
   name: 'described',
   nameOperator: 'exempt',
   // dates
@@ -76,7 +77,6 @@ const SAMPLE: Partial<Record<keyof NormalizedTaskFilter, NormalizedTaskFilter>> 
   hasRepetitionRule: { hasRepetitionRule: true } as NormalizedTaskFilter,
   tags: { tags: ['x'] } as NormalizedTaskFilter,
   text: { text: 'foo' } as NormalizedTaskFilter,
-  search: { search: 'foo' } as NormalizedTaskFilter,
   name: { name: 'foo' } as NormalizedTaskFilter,
   dueBefore: { dueBefore: '2026-01-01' } as NormalizedTaskFilter,
   dueAfter: { dueAfter: '2026-01-01' } as NormalizedTaskFilter,

@@ -1008,8 +1008,8 @@ export function describeFilterForScript(filter: TaskFilter): string {
   if (filter.tags && filter.tags.length > 0) {
     conditions.push(`tags[${filter.tagsOperator || 'AND'}]: ${filter.tags.join(', ')}`);
   }
-  if (filter.text || filter.search) {
-    conditions.push(`text: "${filter.text || filter.search}"`);
+  if (filter.text) {
+    conditions.push(`text: "${filter.text}"`);
   }
   if (filter.name) {
     // OMN-142: name-only filter (distinct from text, which matches notes)

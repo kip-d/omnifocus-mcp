@@ -135,12 +135,15 @@ export const FILTER_DEFS: readonly FilterDef[] = [
   },
 
   // --- Text search ---
-  // Support both filter.text and filter.search (legacy alias for compatibility)
-  // Per spec (filters.ts:113-115), search checks BOTH name AND note
+  // `text` checks BOTH name AND note.
+  // OMN-307: the legacy `filter.search` alias was removed. The read schema has
+  // never exposed a `filters.search` key (`search` is a tasks *mode*), so the
+  // alias was an unreachable lowering path — accepted here, rejected at the
+  // boundary. `text` is the single spelling; see read-schema.test.ts.
   {
     fields: ['task.name', 'task.note'],
     build: (f) => {
-      const searchTerm = f.text ?? f.search;
+      const searchTerm = f.text;
       if (searchTerm === undefined) return null;
       const operator = f.textOperator === 'MATCHES' ? 'matches' : 'includes';
       const nameMatch = comparison('task.name', operator, searchTerm);
