@@ -167,8 +167,11 @@ export interface TaskFilter {
    */
   parentTaskId?: string;
 
-  // --- Search (for name/note search) ---
-  search?: string; // Search term for name/note content
+  // --- Text search ---
+  // OMN-307: the `search` alias was removed. It duplicated `text` (see below)
+  // but had no counterpart in the read schema, so no MCP client could ever set
+  // it. Use `text` for name/note search; `search` survives only as a tasks
+  // `mode` value, which is a view selector rather than a filter.
 
   /**
    * OMN-115: fast search restricts text matching to the task NAME only,

@@ -35,6 +35,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `wip_limits`, `onhold_reactivation`, and `sequential_blocked_far` each independently rebuilt the same `Map` over up to
   3000 tasks; requesting all three together (exactly what `guided_review`'s `standard` mode does in one call) tripled
   that O(n) pass for no reason. No behavior change — same data, computed once and shared.
+- **Internal (no client-visible change): the `filters.search` alias is removed from the AST lowering** (OMN-307) — the
+  AST builder honored `filter.search` as a legacy alias for `filter.text`, but the read schema has never exposed a
+  `filters.search` key, so `{ filters: { search: "..." } }` was rejected at the boundary with
+  `Unrecognized key(s) in object: 'search'` and the lowering branch was unreachable from every MCP client. A layer-5
+  path with no layer-1 door. Deleted rather than exposed: `filters.text` already provides identical name-OR-note
+  matching and is advertised, so wiring `search` through would have added a public field — and the full contract-matrix
+  walk — purely to gain a synonym. `search` survives as a tasks **`mode`** value (a view selector), which is untouched.
+  No `inputSchema` or tool-description change, because the alias was never advertised. Regression cover added in
+  `read-schema.test.ts` pinning that `filters.search` is rejected while `mode: "search"` and `filters.text` still
+  validate; the AST tests that previously asserted alias-equals-text now assert the alias is inert, and the OMN-115
+  `fastSearch` cases were re-pointed at `text` so that fast path stays covered on a reachable code path.
+
 - **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
   `productivity_stats` surfaces three computed fields it was discarding** (OMN-289) — the response now contains exactly
   what was actually computed: nothing real hidden, nothing fake shipped. **Added to `velocity`:** `averageCreated`,
