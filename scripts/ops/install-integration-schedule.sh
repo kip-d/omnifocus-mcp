@@ -185,19 +185,42 @@ if [ "$MODE" = "verify" ]; then
     exit 1
   fi
 
-  # A STATUS line exists, but the wrapper is NOT done: it still writes the LEAK:
-  # line and then exits, and launchd only updates "last exit code" once the
-  # process actually terminates. Reading it here would race that exit and see an
-  # empty or previous-run value — reporting VERIFY FAILED for a run that passed.
+  # A STATUS line exists, but the wrapper is NOT done. In the mid-suite WEDGED
+  # path it logs STATUS first and THEN runs the leak scan, which has its own
+  # budget of up to CLEANUP_TIMEOUT before the LEAK: line appears; launchd
+  # likewise only updates "last exit code" once the process actually
+  # terminates. Reading either too early sees an empty or previous-run value.
   # (Detecting STATUS closed the read-too-early-after-SPAWN half of this race;
   # this closes the read-too-early-before-TERMINATION half.)
   #
   # Wait for the job to leave launchd's running set. `pid =` is present only
-  # while an instance is alive, so its absence is the termination signal.
-  for _ in $(seq 1 60); do
-    launchctl print "$GUI/$LABEL" 2>/dev/null | grep -qE '^[[:space:]]*pid =' || break
-    sleep 1
+  # while an instance is alive, so its absence is the termination signal. The
+  # wait budget must cover cleanup's own budget: a hardcoded 60s here was a
+  # tenth of it, and when cleanup ran longer the fall-through reused the log
+  # region captured at STATUS time and printed the reassuring
+  # "LEAK: (none recorded)" while cleanup was still running against the live
+  # database (OMN-304). Derive it from the same knob the wrapper reads, with
+  # the same 20% slack as verify_budget above.
+  # NOT `launchctl print | grep -q`: under pipefail, grep -q exiting at the
+  # first match can SIGPIPE a still-writing launchctl and turn a running job
+  # into a non-zero pipeline — i.e. a false "terminated" on iteration 1, which
+  # is this same stale-read defect by another road. Capture, then match.
+  term_budget=$(( ${OF_MCP_CLEANUP_TIMEOUT:-600} * 12 / 10 ))
+  terminated=""
+  for _ in $(seq 1 $(( term_budget / 5 + 1 ))); do
+    job_state="$(launchctl print "$GUI/$LABEL" 2>/dev/null || true)"
+    if ! grep -qE '^[[:space:]]*pid =' <<< "$job_state"; then
+      terminated=1
+      break
+    fi
+    sleep 5
   done
+
+  # Re-read this run's region now that the run is over. Anything the wrapper
+  # wrote AFTER its STATUS line — the LEAK: line, in the WEDGED path — is
+  # invisible to the region captured at STATUS-detection time; reusing that
+  # stale capture was the other half of OMN-304.
+  new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
 
   rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
   echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
@@ -205,6 +228,12 @@ if [ "$MODE" = "verify" ]; then
   # Read the verdict ONLY from this run's region of the log.
   status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
   leak_line="$(printf '%s' "$new_region" | grep -aE '^LEAK: ' | tail -1 || true)"
+  if [ -z "$terminated" ] && [ -z "$leak_line" ]; then
+    # The wait exhausted with the job still alive: the leak question is still
+    # being decided. Say so — never let the fall-through print a clean-looking
+    # default for a scan that hasn't finished.
+    leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+  fi
   echo "  ${status_line:-STATUS: (none recorded)}"
   echo "  ${leak_line:-LEAK: (none recorded)}"
 
