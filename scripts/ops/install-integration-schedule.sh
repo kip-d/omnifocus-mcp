@@ -174,21 +174,27 @@ if [ "$MODE" = "verify" ]; then
   # still override (an operator exporting one for --verify is asserting it
   # matches how they run the wrapper manually — the same contract as before).
   # The literal fallback only fires if the wrapper line ever stops matching.
-  wrapper_default() { # <NAME> <fallback> — reads NAME="${OF_MCP_NAME:-N}" from the wrapper
+  wrapper_default() { # <NAME> — reads NAME="${OF_MCP_NAME:-N}" from the wrapper
     local v
     v="$(sed -n "s/^${1}=\"\\\${OF_MCP_${1}:-\\([0-9][0-9]*\\)}\"\$/\\1/p" "$WRAPPER_SRC")"
-    if [ -n "$v" ]; then printf '%s' "$v"; else
-      # Never fall back silently: a reformatted wrapper line plus a bumped
-      # default would otherwise desync this budget invisibly, and the first
-      # symptom would be a false VERIFY FAILED on a healthy long run.
-      echo "  WARNING: could not parse ${1} default from $WRAPPER_SRC; using baked fallback ${2}s" >&2
-      printf '%s' "$2"
+    if [ -z "$v" ]; then
+      # Fail HARD, not a stderr warning a skimmed run misses: a baked fallback
+      # here silently desyncs the budgets the moment the wrapper line is
+      # reformatted alongside a bumped default, and the first symptom would be
+      # the original OMN-304 false VERIFY FAILED on a healthy long run.
+      # --verify is a manual command; fix the parse (or the wrapper line) and
+      # re-run.
+      echo "ERROR: could not parse the ${1} default out of $WRAPPER_SRC —" >&2
+      echo "       the NAME=\"\${OF_MCP_NAME:-N}\" line changed shape. Verify cannot" >&2
+      echo "       size its wait budgets truthfully; fix the pattern and re-run." >&2
+      exit 2
     fi
+    printf '%s' "$v"
   }
-  preflight_t="${OF_MCP_PREFLIGHT_TIMEOUT:-$(wrapper_default PREFLIGHT_TIMEOUT 30)}"
-  build_t="${OF_MCP_BUILD_TIMEOUT:-$(wrapper_default BUILD_TIMEOUT 600)}"
-  suite_t="${OF_MCP_SUITE_TIMEOUT:-$(wrapper_default SUITE_TIMEOUT 2700)}"
-  cleanup_t="${OF_MCP_CLEANUP_TIMEOUT:-$(wrapper_default CLEANUP_TIMEOUT 600)}"
+  preflight_t="${OF_MCP_PREFLIGHT_TIMEOUT:-$(wrapper_default PREFLIGHT_TIMEOUT)}"
+  build_t="${OF_MCP_BUILD_TIMEOUT:-$(wrapper_default BUILD_TIMEOUT)}"
+  suite_t="${OF_MCP_SUITE_TIMEOUT:-$(wrapper_default SUITE_TIMEOUT)}"
+  cleanup_t="${OF_MCP_CLEANUP_TIMEOUT:-$(wrapper_default CLEANUP_TIMEOUT)}"
 
   # One slack formula for every wait budget: (phase timeouts + one SIGKILL
   # grace per run_bounded phase) + 20% — the `timeout -k` grace is a fixed
@@ -199,11 +205,19 @@ if [ "$MODE" = "verify" ]; then
   # same source-is-authority rule as wrapper_default, same loud fallback.
   KILL_GRACE="$(sed -n 's/^.*"\$TIMEOUT_CMD" -k \([0-9][0-9]*\)s .*$/\1/p' "$WRAPPER_SRC" | head -1)"
   if [ -z "$KILL_GRACE" ]; then
-    echo "  WARNING: could not parse run_bounded's 'timeout -k' grace from $WRAPPER_SRC; using baked fallback 30s" >&2
-    KILL_GRACE=30
+    # Same fail-hard rule as wrapper_default: a baked grace silently desyncs
+    # the budgets the moment run_bounded's `-k` value changes shape or size.
+    echo "ERROR: could not parse run_bounded's 'timeout -k' grace out of $WRAPPER_SRC;" >&2
+    echo "       verify cannot size its wait budgets truthfully. Fix the pattern and re-run." >&2
+    exit 2
   fi
   budget_with_slack() { # <sum-of-phase-timeouts> <run_bounded-phase-count>
     printf '%s' $(( ($1 + $2 * KILL_GRACE) * 12 / 10 ))
+  }
+  # Integer minutes floor to a misleading "0 min" for sub-minute budgets
+  # (small tuned timeouts) — print seconds until a minute is worth rounding.
+  fmt_duration() { # <seconds>
+    if [ "$1" -ge 60 ]; then printf '%s min' $(( $1 / 60 )); else printf '%ss' "$1"; fi
   }
 
   # Poll PREDICATE every 5s until it succeeds (0) or BUDGET seconds are
@@ -253,7 +267,7 @@ if [ "$MODE" = "verify" ]; then
   # run_bounded phases return, so the budget covers all four — three of them
   # with the kill grace.
   verify_budget="$(budget_with_slack $(( preflight_t + build_t + suite_t + cleanup_t )) 3)"
-  echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
+  echo "  waiting up to $(fmt_duration "$verify_budget") for this run's STATUS line ..."
   if ! poll_for "$verify_budget" status_appeared; then
     # status_appeared leaves the last (non-matching) tail in new_region; the
     # failure branch below keys off emptiness, so clear it explicitly.
@@ -282,7 +296,7 @@ if [ "$MODE" = "verify" ]; then
   # "LEAK: (none recorded)" while cleanup was still running against the live
   # database (OMN-304).
   term_budget="$(budget_with_slack "$cleanup_t" 1)"
-  echo "  STATUS seen; waiting up to $((term_budget / 60)) min for the job to finish (cleanup may still be running) ..."
+  echo "  STATUS seen; waiting up to $(fmt_duration "$term_budget") for the job to finish (cleanup may still be running) ..."
   terminated=""
   if poll_for "$term_budget" job_terminated; then
     terminated=1
