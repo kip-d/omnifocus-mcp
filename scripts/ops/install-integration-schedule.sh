@@ -190,12 +190,18 @@ if [ "$MODE" = "verify" ]; then
   suite_t="${OF_MCP_SUITE_TIMEOUT:-$(wrapper_default SUITE_TIMEOUT 2700)}"
   cleanup_t="${OF_MCP_CLEANUP_TIMEOUT:-$(wrapper_default CLEANUP_TIMEOUT 600)}"
 
-  # One slack formula for every wait budget: (phase timeouts + one 30s SIGKILL
-  # grace per run_bounded phase) + 20% — run_bounded's `timeout -k 30s` is a
-  # fixed cost, so it goes inside the proportional slack, and with small tuned
+  # One slack formula for every wait budget: (phase timeouts + one SIGKILL
+  # grace per run_bounded phase) + 20% — the `timeout -k` grace is a fixed
+  # cost, so it goes inside the proportional slack, and with small tuned
   # timeouts the slack alone is thinner than the kill window. Preflight bounds
   # itself with an exact watchdog (no grace), so it contributes no grace count.
-  KILL_GRACE=30
+  # The grace is parsed from run_bounded's own `timeout -k Ns` invocation —
+  # same source-is-authority rule as wrapper_default, same loud fallback.
+  KILL_GRACE="$(sed -n 's/^.*"\$TIMEOUT_CMD" -k \([0-9][0-9]*\)s .*$/\1/p' "$WRAPPER_SRC" | head -1)"
+  if [ -z "$KILL_GRACE" ]; then
+    echo "  WARNING: could not parse run_bounded's 'timeout -k' grace from $WRAPPER_SRC; using baked fallback 30s" >&2
+    KILL_GRACE=30
+  fi
   budget_with_slack() { # <sum-of-phase-timeouts> <run_bounded-phase-count>
     printf '%s' $(( ($1 + $2 * KILL_GRACE) * 12 / 10 ))
   }
@@ -228,9 +234,18 @@ if [ "$MODE" = "verify" ]; then
   # cleanup still mutates the live database. Only a successful print with no
   # pid line counts; on failure keep polling, and if the failure persists the
   # budget exhausts into the honest "cleanup still running" message.
+  # Records whether the most recent probe could ask launchd at all, so the
+  # budget-exhausted message can distinguish "cleanup is still running" from
+  # "launchctl itself could not be queried" — different diagnoses, and the
+  # wrong one sends the operator to the wrong place.
+  job_probe_failed=""
   job_terminated() {
     local out
-    out="$(launchctl print "$GUI/$LABEL" 2>/dev/null)" || return 1
+    if ! out="$(launchctl print "$GUI/$LABEL" 2>/dev/null)"; then
+      job_probe_failed=1
+      return 1
+    fi
+    job_probe_failed=""
     ! grep -qE '^[[:space:]]*pid =' <<< "$out"
   }
 
@@ -279,7 +294,11 @@ if [ "$MODE" = "verify" ]; then
   # stale capture was the other half of OMN-304.
   new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
 
-  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
+  # `|| true` inside the substitution: under pipefail a failing launchctl (or
+  # an awk SIGPIPE) would otherwise fail the assignment and set -e would kill
+  # the whole verify with no verdict printed at all — observed via the
+  # launchctl-down harness scenario. An empty rc already prints as "unknown".
+  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}' || true)"
   echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
 
   # Read the verdict ONLY from this run's region of the log.
@@ -292,7 +311,11 @@ if [ "$MODE" = "verify" ]; then
     # ended down a path that never runs the scan (build failure, preflight
     # wedge) — say which.
     if [ -z "$terminated" ]; then
-      leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+      if [ -n "$job_probe_failed" ]; then
+        leak_line="LEAK: unknown — launchctl could not be queried, so termination was never observed; check launchd and $RUN_LOG"
+      else
+        leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+      fi
     else
       leak_line="LEAK: not scanned — this run ended without a leak scan (see STATUS above)"
     fi
