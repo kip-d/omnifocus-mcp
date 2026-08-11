@@ -177,11 +177,28 @@ if [ "$MODE" = "verify" ]; then
   wrapper_default() { # <NAME> <fallback> — reads NAME="${OF_MCP_NAME:-N}" from the wrapper
     local v
     v="$(sed -n "s/^${1}=\"\\\${OF_MCP_${1}:-\\([0-9][0-9]*\\)}\"\$/\\1/p" "$WRAPPER_SRC")"
-    if [ -n "$v" ]; then printf '%s' "$v"; else printf '%s' "$2"; fi
+    if [ -n "$v" ]; then printf '%s' "$v"; else
+      # Never fall back silently: a reformatted wrapper line plus a bumped
+      # default would otherwise desync this budget invisibly, and the first
+      # symptom would be a false VERIFY FAILED on a healthy long run.
+      echo "  WARNING: could not parse ${1} default from $WRAPPER_SRC; using baked fallback ${2}s" >&2
+      printf '%s' "$2"
+    fi
   }
+  preflight_t="${OF_MCP_PREFLIGHT_TIMEOUT:-$(wrapper_default PREFLIGHT_TIMEOUT 30)}"
   build_t="${OF_MCP_BUILD_TIMEOUT:-$(wrapper_default BUILD_TIMEOUT 600)}"
   suite_t="${OF_MCP_SUITE_TIMEOUT:-$(wrapper_default SUITE_TIMEOUT 2700)}"
   cleanup_t="${OF_MCP_CLEANUP_TIMEOUT:-$(wrapper_default CLEANUP_TIMEOUT 600)}"
+
+  # One slack formula for every wait budget: (phase timeouts + one 30s SIGKILL
+  # grace per run_bounded phase) + 20% — run_bounded's `timeout -k 30s` is a
+  # fixed cost, so it goes inside the proportional slack, and with small tuned
+  # timeouts the slack alone is thinner than the kill window. Preflight bounds
+  # itself with an exact watchdog (no grace), so it contributes no grace count.
+  KILL_GRACE=30
+  budget_with_slack() { # <sum-of-phase-timeouts> <run_bounded-phase-count>
+    printf '%s' $(( ($1 + $2 * KILL_GRACE) * 12 / 10 ))
+  }
 
   # Poll PREDICATE every 5s until it succeeds (0) or BUDGET seconds are
   # exhausted (1). Both waits below share this: two hand-rolled copies of the
@@ -217,12 +234,10 @@ if [ "$MODE" = "verify" ]; then
     ! grep -qE '^[[:space:]]*pid =' <<< "$out"
   }
 
-  # In the normal path STATUS is written only after all three bounded phases
-  # return, and each can overrun its timeout by run_bounded's fixed 30s
-  # SIGKILL grace (`timeout -k 30s`) — so add the grace per phase before the
-  # proportional slack, same reasoning as term_budget below: with small tuned
-  # timeouts, 20% slack alone is thinner than the kill windows.
-  verify_budget=$(( (build_t + suite_t + cleanup_t + 90) * 12 / 10 ))
+  # In the normal path STATUS is written only after preflight plus all three
+  # run_bounded phases return, so the budget covers all four — three of them
+  # with the kill grace.
+  verify_budget="$(budget_with_slack $(( preflight_t + build_t + suite_t + cleanup_t )) 3)"
   echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
   if ! poll_for "$verify_budget" status_appeared; then
     # status_appeared leaves the last (non-matching) tail in new_region; the
@@ -250,12 +265,8 @@ if [ "$MODE" = "verify" ]; then
   # tenth of it, and when cleanup ran longer the fall-through reused the log
   # region captured at STATUS time and printed the reassuring
   # "LEAK: (none recorded)" while cleanup was still running against the live
-  # database (OMN-304). Add run_bounded's fixed 30s SIGKILL grace
-  # (`timeout -k 30s`) before the 20% slack: with a small cleanup budget
-  # (under ~150s, e.g. a locally tuned OF_MCP_CLEANUP_TIMEOUT) the slack alone
-  # is thinner than the kill window, and a hung-cleanup run would read as
-  # "still running" moments before the wrapper's own kill sequence lands.
-  term_budget=$(( (cleanup_t + 30) * 12 / 10 ))
+  # database (OMN-304).
+  term_budget="$(budget_with_slack "$cleanup_t" 1)"
   echo "  STATUS seen; waiting up to $((term_budget / 60)) min for the job to finish (cleanup may still be running) ..."
   terminated=""
   if poll_for "$term_budget" job_terminated; then
@@ -274,14 +285,20 @@ if [ "$MODE" = "verify" ]; then
   # Read the verdict ONLY from this run's region of the log.
   status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
   leak_line="$(printf '%s' "$new_region" | grep -aE '^LEAK: ' | tail -1 || true)"
-  if [ -z "$terminated" ] && [ -z "$leak_line" ]; then
-    # The wait exhausted with the job still alive: the leak question is still
-    # being decided. Say so — never let the fall-through print a clean-looking
-    # default for a scan that hasn't finished.
-    leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+  if [ -z "$leak_line" ]; then
+    # No LEAK line is two different facts, and neither may print the old
+    # clean-looking "(none recorded)" default (which read as "scan ran,
+    # nothing found"): either the job is still deciding the question, or it
+    # ended down a path that never runs the scan (build failure, preflight
+    # wedge) — say which.
+    if [ -z "$terminated" ]; then
+      leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+    else
+      leak_line="LEAK: not scanned — this run ended without a leak scan (see STATUS above)"
+    fi
   fi
   echo "  ${status_line:-STATUS: (none recorded)}"
-  echo "  ${leak_line:-LEAK: (none recorded)}"
+  echo "  $leak_line"
 
   # A WEDGED run is not a pass and not a failure: the job worked, the
   # environment didn't. Say so plainly rather than reporting green.
