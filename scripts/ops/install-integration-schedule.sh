@@ -204,13 +204,25 @@ if [ "$MODE" = "verify" ]; then
   # into a non-zero pipeline — i.e. a false "terminated" on iteration 1, the
   # same stale-read defect by another road. Capture, then match against a
   # herestring (no writer left to kill).
+  # A failing `launchctl print` is NOT evidence of termination: for a loaded
+  # job the command succeeds whether or not an instance is running (the pid
+  # line just disappears), so a failure is a transient launchctl error — and
+  # treating its empty output as "no pid line" would report terminated while
+  # cleanup still mutates the live database. Only a successful print with no
+  # pid line counts; on failure keep polling, and if the failure persists the
+  # budget exhausts into the honest "cleanup still running" message.
   job_terminated() {
     local out
-    out="$(launchctl print "$GUI/$LABEL" 2>/dev/null || true)"
+    out="$(launchctl print "$GUI/$LABEL" 2>/dev/null)" || return 1
     ! grep -qE '^[[:space:]]*pid =' <<< "$out"
   }
 
-  verify_budget=$(( (build_t + suite_t + cleanup_t) * 12 / 10 ))
+  # In the normal path STATUS is written only after all three bounded phases
+  # return, and each can overrun its timeout by run_bounded's fixed 30s
+  # SIGKILL grace (`timeout -k 30s`) — so add the grace per phase before the
+  # proportional slack, same reasoning as term_budget below: with small tuned
+  # timeouts, 20% slack alone is thinner than the kill windows.
+  verify_budget=$(( (build_t + suite_t + cleanup_t + 90) * 12 / 10 ))
   echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
   if ! poll_for "$verify_budget" status_appeared; then
     # status_appeared leaves the last (non-matching) tail in new_region; the
