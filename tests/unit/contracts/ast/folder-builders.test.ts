@@ -30,7 +30,8 @@ describe('buildFilteredFoldersScript', () => {
     it('returns JSON with folders array and metadata', () => {
       const result = buildFilteredFoldersScript({});
 
-      expect(result.script).toContain('folders: results');
+      // OMN-310: rows are sliced AFTER the sort (limit/offset pagination)
+      expect(result.script).toContain('folders: sliced');
       expect(result.script).toContain('returned_count');
       expect(result.script).toContain('total_available');
     });
@@ -70,14 +71,14 @@ describe('buildFilteredFoldersScript', () => {
   });
 
   describe('options', () => {
-    it('respects limit option', () => {
+    it('respects limit option (OMN-310: post-sort slice)', () => {
       const result = buildFilteredFoldersScript({ limit: 200 });
-      expect(result.script).toContain('const limit = 200');
+      expect(result.script).toMatch(/\.slice\(0,\s*0\s*\+\s*200\)/);
     });
 
-    it('defaults limit to 100', () => {
+    it('defaults limit to 100 (OMN-310: post-sort slice)', () => {
       const result = buildFilteredFoldersScript({});
-      expect(result.script).toContain('const limit = 100');
+      expect(result.script).toMatch(/\.slice\(0,\s*0\s*\+\s*100\)/);
     });
 
     it('includes projects when includeProjects is true', () => {
@@ -135,14 +136,17 @@ describe('buildFilteredFoldersScript', () => {
       expect(result.script).toContain('!folder.parent');
     });
 
-    it('count honesty: filters BEFORE the limit cap, total_available from totalMatched', () => {
+    it('count honesty: totalMatched counts every match; pagination is a post-sort slice (OMN-310)', () => {
       const result = buildFilteredFoldersScript({ filter: { name: 'X', nameOperator: 'CONTAINS' } });
-      // matchesFilter rejection precedes the limit guard
-      const matchIdx = result.script.indexOf('if (!matchesFilter(folder)) return;');
-      const limitIdx = result.script.indexOf('if (count >= limit) return;');
-      expect(matchIdx).toBeGreaterThanOrEqual(0);
-      expect(limitIdx).toBeGreaterThan(matchIdx);
+      expect(result.script).toContain('if (!matchesFilter(folder)) return;');
       expect(result.script).toContain('totalMatched++');
+      // OMN-310: the old in-loop cap returned an arbitrary pre-sort subset —
+      // it must stay gone; the slice after the sort is the only row cap.
+      expect(result.script).not.toContain('count >= limit');
+      const sortIdx = result.script.indexOf('results.sort(');
+      const sliceIdx = result.script.indexOf('results.slice(');
+      expect(sortIdx).toBeGreaterThanOrEqual(0);
+      expect(sliceIdx).toBeGreaterThan(sortIdx);
       expect(result.script).toContain('total_available: totalMatched');
       expect(result.script).not.toContain('total_available: flattenedFolders.length');
     });

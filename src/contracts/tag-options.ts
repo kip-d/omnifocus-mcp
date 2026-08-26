@@ -74,6 +74,12 @@ export interface TagQueryOptions {
   limit?: number;
 
   /**
+   * OMN-310: matched tags to skip before the returned slice (basic mode only).
+   * Applied AFTER the name sort so pages follow sort order.
+   */
+  offset?: number;
+
+  /**
    * OMN-170 S2: tag name-scoped filter (basic mode only — the read seam's mode).
    * Compiled from a TagFilter by reject-filters.ts. Other modes ignore it.
    */
