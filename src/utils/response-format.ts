@@ -122,7 +122,7 @@ export interface ResponseListOptions extends CountHonestyInput {
 export function applyCountHonesty(
   response: { summary?: Record<string, unknown>; metadata: StandardMetadataV2 },
   counts: CountHonestyInput | undefined,
-  itemNoun: 'tasks' | 'projects' | 'folders',
+  itemNoun: 'tasks' | 'projects' | 'folders' | 'tags',
 ): void {
   if (counts?.population === undefined) return;
   const population = counts.population;
@@ -642,10 +642,12 @@ export function createListResponseV2<T>(
     },
   };
 
-  // 'tasks' is a fallback label only: no tags/other caller supplies counts today,
-  // so the truncation insight noun is exercised solely for projects and folders.
-  let noun: 'tasks' | 'projects' | 'folders' = 'tasks';
-  if (itemType === 'projects' || itemType === 'folders') {
+  // OMN-310 review: tags now supplies real {population, offset} counts, so the
+  // noun map carries it — today tags responses build no summary object (the
+  // insight line never renders there), but the label is correct if one is ever
+  // added. 'tasks' remains the fallback for 'other' only.
+  let noun: 'tasks' | 'projects' | 'folders' | 'tags' = 'tasks';
+  if (itemType === 'projects' || itemType === 'folders' || itemType === 'tags') {
     noun = itemType;
   }
   applyCountHonesty(response as { summary?: Record<string, unknown>; metadata: StandardMetadataV2 }, opts, noun);

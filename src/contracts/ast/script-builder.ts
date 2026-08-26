@@ -1463,6 +1463,8 @@ export function buildProjectByIdScript(projectId: string, fields: string[] = [])
 export interface FolderScriptOptions {
   /** Maximum folders to return */
   limit?: number;
+  /** Matched folders to skip before collecting rows (OMN-310: offset pagination) */
+  offset?: number;
   /** Include projects in each folder */
   includeProjects?: boolean;
   /** Include child subfolders */
@@ -1490,6 +1492,7 @@ export interface FolderScriptOptions {
 export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): GeneratedScript {
   const {
     limit = 100,
+    offset = 0,
     includeProjects = false,
     includeSubfolders = true,
     filter = {},
@@ -1506,9 +1509,7 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
   const omniJsSource = `
       (() => {
         const results = [];
-        let count = 0;
         let totalMatched = 0;
-        const limit = ${limit};
         const includeProjects = ${includeProjects};
         const includeSubfolders = ${includeSubfolders};
 
@@ -1547,13 +1548,21 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
 
         // Process all folders
         flattenedFolders.forEach(folder => {
-          // OMN-170 S2: filter FIRST, then count the match (OMN-154 honesty),
-          // then cap projected rows by limit — so total_available reports the
-          // full matching population, not just the returned slice.
+          // OMN-170 S2: filter FIRST, then count the match (OMN-154 honesty).
+          // OMN-310: NO in-loop cap — all matches are projected so the sort
+          // below sees the full population, then limit/offset slice AFTER the
+          // sort (the old pre-sort cap returned an arbitrary subset, sorted —
+          // the memory §5 trap). Review note: the per-match path/depth walk is
+          // NOT deferrable — path and depth ARE the sort keys (sortBy defaults
+          // to 'path'), so they must exist for every match before sorting.
+          // Folder populations are small (tens, not thousands), so the full
+          // walk is cheap; revisit only if that assumption breaks.
           if (!matchesFilter(folder)) return;
           totalMatched++;
-          if (count >= limit) return;
-
+          ${
+            limit === 0
+              ? '// OMN-310 r4: countOnly — count matches, emit NO projection at all'
+              : `
           const depth = getFolderDepth(folder);
           const path = getFolderPath(folder);
 
@@ -1597,10 +1606,18 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
             folderObj.projectCount = folder.projects.length;
           }
 
-          results.push(folderObj);
-          count++;
+          results.push(folderObj);`
+          }
         });
 
+        ${
+          limit === 0
+            ? `
+        // OMN-310 r2: countOnly (limit 0) returns no rows — sorting an
+        // unobservable result is wasted work, so the sort is skipped entirely.
+        const sliced = [];
+        `
+            : `
         // Sort results
         const sortBy = '${sortBy}';
         const sortOrder = '${sortOrder}';
@@ -1630,11 +1647,16 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           }
         });
 
+        // OMN-310: paginate AFTER the sort so pages follow sort order.
+        const sliced = results.slice(${offset}, ${offset} + ${limit});
+        `
+        }
+
         return JSON.stringify({
           success: true,
-          folders: results,
+          folders: sliced,
           metadata: {
-            returned_count: results.length,
+            returned_count: sliced.length,
             total_available: totalMatched
           }
         });

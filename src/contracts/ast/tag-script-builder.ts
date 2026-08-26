@@ -29,14 +29,24 @@ import type { GeneratedScript } from './script-builder.js';
  * @returns Generated script ready for execution
  */
 export function buildTagsScript(options: TagQueryOptions): GeneratedScript {
-  const { mode, includeEmpty = true, sortBy = 'name', includeUsageStats = false, limit, name, nameOperator } = options;
+  const {
+    mode,
+    includeEmpty = true,
+    sortBy = 'name',
+    includeUsageStats = false,
+    limit,
+    offset,
+    name,
+    nameOperator,
+  } = options;
 
   switch (mode) {
     case 'names':
       return buildTagNamesScript({ sortBy, limit });
     case 'basic':
       // OMN-170 S2: name filter is supported in basic mode (the read seam's mode).
-      return buildBasicTagsScript({ sortBy, limit, name, nameOperator });
+      // OMN-310: limit/offset paginate basic mode (post-sort slice).
+      return buildBasicTagsScript({ sortBy, limit, offset, name, nameOperator });
     case 'full':
       return buildFullTagsScript({ includeEmpty, sortBy, includeUsageStats, limit });
     default: {
@@ -54,6 +64,8 @@ export function buildTagsScript(options: TagQueryOptions): GeneratedScript {
 interface TagScriptOptions {
   sortBy?: TagSortBy;
   limit?: number;
+  /** OMN-310: matched tags to skip before the returned slice (basic mode only). */
+  offset?: number;
   /** OMN-170 S2: tag name filter (basic mode only). */
   name?: string;
   nameOperator?: TextOperator;
@@ -185,10 +197,16 @@ function buildTagNamesScript(options: TagScriptOptions = {}): GeneratedScript {
  * Note: sortBy is ignored in basic mode (always sorted by name)
  */
 function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
-  const { limit, name, nameOperator } = options;
-  // sortBy is ignored in basic mode - always sorted by name
-  const limitClause = limit ? `const limitCount = ${limit};` : '';
-  const limitCheck = limit ? 'if (count >= limitCount) return;' : '';
+  const { limit, offset, name, nameOperator } = options;
+  // sortBy is ignored in basic mode - always sorted by name.
+  // OMN-310: pagination is a post-sort slice in the JXA wrapper — an in-script
+  // cap would run in DB-iteration order and return an arbitrary subset, sorted
+  // (the same pre-sort-cap trap the folders builder had).
+  // r2: one slice expression — the end argument is simply omitted when no limit.
+  const paginate = limit !== undefined || offset !== undefined;
+  const start = offset ?? 0;
+  const sliceEnd = limit !== undefined ? `, ${start} + ${limit}` : '';
+  const sliceExpr = paginate ? `result.items = result.items.slice(${start}${sliceEnd});` : '';
   const namePredicate = tagNamePredicate(name, nameOperator);
   const hasFilter = !!name;
 
@@ -201,8 +219,6 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
       (() => {
         const tags = [];
         let totalMatched = 0;
-        ${limitClause}
-        let count = 0;
 
         // OMN-170 S2: tag name predicate (true = match all when unfiltered).
         function matchesName(tag) { return ${namePredicate}; }
@@ -211,7 +227,6 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
           if (!(tag.id && tag.name)) return;
           if (!matchesName(tag)) return;
           totalMatched++;
-          ${limitCheck}
           // OMN-145: parentId is always emitted in basic mode (null for top-level tags).
           // Option A (unconditional field) was chosen over an opt-in mode/fields param:
           // an opt-in flag an LLM client won't know to set defeats "make hierarchy
@@ -223,7 +238,6 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
             name: tag.name,
             parentId: ${TAG_PARENT_ID_EXPR}
           });
-          count++;
         });
 
         return JSON.stringify({
@@ -245,9 +259,10 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
     const resultJson = app.evaluateJavascript(${JSON.stringify(tagsOmniJsSource)});
     const result = JSON.parse(resultJson);
 
-    // Sort by name
+    // Sort by name, THEN paginate (OMN-310) — pages follow sort order.
     if (result.items) {
       result.items.sort((a, b) => a.name.localeCompare(b.name));
+      ${sliceExpr}
     }
 
     const endTime = Date.now();
@@ -257,7 +272,7 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
       v: 'ast',
       items: result.items || [],
       summary: {
-        total: result.total || 0,
+        total: (result.items || []).length,
         total_matched: result.total_matched != null ? result.total_matched : (result.total || 0),
         insights: ["Found " + (result.total || 0) + " tags (basic mode)"],
         query_time_ms: endTime - startTime,

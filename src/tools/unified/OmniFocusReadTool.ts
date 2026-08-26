@@ -164,6 +164,20 @@ export function projectFieldsOnResult(
 }
 
 /**
+ * OMN-310 r2: ONE definition of the paginated cache-key suffix shared by the
+ * tags and folders handlers — a format change (e.g. a version tag) lands in
+ * both paths or neither, closing the same drift class OMN-309/310 fixed.
+ */
+function paginationCacheKey(
+  base: string,
+  paginated: boolean,
+  limit: number | undefined,
+  offset: number | undefined,
+): string {
+  return paginated ? `${base}_limit:${limit ?? 'all'}_offset:${offset ?? 0}` : base;
+}
+
+/**
  * One truncation policy for BOTH entity paths: list-style reads truncate
  * notes unless the caller asked for details. Tasks and projects must never
  * diverge on this — change it here, not per call site.
@@ -1155,13 +1169,16 @@ PERFORMANCE:
 
   // Shared so the count-only path and the row path build byte-identical tag
   // scripts — a divergence would make a count disagree with the row population.
-  private tagQueryOptions(filter: TagFilter): TagQueryOptions {
+  private tagQueryOptions(filter: TagFilter, pagination?: { limit?: number; offset?: number }): TagQueryOptions {
     return {
       mode: 'basic' as TagQueryMode,
       includeEmpty: true,
       sortBy: 'name' as TagSortBy,
       name: filter.name,
       nameOperator: filter.nameOperator,
+      // OMN-310: post-sort pagination; both absent = uncapped browse (unchanged).
+      limit: pagination?.limit,
+      offset: pagination?.offset,
     };
   }
 
@@ -1197,17 +1214,41 @@ PERFORMANCE:
       return this.executeTagCountOnly(filter, timer);
     }
 
+    // OMN-310: limit/offset paginate the (name-sorted) tag list. Both absent =
+    // the original uncapped browse, keeping its byte-identical cache key.
+    // r2: offset 0 is normalized to absent — a semantically identical query
+    // must not create a second cache entry.
+    const limit = compiled.limit;
+    const offset = compiled.offset && compiled.offset > 0 ? compiled.offset : undefined;
+    const paginated = limit !== undefined || offset !== undefined;
+
     const hasFilter = filter.name !== undefined;
-    const cacheKey = hasFilter
+    const baseCacheKey = hasFilter
       ? `list:name:true:false:false:true:false_${JSON.stringify(filter)}`
       : 'list:name:true:false:false:true:false';
+    // Paginated pages compile different scripts, so they MUST key separately
+    // (the OMN-309 lesson: a shared entry serves page 1 to every offset).
+    const cacheKey = paginationCacheKey(baseCacheKey, paginated, limit, offset);
     const cached = this.cache.get<unknown>('tags', cacheKey);
     if (cached) {
-      return cached;
+      // OMN-310: the whole response is cached, so its stored metadata says
+      // from_cache: false — restamp from_cache AND the timer fields honestly
+      // on the hit path (r2: a cache hit must not report the cache-write
+      // timestamp/duration; matches the folders/projects hit paths).
+      const cachedResponse = cached as { metadata?: Record<string, unknown> };
+      return {
+        ...cachedResponse,
+        metadata: {
+          ...(cachedResponse.metadata ?? {}),
+          ...timer.toMetadata(),
+          timestamp: new Date().toISOString(),
+          from_cache: true,
+        },
+      };
     }
 
     // Build and execute AST-powered tag list script (basic mode; name filter S2).
-    const generatedScript = buildTagsScript(this.tagQueryOptions(filter));
+    const generatedScript = buildTagsScript(this.tagQueryOptions(filter, { limit, offset }));
     const result = await this.execJson(generatedScript.script, TAG_LIST_SCHEMA);
 
     if (!isScriptSuccess(result)) {
@@ -1229,10 +1270,9 @@ PERFORMANCE:
       summary?: { total?: number; total_matched?: number };
     };
     const items = envelope.items || [];
-    const total = envelope.summary?.total ?? items.length;
     // OMN-154/OMN-170: the matching population (pre-limit) is total_matched; falls
     // back to total when the script omits it (no name filter / older builds).
-    const population = envelope.summary?.total_matched ?? total;
+    const population = envelope.summary?.total_matched ?? envelope.summary?.total ?? items.length;
 
     const response = createListResponseV2(
       'tags',
@@ -1240,11 +1280,16 @@ PERFORMANCE:
       'tags',
       {
         ...timer.toMetadata(),
-        total,
+        // r2: the legacy `total` key is GONE — it reported the page size beside
+        // total_count's population (OMN-154: total_count is the single truthful
+        // field; no consumer read the bare `total`).
         operation: 'list',
         mode: 'ast_unified',
+        // OMN-310: surface the applied offset on paginated queries (OMN-309 parity)
+        ...(paginated ? { offset: offset ?? 0 } : {}),
       },
-      { population },
+      // OMN-310: offset feeds truncation honesty (truncated iff offset + returned < population)
+      { population, offset },
     );
 
     // Cache the result (keyed by filter — see cacheKey above)
@@ -1310,8 +1355,10 @@ PERFORMANCE:
 
   /**
    * OMN-174: count-only path for folders. `total_available` is the full matching
-   * population regardless of limit (OMN-170 S2), and `limit: 0` makes the OmniJS
-   * loop count matches but skip the per-folder path/depth/children projection.
+   * population regardless of limit (OMN-170 S2); `limit: 0` returns zero rows via
+   * the post-sort slice. (OMN-310 note: the loop now projects every match before
+   * slicing — the old in-loop cap skipped projection but returned an arbitrary
+   * pre-sort subset. Folder populations are small; correctness won.)
    */
   private async executeFolderCountOnly(filter: FolderFilter, timer: OperationTimerV2): Promise<unknown> {
     const { script } = buildFilteredFoldersScript({ filter, limit: 0 });
@@ -1342,6 +1389,15 @@ PERFORMANCE:
 
     const isEmpty = isEmptyFolderFilter(filter);
 
+    // OMN-310: honor compiled.limit/offset (limit was hardcoded to 100 — the
+    // memory §5 gotcha). Defaults preserve existing behavior: limit 100, offset 0.
+    const limit = compiled.limit ?? 100;
+    const offset = compiled.offset && compiled.offset > 0 ? compiled.offset : 0;
+    // r2: an explicit limit equal to the 100 default, or offset 0, is the
+    // unpaginated browse — a semantically identical query must not create a
+    // second cache entry.
+    const paginated = limit !== 100 || offset > 0;
+
     // Helper: build the folders response with honest counts on both paths
     const buildFoldersResponse = (
       folders: unknown[],
@@ -1353,24 +1409,30 @@ PERFORMANCE:
         operation: 'list',
         returned_count: folders.length,
         total_folders: folders.length,
+        // OMN-310: surface the applied offset on paginated queries (OMN-309 parity)
+        ...(paginated ? { offset } : {}),
         ...extraMeta,
       });
-      applyCountHonesty(response, { population: totalAvailable }, 'folders');
+      // OMN-310: offset feeds truncation honesty (truncated iff offset + returned < population)
+      applyCountHonesty(response, { population: totalAvailable, offset }, 'folders');
       if (typeof response.metadata.total_count === 'number') {
         response.metadata.total_folders = response.metadata.total_count;
       }
       return response;
     };
 
-    // Check cache first
-    const cacheKey = isEmpty ? 'folders_list_basic' : `folders_list_basic_${JSON.stringify(filter)}`;
+    // Check cache first. Paginated pages compile different scripts, so they MUST
+    // key separately (the OMN-309 lesson); the unpaginated browse keeps its
+    // original byte-identical key.
+    const baseCacheKey = isEmpty ? 'folders_list_basic' : `folders_list_basic_${JSON.stringify(filter)}`;
+    const cacheKey = paginationCacheKey(baseCacheKey, paginated, limit, offset);
     const cached = this.cache.get<{ folders: unknown[]; totalAvailable?: number }>('folders', cacheKey);
     if (cached) {
       return buildFoldersResponse(cached.folders, cached.totalAvailable, { from_cache: true });
     }
 
     // Build and execute AST-generated folder list script
-    const { script } = buildFilteredFoldersScript({ filter, limit: 100 });
+    const { script } = buildFilteredFoldersScript({ filter, limit, offset });
     const result = await this.execJson(script, FolderListSchema);
 
     if (!isScriptSuccess(result)) {
