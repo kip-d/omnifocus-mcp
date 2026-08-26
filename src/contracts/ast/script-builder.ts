@@ -1559,7 +1559,10 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           // walk is cheap; revisit only if that assumption breaks.
           if (!matchesFilter(folder)) return;
           totalMatched++;
-
+          ${
+            limit === 0
+              ? '// OMN-310 r4: countOnly — count matches, emit NO projection at all'
+              : `
           const depth = getFolderDepth(folder);
           const path = getFolderPath(folder);
 
@@ -1603,7 +1606,8 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
             folderObj.projectCount = folder.projects.length;
           }
 
-          results.push(folderObj);
+          results.push(folderObj);`
+          }
         });
 
         ${

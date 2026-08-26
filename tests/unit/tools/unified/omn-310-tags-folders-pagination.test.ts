@@ -37,6 +37,17 @@ describe('OMN-310: buildFilteredFoldersScript pagination', () => {
     expect(result.script).not.toMatch(/count >= limit/);
   });
 
+  it('countOnly (limit 0) skips per-folder projection entirely, not just the sort (review r4)', () => {
+    const countOnly = buildFilteredFoldersScript({ limit: 0 });
+    // The loop counts matches and bails — no path/depth walk, no folderObj.
+    expect(countOnly.script).not.toContain('const path = getFolderPath(folder)');
+    expect(countOnly.script).not.toContain('results.sort(');
+
+    // Normal queries still project.
+    const normal = buildFilteredFoldersScript({ limit: 5 });
+    expect(normal.script).toContain('const path = getFolderPath(folder)');
+  });
+
   it('defaults to limit 100 / offset 0 when not specified', () => {
     const result = buildFilteredFoldersScript({});
     expect(result.script).toMatch(/\.slice\(0,\s*0\s*\+\s*100\)/);
