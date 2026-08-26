@@ -65,6 +65,29 @@ describe('OMN-311: ReadSchema sort-field honesty', () => {
     }
   });
 
+  it('rejects duplicate sort fields on projects — the second key is dead, not a tiebreaker (review r4)', () => {
+    const result = parse({
+      type: 'projects',
+      sort: [
+        { field: 'name', direction: 'asc' },
+        { field: 'name', direction: 'desc' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    const message = JSON.stringify(result.success ? {} : result.error.issues);
+    expect(message).toMatch(/duplicate/i);
+
+    // Distinct fields as a real tiebreaker chain remain fine.
+    const distinct = parse({
+      type: 'projects',
+      sort: [
+        { field: 'dueDate', direction: 'asc' },
+        { field: 'name', direction: 'asc' },
+      ],
+    });
+    expect(distinct.success).toBe(true);
+  });
+
   it('rejects sort on tags and folders queries with guidance', () => {
     for (const type of ['tags', 'folders']) {
       const result = parse({ type, sort: [{ field: 'name', direction: 'desc' }] });

@@ -402,6 +402,7 @@ export const ReadSchema = z
     // projects script can read from the raw Project object; task-only fields
     // reject with guidance instead of the old silent accept-and-drop.
     if (q.type === 'projects' && Array.isArray(q.sort)) {
+      const seen = new Set<string>();
       for (const s of q.sort) {
         if (!PROJECT_SORT_FIELDS.has(s.field)) {
           ctx.addIssue({
@@ -410,6 +411,17 @@ export const ReadSchema = z
             message: `'${s.field}' is not sortable on projects queries. Supported project sort fields: ${[...PROJECT_SORT_FIELDS].join(', ')}.`,
           });
         }
+        // r4: a repeated field's second entry is unreachable in the comparator
+        // (ties on the first occurrence are ties on the repeat) — reject the
+        // duplicate loudly rather than silently ignoring it.
+        if (seen.has(s.field)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['query', 'sort'],
+            message: `Duplicate sort field '${s.field}': a repeated field can never act as a tiebreaker for itself. Use each field at most once.`,
+          });
+        }
+        seen.add(s.field);
       }
     }
     // OMN-311: tags/folders/perspectives are always name/path-sorted by design —
