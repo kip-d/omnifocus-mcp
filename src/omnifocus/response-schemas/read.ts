@@ -201,7 +201,9 @@ export const TaskListMetadataSchema = z
  *   return JSON.stringify({ projects, metadata: { total_available, total_matched,
  *     returned_count, limit_applied, performance_mode, stats_included,
  *     optimization, filter_description } }).
- * All keys are always emitted (single code path for the metadata object).
+ * All keys are always emitted (single code path for the metadata object),
+ * EXCEPT offset_applied — emitted only when the query paginated with a
+ * non-zero offset (OMN-309).
  */
 export const ProjectListMetadataSchema = z
   .object({
@@ -209,6 +211,8 @@ export const ProjectListMetadataSchema = z
     total_matched: z.number(),
     returned_count: z.number(),
     limit_applied: z.number(),
+    // OMN-309: present only when the query paginated with a non-zero offset
+    offset_applied: z.number().optional(),
     performance_mode: z.string(),
     stats_included: z.boolean(),
     optimization: z.string(),

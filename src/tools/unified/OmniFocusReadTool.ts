@@ -997,6 +997,7 @@ PERFORMANCE:
     if (compiled.type !== 'projects') throw new Error('handleProjectQuery: wrong type');
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
+    const offset = compiled.offset || 0; // OMN-309: was silently dropped
     const includeStats = compiled.includeStats ?? false;
 
     // OMN-174: count-only fast path (checked before id-lookup/row paths, mirroring
@@ -1033,7 +1034,9 @@ PERFORMANCE:
     // (details:false) and full-note (details:true) list now compile different
     // scripts, and a shared entry would serve truncated notes to a details:true
     // caller (or vice versa).
-    const cacheParams = { ...projectFilter, limit, includeStats, noteTruncateLength };
+    // OMN-309: offset MUST participate — pages compile different scripts, and a
+    // shared entry would serve page 1's rows to every offset (the live repro).
+    const cacheParams = { ...projectFilter, limit, offset, includeStats, noteTruncateLength };
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
@@ -1047,8 +1050,10 @@ PERFORMANCE:
           ...timer.toMetadata(),
           from_cache: true,
           operation: 'list',
+          offset, // OMN-309 review: surface the applied offset, matching the tasks path
         },
-        { population: cached.totalMatched, summary: !isNarrowLookup },
+        // OMN-309: same offset-aware truncation honesty as the fresh path
+        { population: cached.totalMatched, offset, summary: !isNarrowLookup },
       ) as unknown as Record<string, unknown>;
 
       // Post-hoc field projection (always applied for thin-by-default)
@@ -1058,6 +1063,7 @@ PERFORMANCE:
     // Execute query using AST-powered script builder
     const generatedScript = buildFilteredProjectsScript(projectFilter, {
       limit,
+      offset,
       includeStats,
       performanceMode: includeStats ? 'normal' : 'lite',
       noteTruncateLength,
@@ -1099,8 +1105,11 @@ PERFORMANCE:
         ...timer.toMetadata(),
         from_cache: false,
         operation: 'list',
+        offset, // OMN-309 review: surface the applied offset, matching the tasks path
       },
-      { population: totalMatched, summary: !isNarrowLookup },
+      // OMN-309: offset participates in truncation honesty (R2: truncated iff
+      // offset + returned < population), matching the tasks pipeline.
+      { population: totalMatched, offset, summary: !isNarrowLookup },
     ) as unknown as Record<string, unknown>;
 
     // Post-hoc field projection (always applied for thin-by-default)
