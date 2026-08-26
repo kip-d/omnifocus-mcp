@@ -1552,7 +1552,11 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           // OMN-310: NO in-loop cap — all matches are projected so the sort
           // below sees the full population, then limit/offset slice AFTER the
           // sort (the old pre-sort cap returned an arbitrary subset, sorted —
-          // the memory §5 trap). Folder counts are small; full projection is cheap.
+          // the memory §5 trap). Review note: the per-match path/depth walk is
+          // NOT deferrable — path and depth ARE the sort keys (sortBy defaults
+          // to 'path'), so they must exist for every match before sorting.
+          // Folder populations are small (tens, not thousands), so the full
+          // walk is cheap; revisit only if that assumption breaks.
           if (!matchesFilter(folder)) return;
           totalMatched++;
 
