@@ -1606,6 +1606,14 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
           results.push(folderObj);
         });
 
+        ${
+          limit === 0
+            ? `
+        // OMN-310 r2: countOnly (limit 0) returns no rows — sorting an
+        // unobservable result is wasted work, so the sort is skipped entirely.
+        const sliced = [];
+        `
+            : `
         // Sort results
         const sortBy = '${sortBy}';
         const sortOrder = '${sortOrder}';
@@ -1637,6 +1645,8 @@ export function buildFilteredFoldersScript(options: FolderScriptOptions = {}): G
 
         // OMN-310: paginate AFTER the sort so pages follow sort order.
         const sliced = results.slice(${offset}, ${offset} + ${limit});
+        `
+        }
 
         return JSON.stringify({
           success: true,

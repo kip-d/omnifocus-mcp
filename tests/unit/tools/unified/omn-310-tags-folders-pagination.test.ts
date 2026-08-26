@@ -170,6 +170,56 @@ describe('OMN-310: handler threading for tags and folders', () => {
     expect(cacheKey).toBe('folders_list_basic');
   });
 
+  it('tags: metadata carries total_count only — the legacy near-duplicate `total` is gone (review r2)', async () => {
+    execJsonSpy.mockResolvedValue(tagsScriptSuccess);
+
+    const result = (await tool.execute({ query: { type: 'tags', limit: 2, offset: 3 } })) as any;
+
+    // OMN-154 doctrine: total_count is the single truthful population field.
+    // Pre-fix, metadata.total reported the PAGE size beside total_count's
+    // population — two near-identical names with different numbers.
+    expect(result.metadata.total_count).toBe(5);
+    expect('total' in result.metadata).toBe(false);
+  });
+
+  it('tags: a cache hit reports fresh timestamp/query_time, not the cache-write values (review r2)', async () => {
+    execJsonSpy.mockResolvedValue(tagsScriptSuccess);
+    (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      success: true,
+      data: { items: [] },
+      metadata: { timestamp: '2000-01-01T00:00:00.000Z', query_time_ms: 9999, from_cache: false },
+    });
+
+    const result = (await tool.execute({ query: { type: 'tags' } })) as any;
+
+    expect(result.metadata.from_cache).toBe(true);
+    expect(result.metadata.timestamp).not.toBe('2000-01-01T00:00:00.000Z');
+    expect(result.metadata.query_time_ms).toBeLessThan(9999);
+  });
+
+  it('folders: countOnly (limit 0) emits no sort call — nothing observable to order (review r2)', async () => {
+    execJsonSpy.mockResolvedValue(foldersScriptSuccess);
+
+    await tool.execute({ query: { type: 'folders', countOnly: true } });
+
+    const script = execJsonSpy.mock.calls[0][0] as string;
+    expect(script).not.toContain('results.sort(');
+  });
+
+  it('explicit offset:0 (tags) and limit:100 (folders) key as the unpaginated browse (review r2)', async () => {
+    execJsonSpy.mockResolvedValue(tagsScriptSuccess);
+    await tool.execute({ query: { type: 'tags', offset: 0 } });
+    const tagKey = (mockCache.get as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(tagKey).toBe('list:name:true:false:false:true:false');
+
+    vi.clearAllMocks();
+    (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    execJsonSpy.mockResolvedValue(foldersScriptSuccess);
+    await tool.execute({ query: { type: 'folders', limit: 100, offset: 0 } });
+    const folderKey = (mockCache.get as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(folderKey).toBe('folders_list_basic');
+  });
+
   it('folders: a non-final page IS marked truncated', async () => {
     execJsonSpy.mockResolvedValue(foldersScriptSuccess);
 

@@ -164,6 +164,20 @@ export function projectFieldsOnResult(
 }
 
 /**
+ * OMN-310 r2: ONE definition of the paginated cache-key suffix shared by the
+ * tags and folders handlers — a format change (e.g. a version tag) lands in
+ * both paths or neither, closing the same drift class OMN-309/310 fixed.
+ */
+function paginationCacheKey(
+  base: string,
+  paginated: boolean,
+  limit: number | undefined,
+  offset: number | undefined,
+): string {
+  return paginated ? `${base}_limit:${limit ?? 'all'}_offset:${offset ?? 0}` : base;
+}
+
+/**
  * One truncation policy for BOTH entity paths: list-style reads truncate
  * notes unless the caller asked for details. Tasks and projects must never
  * diverge on this — change it here, not per call site.
@@ -1202,8 +1216,10 @@ PERFORMANCE:
 
     // OMN-310: limit/offset paginate the (name-sorted) tag list. Both absent =
     // the original uncapped browse, keeping its byte-identical cache key.
+    // r2: offset 0 is normalized to absent — a semantically identical query
+    // must not create a second cache entry.
     const limit = compiled.limit;
-    const offset = compiled.offset;
+    const offset = compiled.offset && compiled.offset > 0 ? compiled.offset : undefined;
     const paginated = limit !== undefined || offset !== undefined;
 
     const hasFilter = filter.name !== undefined;
@@ -1212,13 +1228,23 @@ PERFORMANCE:
       : 'list:name:true:false:false:true:false';
     // Paginated pages compile different scripts, so they MUST key separately
     // (the OMN-309 lesson: a shared entry serves page 1 to every offset).
-    const cacheKey = paginated ? `${baseCacheKey}_limit:${limit ?? 'all'}_offset:${offset ?? 0}` : baseCacheKey;
+    const cacheKey = paginationCacheKey(baseCacheKey, paginated, limit, offset);
     const cached = this.cache.get<unknown>('tags', cacheKey);
     if (cached) {
       // OMN-310: the whole response is cached, so its stored metadata says
-      // from_cache: false — restamp it honestly on the hit path.
+      // from_cache: false — restamp from_cache AND the timer fields honestly
+      // on the hit path (r2: a cache hit must not report the cache-write
+      // timestamp/duration; matches the folders/projects hit paths).
       const cachedResponse = cached as { metadata?: Record<string, unknown> };
-      return { ...cachedResponse, metadata: { ...(cachedResponse.metadata ?? {}), from_cache: true } };
+      return {
+        ...cachedResponse,
+        metadata: {
+          ...(cachedResponse.metadata ?? {}),
+          ...timer.toMetadata(),
+          timestamp: new Date().toISOString(),
+          from_cache: true,
+        },
+      };
     }
 
     // Build and execute AST-powered tag list script (basic mode; name filter S2).
@@ -1244,10 +1270,9 @@ PERFORMANCE:
       summary?: { total?: number; total_matched?: number };
     };
     const items = envelope.items || [];
-    const total = envelope.summary?.total ?? items.length;
     // OMN-154/OMN-170: the matching population (pre-limit) is total_matched; falls
     // back to total when the script omits it (no name filter / older builds).
-    const population = envelope.summary?.total_matched ?? total;
+    const population = envelope.summary?.total_matched ?? envelope.summary?.total ?? items.length;
 
     const response = createListResponseV2(
       'tags',
@@ -1255,7 +1280,9 @@ PERFORMANCE:
       'tags',
       {
         ...timer.toMetadata(),
-        total,
+        // r2: the legacy `total` key is GONE — it reported the page size beside
+        // total_count's population (OMN-154: total_count is the single truthful
+        // field; no consumer read the bare `total`).
         operation: 'list',
         mode: 'ast_unified',
         // OMN-310: surface the applied offset on paginated queries (OMN-309 parity)
@@ -1365,8 +1392,11 @@ PERFORMANCE:
     // OMN-310: honor compiled.limit/offset (limit was hardcoded to 100 — the
     // memory §5 gotcha). Defaults preserve existing behavior: limit 100, offset 0.
     const limit = compiled.limit ?? 100;
-    const offset = compiled.offset ?? 0;
-    const paginated = compiled.limit !== undefined || compiled.offset !== undefined;
+    const offset = compiled.offset && compiled.offset > 0 ? compiled.offset : 0;
+    // r2: an explicit limit equal to the 100 default, or offset 0, is the
+    // unpaginated browse — a semantically identical query must not create a
+    // second cache entry.
+    const paginated = limit !== 100 || offset > 0;
 
     // Helper: build the folders response with honest counts on both paths
     const buildFoldersResponse = (
@@ -1395,7 +1425,7 @@ PERFORMANCE:
     // key separately (the OMN-309 lesson); the unpaginated browse keeps its
     // original byte-identical key.
     const baseCacheKey = isEmpty ? 'folders_list_basic' : `folders_list_basic_${JSON.stringify(filter)}`;
-    const cacheKey = paginated ? `${baseCacheKey}_limit:${limit}_offset:${offset}` : baseCacheKey;
+    const cacheKey = paginationCacheKey(baseCacheKey, paginated, limit, offset);
     const cached = this.cache.get<{ folders: unknown[]; totalAvailable?: number }>('folders', cacheKey);
     if (cached) {
       return buildFoldersResponse(cached.folders, cached.totalAvailable, { from_cache: true });

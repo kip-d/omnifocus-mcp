@@ -202,12 +202,11 @@ function buildBasicTagsScript(options: TagScriptOptions = {}): GeneratedScript {
   // OMN-310: pagination is a post-sort slice in the JXA wrapper — an in-script
   // cap would run in DB-iteration order and return an arbitrary subset, sorted
   // (the same pre-sort-cap trap the folders builder had).
-  let sliceExpr = '';
-  if (limit !== undefined) {
-    sliceExpr = `result.items = result.items.slice(${offset ?? 0}, ${offset ?? 0} + ${limit});`;
-  } else if (offset !== undefined) {
-    sliceExpr = `result.items = result.items.slice(${offset});`;
-  }
+  // r2: one slice expression — the end argument is simply omitted when no limit.
+  const paginate = limit !== undefined || offset !== undefined;
+  const start = offset ?? 0;
+  const sliceEnd = limit !== undefined ? `, ${start} + ${limit}` : '';
+  const sliceExpr = paginate ? `result.items = result.items.slice(${start}${sliceEnd});` : '';
   const namePredicate = tagNamePredicate(name, nameOperator);
   const hasFilter = !!name;
 
