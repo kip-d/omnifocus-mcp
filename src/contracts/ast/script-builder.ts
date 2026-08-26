@@ -1080,6 +1080,13 @@ const PROJECT_SORT_VALUE_EXPRS: Record<ProjectSortField, string> = {
 };
 
 /**
+ * OMN-311 review: the schema-side acceptance set is DERIVED from the value-expr
+ * Record (single source of truth) — a field the schema accepts but the builder
+ * cannot lower is impossible by construction, not by comment discipline.
+ */
+export const PROJECT_SORT_FIELDS: ReadonlySet<string> = new Set(Object.keys(PROJECT_SORT_VALUE_EXPRS));
+
+/**
  * Default fields to include in project response
  */
 const DEFAULT_PROJECT_FIELDS = [
@@ -1243,6 +1250,66 @@ export function buildFilteredProjectsScript(
   // hard-error on a typo'd folder where the equivalent non-countOnly query ignores it.
   const folderGuard = filter.id ? '' : emitFolderNotFoundGuardsForFilter(filter, 'folderName');
 
+  // OMN-311: single definition of "build one projected row from `project`" —
+  // spliced into the unsorted loop AND the sorted path's post-slice pass, so
+  // enrichment cost is always per-returned-row, never per-match.
+  const buildProjectRow = `const proj = {
+            ${fieldProjection}
+          };
+
+          ${
+            includeTaskCounts
+              ? `
+          // Task counts (normal mode) — OMN-270: see the formula comment
+          // above the taskCountsByProject pass
+          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
+
+          // Next task
+          const nextTask = project.nextTask;
+          if (nextTask) {
+            proj.nextTask = {
+              id: nextTask.id.primaryKey,
+              name: nextTask.name,
+              flagged: nextTask.flagged || false,
+              dueDate: nextTask.dueDate ? nextTask.dueDate.toISOString() : null
+            };
+          }
+          `
+              : ''
+          }
+
+          ${
+            includeStats
+              ? `
+          // Include stats (expensive)
+          const tasks = project.flattenedTasks;
+          if (tasks && tasks.length > 0) {
+            let active = 0, completed = 0, overdue = 0, flagged = 0;
+            const now = new Date();
+
+            tasks.forEach(task => {
+              if (task.completed) {
+                completed++;
+              } else {
+                active++;
+                if (task.dueDate && task.dueDate < now) overdue++;
+              }
+              if (task.flagged) flagged++;
+            });
+
+            proj.stats = {
+              active: active,
+              completed: completed,
+              total: tasks.length,
+              completionRate: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
+              overdue: overdue,
+              flagged: flagged
+            };
+          }
+          `
+              : ''
+          }`;
+
   const omniJsSource = `
       (() => {
         ${folderGuard}
@@ -1298,77 +1365,30 @@ export function buildFilteredProjectsScript(
           if (!matchesFilter(project)) return;
 
           // OMN-154: count every match; the limit caps only the projected rows.
-          // OMN-311: on the sorted path there is NO in-loop skip/cap — every
-          // match is collected so the sort sees the full population.
+          // OMN-311: the sorted path collects only {sort values, project ref}
+          // here — projection and enrichment run AFTER the slice below, so a
+          // paginated sorted query never materializes the full population
+          // (review finding on PR #265).
           totalMatched++;
           ${offsetCheck}
-          ${useSort ? '' : 'if (count >= limit) return;'}
-
-          const proj = {
-            ${fieldProjection}
-          };
-
           ${
-            includeTaskCounts
-              ? `
-          // Task counts (normal mode) — OMN-270: see the formula comment
-          // above the taskCountsByProject pass
-          proj.taskCounts = taskCountsByProject[project.id.primaryKey] || ${TASK_COUNTS_ZERO_LITERAL};
+            useSort
+              ? `entries.push({ v: ${sortValsExpr}, p: project });`
+              : `if (count >= limit) return;
 
-          // Next task
-          const nextTask = project.nextTask;
-          if (nextTask) {
-            proj.nextTask = {
-              id: nextTask.id.primaryKey,
-              name: nextTask.name,
-              flagged: nextTask.flagged || false,
-              dueDate: nextTask.dueDate ? nextTask.dueDate.toISOString() : null
-            };
+          ${buildProjectRow}
+          results.push(proj);
+          count++;`
           }
-          `
-              : ''
-          }
-
-          ${
-            includeStats
-              ? `
-          // Include stats (expensive)
-          const tasks = project.flattenedTasks;
-          if (tasks && tasks.length > 0) {
-            let active = 0, completed = 0, overdue = 0, flagged = 0;
-            const now = new Date();
-
-            tasks.forEach(task => {
-              if (task.completed) {
-                completed++;
-              } else {
-                active++;
-                if (task.dueDate && task.dueDate < now) overdue++;
-              }
-              if (task.flagged) flagged++;
-            });
-
-            proj.stats = {
-              active: active,
-              completed: completed,
-              total: tasks.length,
-              completionRate: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
-              overdue: overdue,
-              flagged: flagged
-            };
-          }
-          `
-              : ''
-          }
-
-          ${useSort ? `entries.push({ v: ${sortValsExpr}, r: proj });` : 'results.push(proj);\n          count++;'}
         });
 
         ${
           useSort
             ? `
         // OMN-311: multi-key sort over RAW-object values (v tuples), null
-        // (missing date) last in either direction, then paginate the sorted set.
+        // (missing date) last in either direction; strings compare with
+        // localeCompare to match the tasks comparator's semantics. Then
+        // paginate the sorted set and build rows for the page ONLY.
         const __dirs = ${sortDirsJson};
         entries.sort((a, b) => {
           for (let i = 0; i < __dirs.length; i++) {
@@ -1376,12 +1396,17 @@ export function buildFilteredProjectsScript(
             if (av === bv) continue;
             if (av === null) return 1;
             if (bv === null) return -1;
-            const c = av < bv ? -1 : 1;
+            const c = typeof av === 'string' ? av.localeCompare(bv) : (av < bv ? -1 : 1);
+            if (c === 0) continue;
             return __dirs[i] === "desc" ? -c : c;
           }
           return 0;
         });
-        entries.slice(${offset}, ${offset} + ${limit}).forEach(e => results.push(e.r));
+        entries.slice(${offset}, ${offset} + ${limit}).forEach(e => {
+          const project = e.p;
+          ${buildProjectRow}
+          results.push(proj);
+        });
         `
             : ''
         }

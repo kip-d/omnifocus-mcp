@@ -363,9 +363,10 @@ const FolderQuerySchema = BaseQuerySchema.merge(
 ).strict();
 
 // OMN-311: the sort fields the projects script builder can read from the raw
-// Project object (see PROJECT_SORT_VALUE_EXPRS in contracts/ast/script-builder).
+// Project object — imported from the builder (derived from its value-expr
+// Record), so schema acceptance and script lowering cannot drift apart.
 // Task-only fields (added/modified/estimatedMinutes) reject with guidance.
-const PROJECT_SORT_FIELDS = new Set(['name', 'flagged', 'dueDate', 'deferDate', 'plannedDate', 'completionDate']);
+import { PROJECT_SORT_FIELDS } from '../../../contracts/ast/script-builder.js';
 
 // Discriminated union on query.type
 const QuerySchema = z.discriminatedUnion('type', [

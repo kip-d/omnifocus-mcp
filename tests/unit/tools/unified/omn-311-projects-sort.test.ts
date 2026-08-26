@@ -94,6 +94,29 @@ describe('OMN-311: buildFilteredProjectsScript in-script sort', () => {
     expect(recoverInnerProgram(result.script)).toContain('"desc"');
   });
 
+  it('defers row projection and enrichment until AFTER the slice (review: no full-population materialization)', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      { sort: [{ field: 'name', direction: 'asc' }], includeStats: true, performanceMode: 'normal', limit: 25 },
+    );
+    const inner = recoverInnerProgram(result.script);
+
+    // The loop collects only {sort values, project ref}; the projection and the
+    // per-project stats/taskCounts enrichment run after entries.sort + slice,
+    // so a limit:25 page never pays enrichment for 2,000 matches.
+    const sortIdx = inner.indexOf('entries.sort(');
+    const projectionIdx = inner.indexOf('id: project.id.primaryKey');
+    const statsIdx = inner.indexOf('proj.taskCounts');
+    expect(sortIdx).toBeGreaterThanOrEqual(0);
+    expect(projectionIdx).toBeGreaterThan(sortIdx);
+    expect(statsIdx).toBeGreaterThan(sortIdx);
+  });
+
+  it('string sort values compare with localeCompare, matching the tasks comparator', () => {
+    const result = buildFilteredProjectsScript({}, { sort: [{ field: 'name', direction: 'asc' }], limit: 25 });
+    expect(recoverInnerProgram(result.script)).toContain('localeCompare');
+  });
+
   it('without sort, keeps the existing unsorted emission (no entries machinery)', () => {
     const result = buildFilteredProjectsScript({}, { limit: 25, offset: 10 });
     expect(result.script).not.toContain('entries.sort(');
