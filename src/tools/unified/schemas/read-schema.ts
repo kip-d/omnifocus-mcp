@@ -413,8 +413,11 @@ export const ReadSchema = z
       }
     }
     // OMN-311: tags/folders/perspectives are always name/path-sorted by design —
-    // reject sort loudly rather than silently ignoring it.
-    if ((q.type === 'tags' || q.type === 'folders' || q.type === 'perspectives') && q.sort !== undefined) {
+    // reject sort loudly rather than silently ignoring it. r2: an EMPTY sort
+    // array means "no sort criteria" (a defensive-client pattern) and is
+    // treated as absent everywhere, matching the projects branch above where
+    // zero entries naturally add zero issues.
+    if ((q.type === 'tags' || q.type === 'folders' || q.type === 'perspectives') && q.sort && q.sort.length > 0) {
       const order = q.type === 'folders' ? 'path' : 'name';
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

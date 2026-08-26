@@ -55,6 +55,16 @@ describe('OMN-311: ReadSchema sort-field honesty', () => {
     }
   });
 
+  it('treats sort: [] as absent on every query type (review r2: defensive-client parity)', () => {
+    // An empty sort array is a common templated/defensive pattern meaning
+    // "no sort criteria" — it must parse everywhere, matching how projects
+    // already treated it (zero entries → zero issues).
+    for (const type of ['projects', 'tags', 'folders', 'perspectives']) {
+      const result = parse({ type, sort: [] });
+      expect(result.success).toBe(true);
+    }
+  });
+
   it('rejects sort on tags and folders queries with guidance', () => {
     for (const type of ['tags', 'folders']) {
       const result = parse({ type, sort: [{ field: 'name', direction: 'desc' }] });
