@@ -1050,6 +1050,7 @@ PERFORMANCE:
           ...timer.toMetadata(),
           from_cache: true,
           operation: 'list',
+          offset, // OMN-309 review: surface the applied offset, matching the tasks path
         },
         // OMN-309: same offset-aware truncation honesty as the fresh path
         { population: cached.totalMatched, offset, summary: !isNarrowLookup },
@@ -1104,6 +1105,7 @@ PERFORMANCE:
         ...timer.toMetadata(),
         from_cache: false,
         operation: 'list',
+        offset, // OMN-309 review: surface the applied offset, matching the tasks path
       },
       // OMN-309: offset participates in truncation honesty (R2: truncated iff
       // offset + returned < population), matching the tasks pipeline.

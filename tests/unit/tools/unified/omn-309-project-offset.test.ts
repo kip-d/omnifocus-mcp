@@ -94,6 +94,18 @@ describe('OMN-309: handleProjectQuery offset threading', () => {
     expect(result.metadata.truncated).toBeUndefined();
   });
 
+  it('surfaces the applied offset in outer response metadata, matching the tasks path', async () => {
+    // Fresh path
+    const fresh = (await tool.execute({ query: { type: 'projects', offset: 10, limit: 5 } })) as any;
+    expect(fresh.metadata.offset).toBe(10);
+
+    // Cache-hit path
+    (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({ projects: [], totalMatched: 0 });
+    const cached = (await tool.execute({ query: { type: 'projects', offset: 10, limit: 5 } })) as any;
+    expect(cached.metadata.from_cache).toBe(true);
+    expect(cached.metadata.offset).toBe(10);
+  });
+
   it('includes offset in the cache key so pages cache separately (layer 8)', async () => {
     await tool.execute({ query: { type: 'projects', offset: 10, limit: 5 } });
     await tool.execute({ query: { type: 'projects', offset: 20, limit: 5 } });
