@@ -174,6 +174,16 @@ describe('OMN-311: handleProjectQuery sort threading', () => {
     expect(cacheKey).toContain('desc');
   });
 
+  it('sort: [] shares the unsorted cache key — no fragmentation (review r3)', async () => {
+    await tool.execute({ query: { type: 'projects', sort: [], limit: 5 } });
+    await tool.execute({ query: { type: 'projects', limit: 5 } });
+
+    const keys = (mockCache.get as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1] as string);
+    expect(keys).toHaveLength(2);
+    // Both compile the byte-identical unsorted script; they MUST share an entry.
+    expect(keys[0]).toBe(keys[1]);
+  });
+
   it('surfaces metadata.sort_applied on sorted queries and omits it otherwise', async () => {
     const sorted = (await tool.execute({
       query: { type: 'projects', sort: [{ field: 'name', direction: 'asc' }], limit: 5 },

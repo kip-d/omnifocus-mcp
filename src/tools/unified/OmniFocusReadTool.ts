@@ -1001,9 +1001,13 @@ PERFORMANCE:
     const offset = compiled.offset || 0; // OMN-309: was silently dropped
     // OMN-311: sort was silently dropped too. The ReadSchema superRefine
     // guarantees only project-sortable fields reach here, so the narrowing
-    // cast to the builder's ProjectSortField union is sound.
-    const sort = compiled.sort as ProjectScriptOptions['sort'];
-    const useSort = !!(sort && sort.length > 0);
+    // cast to the builder's ProjectSortField union is sound. r3: an empty
+    // sort array normalizes to undefined BEFORE the cache key — sort: [] and
+    // an omitted sort compile the byte-identical unsorted script and must
+    // share one cache entry (same normalization as tags/folders offset:0).
+    const sort =
+      compiled.sort && compiled.sort.length > 0 ? (compiled.sort as ProjectScriptOptions['sort']) : undefined;
+    const useSort = sort !== undefined;
     const includeStats = compiled.includeStats ?? false;
 
     // OMN-174: count-only fast path (checked before id-lookup/row paths, mirroring
