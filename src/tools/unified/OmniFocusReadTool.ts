@@ -11,6 +11,7 @@ import {
   NOTE_TRUNCATE_LENGTH,
   resolveEffectiveTaskFields,
   resolveEffectiveProjectFields,
+  type ProjectScriptOptions,
 } from '../../contracts/ast/script-builder.js';
 import {
   isScriptSuccess,
@@ -359,7 +360,7 @@ RESPONSE CONTROL:
 - available: true when actionable now (OmniFocus status Available, Next, DueSoon, or Overdue); blocked: true when waiting on a predecessor, a future defer date, or an on-hold project (status Blocked). Completed/dropped tasks are neither.
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completionDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, reviewInterval, defaultSingletonActionHolder, tags, plannedDate. Returned status values: "active" | "onHold" | "done" | "dropped" (input filters use the transport form status: "on_hold"; the response uses "onHold")
 - includeStats: true (projects) attaches taskCounts {total, available, completed} and nextTask to every row (plus a stats block). These ride on includeStats, NOT on fields — they are attached even when a fields list omits them, so a fields projection combined with includeStats returns the requested fields PLUS these extras. All three taskCounts share one scope — every task in the project at any depth (the project's root task excluded) — so available <= total and completed <= total always hold; available counts actionable-now tasks and 0 reliably means "no workable task". Costs a whole-database task scan regardless of filter/limit — omit it when you only need project identity/metadata
-- sort: [{ field: "dueDate", direction: "asc" }]
+- sort: [{ field: "dueDate", direction: "asc" }]. Projects support name, flagged, dueDate, deferDate, plannedDate, completionDate (task-only fields like added/modified/estimatedMinutes are rejected with guidance; project sort works even when the sort key is not in fields). Tags/folders reject sort — they are always name/path-sorted.
 - limit/offset: Pagination (default limit: 25, max: 500)
 - countOnly: true returns only the matching count (metadata.total_count), no rows — for "how many" questions. Valid on tasks, projects, tags, and folders (not perspectives). Skips row materialization (and, for projects, the per-project taskCounts/nextTask enrichment); on tags/folders it mainly trims the response payload, since those scripts already enumerate every row
 - includeProjectRoot: false (default) — project-root rows are excluded from all tasks queries. In OmniFocus a project IS a task (its root task); completing or deleting that root row completes/deletes the PROJECT. Default exclusion prevents accidental project destruction. Set true only when intentionally inspecting project roots. Root rows always carry isProjectRoot: true when opted in (auto-injected regardless of fields selection).
@@ -998,6 +999,11 @@ PERFORMANCE:
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
     const offset = compiled.offset || 0; // OMN-309: was silently dropped
+    // OMN-311: sort was silently dropped too. The ReadSchema superRefine
+    // guarantees only project-sortable fields reach here, so the narrowing
+    // cast to the builder's ProjectSortField union is sound.
+    const sort = compiled.sort as ProjectScriptOptions['sort'];
+    const useSort = !!(sort && sort.length > 0);
     const includeStats = compiled.includeStats ?? false;
 
     // OMN-174: count-only fast path (checked before id-lookup/row paths, mirroring
@@ -1036,7 +1042,8 @@ PERFORMANCE:
     // caller (or vice versa).
     // OMN-309: offset MUST participate — pages compile different scripts, and a
     // shared entry would serve page 1's rows to every offset (the live repro).
-    const cacheParams = { ...projectFilter, limit, offset, includeStats, noteTruncateLength };
+    // OMN-311: sort MUST participate too — sorted pages compile different scripts.
+    const cacheParams = { ...projectFilter, limit, offset, sort, includeStats, noteTruncateLength };
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
@@ -1051,6 +1058,7 @@ PERFORMANCE:
           from_cache: true,
           operation: 'list',
           offset, // OMN-309 review: surface the applied offset, matching the tasks path
+          ...(useSort ? { sort_applied: true } : {}), // OMN-311
         },
         // OMN-309: same offset-aware truncation honesty as the fresh path
         { population: cached.totalMatched, offset, summary: !isNarrowLookup },
@@ -1064,6 +1072,7 @@ PERFORMANCE:
     const generatedScript = buildFilteredProjectsScript(projectFilter, {
       limit,
       offset,
+      sort, // OMN-311
       includeStats,
       performanceMode: includeStats ? 'normal' : 'lite',
       noteTruncateLength,
@@ -1106,6 +1115,7 @@ PERFORMANCE:
         from_cache: false,
         operation: 'list',
         offset, // OMN-309 review: surface the applied offset, matching the tasks path
+        ...(useSort ? { sort_applied: true } : {}), // OMN-311
       },
       // OMN-309: offset participates in truncation honesty (R2: truncated iff
       // offset + returned < population), matching the tasks pipeline.

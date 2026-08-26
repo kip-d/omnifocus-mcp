@@ -203,7 +203,8 @@ export const TaskListMetadataSchema = z
  *     optimization, filter_description } }).
  * All keys are always emitted (single code path for the metadata object),
  * EXCEPT offset_applied — emitted only when the query paginated with a
- * non-zero offset (OMN-309).
+ * non-zero offset (OMN-309) — and sorted_in_script — emitted only when the
+ * query sorted in-script (OMN-311).
  */
 export const ProjectListMetadataSchema = z
   .object({
@@ -213,6 +214,8 @@ export const ProjectListMetadataSchema = z
     limit_applied: z.number(),
     // OMN-309: present only when the query paginated with a non-zero offset
     offset_applied: z.number().optional(),
+    // OMN-311: present only when the query sorted in-script
+    sorted_in_script: z.boolean().optional(),
     performance_mode: z.string(),
     stats_included: z.boolean(),
     optimization: z.string(),

@@ -1052,7 +1052,32 @@ export interface ProjectScriptOptions {
   noteTruncateLength?: number;
   /** Matched projects to skip before collecting rows (OMN-309: offset pagination) */
   offset?: number;
+  /**
+   * OMN-311: in-script sort. Values are read from the RAW project object — NOT
+   * the projected row — so a sort key absent from `fields` still sorts
+   * correctly (the tasks-side OMN-305 trap, deliberately not replicated here).
+   * When present, the loop collects ALL matches, sorts, then slices
+   * offset/limit; when absent, the OMN-309 skip/cap fast path is unchanged.
+   */
+  sort?: Array<{ field: ProjectSortField; direction: 'asc' | 'desc' }>;
 }
+
+/** OMN-311: fields the projects script can sort on (mirrors PROJECT_SORT_FIELDS in read-schema). */
+export type ProjectSortField = 'name' | 'flagged' | 'dueDate' | 'deferDate' | 'plannedDate' | 'completionDate';
+
+/**
+ * OMN-311: OmniJS expressions producing a comparable sort value from the RAW
+ * `project` object. Dates compare as epoch millis with null (no date) sorted
+ * last in either direction; name compares case-insensitively.
+ */
+const PROJECT_SORT_VALUE_EXPRS: Record<ProjectSortField, string> = {
+  name: "(project.name || '').toLowerCase()",
+  flagged: 'project.flagged ? 1 : 0',
+  dueDate: 'project.dueDate ? project.dueDate.getTime() : null',
+  deferDate: 'project.deferDate ? project.deferDate.getTime() : null',
+  plannedDate: 'project.plannedDate ? project.plannedDate.getTime() : null',
+  completionDate: 'project.completionDate ? project.completionDate.getTime() : null',
+};
 
 /**
  * Default fields to include in project response
@@ -1182,11 +1207,18 @@ export function buildFilteredProjectsScript(
     performanceMode = 'normal',
     noteTruncateLength,
     offset = 0,
+    sort,
   } = options;
+
+  // OMN-311: sorted path collects ALL matches (sort needs the full population),
+  // so the in-loop skip/cap machinery below is emitted only on the unsorted path.
+  const useSort = !!(sort && sort.length > 0);
+  const sortValsExpr = useSort ? `[${sort.map((s) => PROJECT_SORT_VALUE_EXPRS[s.field]).join(', ')}]` : '';
+  const sortDirsJson = useSort ? JSON.stringify(sort.map((s) => s.direction)) : '';
 
   // OMN-309: offset skips matched projects AFTER totalMatched++ so
   // total_matched stays the full population count (the OMN-154 invariant).
-  const useOffset = offset > 0;
+  const useOffset = !useSort && offset > 0;
   const offsetVars = useOffset ? `const offset = ${offset};\n        let skipped = 0;` : '';
   const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
 
@@ -1215,6 +1247,7 @@ export function buildFilteredProjectsScript(
       (() => {
         ${folderGuard}
         const results = [];
+        ${useSort ? 'const entries = [];' : ''}
         let count = 0;
         let totalMatched = 0;
         const limit = ${limit};
@@ -1264,10 +1297,12 @@ export function buildFilteredProjectsScript(
           // Apply AST-generated filter
           if (!matchesFilter(project)) return;
 
-          // OMN-154: count every match; the limit caps only the projected rows
+          // OMN-154: count every match; the limit caps only the projected rows.
+          // OMN-311: on the sorted path there is NO in-loop skip/cap — every
+          // match is collected so the sort sees the full population.
           totalMatched++;
           ${offsetCheck}
-          if (count >= limit) return;
+          ${useSort ? '' : 'if (count >= limit) return;'}
 
           const proj = {
             ${fieldProjection}
@@ -1326,9 +1361,30 @@ export function buildFilteredProjectsScript(
               : ''
           }
 
-          results.push(proj);
-          count++;
+          ${useSort ? `entries.push({ v: ${sortValsExpr}, r: proj });` : 'results.push(proj);\n          count++;'}
         });
+
+        ${
+          useSort
+            ? `
+        // OMN-311: multi-key sort over RAW-object values (v tuples), null
+        // (missing date) last in either direction, then paginate the sorted set.
+        const __dirs = ${sortDirsJson};
+        entries.sort((a, b) => {
+          for (let i = 0; i < __dirs.length; i++) {
+            const av = a.v[i], bv = b.v[i];
+            if (av === bv) continue;
+            if (av === null) return 1;
+            if (bv === null) return -1;
+            const c = av < bv ? -1 : 1;
+            return __dirs[i] === "desc" ? -c : c;
+          }
+          return 0;
+        });
+        entries.slice(${offset}, ${offset} + ${limit}).forEach(e => results.push(e.r));
+        `
+            : ''
+        }
 
         return JSON.stringify({
           projects: results,
@@ -1360,7 +1416,8 @@ export function buildFilteredProjectsScript(
         total_matched: result.total_matched,
         returned_count: result.count,
         limit_applied: ${limit},
-        ${useOffset ? `offset_applied: ${offset},` : ''}
+        ${offset > 0 ? `offset_applied: ${offset},` : ''}
+        ${useSort ? 'sorted_in_script: true,' : ''}
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',
