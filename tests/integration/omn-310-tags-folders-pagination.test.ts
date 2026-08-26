@@ -118,7 +118,7 @@ d('OMN-310: tags/folders limit+offset pagination against real OmniFocus', () => 
   describe.each([
     ['folders', (offset: number) => readFolderPage(offset)],
     ['tags', (offset: number) => readTagPage(offset)],
-  ] as const)('%s', (label, readPage) => {
+  ] as const)('%s', (_label, readPage) => {
     it('pages are disjoint, sorted, and jointly cover the population exactly', async () => {
       const pages: ListResponse[] = [];
       for (const offset of PAGE_OFFSETS) pages.push(await readPage(offset));
