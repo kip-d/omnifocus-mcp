@@ -1050,6 +1050,8 @@ export interface ProjectScriptOptions {
   performanceMode?: 'normal' | 'lite';
   /** When set and > 0, truncate note content to this many characters */
   noteTruncateLength?: number;
+  /** Matched projects to skip before collecting rows (OMN-309: offset pagination) */
+  offset?: number;
 }
 
 /**
@@ -1173,7 +1175,20 @@ export function buildFilteredProjectsScript(
   filter: ProjectFilter,
   options: ProjectScriptOptions = {},
 ): GeneratedScript {
-  const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal', noteTruncateLength } = options;
+  const {
+    limit = 50,
+    fields = [],
+    includeStats = false,
+    performanceMode = 'normal',
+    noteTruncateLength,
+    offset = 0,
+  } = options;
+
+  // OMN-309: offset skips matched projects AFTER totalMatched++ so
+  // total_matched stays the full population count (the OMN-154 invariant).
+  const useOffset = offset > 0;
+  const offsetVars = useOffset ? `const offset = ${offset};\n        let skipped = 0;` : '';
+  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
 
   // Generate the filter predicate code
   const filterCode = generateProjectFilterCode(filter);
@@ -1203,6 +1218,7 @@ export function buildFilteredProjectsScript(
         let count = 0;
         let totalMatched = 0;
         const limit = ${limit};
+        ${offsetVars}
 
         // OMN-274: single-definition status map (canonical 'onHold', String(s)
         // fail-open) — see PROJECT_STATUS_STRING_SNIPPET in ./types.
@@ -1250,6 +1266,7 @@ export function buildFilteredProjectsScript(
 
           // OMN-154: count every match; the limit caps only the projected rows
           totalMatched++;
+          ${offsetCheck}
           if (count >= limit) return;
 
           const proj = {
@@ -1343,6 +1360,7 @@ export function buildFilteredProjectsScript(
         total_matched: result.total_matched,
         returned_count: result.count,
         limit_applied: ${limit},
+        ${useOffset ? `offset_applied: ${offset},` : ''}
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',

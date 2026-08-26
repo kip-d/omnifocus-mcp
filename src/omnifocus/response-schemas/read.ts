@@ -209,6 +209,8 @@ export const ProjectListMetadataSchema = z
     total_matched: z.number(),
     returned_count: z.number(),
     limit_applied: z.number(),
+    // OMN-309: present only when the query paginated with a non-zero offset
+    offset_applied: z.number().optional(),
     performance_mode: z.string(),
     stats_included: z.boolean(),
     optimization: z.string(),
