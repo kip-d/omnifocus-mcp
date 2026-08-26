@@ -1052,7 +1052,39 @@ export interface ProjectScriptOptions {
   noteTruncateLength?: number;
   /** Matched projects to skip before collecting rows (OMN-309: offset pagination) */
   offset?: number;
+  /**
+   * OMN-311: in-script sort. Values are read from the RAW project object — NOT
+   * the projected row — so a sort key absent from `fields` still sorts
+   * correctly (the tasks-side OMN-305 trap, deliberately not replicated here).
+   * When present, the loop collects ALL matches, sorts, then slices
+   * offset/limit; when absent, the OMN-309 skip/cap fast path is unchanged.
+   */
+  sort?: Array<{ field: ProjectSortField; direction: 'asc' | 'desc' }>;
 }
+
+/** OMN-311: fields the projects script can sort on (mirrors PROJECT_SORT_FIELDS in read-schema). */
+export type ProjectSortField = 'name' | 'flagged' | 'dueDate' | 'deferDate' | 'plannedDate' | 'completionDate';
+
+/**
+ * OMN-311: OmniJS expressions producing a comparable sort value from the RAW
+ * `project` object. Dates compare as epoch millis with null (no date) sorted
+ * last in either direction; name compares case-insensitively.
+ */
+const PROJECT_SORT_VALUE_EXPRS: Record<ProjectSortField, string> = {
+  name: "(project.name || '').toLowerCase()",
+  flagged: 'project.flagged ? 1 : 0',
+  dueDate: 'project.dueDate ? project.dueDate.getTime() : null',
+  deferDate: 'project.deferDate ? project.deferDate.getTime() : null',
+  plannedDate: 'project.plannedDate ? project.plannedDate.getTime() : null',
+  completionDate: 'project.completionDate ? project.completionDate.getTime() : null',
+};
+
+/**
+ * OMN-311 review: the schema-side acceptance set is DERIVED from the value-expr
+ * Record (single source of truth) — a field the schema accepts but the builder
+ * cannot lower is impossible by construction, not by comment discipline.
+ */
+export const PROJECT_SORT_FIELDS: ReadonlySet<string> = new Set(Object.keys(PROJECT_SORT_VALUE_EXPRS));
 
 /**
  * Default fields to include in project response
@@ -1182,11 +1214,18 @@ export function buildFilteredProjectsScript(
     performanceMode = 'normal',
     noteTruncateLength,
     offset = 0,
+    sort,
   } = options;
+
+  // OMN-311: sorted path collects ALL matches (sort needs the full population),
+  // so the in-loop skip/cap machinery below is emitted only on the unsorted path.
+  const useSort = !!(sort && sort.length > 0);
+  const sortValsExpr = useSort ? `[${sort.map((s) => PROJECT_SORT_VALUE_EXPRS[s.field]).join(', ')}]` : '';
+  const sortDirsJson = useSort ? JSON.stringify(sort.map((s) => s.direction)) : '';
 
   // OMN-309: offset skips matched projects AFTER totalMatched++ so
   // total_matched stays the full population count (the OMN-154 invariant).
-  const useOffset = offset > 0;
+  const useOffset = !useSort && offset > 0;
   const offsetVars = useOffset ? `const offset = ${offset};\n        let skipped = 0;` : '';
   const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
 
@@ -1211,65 +1250,10 @@ export function buildFilteredProjectsScript(
   // hard-error on a typo'd folder where the equivalent non-countOnly query ignores it.
   const folderGuard = filter.id ? '' : emitFolderNotFoundGuardsForFilter(filter, 'folderName');
 
-  const omniJsSource = `
-      (() => {
-        ${folderGuard}
-        const results = [];
-        let count = 0;
-        let totalMatched = 0;
-        const limit = ${limit};
-        ${offsetVars}
-
-        // OMN-274: single-definition status map (canonical 'onHold', String(s)
-        // fail-open) — see PROJECT_STATUS_STRING_SNIPPET in ./types.
-        ${PROJECT_STATUS_STRING_SNIPPET}
-
-        // Helper to build folder path
-        function getFolderPath(folder) {
-          if (!folder) return '';
-          const parts = [];
-          let current = folder;
-          while (current) {
-            parts.unshift(current.name);
-            current = current.parent;
-          }
-          return parts.join('/');
-        }
-
-        // AST-generated filter predicate
-        // Filter: ${sanitizeForScriptComment(filterDescription)}
-        function matchesFilter(project) {
-          return ${filterCode};
-        }
-
-        ${
-          includeTaskCounts
-            ? `
-        // OMN-270: the root-task count properties are undefined in OmniJS
-        // (live-probed 2026-07-16; JXA-only), and the JXA-era root-task
-        // accessor isn't a Project property there either — so the advertised
-        // taskCounts field was never emitted. Do NOT "simplify" back to
-        // them. All three counts come from the shared whole-DB pass below
-        // (one scope: every non-root descendant) — semantics, failure
-        // granularity, and measured cost (~0.6s live on a 2.9k-task DB; runs
-        // only when includeStats requests counts, and is inherent to
-        // per-project descendant counts) documented at
-        // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
-        ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
-        `
-            : ''
-        }
-
-        flattenedProjects.forEach(project => {
-          // Apply AST-generated filter
-          if (!matchesFilter(project)) return;
-
-          // OMN-154: count every match; the limit caps only the projected rows
-          totalMatched++;
-          ${offsetCheck}
-          if (count >= limit) return;
-
-          const proj = {
+  // OMN-311: single definition of "build one projected row from `project`" —
+  // spliced into the unsorted loop AND the sorted path's post-slice pass, so
+  // enrichment cost is always per-returned-row, never per-match.
+  const buildProjectRow = `const proj = {
             ${fieldProjection}
           };
 
@@ -1324,11 +1308,108 @@ export function buildFilteredProjectsScript(
           }
           `
               : ''
-          }
+          }`;
 
+  const omniJsSource = `
+      (() => {
+        ${folderGuard}
+        const results = [];
+        ${useSort ? 'const entries = [];' : ''}
+        let count = 0;
+        let totalMatched = 0;
+        const limit = ${limit};
+        ${offsetVars}
+
+        // OMN-274: single-definition status map (canonical 'onHold', String(s)
+        // fail-open) — see PROJECT_STATUS_STRING_SNIPPET in ./types.
+        ${PROJECT_STATUS_STRING_SNIPPET}
+
+        // Helper to build folder path
+        function getFolderPath(folder) {
+          if (!folder) return '';
+          const parts = [];
+          let current = folder;
+          while (current) {
+            parts.unshift(current.name);
+            current = current.parent;
+          }
+          return parts.join('/');
+        }
+
+        // AST-generated filter predicate
+        // Filter: ${sanitizeForScriptComment(filterDescription)}
+        function matchesFilter(project) {
+          return ${filterCode};
+        }
+
+        ${
+          includeTaskCounts
+            ? `
+        // OMN-270: the root-task count properties are undefined in OmniJS
+        // (live-probed 2026-07-16; JXA-only), and the JXA-era root-task
+        // accessor isn't a Project property there either — so the advertised
+        // taskCounts field was never emitted. Do NOT "simplify" back to
+        // them. All three counts come from the shared whole-DB pass below
+        // (one scope: every non-root descendant) — semantics, failure
+        // granularity, and measured cost (~0.6s live on a 2.9k-task DB; runs
+        // only when includeStats requests counts, and is inherent to
+        // per-project descendant counts) documented at
+        // TASK_COUNTS_BY_PROJECT_PASS_SNIPPET (contracts/ast/types).
+        ${TASK_COUNTS_BY_PROJECT_PASS_SNIPPET}
+        `
+            : ''
+        }
+
+        flattenedProjects.forEach(project => {
+          // Apply AST-generated filter
+          if (!matchesFilter(project)) return;
+
+          // OMN-154: count every match; the limit caps only the projected rows.
+          // OMN-311: the sorted path collects only {sort values, project ref}
+          // here — projection and enrichment run AFTER the slice below, so a
+          // paginated sorted query never materializes the full population
+          // (review finding on PR #265).
+          totalMatched++;
+          ${offsetCheck}
+          ${
+            useSort
+              ? `entries.push({ v: ${sortValsExpr}, p: project });`
+              : `if (count >= limit) return;
+
+          ${buildProjectRow}
           results.push(proj);
-          count++;
+          count++;`
+          }
         });
+
+        ${
+          useSort
+            ? `
+        // OMN-311: multi-key sort over RAW-object values (v tuples), null
+        // (missing date) last in either direction; strings compare with
+        // localeCompare to match the tasks comparator's semantics. Then
+        // paginate the sorted set and build rows for the page ONLY.
+        const __dirs = ${sortDirsJson};
+        entries.sort((a, b) => {
+          for (let i = 0; i < __dirs.length; i++) {
+            const av = a.v[i], bv = b.v[i];
+            if (av === bv) continue;
+            if (av === null) return 1;
+            if (bv === null) return -1;
+            const c = typeof av === 'string' ? av.localeCompare(bv) : (av < bv ? -1 : 1);
+            if (c === 0) continue;
+            return __dirs[i] === "desc" ? -c : c;
+          }
+          return 0;
+        });
+        entries.slice(${offset}, ${offset} + ${limit}).forEach(e => {
+          const project = e.p;
+          ${buildProjectRow}
+          results.push(proj);
+        });
+        `
+            : ''
+        }
 
         return JSON.stringify({
           projects: results,
@@ -1360,7 +1441,8 @@ export function buildFilteredProjectsScript(
         total_matched: result.total_matched,
         returned_count: result.count,
         limit_applied: ${limit},
-        ${useOffset ? `offset_applied: ${offset},` : ''}
+        ${offset > 0 ? `offset_applied: ${offset},` : ''}
+        ${useSort ? 'sorted_in_script: true,' : ''}
         performance_mode: '${performanceMode}',
         stats_included: ${includeStats},
         optimization: 'ast_filtered',

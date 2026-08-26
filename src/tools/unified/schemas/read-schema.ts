@@ -362,6 +362,12 @@ const FolderQuerySchema = BaseQuerySchema.merge(
   }),
 ).strict();
 
+// OMN-311: the sort fields the projects script builder can read from the raw
+// Project object — imported from the builder (derived from its value-expr
+// Record), so schema acceptance and script lowering cannot drift apart.
+// Task-only fields (added/modified/estimatedMinutes) reject with guidance.
+import { PROJECT_SORT_FIELDS } from '../../../contracts/ast/script-builder.js';
+
 // Discriminated union on query.type
 const QuerySchema = z.discriminatedUnion('type', [
   TaskQuerySchema,
@@ -390,6 +396,45 @@ export const ReadSchema = z
         path: ['query', 'mode'],
         message:
           '\'mode\' is a tasks-only view selector and is not supported on projects queries. To search projects use filters.name or filters.text, e.g. filters: { name: { contains: "..." } } or filters: { text: { matches: "..." } }.',
+      });
+    }
+    // OMN-311: sort-field honesty. Projects sort supports the fields the
+    // projects script can read from the raw Project object; task-only fields
+    // reject with guidance instead of the old silent accept-and-drop.
+    if (q.type === 'projects' && Array.isArray(q.sort)) {
+      const seen = new Set<string>();
+      for (const s of q.sort) {
+        if (!PROJECT_SORT_FIELDS.has(s.field)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['query', 'sort'],
+            message: `'${s.field}' is not sortable on projects queries. Supported project sort fields: ${[...PROJECT_SORT_FIELDS].join(', ')}.`,
+          });
+        }
+        // r4: a repeated field's second entry is unreachable in the comparator
+        // (ties on the first occurrence are ties on the repeat) — reject the
+        // duplicate loudly rather than silently ignoring it.
+        if (seen.has(s.field)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['query', 'sort'],
+            message: `Duplicate sort field '${s.field}': a repeated field can never act as a tiebreaker for itself. Use each field at most once.`,
+          });
+        }
+        seen.add(s.field);
+      }
+    }
+    // OMN-311: tags/folders/perspectives are always name/path-sorted by design —
+    // reject sort loudly rather than silently ignoring it. r2: an EMPTY sort
+    // array means "no sort criteria" (a defensive-client pattern) and is
+    // treated as absent everywhere, matching the projects branch above where
+    // zero entries naturally add zero issues.
+    if ((q.type === 'tags' || q.type === 'folders' || q.type === 'perspectives') && q.sort && q.sort.length > 0) {
+      const order = q.type === 'folders' ? 'path' : 'name';
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query', 'sort'],
+        message: `'sort' is not supported on ${q.type} queries — results are always ${order}-sorted. Omit sort.`,
       });
     }
   });
