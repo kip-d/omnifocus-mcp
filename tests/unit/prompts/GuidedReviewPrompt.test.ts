@@ -43,12 +43,9 @@ describe('GuidedReviewPrompt', () => {
     ]);
   });
 
-  it('rejects an unknown mode loudly rather than silently falling back', () => {
-    expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(/mode must be one of quick, standard, deep/);
-  });
-
-  it('rejects an unknown mode with a PromptArgumentError so the MCP layer can map it to InvalidParams', () => {
+  it('rejects an unknown mode loudly with a PromptArgumentError so the MCP layer maps it to InvalidParams', () => {
     expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(PromptArgumentError);
+    expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(/mode must be one of quick, standard, deep/);
   });
 
   it('excludes non-detector queues from the pattern_analysis insights array but keeps them in Queue order', () => {
