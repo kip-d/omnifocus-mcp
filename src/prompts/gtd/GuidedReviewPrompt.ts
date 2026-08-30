@@ -49,7 +49,7 @@ function coerceModeCandidate(raw: unknown): string {
 }
 
 function parseMode(raw: unknown): ReviewMode {
-  const candidate = raw === undefined || raw === null || raw === '' ? 'quick' : coerceModeCandidate(raw);
+  const candidate = raw == null || raw === '' ? 'quick' : coerceModeCandidate(raw);
   if (!(REVIEW_MODES as readonly string[]).includes(candidate)) {
     throw new PromptArgumentError(`guided_review: mode must be one of quick, standard, deep (got ${candidate})`);
   }

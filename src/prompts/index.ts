@@ -71,7 +71,7 @@ export function registerPrompts(server: Server): void {
       return prompt.toGetPromptResult(args);
     } catch (error) {
       if (error instanceof PromptArgumentError) {
-        throw new McpError(ErrorCode.InvalidParams, error.message);
+        throw new McpError(error.errorCode, error.message);
       }
       logger.error(`Error generating prompt messages for ${name}:`, error);
       throw new McpError(

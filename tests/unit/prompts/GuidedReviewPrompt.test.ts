@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { GuidedReviewPrompt, QUEUES_BY_MODE, DECISION_OUTCOMES } from '../../../src/prompts/gtd/GuidedReviewPrompt.js';
+import { KNOWN_PATTERNS } from '../../../src/tools/unified/OmniFocusAnalyzeTool.js';
+
+// Queues that are NOT pattern_analysis detectors (fetched via separate calls).
+const NON_DETECTOR_QUEUES = ['on_hold_projects', 'productivity_check'];
 import { PromptArgumentError } from '../../../src/prompts/base.js';
 
 const textOf = (p: GuidedReviewPrompt, args: Record<string, unknown>) =>
@@ -43,12 +47,9 @@ describe('GuidedReviewPrompt', () => {
     ]);
   });
 
-  it('rejects an unknown mode loudly rather than silently falling back', () => {
-    expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(/mode must be one of quick, standard, deep/);
-  });
-
-  it('rejects an unknown mode with a PromptArgumentError so the MCP layer can map it to InvalidParams', () => {
+  it('rejects an unknown mode loudly with a PromptArgumentError so the MCP layer maps it to InvalidParams', () => {
     expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(PromptArgumentError);
+    expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(/mode must be one of quick, standard, deep/);
   });
 
   it('excludes non-detector queues from the pattern_analysis insights array but keeps them in Queue order', () => {
@@ -75,5 +76,18 @@ describe('GuidedReviewPrompt', () => {
     expect(text).toMatch(/output vocabulary/i);
     expect(text).toMatch(/one (item|decision) at a time/i);
     expect(text).toContain('GTD/Review Log.md');
+  });
+});
+
+describe('detector vocabulary drift guard (OMN-313 high-gate finding 3)', () => {
+  it('every detector name in QUEUES_BY_MODE exists in the analyze tool KNOWN_PATTERNS', () => {
+    // The retired next_actions -> clarify_candidates rename once broke callers
+    // silently; this turns the next rename into a red test instead.
+    for (const queues of Object.values(QUEUES_BY_MODE)) {
+      for (const q of queues) {
+        if (NON_DETECTOR_QUEUES.includes(q)) continue;
+        expect(KNOWN_PATTERNS).toContain(q);
+      }
+    }
   });
 });
