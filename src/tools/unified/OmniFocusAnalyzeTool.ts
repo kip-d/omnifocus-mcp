@@ -248,6 +248,25 @@ interface ExtractionResult {
 }
 
 // Convert string ID to branded ProjectId for type safety
+// The full pattern_analysis detector vocabulary. Module-level and exported so
+// other surfaces that name detectors (e.g. the guided_review prompt's
+// QUEUES_BY_MODE) can guard against drift with a test instead of re-typing
+// the list blind — the retired `next_actions` → `clarify_candidates` rename
+// broke callers silently once already (see the OMN-258 note at the use site).
+export const KNOWN_PATTERNS = [
+  'duplicates',
+  'dormant_projects',
+  'tag_audit',
+  'deadline_health',
+  'waiting_for',
+  'estimation_bias',
+  'clarify_candidates',
+  'review_gaps',
+  'wip_limits',
+  'due_date_bunching',
+  'missing_next_actions',
+];
+
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 // ---------------------------------------------------------------------------
@@ -1151,20 +1170,7 @@ TIME-WINDOW SCOPING:
         bunching_threshold: 8,
       };
 
-      // Expand 'all' to include all patterns
-      const KNOWN_PATTERNS = [
-        'duplicates',
-        'dormant_projects',
-        'tag_audit',
-        'deadline_health',
-        'waiting_for',
-        'estimation_bias',
-        'clarify_candidates',
-        'review_gaps',
-        'wip_limits',
-        'due_date_bunching',
-        'missing_next_actions',
-      ];
+      // Expand 'all' to include all patterns (KNOWN_PATTERNS is module-level, exported)
       const patterns = rawPatterns.includes('all') ? KNOWN_PATTERNS : rawPatterns;
       // OMN-258: unknown keys (incl. the retired 'next_actions', renamed
       // clarify_candidates with no alias) are reported, never silently no-op'd.
