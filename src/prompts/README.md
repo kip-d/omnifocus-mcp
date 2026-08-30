@@ -34,6 +34,7 @@ These prompts are available through the MCP protocol and can be called programma
 | ------------------------- | -------------------------------- | ---------------------------------------- |
 | `gtd_principles`          | Learn GTD methodology            | "Show me the gtd_principles prompt"      |
 | `gtd_weekly_review`       | Complete weekly review           | "Use the gtd_weekly_review prompt"       |
+| `guided_review`           | One decision at a time           | "Use the guided_review prompt"           |
 | `gtd_process_inbox`       | Process inbox items              | "Use the gtd_process_inbox prompt"       |
 | `eisenhower_matrix_inbox` | Prioritize by urgency/importance | "Use the eisenhower_matrix_inbox prompt" |
 | `quick_reference`         | Essential commands               | "Use the quick_reference prompt"         |
@@ -44,6 +45,7 @@ These prompts are available through the MCP protocol and can be called programma
 
 - **`gtd_principles`** (`GTDPrinciplesPrompt.ts`) - Core GTD methodology and principles guide
 - **`gtd_weekly_review`** (`WeeklyReviewPrompt.ts`) - Complete weekly review process with OmniFocus integration
+- **`guided_review`** (`GuidedReviewPrompt.ts`) - Guided review, one decision at a time (modes: quick | standard | deep)
 - **`gtd_process_inbox`** (`InboxProcessingPrompt.ts`) - Structured inbox processing workflow
 - **`eisenhower_matrix_inbox`** (`eisenhower-matrix.ts`) - Prioritize inbox items using the Eisenhower Matrix
 
