@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`guided_review` MCP prompt + `workflow-guided-review.md` skill reference** (OMN-313) — "N decisions, one at a time"
+  over the detectors that already exist (`missing_next_actions`, `deadline_health`, `waiting_for`, `dormant_projects`,
+  `wip_limits`, `clarify_candidates`, `review_gaps`) and batched `manage_reviews`. Modes quick / standard / deep; a
+  fixed decision-outcome vocabulary (define · hold · handoff · drop · done · skip) logged to the vault. No tool or
+  schema change. Spec: `Technical/specs/Guided-Decision Review Layer - design.md` (vault).
+- **Prompt argument errors are now `InvalidParams`** — a prompt that rejects an argument value throws
+  `PromptArgumentError` (`src/prompts/base.ts`) and the GetPrompt handler maps it to `ErrorCode.InvalidParams` instead
+  of wrapping it as `InternalError`. First exercised by `guided_review`'s `mode`; applies to every prompt.
+
 ### Changed
 
 - **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
