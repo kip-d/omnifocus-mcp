@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# of-mcp-guided-review — launchd wrapper for the guided-review inbox push (OMN-314).
+#
+# Canonical source: scripts/ops/of-mcp-guided-review in the omnifocus-mcp repo.
+# Deploy with scripts/ops/install-guided-review-schedule.sh. Do NOT hand-edit
+# the deployed copy — edit here and re-run the installer.
+#
+# WHAT IT DOES: runs scripts/ops/guided-review-push.ts against the prod server
+# in $OF_MCP_REPO_DIR. That script counts the review decisions waiting and
+# creates/updates ONE OmniFocus inbox item ("Review: N decisions waiting"). It
+# writes to the real database — one inbox task, by design (spec D1).
+#
+# Saturday runs use --mode deep (adds dormant_projects); weekdays are quick.
+set -euo pipefail
+
+brew_dirs=()
+for d in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$d" ] && brew_dirs+=("$d")
+done
+if [ ${#brew_dirs[@]} -gt 0 ]; then
+  PATH="$(IFS=:; printf '%s' "${brew_dirs[*]}"):$PATH"
+fi
+export PATH
+
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LOG="${OF_MCP_GUIDED_REVIEW_LOG:-$HOME/.omnifocus-mcp/guided-review.log}"
+RUN_TIMEOUT="${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600}"
+
+mkdir -p "$(dirname "$LOG")"
+cd "$REPO_DIR" || { echo "of-mcp-guided-review: repo dir not found: $REPO_DIR" >&2; exit 1; }
+log() { echo "$*" >> "$LOG"; }
+
+# Bounded run — same shape as of-mcp-integration's run_bounded, deliberately NOT
+# --foreground (that flag disables the descendant kill we want). 124 = timeout.
+TIMEOUT_CMD=""
+for c in timeout gtimeout; do
+  command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+done
+run_bounded() {
+  local secs="$1"; shift
+  local rc=0
+  if [ -n "$TIMEOUT_CMD" ]; then
+    "$TIMEOUT_CMD" -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
+    return "$rc"
+  fi
+  set -m
+  "$@" >> "$LOG" 2>&1 &
+  local child=$!
+  set +m
+  ( sleep "$secs"; kill -9 -"$child" 2>/dev/null || kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
+  local wd=$!
+  disown "$wd" 2>/dev/null || true
+  wait "$child" 2>/dev/null || rc=$?
+  if ! kill "$wd" 2>/dev/null; then [ "$rc" -eq 137 ] && rc=124; fi
+  return "$rc"
+}
+
+log ""
+log "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') ====="
+
+# Fail-safe, not an operating mode: OmniFocus normally runs all day on this
+# machine. pgrep (not `tell application`, which auto-launches; not System
+# Events, which fails under launchd) covers the reboot window only.
+if ! pgrep -x OmniFocus >/dev/null 2>&1; then
+  log "STATUS: SKIPPED — OmniFocus is not running; nothing pushed."
+  exit 0
+fi
+
+MODE="quick"
+[ "$(date +%u)" = "6" ] && MODE="deep"
+
+set +e
+run_bounded "$RUN_TIMEOUT" npx tsx scripts/ops/guided-review-push.ts "$REPO_DIR/dist/index.js" --mode "$MODE"
+rc=$?
+set -e
+case "$rc" in
+  0)   log "STATUS: OK (mode=$MODE)" ;;
+  124) log "STATUS: WEDGED — push exceeded ${RUN_TIMEOUT}s and was killed (mode=$MODE)"; exit 0 ;;
+  *)   log "STATUS: FAILED — push exited $rc (mode=$MODE)"; exit "$rc" ;;
+esac
