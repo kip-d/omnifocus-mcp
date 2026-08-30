@@ -40,6 +40,10 @@ export interface PatternData {
   };
   waiting_for?: {
     items?: {
+      // analyzeWaitingFor caps candidates LOUDLY (screen.capped) — see
+      // OmniFocusAnalyzeTool.ts. candidates_total is the true count seen before
+      // capping; candidates_returned/candidates.length is what actually shipped.
+      screen?: { candidates_total?: number; candidates_returned?: number; capped?: boolean };
       candidates?: Array<{
         id: string;
         name: string;
@@ -50,7 +54,9 @@ export interface PatternData {
       }>;
     };
   };
-  dormant_projects?: { items?: Array<{ id: string; name: string; days_dormant: number }> };
+  // detectDormantProjects ships `count` (the true total) alongside `items`
+  // sliced to 10 — see OmniFocusAnalyzeTool.ts.
+  dormant_projects?: { count?: number; items?: Array<{ id: string; name: string; days_dormant: number }> };
 }
 
 export interface QueueItem {
@@ -145,12 +151,50 @@ export function buildQueue(patterns: PatternData, slice: ReviewProject[], mode: 
   const dh = patterns.deadline_health?.items;
   if (dh && (dh.overdue_count ?? 0) > (dh.overdue_samples?.length ?? 0)) floors.deadline_health = true;
 
-  return { total: all.length, perQueue, floors, top: all.slice(0, TOP_N) };
+  // waiting_for is capped LOUDLY by the detector (screen.capped) — see
+  // analyzeWaitingFor in OmniFocusAnalyzeTool.ts. In deep mode there is no
+  // slice filter, so the true total (candidates_total) is a safe stand-in for
+  // the returned-row count and replaces it — the honest number ships instead
+  // of just what fit in the capped response. In quick mode we can't safely
+  // inflate: the un-returned candidates were never checked against the
+  // review slice, so their count is kept as the filtered row count, but the
+  // floor is still flagged — that number is a known undercount either way.
+  const wf = patterns.waiting_for?.items;
+  if (wf?.screen) {
+    const total = wf.screen.candidates_total ?? 0;
+    const returned = wf.screen.candidates_returned ?? (wf.candidates ?? []).length;
+    if (wf.screen.capped === true || total > returned) {
+      floors.waiting_for = true;
+      if (mode === 'deep') perQueue.waiting_for = total;
+    }
+  }
+
+  // dormant_projects ships `count` (the true total) alongside `items` sliced
+  // to 10. It only ever appears in deep mode (see QUEUE_ORDER) — gate on that
+  // explicitly rather than relying on the caller to omit the field in quick
+  // mode, since a passed-in PatternData can legally carry it either way.
+  const dp = patterns.dormant_projects;
+  if (mode === 'deep' && dp && typeof dp.count === 'number' && dp.count > (dp.items ?? []).length) {
+    floors.dormant_projects = true;
+    perQueue.dormant_projects = dp.count;
+  }
+
+  // missing_next_actions is NOT capped — detectMissingNextActions in
+  // OmniFocusAnalyzeTool.ts returns every stalled active project, unsliced.
+  // No floor logic needed for that queue.
+
+  const total = Object.values(perQueue).reduce((sum, n) => sum + n, 0);
+
+  return { total, perQueue, floors, top: all.slice(0, TOP_N) };
 }
 
 export function buildInboxItem(queue: Queue, mode: PushMode, now: Date): { name: string; note: string } {
   const n = queue.total;
-  const name = `${ITEM_PREFIX}${n} decision${n === 1 ? '' : 's'} waiting`;
+  // If ANY queue is floored, the total itself is an undercount — carry that
+  // into the headline number, not just the per-queue breakdown in the note.
+  const anyFloor = Object.values(queue.floors).some(Boolean);
+  const isSingular = n === 1 && !anyFloor;
+  const name = `${ITEM_PREFIX}${n}${anyFloor ? '+' : ''} decision${isSingular ? '' : 's'} waiting`;
   const date = now.toISOString().slice(0, 10);
   const counts = Object.entries(queue.perQueue)
     .map(([q, c]) => `${q}: ${c}${queue.floors[q] ? '+' : ''}`)

@@ -81,6 +81,63 @@ describe('buildQueue', () => {
     const q = buildQueue(capped, slice, 'deep');
     expect(q.floors).toEqual({ deadline_health: true });
   });
+
+  it('waiting_for capped: flags the floor and, in deep mode, uses candidates_total as the count', () => {
+    const capped: PatternData = {
+      ...patterns,
+      waiting_for: {
+        items: {
+          screen: { candidates_total: 753, candidates_returned: 1, capped: true },
+          candidates: patterns.waiting_for!.items!.candidates,
+        },
+      },
+    };
+    const deep = buildQueue(capped, slice, 'deep');
+    expect(deep.floors.waiting_for).toBe(true);
+    expect(deep.perQueue.waiting_for).toBe(753);
+
+    const quick = buildQueue(capped, slice, 'quick');
+    expect(quick.floors.waiting_for).toBe(true);
+    // Quick mode can't safely inflate an unfiltered total onto a sliced count —
+    // it keeps the filtered row count (1, from the one candidate whose project
+    // is in the due slice) but still flags the floor.
+    expect(quick.perQueue.waiting_for).toBe(1);
+  });
+
+  it('waiting_for uncapped: no floor, row count unchanged', () => {
+    const uncapped: PatternData = {
+      ...patterns,
+      waiting_for: {
+        items: {
+          screen: { candidates_total: 1, candidates_returned: 1, capped: false },
+          candidates: patterns.waiting_for!.items!.candidates,
+        },
+      },
+    };
+    const q = buildQueue(uncapped, slice, 'deep');
+    expect(q.floors.waiting_for).toBeUndefined();
+    expect(q.perQueue.waiting_for).toBe(1);
+  });
+
+  it('dormant_projects: count > items.length flags the floor and uses count as the deep-mode total', () => {
+    const capped: PatternData = {
+      ...patterns,
+      dormant_projects: { count: 42, items: patterns.dormant_projects!.items },
+    };
+    const q = buildQueue(capped, slice, 'deep');
+    expect(q.floors.dormant_projects).toBe(true);
+    expect(q.perQueue.dormant_projects).toBe(42);
+  });
+
+  it('dormant_projects: count === items.length is not a floor', () => {
+    const uncapped: PatternData = {
+      ...patterns,
+      dormant_projects: { count: 1, items: patterns.dormant_projects!.items },
+    };
+    const q = buildQueue(uncapped, slice, 'deep');
+    expect(q.floors.dormant_projects).toBeUndefined();
+    expect(q.perQueue.dormant_projects).toBe(1);
+  });
 });
 
 describe('buildInboxItem', () => {
@@ -114,6 +171,18 @@ describe('buildInboxItem', () => {
     };
     const item = buildInboxItem(buildQueue(capped, slice, 'deep'), 'deep', new Date('2026-09-05T07:00:00'));
     expect(item.note.split('\n')[1]).toContain('deadline_health: 1+');
+  });
+
+  it('carries the floor into the headline count, not just the per-queue breakdown', () => {
+    const capped: PatternData = {
+      ...patterns,
+      deadline_health: {
+        items: { overdue_count: 9, overdue_samples: patterns.deadline_health!.items!.overdue_samples },
+      },
+    };
+    const item = buildInboxItem(buildQueue(capped, slice, 'deep'), 'deep', new Date('2026-09-05T07:00:00'));
+    // total = 5 from the existing "deep mode" fixture math, +1 floor marker.
+    expect(item.name).toBe(`${ITEM_PREFIX}5+ decisions waiting`);
   });
 });
 
