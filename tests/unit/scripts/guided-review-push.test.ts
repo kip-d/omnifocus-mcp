@@ -4,6 +4,8 @@ import {
   buildInboxItem,
   decideAction,
   ITEM_PREFIX,
+  parseArgs,
+  UsageError,
   type PatternData,
   type ReviewProject,
 } from '../../../scripts/ops/guided-review-push.js';
@@ -134,5 +136,22 @@ describe('decideAction', () => {
   });
   it('ignores inbox rows that merely contain the prefix mid-name', () => {
     expect(decideAction([{ id: 'x2', name: `Book: ${ITEM_PREFIX}notes` }], 2)).toEqual({ action: 'create' });
+  });
+});
+
+describe('parseArgs', () => {
+  it('defaults to quick with a 180s timeout', () => {
+    expect(parseArgs(['dist/index.js'])).toEqual({ server: 'dist/index.js', mode: 'quick', timeoutMs: 180_000 });
+  });
+  it('accepts --mode deep and --timeout', () => {
+    expect(parseArgs(['dist/index.js', '--mode', 'deep', '--timeout', '5000'])).toEqual({
+      server: 'dist/index.js',
+      mode: 'deep',
+      timeoutMs: 5000,
+    });
+  });
+  it('rejects a missing server path and an unknown mode as usage errors', () => {
+    expect(() => parseArgs([])).toThrow(UsageError);
+    expect(() => parseArgs(['dist/index.js', '--mode', 'standard'])).toThrow(/quick or deep/);
   });
 });

@@ -15,6 +15,9 @@
  * Usage (prod): npx tsx scripts/ops/guided-review-push.ts <path>/dist/index.js [--mode quick|deep]
  * Env: OF_MCP_REVIEW_ITEM_PREFIX overrides "Review: " (dev server needs "__TEST__ Review: ").
  */
+import { StdioJsonRpcTransport } from '../../tests/integration/helpers/stdio-jsonrpc-transport.js';
+import { isRunDirectly } from '../lib/run-directly.js';
+
 export const ITEM_PREFIX = process.env.OF_MCP_REVIEW_ITEM_PREFIX ?? 'Review: ';
 export const startLine = (mode: PushMode): string => `Start: ask Claude for a ${mode} guided review`;
 
@@ -160,4 +163,134 @@ export function decideAction(
   const existing = openInboxTasks.find((t) => t.name.startsWith(ITEM_PREFIX));
   if (existing) return { action: 'update', id: existing.id };
   return total > 0 ? { action: 'create' } : { action: 'none' };
+}
+
+// ─── driver ─────────────────────────────────────────────────────────────────
+
+export interface PushArgs {
+  server: string;
+  mode: PushMode;
+  timeoutMs: number;
+}
+export class UsageError extends Error {}
+
+export function parseArgs(argv: string[]): PushArgs {
+  const [server, ...rest] = argv;
+  if (!server) {
+    throw new UsageError('usage: guided-review-push.ts <path-to-dist/index.js> [--mode quick|deep] [--timeout <ms>]');
+  }
+  let mode: PushMode = 'quick';
+  let timeoutMs = 180_000;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--mode') {
+      const m = rest[++i];
+      if (m !== 'quick' && m !== 'deep')
+        throw new UsageError(`--mode must be quick or deep (got ${JSON.stringify(m)})`);
+      mode = m;
+    } else if (rest[i] === '--timeout') {
+      timeoutMs = Number(rest[++i]);
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+        throw new UsageError('--timeout needs a positive number of ms');
+    } else {
+      throw new UsageError(`unknown argument ${rest[i]}`);
+    }
+  }
+  return { server, mode, timeoutMs };
+}
+
+// JSON-RPC payloads are untyped by design here (same as scripts/verify-deploy.ts).
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function main(): Promise<void> {
+  const { server, mode, timeoutMs } = parseArgs(process.argv.slice(2));
+  const transport = new StdioJsonRpcTransport({ serverPath: server });
+  transport.start();
+  transport.child.once('exit', (code, signal) => {
+    transport.rejectAllPending(new Error(`server exited unexpectedly (code ${code}, signal ${signal})`));
+  });
+  const rpc = (method: string, params: unknown): Promise<any> =>
+    transport.sendRequest({ jsonrpc: '2.0', id: transport.nextId(), method, params }, timeoutMs);
+  const call = async (name: string, args: unknown): Promise<any> => {
+    const res = await rpc('tools/call', { name, arguments: args });
+    if (res.error) throw new Error(`${name}: JSON-RPC error ${JSON.stringify(res.error)}`);
+    const parsed = JSON.parse(res.result.content[0].text);
+    if (parsed.success === false) throw new Error(`${name}: ${JSON.stringify(parsed.error ?? parsed)}`);
+    return parsed;
+  };
+
+  try {
+    const init = await rpc('initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'guided-review-push', version: '1.0.0' },
+    });
+    if (init.error) throw new Error(`initialize: ${JSON.stringify(init.error)}`);
+    transport.sendNotification('notifications/initialized', {});
+
+    // Refuse a stale build: the same probe verify-deploy uses (buildId + stale flag).
+    const version = await call('system', { operation: 'version' });
+    const vd = version.data ?? version;
+    if (vd.stale === true) {
+      throw new Error(`server build is stale (buildId ${vd.buildId}); rebuild before running the push`);
+    }
+
+    const reviews = await call('omnifocus_analyze', {
+      analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+    });
+    const slice: ReviewProject[] = (reviews.data?.projects ?? []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      reviewStatus: p.reviewStatus,
+    }));
+
+    const patterns = await call('omnifocus_analyze', {
+      analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
+    });
+    const queue = buildQueue(patterns.data as PatternData, slice, mode);
+
+    const inbox = await call('omnifocus_read', {
+      query: {
+        type: 'tasks',
+        mode: 'inbox',
+        filters: { name: { contains: ITEM_PREFIX.trim() } },
+        fields: ['id', 'name'],
+        limit: 20,
+      },
+    });
+    const open: Array<{ id: string; name: string }> = (inbox.data?.tasks ?? inbox.data?.items ?? []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+    }));
+
+    const decision = decideAction(open, queue.total);
+    const item = buildInboxItem(queue, mode, new Date());
+    if (decision.action === 'none') {
+      console.error('guided-review-push: 0 decisions, no open item — nothing to do');
+    } else if (decision.action === 'create') {
+      const r = await call('omnifocus_write', {
+        mutation: { operation: 'create', target: 'task', data: { name: item.name, note: item.note } },
+      });
+      console.error(`guided-review-push: CREATED ${item.name} (${r.data?.task?.taskId ?? '?'})`);
+    } else {
+      await call('omnifocus_write', {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: decision.id,
+          changes: { name: item.name, note: item.note },
+        },
+      });
+      console.error(`guided-review-push: UPDATED ${decision.id} → ${item.name}`);
+    }
+    console.error(`guided-review-push: ${JSON.stringify(queue.perQueue)}`);
+  } finally {
+    await transport.close({ graceful: true });
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+if (isRunDirectly(import.meta.url)) {
+  main().catch((e) => {
+    console.error(e instanceof UsageError ? e.message : `guided-review-push FAILED: ${(e as Error).message}`);
+    process.exit(e instanceof UsageError ? 2 : 1);
+  });
 }
