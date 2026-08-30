@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from scripts/ops/com.omnifocus-mcp.guided-review.plist.template by
+     install-guided-review-schedule.sh (substitutes absolute paths and a
+     Homebrew-aware PATH; launchd does NOT expand $HOME). Re-run the installer
+     to update; do not hand-edit the deployed copy. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.omnifocus-mcp.guided-review</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>__PATH_VALUE__</string>
+      <key>OF_MCP_REPO_DIR</key>
+      <string>__REPO_DIR__</string>
+    </dict>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>__WRAPPER_PATH__</string>
+    </array>
+    <!-- Mon–Sat 07:00 (spec D2). Saturday's run is deep mode (the wrapper
+         decides by weekday). Sunday is deliberately free: the diagnose job runs
+         Sunday 09:00 and the integration suite Saturday 08:00 — this job
+         finishes in well under a minute so 07:00 Saturday never overlaps. -->
+    <key>StartCalendarInterval</key>
+    <array>
+      <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>__LAUNCHD_LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LAUNCHD_LOG__</string>
+  </dict>
+</plist>
