@@ -25,6 +25,7 @@ export PATH
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 LOG="${OF_MCP_GUIDED_REVIEW_LOG:-$HOME/.omnifocus-mcp/guided-review.log}"
 RUN_TIMEOUT="${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600}"
+PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
 
 mkdir -p "$(dirname "$LOG")"
 cd "$REPO_DIR" || { echo "of-mcp-guided-review: repo dir not found: $REPO_DIR" >&2; exit 1; }
@@ -65,6 +66,46 @@ if ! pgrep -x OmniFocus >/dev/null 2>&1; then
   log "STATUS: SKIPPED — OmniFocus is not running; nothing pushed."
   exit 0
 fi
+
+# pgrep only proves the process exists — not that it answers AppleEvents. On
+# this machine, under launchd, OmniFocus can be running and still never
+# respond (the OMN-302 integration job WEDGED this way on every run since
+# 2026-08-08). Without this probe that shows up as guided-review-push.ts's
+# JSON-RPC calls timing out, which the case block below logs as STATUS:
+# FAILED — indistinguishable from an actual code bug. Round-trip one real
+# AppleEvent first, watchdogged (a wedged OmniFocus can block forever), same
+# shape as of-mcp-integration's Step 2.
+#
+# This DOES depend on Automation permission, and a launchd job may not have
+# it even when a terminal does — reported honestly as a wedge rather than a
+# failure, naming the permission explicitly, because "OmniFocus isn't
+# answering" and "this context was never granted permission to ask" look
+# identical from here and need different fixes.
+osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
+probe_pid=$!
+( sleep "$PREFLIGHT_TIMEOUT"; kill -9 "$probe_pid" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog_pid=$!
+# Drop the watchdog from the job table BEFORE killing it. Without this, bash
+# announces "Terminated: 15" on stderr every healthy run — which lands in the
+# launchd log and reads like an error in a job whose whole point is that its
+# output gets trusted.
+disown "$watchdog_pid" 2>/dev/null || true
+preflight_rc=0
+wait "$probe_pid" 2>/dev/null || preflight_rc=$?
+kill "$watchdog_pid" 2>/dev/null || true
+
+if [ "$preflight_rc" -ne 0 ]; then
+  log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
+  log "  The push was NOT run. This is an environment blocker, not a code bug."
+  log "  Two different causes look identical here and need different fixes:"
+  log "    1. OmniFocus is genuinely wedged — a modal dialog, or a sync stall."
+  log "    2. THIS context lacks Automation permission. A launchd job is a"
+  log "       different TCC context than your terminal, so a probe that works"
+  log "       by hand can still be denied here. Check System Settings >"
+  log "       Privacy & Security > Automation for the scheduled job's parent."
+  exit 0
+fi
+log "preflight: OmniFocus running and answering"
 
 MODE="quick"
 [ "$(date +%u)" = "6" ] && MODE="deep"
