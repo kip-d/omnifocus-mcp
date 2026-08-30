@@ -1,5 +1,5 @@
 import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
-import { BasePrompt, PromptArgument } from '../base.js';
+import { BasePrompt, PromptArgument, PromptArgumentError } from '../base.js';
 
 /**
  * OMN-313 — guided review: "N decisions, one at a time" over the detectors
@@ -42,16 +42,18 @@ export const DECISION_OUTCOMES = ['define', 'hold', 'handoff', 'drop', 'done', '
 
 const NON_DETECTOR_QUEUES = new Set(['on_hold_projects', 'productivity_check']);
 
-function describeRaw(raw: unknown): string {
+// Coerces an arbitrary argument value into a string candidate mode, without
+// normalizing case — exact lowercase match against REVIEW_MODES is deliberate.
+function coerceModeCandidate(raw: unknown): string {
   return typeof raw === 'string' || typeof raw === 'number' ? String(raw) : typeof raw;
 }
 
 function parseMode(raw: unknown): ReviewMode {
-  const mode = raw === undefined || raw === null || raw === '' ? 'quick' : describeRaw(raw);
-  if (!(REVIEW_MODES as readonly string[]).includes(mode)) {
-    throw new Error(`guided_review: mode must be one of quick, standard, deep (got ${describeRaw(raw)})`);
+  const candidate = raw === undefined || raw === null || raw === '' ? 'quick' : coerceModeCandidate(raw);
+  if (!(REVIEW_MODES as readonly string[]).includes(candidate)) {
+    throw new PromptArgumentError(`guided_review: mode must be one of quick, standard, deep (got ${candidate})`);
   }
-  return mode as ReviewMode;
+  return candidate as ReviewMode;
 }
 
 function describePopulation(mode: ReviewMode): string {
@@ -114,9 +116,7 @@ omnifocus_analyze({ analysis: { type: "pattern_analysis", params: { insights: ${
 \`\`\`
 Queue order: ${queues.join(' → ')}.
 Population: ${population}
-${extraCalls}
-
-### Step 2 — the loop, one item per turn
+${extraCalls ? `${extraCalls}\n\n` : '\n'}### Step 2 — the loop, one item per turn
 1. State the item and its reason QUOTED from the evidence bundle (counts, dates). Never an inferred motive.
 2. Ask for one decision outcome from this fixed set — an output vocabulary, not a text screen; nothing here scans task text:
    ${DECISION_OUTCOMES.map((o) => `\`${o}\``).join(' · ')}

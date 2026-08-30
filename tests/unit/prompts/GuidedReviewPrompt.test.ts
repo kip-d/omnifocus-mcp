@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GuidedReviewPrompt, QUEUES_BY_MODE, DECISION_OUTCOMES } from '../../../src/prompts/gtd/GuidedReviewPrompt.js';
+import { PromptArgumentError } from '../../../src/prompts/base.js';
 
 const textOf = (p: GuidedReviewPrompt, args: Record<string, unknown>) =>
   p
@@ -44,6 +45,27 @@ describe('GuidedReviewPrompt', () => {
 
   it('rejects an unknown mode loudly rather than silently falling back', () => {
     expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(/mode must be one of quick, standard, deep/);
+  });
+
+  it('rejects an unknown mode with a PromptArgumentError so the MCP layer can map it to InvalidParams', () => {
+    expect(() => prompt.generateMessages({ mode: 'weekly' })).toThrow(PromptArgumentError);
+  });
+
+  it('excludes non-detector queues from the pattern_analysis insights array but keeps them in Queue order', () => {
+    for (const mode of ['standard', 'deep'] as const) {
+      const text = textOf(prompt, { mode });
+      const match = text.match(/insights: (\[.*?\])/);
+      expect(match).not.toBeNull();
+      const insights = JSON.parse(match![1]);
+      expect(insights).not.toContain('on_hold_projects');
+      expect(insights).not.toContain('productivity_check');
+
+      const queueOrderLine = text.split('\n').find((l) => l.startsWith('Queue order:'));
+      expect(queueOrderLine).toContain('on_hold_projects');
+      if (mode === 'deep') {
+        expect(queueOrderLine).toContain('productivity_check');
+      }
+    }
   });
 
   it('states the fixed decision-outcome vocabulary and that nothing scans task text', () => {

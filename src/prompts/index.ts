@@ -6,7 +6,7 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { BasePrompt } from './base.js';
+import { BasePrompt, PromptArgumentError } from './base.js';
 import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
 import { GTDPrinciplesPrompt } from './gtd/GTDPrinciplesPrompt.js';
@@ -70,6 +70,9 @@ export function registerPrompts(server: Server): void {
     try {
       return prompt.toGetPromptResult(args);
     } catch (error) {
+      if (error instanceof PromptArgumentError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message);
+      }
       logger.error(`Error generating prompt messages for ${name}:`, error);
       throw new McpError(
         ErrorCode.InternalError,
