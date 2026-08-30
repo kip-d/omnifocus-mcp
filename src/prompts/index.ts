@@ -11,6 +11,7 @@ import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
 import { GTDPrinciplesPrompt } from './gtd/GTDPrinciplesPrompt.js';
 import { EisenhowerMatrixPrompt } from './gtd/eisenhower-matrix.js';
+import { GuidedReviewPrompt } from './gtd/GuidedReviewPrompt.js';
 import { QuickReferencePrompt } from './reference/QuickReferencePrompt.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -27,6 +28,7 @@ export function registerPrompts(server: Server): void {
     new WeeklyReviewPrompt(),
     new InboxProcessingPrompt(),
     new EisenhowerMatrixPrompt(),
+    new GuidedReviewPrompt(),
 
     // Essential Reference
     new QuickReferencePrompt(),

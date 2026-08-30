@@ -84,12 +84,13 @@ omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "li
 - Tags: 10 minutes
 - Analytics: 1 hour
 
-## Available Prompts (5 GTD-focused)
+## Available Prompts (6)
 1. \`gtd_principles\` - Core GTD methodology guide
 2. \`gtd_process_inbox\` - Process inbox using pure GTD (2-minute rule)
 3. \`eisenhower_matrix_inbox\` - Process inbox using priority quadrants
 4. \`gtd_weekly_review\` - Complete weekly review workflow
-5. \`quick_reference\` - This essential reference guide
+5. \`guided_review\` - One decision at a time over the review queues (mode: quick | standard | deep)
+6. \`quick_reference\` - This essential reference guide
 
 ## System Commands
 \`\`\`javascript
