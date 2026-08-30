@@ -15,8 +15,13 @@
  * Usage (prod): npx tsx scripts/ops/guided-review-push.ts <path>/dist/index.js [--mode quick|deep]
  * Env: OF_MCP_REVIEW_ITEM_PREFIX overrides "Review: " (dev server needs "__TEST__ Review: ").
  */
+import { StringDecoder } from 'node:string_decoder';
 import { StdioJsonRpcTransport } from '../../tests/integration/helpers/stdio-jsonrpc-transport.js';
 import { isRunDirectly } from '../lib/run-directly.js';
+// verify-deploy.ts guards main() with isRunDirectly, so importing this is side-effect-free.
+import { INIT_TIMEOUT_MS } from '../verify-deploy.js';
+
+const STDERR_TAIL_LIMIT = 64 * 1024;
 
 export const ITEM_PREFIX = process.env.OF_MCP_REVIEW_ITEM_PREFIX ?? 'Review: ';
 export const startLine = (mode: PushMode): string => `Start: ask Claude for a ${mode} guided review`;
@@ -252,6 +257,31 @@ export function requireObject(value: unknown, label: string): Record<string, unk
   return value as Record<string, unknown>;
 }
 
+// createTaskResponseV2 (src/utils/response-format.ts) keys the same three
+// fields: metadata.truncated is set to `true` (never `false`) when
+// applyCountHonesty finds offset+returned < population, and total_count/
+// returned_count always accompany it (response-format.ts:130-136,741-746;
+// wired for `mode: 'inbox'` task queries at
+// src/tools/unified/OmniFocusReadTool.ts:636). Absence of `truncated` is
+// therefore unambiguous — it's never explicitly cleared, so a missing field
+// means "not truncated", not "unknown". total_count > returned_count is kept
+// as a second, independent check in case a future response shape carries the
+// counts without the boolean.
+export function assertNotTruncated(metadata: unknown, label: string): void {
+  if (typeof metadata !== 'object' || metadata === null) return;
+  const m = metadata as { truncated?: unknown; total_count?: unknown; returned_count?: unknown };
+  const total = typeof m.total_count === 'number' ? m.total_count : undefined;
+  const returned = typeof m.returned_count === 'number' ? m.returned_count : undefined;
+  const flagged = m.truncated === true;
+  const overCount = total !== undefined && returned !== undefined && total > returned;
+  if (flagged || overCount) {
+    throw new Error(
+      `${label}: response was truncated (total_count=${total ?? '?'}, returned_count=${returned ?? '?'}) — ` +
+        'narrow the inbox filter (or raise the limit) so the existing Review: item is never missed',
+    );
+  }
+}
+
 export function parseArgs(argv: string[]): PushArgs {
   const [server, ...rest] = argv;
   if (!server) {
@@ -285,8 +315,22 @@ async function main(): Promise<void> {
   transport.child.once('exit', (code, signal) => {
     transport.rejectAllPending(new Error(`server exited unexpectedly (code ${code}, signal ${signal})`));
   });
-  const rpc = (method: string, params: unknown): Promise<any> =>
-    transport.sendRequest({ jsonrpc: '2.0', id: transport.nextId(), method, params }, timeoutMs);
+
+  // Failure-only stderr replay, mirroring verify-deploy.ts: keep a bounded
+  // tail so a crash surfaces the server's own diagnostics without polluting
+  // success output. StringDecoder carries multi-byte UTF-8 sequences split
+  // across chunk boundaries.
+  let stderrTail = '';
+  const stderrDecoder = new StringDecoder('utf8');
+  transport.child.stderr?.on('data', (chunk: Buffer) => {
+    stderrTail = (stderrTail + stderrDecoder.write(chunk)).slice(-STDERR_TAIL_LIMIT);
+  });
+  transport.child.on('error', (e) => {
+    transport.rejectAllPending(new Error(`could not spawn server: ${e.message}`));
+  });
+
+  const rpc = (method: string, params: unknown, rpcTimeoutMs: number = timeoutMs): Promise<any> =>
+    transport.sendRequest({ jsonrpc: '2.0', id: transport.nextId(), method, params }, rpcTimeoutMs);
   const call = async (name: string, args: unknown): Promise<any> => {
     const res = await rpc('tools/call', { name, arguments: args });
     if (res.error) throw new Error(`${name}: JSON-RPC error ${JSON.stringify(res.error)}`);
@@ -295,12 +339,17 @@ async function main(): Promise<void> {
     return parsed;
   };
 
+  let rpcFailed = false;
   try {
-    const init = await rpc('initialize', {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'guided-review-push', version: '1.0.0' },
-    });
+    const init = await rpc(
+      'initialize',
+      {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'guided-review-push', version: '1.0.0' },
+      },
+      Math.min(timeoutMs, INIT_TIMEOUT_MS),
+    );
     if (init.error) throw new Error(`initialize: ${JSON.stringify(init.error)}`);
     transport.sendNotification('notifications/initialized', {});
 
@@ -333,9 +382,12 @@ async function main(): Promise<void> {
         mode: 'inbox',
         filters: { name: { contains: ITEM_PREFIX.trim() } },
         fields: ['id', 'name'],
-        limit: 20,
+        limit: 100,
       },
     });
+    // A truncated response could hide the existing Review: item, causing a
+    // duplicate to be created — see assertNotTruncated.
+    assertNotTruncated(inbox.metadata, 'inbox review-item lookup');
     const open: Array<{ id: string; name: string }> = (inbox.data?.tasks ?? inbox.data?.items ?? []).map((t: any) => ({
       id: t.id,
       name: t.name,
@@ -377,8 +429,16 @@ async function main(): Promise<void> {
       console.error(`guided-review-push: UPDATED ${decision.id} → ${item.name}`);
     }
     console.error(`guided-review-push: ${JSON.stringify(queue.perQueue)}`);
+  } catch (e) {
+    rpcFailed = true;
+    const tail = stderrTail.trim();
+    const suffix = tail ? `\n--- server stderr (tail) ---\n${tail}` : '';
+    throw new Error(`${(e as Error).message}${suffix}`);
   } finally {
-    await transport.close({ graceful: true });
+    // On the failure path the caller has already given up waiting (an RPC
+    // timed out, errored, or the server died) — kill immediately rather than
+    // letting graceful close add its wait on top. Mirrors verify-deploy.ts.
+    await transport.close({ graceful: !rpcFailed });
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

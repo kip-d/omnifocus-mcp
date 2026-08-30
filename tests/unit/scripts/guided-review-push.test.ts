@@ -9,6 +9,7 @@ import {
   UsageError,
   requireArray,
   requireObject,
+  assertNotTruncated,
   type PatternData,
   type ReviewProject,
 } from '../../../scripts/ops/guided-review-push.js';
@@ -280,6 +281,32 @@ describe('requireObject', () => {
   it('throws on null and on an array', () => {
     expect(() => requireObject(null, 'x')).toThrow(/x/);
     expect(() => requireObject([1, 2], 'x')).toThrow(/x/);
+  });
+});
+
+describe('assertNotTruncated', () => {
+  it('throws, naming the label, when metadata.truncated is true', () => {
+    expect(() => assertNotTruncated({ truncated: true, total_count: 42, returned_count: 20 }, 'inbox lookup')).toThrow(
+      /inbox lookup.*truncated/i,
+    );
+  });
+
+  it('throws when total_count exceeds returned_count even without an explicit truncated flag', () => {
+    expect(() => assertNotTruncated({ total_count: 42, returned_count: 20 }, 'inbox lookup')).toThrow(/inbox lookup/);
+  });
+
+  it('passes when truncated is explicitly false and counts agree', () => {
+    expect(() => assertNotTruncated({ truncated: false, total_count: 3, returned_count: 3 }, 'x')).not.toThrow();
+  });
+
+  it('passes when total_count and returned_count are equal', () => {
+    expect(() => assertNotTruncated({ total_count: 3, returned_count: 3 }, 'x')).not.toThrow();
+  });
+
+  it('passes when the truncation fields are entirely absent (absence is not ambiguous here — createTaskResponseV2 only ever sets truncated:true, never false, so missing means not truncated)', () => {
+    expect(() => assertNotTruncated({}, 'x')).not.toThrow();
+    expect(() => assertNotTruncated(undefined, 'x')).not.toThrow();
+    expect(() => assertNotTruncated(null, 'x')).not.toThrow();
   });
 });
 
