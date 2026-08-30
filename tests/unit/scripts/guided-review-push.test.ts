@@ -3,6 +3,7 @@ import {
   buildQueue,
   buildInboxItem,
   decideAction,
+  findReviewItems,
   ITEM_PREFIX,
   parseArgs,
   UsageError,
@@ -207,6 +208,32 @@ describe('decideAction', () => {
   });
   it('ignores inbox rows that merely contain the prefix mid-name', () => {
     expect(decideAction([{ id: 'x2', name: `Book: ${ITEM_PREFIX}notes` }], 2)).toEqual({ action: 'create' });
+  });
+  it('when more than one review item is open, updates only the first (findReviewItems surfaces the rest)', () => {
+    const open = [
+      { id: 'x1', name: `${ITEM_PREFIX}5 decisions waiting` },
+      { id: 'x2', name: `${ITEM_PREFIX}2 decisions waiting` },
+    ];
+    expect(decideAction(open, 3)).toEqual({ action: 'update', id: 'x1' });
+    expect(findReviewItems(open)).toEqual(open);
+  });
+});
+
+describe('findReviewItems', () => {
+  it('returns every open task whose name carries the review prefix, in order', () => {
+    const open = [
+      { id: 'a', name: `Book: ${ITEM_PREFIX}notes` },
+      { id: 'b', name: `${ITEM_PREFIX}5 decisions waiting` },
+      { id: 'c', name: 'Unrelated task' },
+      { id: 'd', name: `${ITEM_PREFIX}2 decisions waiting` },
+    ];
+    expect(findReviewItems(open)).toEqual([
+      { id: 'b', name: `${ITEM_PREFIX}5 decisions waiting` },
+      { id: 'd', name: `${ITEM_PREFIX}2 decisions waiting` },
+    ]);
+  });
+  it('returns an empty array when nothing matches', () => {
+    expect(findReviewItems([{ id: 'a', name: 'Unrelated task' }])).toEqual([]);
   });
 });
 

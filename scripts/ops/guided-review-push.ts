@@ -208,11 +208,18 @@ export function buildInboxItem(queue: Queue, mode: PushMode, now: Date): { name:
   return { name, note: lines.slice(0, 10).join('\n') };
 }
 
+/** Every open inbox task whose name carries the review prefix, in list order. */
+export function findReviewItems(
+  openInboxTasks: Array<{ id: string; name: string }>,
+): Array<{ id: string; name: string }> {
+  return openInboxTasks.filter((t) => t.name.startsWith(ITEM_PREFIX));
+}
+
 export function decideAction(
   openInboxTasks: Array<{ id: string; name: string }>,
   total: number,
 ): { action: 'create' } | { action: 'update'; id: string } | { action: 'none' } {
-  const existing = openInboxTasks.find((t) => t.name.startsWith(ITEM_PREFIX));
+  const [existing] = findReviewItems(openInboxTasks);
   if (existing) return { action: 'update', id: existing.id };
   return total > 0 ? { action: 'create' } : { action: 'none' };
 }
@@ -336,6 +343,21 @@ async function main(): Promise<void> {
 
     const decision = decideAction(open, queue.total);
     const item = buildInboxItem(queue, mode, new Date());
+
+    // decideAction updates only the FIRST match — silently, if there happen to
+    // be more than one. That's a state the job should never create on its own
+    // (idempotent update, not create), but a human deleting/duplicating by
+    // hand can produce it, and the wrapper's log is the only place anyone
+    // would see it. Warn loudly rather than quietly picking a winner forever.
+    const reviewItems = findReviewItems(open);
+    if (reviewItems.length > 1) {
+      const [kept, ...stale] = reviewItems;
+      console.error(
+        `guided-review-push: WARNING — ${reviewItems.length} open review items found; ` +
+          `updating ${kept.id}, leaving ${stale.map((t) => t.id).join(', ')} stale — delete the extras by hand`,
+      );
+    }
+
     if (decision.action === 'none') {
       console.error('guided-review-push: 0 decisions, no open item — nothing to do');
     } else if (decision.action === 'create') {
