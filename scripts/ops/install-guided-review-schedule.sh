@@ -36,6 +36,17 @@ REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
 # "__TEST__ Review: " because the guarded dev server rejects any other prefix.
 # Mind the trailing space in the default — quoted throughout so it survives.
 ITEM_PREFIX_VALUE="${OF_MCP_REVIEW_ITEM_PREFIX:-Review: }"
+# Also baked into the plist (see the template's OF_MCP_GUIDED_REVIEW_TIMEOUT
+# comment) so the deployed job's run_bounded timeout and this script's
+# --verify poll budget (below) can never disagree — both are derived from
+# this one resolved value, never read independently from the environment
+# twice.
+RUN_TIMEOUT_VALUE="${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600}"
+case "$RUN_TIMEOUT_VALUE" in
+  ''|*[!0-9]*|0)
+    echo "ERROR: OF_MCP_GUIDED_REVIEW_TIMEOUT must be a positive integer (got \"$RUN_TIMEOUT_VALUE\")." >&2
+    exit 1 ;;
+esac
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
 WRAPPER_DEST="$BIN_DIR/of-mcp-guided-review"
@@ -84,28 +95,37 @@ echo "Installed wrapper → $WRAPPER_DEST"
 
 # --- 2. Generate the plist from the template ----------------------------------
 mkdir -p "$LAUNCH_AGENTS" "$(dirname "$LAUNCHD_LOG")"
-# Substituted values are all $HOME-rooted absolute paths and a PATH string of the
-# same — none can contain '|' (the sed delimiter), '&', or newlines on macOS.
-# ITEM_PREFIX_VALUE is the one exception: it is operator-supplied (env override),
-# so it is escaped for sed's replacement text (backslash, '&', and the '#'
-# delimiter used for that one substitution) rather than assumed safe.
+# Every substituted value is escaped for sed's replacement text before use —
+# not just the operator-supplied ITEM_PREFIX_VALUE. Most of the others are
+# $HOME-rooted absolute paths that are unlikely to contain '&' or '#' in
+# practice, but "unlikely" isn't a guarantee (a HOME with an '&' in it, an
+# unusual BIN_DIR override), and escaping unconditionally costs nothing here —
+# so every value goes through escape_sed_repl and every substitution uses the
+# same '#' delimiter, rather than trusting some values and not others.
 escape_sed_repl() {
   # Order matters: backslash first, so the escapes this adds for & or # aren't
   # themselves re-escaped by a later pass.
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g'
 }
+WRAPPER_DEST_ESCAPED="$(escape_sed_repl "$WRAPPER_DEST")"
+LAUNCHD_LOG_ESCAPED="$(escape_sed_repl "$LAUNCHD_LOG")"
+PATH_VALUE_ESCAPED="$(escape_sed_repl "$PATH_VALUE")"
+REPO_DIR_ESCAPED="$(escape_sed_repl "$REPO_DIR")"
 ITEM_PREFIX_ESCAPED="$(escape_sed_repl "$ITEM_PREFIX_VALUE")"
-sed -e "s|__WRAPPER_PATH__|$WRAPPER_DEST|g" \
-    -e "s|__LAUNCHD_LOG__|$LAUNCHD_LOG|g" \
-    -e "s|__PATH_VALUE__|$PATH_VALUE|g" \
-    -e "s|__REPO_DIR__|$REPO_DIR|g" \
+RUN_TIMEOUT_ESCAPED="$(escape_sed_repl "$RUN_TIMEOUT_VALUE")"
+sed -e "s#__WRAPPER_PATH__#$WRAPPER_DEST_ESCAPED#g" \
+    -e "s#__LAUNCHD_LOG__#$LAUNCHD_LOG_ESCAPED#g" \
+    -e "s#__PATH_VALUE__#$PATH_VALUE_ESCAPED#g" \
+    -e "s#__REPO_DIR__#$REPO_DIR_ESCAPED#g" \
     -e "s#__ITEM_PREFIX__#$ITEM_PREFIX_ESCAPED#g" \
+    -e "s#__RUN_TIMEOUT__#$RUN_TIMEOUT_ESCAPED#g" \
     "$TEMPLATE" > "$PLIST_DEST"
 plutil -lint "$PLIST_DEST" >/dev/null
 echo "Installed plist   → $PLIST_DEST"
 echo "  PATH = $PATH_VALUE"
 echo "  repo = $REPO_DIR"
 echo "  item prefix = \"$ITEM_PREFIX_VALUE\"$([ "$ITEM_PREFIX_VALUE" = "Review: " ] || echo "  <-- NOT the default; verify this is intentional for a prod install")"
+echo "  run timeout = ${RUN_TIMEOUT_VALUE}s"
 
 # --- 3. (Re)load the job ------------------------------------------------------
 # bootout is async; bootstrap can race it. Poll until the old instance is gone,
@@ -176,13 +196,16 @@ if [ "$MODE" = "verify" ]; then
 
   launchctl kickstart -k "$GUI/$LABEL"
 
-  # DERIVE the budget from the wrapper's own timeout instead of hardcoding one.
-  # The guided-review wrapper has a single bounded step (the push itself, via
-  # run_bounded), unlike the integration suite's build+suite+cleanup phases — so
-  # there is one env var to read here, not three. Read it with the same default,
-  # and add 20% slack; a hardcoded number here silently rots the moment that
-  # default changes.
-  verify_budget=$(( ${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600} * 12 / 10 ))
+  # DERIVE the budget from RUN_TIMEOUT_VALUE — the SAME resolved value baked
+  # into the plist above, not a second independent read of the env var. The
+  # guided-review wrapper has a single bounded step (the push itself, via
+  # run_bounded), unlike the integration suite's build+suite+cleanup phases —
+  # so there is one number to derive from here, not three. Add 20% slack; a
+  # hardcoded number here silently rots the moment that default changes, and
+  # reading the env var independently here (rather than reusing
+  # RUN_TIMEOUT_VALUE) could let the poll budget and the deployed timeout
+  # disagree if the variable changed between the two reads.
+  verify_budget=$(( RUN_TIMEOUT_VALUE * 12 / 10 ))
   verify_polls=$(( verify_budget / 5 + 1 ))
   echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
   new_region=""
@@ -216,11 +239,11 @@ if [ "$MODE" = "verify" ]; then
   rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
   echo "  last exit code = ${rc:-unknown} (0 = push succeeded; 127 = PATH bug)"
 
-  # Read the verdict ONLY from this run's region of the log.
+  # Read the verdict ONLY from this run's region of the log. This job never
+  # emits a LEAK: line (unlike of-mcp-integration, it creates no test
+  # fixtures) — there is nothing to grep for or hint at cleaning up here.
   status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
-  leak_line="$(printf '%s' "$new_region" | grep -aE '^LEAK: ' | tail -1 || true)"
   echo "  ${status_line:-STATUS: (none recorded)}"
-  echo "  ${leak_line:-LEAK: (none recorded)}"
 
   # SKIPPED (OmniFocus not running at all) and WEDGED (the push timed out) are
   # both "the push never ran" — not a pass and not a failure, the environment
@@ -266,4 +289,3 @@ echo
 echo "Done. Inspect status:  launchctl list | grep guided-review"
 echo "Manual run:            launchctl kickstart -p $GUI/$LABEL"
 echo "Durable log:           $RUN_LOG"
-echo "Clean up leaks:        (cd ${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp} && npm run test:cleanup -- --apply)"

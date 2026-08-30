@@ -20,6 +20,11 @@
            one carrying that literal prefix. -->
       <key>OF_MCP_REVIEW_ITEM_PREFIX</key>
       <string>__ITEM_PREFIX__</string>
+      <!-- Baked at install time, like the prefix above, so the deployed job's
+           run_bounded timeout and the installer's --verify poll budget can
+           never disagree. Defaults to 600 (10 min); see OF_MCP_GUIDED_REVIEW_TIMEOUT. -->
+      <key>OF_MCP_GUIDED_REVIEW_TIMEOUT</key>
+      <string>__RUN_TIMEOUT__</string>
     </dict>
     <key>ProgramArguments</key>
     <array>

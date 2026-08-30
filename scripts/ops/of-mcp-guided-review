@@ -33,10 +33,19 @@ log() { echo "$*" >> "$LOG"; }
 
 # Bounded run — same shape as of-mcp-integration's run_bounded, deliberately NOT
 # --foreground (that flag disables the descendant kill we want). 124 = timeout.
+#
+# OF_MCP_FORCE_FALLBACK exists so the fallback (manual process-group-kill)
+# branch below can actually be exercised on a machine that HAS coreutils.
+# Without it the fallback is unreachable here and its process-group kill can
+# only be asserted, never tested — and it is the branch that runs on a stock
+# macOS with no Homebrew coreutils, i.e. the one least likely to be exercised
+# by accident. Copied from of-mcp-integration's identical mechanism.
 TIMEOUT_CMD=""
-for c in timeout gtimeout; do
-  command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
-done
+if [ -z "${OF_MCP_FORCE_FALLBACK:-}" ]; then
+  for c in timeout gtimeout; do
+    command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+  done
+fi
 run_bounded() {
   local secs="$1"; shift
   local rc=0
