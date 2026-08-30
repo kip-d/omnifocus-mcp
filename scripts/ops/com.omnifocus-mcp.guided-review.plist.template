@@ -15,6 +15,11 @@
       <string>__PATH_VALUE__</string>
       <key>OF_MCP_REPO_DIR</key>
       <string>__REPO_DIR__</string>
+      <!-- Defaults to "Review: ". The dev/verify install sets "__TEST__ Review: "
+           because the guarded dev server rejects any inbox item name other than
+           one carrying that literal prefix. -->
+      <key>OF_MCP_REVIEW_ITEM_PREFIX</key>
+      <string>__ITEM_PREFIX__</string>
     </dict>
     <key>ProgramArguments</key>
     <array>

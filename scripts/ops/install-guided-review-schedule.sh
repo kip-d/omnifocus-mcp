@@ -31,6 +31,11 @@ BIN_DIR="${OF_MCP_BIN_DIR:-$HOME/bin}"
 # Resolved here (not just consumed by the wrapper's own default) because it is
 # baked into the plist — see the EnvironmentVariables comment in the template.
 REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+# Also baked into the plist (see the template's OF_MCP_REVIEW_ITEM_PREFIX
+# comment): defaults to "Review: "; a dev/verify install overrides it to
+# "__TEST__ Review: " because the guarded dev server rejects any other prefix.
+# Mind the trailing space in the default — quoted throughout so it survives.
+ITEM_PREFIX_VALUE="${OF_MCP_REVIEW_ITEM_PREFIX:-Review: }"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
 WRAPPER_DEST="$BIN_DIR/of-mcp-guided-review"
@@ -81,15 +86,26 @@ echo "Installed wrapper → $WRAPPER_DEST"
 mkdir -p "$LAUNCH_AGENTS" "$(dirname "$LAUNCHD_LOG")"
 # Substituted values are all $HOME-rooted absolute paths and a PATH string of the
 # same — none can contain '|' (the sed delimiter), '&', or newlines on macOS.
+# ITEM_PREFIX_VALUE is the one exception: it is operator-supplied (env override),
+# so it is escaped for sed's replacement text (backslash, '&', and the '#'
+# delimiter used for that one substitution) rather than assumed safe.
+escape_sed_repl() {
+  # Order matters: backslash first, so the escapes this adds for & or # aren't
+  # themselves re-escaped by a later pass.
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g'
+}
+ITEM_PREFIX_ESCAPED="$(escape_sed_repl "$ITEM_PREFIX_VALUE")"
 sed -e "s|__WRAPPER_PATH__|$WRAPPER_DEST|g" \
     -e "s|__LAUNCHD_LOG__|$LAUNCHD_LOG|g" \
     -e "s|__PATH_VALUE__|$PATH_VALUE|g" \
     -e "s|__REPO_DIR__|$REPO_DIR|g" \
+    -e "s#__ITEM_PREFIX__#$ITEM_PREFIX_ESCAPED#g" \
     "$TEMPLATE" > "$PLIST_DEST"
 plutil -lint "$PLIST_DEST" >/dev/null
 echo "Installed plist   → $PLIST_DEST"
 echo "  PATH = $PATH_VALUE"
 echo "  repo = $REPO_DIR"
+echo "  item prefix = \"$ITEM_PREFIX_VALUE\"$([ "$ITEM_PREFIX_VALUE" = "Review: " ] || echo "  <-- NOT the default; verify this is intentional for a prod install")"
 
 # --- 3. (Re)load the job ------------------------------------------------------
 # bootout is async; bootstrap can race it. Poll until the old instance is gone,
@@ -100,7 +116,7 @@ for _ in $(seq 1 10); do
   sleep 0.5
 done
 launchctl bootstrap "$GUI" "$PLIST_DEST" || { sleep 1; launchctl bootstrap "$GUI" "$PLIST_DEST"; }
-echo "Loaded job $LABEL (weekly, Saturday 08:00)."
+echo "Loaded job $LABEL (Mon–Sat 07:00; Saturday = deep mode)."
 
 # --- 4. Optional verification -------------------------------------------------
 if [ "$MODE" = "verify" ]; then
@@ -206,9 +222,17 @@ if [ "$MODE" = "verify" ]; then
   echo "  ${status_line:-STATUS: (none recorded)}"
   echo "  ${leak_line:-LEAK: (none recorded)}"
 
-  # A WEDGED run is not a pass and not a failure: the job worked, the
-  # environment didn't. Say so plainly rather than reporting green.
+  # SKIPPED (OmniFocus not running at all) and WEDGED (the push timed out) are
+  # both "the push never ran" — not a pass and not a failure, the environment
+  # blocked it. SKIPPED gets its own message because it means --verify proved
+  # NOTHING: unlike WEDGED, there was no attempt, so this must exit non-zero
+  # too — a silent-success --verify that never actually ran the push would be
+  # exactly the failure mode this flag exists to catch.
   case "$status_line" in
+    *SKIPPED*)
+      echo "  VERIFY NOT RUN — OmniFocus was not running when the job fired, so nothing was pushed or verified." >&2
+      echo "  Start OmniFocus and re-run --verify." >&2
+      exit 4 ;;
     *WEDGED*)
       echo "  VERIFY INCONCLUSIVE — OmniFocus was unreachable, so the push never ran." >&2
       echo "  The job itself is installed and executed correctly. Re-verify once OmniFocus responds." >&2
@@ -220,14 +244,14 @@ if [ "$MODE" = "verify" ]; then
   # recorded it in the region we just read. rc is corroboration — and it can
   # legitimately be unreadable (launchd may not surface it promptly, or at all,
   # for a job that has already exited), which must not by itself manufacture a
-  # failure for a run whose own STATUS says PASS. The "did it run at all?" case
+  # failure for a run whose own STATUS says OK. The "did it run at all?" case
   # is already handled above: no STATUS line means we exited 1 before reaching
   # here, so rc can no longer be a stale value standing in for a run that never
   # happened.
   case "$status_line" in
-    *"STATUS: PASS"*)
+    *"STATUS: OK"*)
       if [ -n "${rc:-}" ] && [ "$rc" != "0" ]; then
-        echo "  VERIFY FAILED — the wrapper logged PASS but launchd reports exit $rc;" >&2
+        echo "  VERIFY FAILED — the wrapper logged OK but launchd reports exit $rc;" >&2
         echo "  these disagree, so the run is not trustworthy. See $RUN_LOG and $LAUNCHD_LOG" >&2
         exit 1
       fi
@@ -239,7 +263,7 @@ if [ "$MODE" = "verify" ]; then
 fi
 
 echo
-echo "Done. Inspect status:  launchctl list | grep integration"
+echo "Done. Inspect status:  launchctl list | grep guided-review"
 echo "Manual run:            launchctl kickstart -p $GUI/$LABEL"
 echo "Durable log:           $RUN_LOG"
 echo "Clean up leaks:        (cd ${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp} && npm run test:cleanup -- --apply)"
