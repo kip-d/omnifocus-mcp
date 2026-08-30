@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   buildQueue,
   buildInboxItem,
@@ -6,6 +6,8 @@ import {
   ITEM_PREFIX,
   parseArgs,
   UsageError,
+  requireArray,
+  requireObject,
   type PatternData,
   type ReviewProject,
 } from '../../../scripts/ops/guided-review-push.js';
@@ -153,5 +155,51 @@ describe('parseArgs', () => {
   it('rejects a missing server path and an unknown mode as usage errors', () => {
     expect(() => parseArgs([])).toThrow(UsageError);
     expect(() => parseArgs(['dist/index.js', '--mode', 'standard'])).toThrow(/quick or deep/);
+  });
+});
+
+describe('requireArray', () => {
+  it('passes through an array, including an empty one', () => {
+    expect(requireArray([], 'x')).toEqual([]);
+    expect(requireArray([1, 2], 'x')).toEqual([1, 2]);
+  });
+  it('throws, naming the label, on undefined', () => {
+    expect(() => requireArray(undefined, 'manage_reviews: data.projects')).toThrow(
+      /manage_reviews: data\.projects.*undefined/,
+    );
+  });
+  it('throws on a non-array value', () => {
+    expect(() => requireArray({ not: 'an array' }, 'x')).toThrow(/x.*object/);
+    expect(() => requireArray('nope', 'x')).toThrow(/x.*string/);
+  });
+});
+
+describe('requireObject', () => {
+  it('passes through a plain object', () => {
+    expect(requireObject({ a: 1 }, 'x')).toEqual({ a: 1 });
+  });
+  it('throws, naming the label, on undefined', () => {
+    expect(() => requireObject(undefined, 'pattern_analysis: data')).toThrow(/pattern_analysis: data.*undefined/);
+  });
+  it('throws on null and on an array', () => {
+    expect(() => requireObject(null, 'x')).toThrow(/x/);
+    expect(() => requireObject([1, 2], 'x')).toThrow(/x/);
+  });
+});
+
+describe('OF_MCP_REVIEW_ITEM_PREFIX override', () => {
+  it('is read at import time and flows through ITEM_PREFIX and buildInboxItem', async () => {
+    vi.resetModules();
+    vi.stubEnv('OF_MCP_REVIEW_ITEM_PREFIX', '__TEST__ Review: ');
+    try {
+      const mod = await import('../../../scripts/ops/guided-review-push.js');
+      expect(mod.ITEM_PREFIX).toBe('__TEST__ Review: ');
+      const q = mod.buildQueue({}, [], 'quick');
+      const item = mod.buildInboxItem(q, 'quick', new Date('2026-09-01T07:00:00'));
+      expect(item.name).toBe('__TEST__ Review: 0 decisions waiting');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });

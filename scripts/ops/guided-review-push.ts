@@ -95,14 +95,18 @@ function extract(patterns: PatternData, queue: string): QueueItem[] {
         reason: `due ${t.days_overdue} day${t.days_overdue === 1 ? '' : 's'} ago`,
       }));
     case 'waiting_for':
-      return (patterns.waiting_for?.items?.candidates ?? []).map((t) => ({
-        queue,
-        id: t.id,
-        name: t.name,
-        projectId: t.project_id,
-        projectName: t.project,
-        reason: `${(t.screen_reasons ?? []).join(', ') || 'screen'}${t.defer_date ? `; deferred ${t.defer_date}` : ''}`,
-      }));
+      return (patterns.waiting_for?.items?.candidates ?? []).map((t) => {
+        const screenReason = (t.screen_reasons ?? []).join(', ') || 'screen';
+        const deferSuffix = t.defer_date ? `; deferred ${t.defer_date}` : '';
+        return {
+          queue,
+          id: t.id,
+          name: t.name,
+          projectId: t.project_id,
+          projectName: t.project,
+          reason: `${screenReason}${deferSuffix}`,
+        };
+      });
     case 'dormant_projects':
       return (patterns.dormant_projects?.items ?? []).map((p) => ({
         queue,
@@ -122,8 +126,12 @@ export function buildQueue(patterns: PatternData, slice: ReviewProject[], mode: 
   const due = slice.filter((p) => p.reviewStatus === 'overdue' || p.reviewStatus === 'due_today');
   const dueIds = new Set(due.map((p) => p.id));
   const dueNames = new Set(due.map((p) => p.name));
-  const inSlice = (i: QueueItem): boolean =>
-    mode === 'deep' || (i.projectId ? dueIds.has(i.projectId) : i.projectName ? dueNames.has(i.projectName) : false);
+  const isDue = (i: QueueItem): boolean => {
+    if (i.projectId) return dueIds.has(i.projectId);
+    if (i.projectName) return dueNames.has(i.projectName);
+    return false;
+  };
+  const inSlice = (i: QueueItem): boolean => mode === 'deep' || isDue(i);
 
   const perQueue: Record<string, number> = {};
   const floors: Record<string, boolean> = {};
@@ -173,6 +181,25 @@ export interface PushArgs {
   timeoutMs: number;
 }
 export class UsageError extends Error {}
+
+// A missing/malformed field from the MCP response must never silently become
+// "0 decisions" — that reads as "nothing waiting" when the truth is "the
+// response shape changed and this script can no longer see the data". Throw
+// loudly instead, naming the call and the field, so the wrapper logs FAILED
+// rather than a confident, wrong zero.
+export function requireArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label}: expected an array, got ${value === undefined ? 'undefined' : typeof value}`);
+  }
+  return value;
+}
+
+export function requireObject(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${label}: expected an object, got ${value === undefined ? 'undefined' : typeof value}`);
+  }
+  return value as Record<string, unknown>;
+}
 
 export function parseArgs(argv: string[]): PushArgs {
   const [server, ...rest] = argv;
@@ -236,7 +263,8 @@ async function main(): Promise<void> {
     const reviews = await call('omnifocus_analyze', {
       analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
     });
-    const slice: ReviewProject[] = (reviews.data?.projects ?? []).map((p: any) => ({
+    const projects = requireArray(reviews.data?.projects, 'manage_reviews list_for_review: data.projects');
+    const slice: ReviewProject[] = projects.map((p: any) => ({
       id: p.id,
       name: p.name,
       reviewStatus: p.reviewStatus,
@@ -245,7 +273,8 @@ async function main(): Promise<void> {
     const patterns = await call('omnifocus_analyze', {
       analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
     });
-    const queue = buildQueue(patterns.data as PatternData, slice, mode);
+    const patternsData = requireObject(patterns.data, 'pattern_analysis: data');
+    const queue = buildQueue(patternsData as PatternData, slice, mode);
 
     const inbox = await call('omnifocus_read', {
       query: {
