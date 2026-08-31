@@ -2486,6 +2486,219 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  describe('pattern_analysis sequential_blocked_far (OMN-315)', () => {
+    const now = new Date('2026-08-31T12:00:00Z');
+    const farDefer = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString(); // 45 days out
+    const soonDefer = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days out
+
+    it('reports a sequential project whose first incomplete task is deferred far out, with the count of tasks behind it', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Blocked head',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't2',
+              name: 'Behind 1',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't3',
+              name: 'Behind 2',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq1',
+              name: 'Seq A',
+              status: 'active status',
+              taskCount: 3,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.success).toBe(true);
+      const finding = res.data.sequential_blocked_far;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0]).toMatchObject({
+        id: 'pseq1',
+        name: 'Seq A',
+        blockingTaskName: 'Blocked head',
+        tasksBehind: 2,
+      });
+    });
+
+    it('does not report a sequential project whose first incomplete task is deferred soon', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't4',
+              name: 'Blocked head 2',
+              project: 'Seq B',
+              projectId: 'pseq2',
+              deferDate: soonDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq2',
+              name: 'Seq B',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('does not report a non-sequential (parallel) project, even with a far-deferred first task', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't5',
+              name: 'Parallel task',
+              project: 'Parallel C',
+              projectId: 'ppar1',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'ppar1',
+              name: 'Parallel C',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: false,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('a sequential project with no incomplete tasks at all is not reported (nothing to block on)', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'pseq3',
+              name: 'Seq D empty',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('a sequential project whose first incomplete task has no defer date at all is not reported', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't6',
+              name: 'No defer',
+              project: 'Seq E',
+              projectId: 'pseq4',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq4',
+              name: 'Seq E',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+  });
+
   // OMN-315: `sequential` is a new field on the project scan, needed by
   // sequential_blocked_far. This test only proves the field survives the
   // Zod boundary (SlimProjectSchema) end-to-end through pattern_analysis —
