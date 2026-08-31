@@ -386,17 +386,29 @@ async function main(): Promise<void> {
       throw new Error(`server build is stale (buildId ${buildId}); rebuild before running the push`);
     }
 
-    // manage_reviews and pattern_analysis have no data dependency on each
-    // other — run them concurrently. Promise.all rejects (loudly) on the
-    // first failure, same error propagation as the sequential calls before.
-    const [reviews, patterns] = await Promise.all([
-      call('omnifocus_analyze', {
-        analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
-      }),
-      call('omnifocus_analyze', {
-        analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
-      }),
-    ]);
+    // Deliberately SEQUENTIAL, not Promise.all (OMN-320 — corrects OMN-314's
+    // own round-2 "efficiency" fix, which made these concurrent on the
+    // reasoning that they have no data dependency). That reasoning holds for
+    // data but not for resource contention: both are whole-DB OmniJS scans
+    // (~14-16s each on this database, confirmed live). OmniFocus's
+    // evaluateJavascript scripting engine is not safely reentrant for two
+    // concurrent multi-second calls from the same client — under launchd,
+    // firing them via Promise.all produced a `code: null` (signal-killed)
+    // failure on the first real scheduled run: the unified system log showed
+    // every AppleEvent got a clean reply from OmniFocus, but when one call
+    // rejected, Promise.all's fail-fast tore down the transport and killed
+    // the still-in-flight sibling's osascript child mid-execution. Each call
+    // verified to succeed cleanly and completely on its own. Running them
+    // concurrently buys nothing anyway — they're CPU/engine-bound on a
+    // shared single-threaded resource (OmniFocus's scripting engine), not
+    // independent I/O, so there is no wall-clock win to trade the reliability
+    // away for.
+    const reviews = await call('omnifocus_analyze', {
+      analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+    });
+    const patterns = await call('omnifocus_analyze', {
+      analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
+    });
     const projects = requireArray(reviews.data?.projects, 'manage_reviews list_for_review: data.projects');
     const slice: ReviewProject[] = projects.map((p: any) => ({
       id: p.id,
