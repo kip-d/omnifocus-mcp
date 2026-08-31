@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# of-mcp-guided-review — launchd wrapper for the guided-review inbox push (OMN-314).
+#
+# Canonical source: scripts/ops/of-mcp-guided-review in the omnifocus-mcp repo.
+# Deploy with scripts/ops/install-guided-review-schedule.sh. Do NOT hand-edit
+# the deployed copy — edit here and re-run the installer.
+#
+# WHAT IT DOES: runs scripts/ops/guided-review-push.ts against the prod server
+# in $OF_MCP_REPO_DIR. That script counts the review decisions waiting and
+# creates/updates ONE OmniFocus inbox item ("Review: N decisions waiting"). It
+# writes to the real database — one inbox task, by design (spec D1).
+#
+# Saturday runs use --mode deep (adds dormant_projects); weekdays are quick.
+set -euo pipefail
+
+brew_dirs=()
+for d in /opt/homebrew/bin /usr/local/bin; do
+  [ -d "$d" ] && brew_dirs+=("$d")
+done
+if [ ${#brew_dirs[@]} -gt 0 ]; then
+  PATH="$(IFS=:; printf '%s' "${brew_dirs[*]}"):$PATH"
+fi
+export PATH
+
+REPO_DIR="${OF_MCP_REPO_DIR:-$HOME/omnifocus-mcp}"
+LOG="${OF_MCP_GUIDED_REVIEW_LOG:-$HOME/.omnifocus-mcp/guided-review.log}"
+RUN_TIMEOUT="${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600}"
+PREFLIGHT_TIMEOUT="${OF_MCP_PREFLIGHT_TIMEOUT:-30}"
+
+mkdir -p "$(dirname "$LOG")"
+cd "$REPO_DIR" || { echo "of-mcp-guided-review: repo dir not found: $REPO_DIR" >&2; exit 1; }
+log() { echo "$*" >> "$LOG"; }
+
+# Bounded run — same shape as of-mcp-integration's run_bounded, deliberately NOT
+# --foreground (that flag disables the descendant kill we want). 124 = timeout.
+#
+# OF_MCP_FORCE_FALLBACK exists so the fallback (manual process-group-kill)
+# branch below can actually be exercised on a machine that HAS coreutils.
+# Without it the fallback is unreachable here and its process-group kill can
+# only be asserted, never tested — and it is the branch that runs on a stock
+# macOS with no Homebrew coreutils, i.e. the one least likely to be exercised
+# by accident. Copied from of-mcp-integration's identical mechanism.
+TIMEOUT_CMD=""
+if [ -z "${OF_MCP_FORCE_FALLBACK:-}" ]; then
+  for c in timeout gtimeout; do
+    command -v "$c" >/dev/null 2>&1 && { TIMEOUT_CMD="$c"; break; }
+  done
+fi
+run_bounded() {
+  local secs="$1"; shift
+  local rc=0
+  if [ -n "$TIMEOUT_CMD" ]; then
+    "$TIMEOUT_CMD" -k 30s "$secs" "$@" >> "$LOG" 2>&1 || rc=$?
+    return "$rc"
+  fi
+  set -m
+  "$@" >> "$LOG" 2>&1 &
+  local child=$!
+  set +m
+  ( sleep "$secs"; kill -9 -"$child" 2>/dev/null || kill -9 "$child" 2>/dev/null ) >/dev/null 2>&1 &
+  local wd=$!
+  disown "$wd" 2>/dev/null || true
+  wait "$child" 2>/dev/null || rc=$?
+  if ! kill "$wd" 2>/dev/null; then [ "$rc" -eq 137 ] && rc=124; fi
+  return "$rc"
+}
+
+log ""
+log "===== run $(date '+%Y-%m-%d %H:%M:%S %Z') ====="
+
+# Fail-safe, not an operating mode: OmniFocus normally runs all day on this
+# machine. pgrep (not `tell application`, which auto-launches; not System
+# Events, which fails under launchd) covers the reboot window only.
+if ! pgrep -x OmniFocus >/dev/null 2>&1; then
+  log "STATUS: SKIPPED — OmniFocus is not running; nothing pushed."
+  exit 0
+fi
+
+# pgrep only proves the process exists — not that it answers AppleEvents. On
+# this machine, under launchd, OmniFocus can be running and still never
+# respond (the OMN-302 integration job WEDGED this way on every run since
+# 2026-08-08). Without this probe that shows up as guided-review-push.ts's
+# JSON-RPC calls timing out, which the case block below logs as STATUS:
+# FAILED — indistinguishable from an actual code bug. Round-trip one real
+# AppleEvent first, watchdogged (a wedged OmniFocus can block forever), same
+# shape as of-mcp-integration's Step 2.
+#
+# This DOES depend on Automation permission, and a launchd job may not have
+# it even when a terminal does — reported honestly as a wedge rather than a
+# failure, naming the permission explicitly, because "OmniFocus isn't
+# answering" and "this context was never granted permission to ask" look
+# identical from here and need different fixes.
+osascript -e 'tell application "OmniFocus" to get name of default document' >/dev/null 2>&1 &
+probe_pid=$!
+( sleep "$PREFLIGHT_TIMEOUT"; kill -9 "$probe_pid" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog_pid=$!
+# Drop the watchdog from the job table BEFORE killing it. Without this, bash
+# announces "Terminated: 15" on stderr every healthy run — which lands in the
+# launchd log and reads like an error in a job whose whole point is that its
+# output gets trusted.
+disown "$watchdog_pid" 2>/dev/null || true
+preflight_rc=0
+wait "$probe_pid" 2>/dev/null || preflight_rc=$?
+kill "$watchdog_pid" 2>/dev/null || true
+
+if [ "$preflight_rc" -ne 0 ]; then
+  # OmniFocus can quit in the window between the liveness pgrep above and this
+  # probe timing out (a user-initiated quit mid-preflight, e.g.). That is
+  # SKIPPED (nothing to push against), not WEDGED (an app that is still
+  # running but not answering) — re-check liveness before deciding which.
+  if ! pgrep -x OmniFocus >/dev/null 2>&1; then
+    log "STATUS: SKIPPED — OmniFocus quit between the liveness check and the preflight probe; nothing pushed."
+    exit 0
+  fi
+  log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
+  log "  The push was NOT run. This is an environment blocker, not a code bug."
+  log "  Two different causes look identical here and need different fixes:"
+  log "    1. OmniFocus is genuinely wedged — a modal dialog, or a sync stall."
+  log "    2. THIS context lacks Automation permission. A launchd job is a"
+  log "       different TCC context than your terminal, so a probe that works"
+  log "       by hand can still be denied here. Check System Settings >"
+  log "       Privacy & Security > Automation for the scheduled job's parent."
+  exit 0
+fi
+log "preflight: OmniFocus running and answering"
+
+MODE="quick"
+[ "$(date +%u)" = "6" ] && MODE="deep"
+
+set +e
+run_bounded "$RUN_TIMEOUT" npx tsx scripts/ops/guided-review-push.ts "$REPO_DIR/dist/index.js" --mode "$MODE"
+rc=$?
+set -e
+case "$rc" in
+  0)   log "STATUS: OK (mode=$MODE)" ;;
+  124) log "STATUS: WEDGED — push exceeded ${RUN_TIMEOUT}s and was killed (mode=$MODE)"; exit 0 ;;
+  *)   log "STATUS: FAILED — push exited $rc (mode=$MODE)"; exit "$rc" ;;
+esac

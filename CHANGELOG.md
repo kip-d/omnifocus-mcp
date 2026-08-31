@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `ErrorCode.InvalidParams`) instead of wrapping it as `InternalError`. The mechanism is shared by all prompts, but
   `guided_review`'s `mode` is currently the only argument validated this way — the five pre-existing prompts do not
   validate their arguments.
+- **Guided-review inbox push** (OMN-314) — `scripts/ops/guided-review-push.ts` + a Mon–Sat 07:00 launchd job
+  (`of-mcp-guided-review`, installer, plist template) that runs the review detectors and creates/updates ONE OmniFocus
+  inbox item `Review: N decisions waiting`; silent when nothing is waiting; Saturday runs deep mode. Runbook:
+  `docs/dev/guided-review-push.md`.
 
 ### Changed
 
