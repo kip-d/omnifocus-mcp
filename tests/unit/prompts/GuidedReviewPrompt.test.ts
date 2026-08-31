@@ -3,7 +3,7 @@ import { GuidedReviewPrompt, QUEUES_BY_MODE, DECISION_OUTCOMES } from '../../../
 import { KNOWN_PATTERNS } from '../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 
 // Queues that are NOT pattern_analysis detectors (fetched via separate calls).
-const NON_DETECTOR_QUEUES = ['on_hold_projects', 'productivity_check'];
+const NON_DETECTOR_QUEUES = ['productivity_check'];
 import { PromptArgumentError } from '../../../src/prompts/base.js';
 
 const textOf = (p: GuidedReviewPrompt, args: Record<string, unknown>) =>
