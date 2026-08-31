@@ -5,10 +5,12 @@ import {
   decideAction,
   findReviewItems,
   ITEM_PREFIX,
+  QUEUE_ORDER,
   parseArgs,
   UsageError,
   requireArray,
   requireObject,
+  requireDetectorKeys,
   assertNotTruncated,
   type PatternData,
   type ReviewProject,
@@ -82,6 +84,23 @@ describe('buildQueue', () => {
     };
     const q = buildQueue(capped, slice, 'deep');
     expect(q.floors).toEqual({ deadline_health: true });
+  });
+
+  it('deep mode: deadline_health floored count uses overdue_count as the true total (mirrors waiting_for/dormant_projects)', () => {
+    const capped: PatternData = {
+      ...patterns,
+      deadline_health: {
+        items: { overdue_count: 12, overdue_samples: patterns.deadline_health!.items!.overdue_samples },
+      },
+    };
+    const deep = buildQueue(capped, slice, 'deep');
+    expect(deep.floors.deadline_health).toBe(true);
+    expect(deep.perQueue.deadline_health).toBe(12);
+
+    // Quick mode keeps the filtered row count + floor flag, same as before.
+    const quick = buildQueue(capped, slice, 'quick');
+    expect(quick.floors.deadline_health).toBe(true);
+    expect(quick.perQueue.deadline_health).toBe(1);
   });
 
   it('waiting_for capped: flags the floor and, in deep mode, uses candidates_total as the count', () => {
@@ -172,7 +191,9 @@ describe('buildInboxItem', () => {
       },
     };
     const item = buildInboxItem(buildQueue(capped, slice, 'deep'), 'deep', new Date('2026-09-05T07:00:00'));
-    expect(item.note.split('\n')[1]).toContain('deadline_health: 1+');
+    // Deep mode now carries the true total (9) into the per-queue breakdown,
+    // not just the filtered row count (1) — mirrors waiting_for/dormant_projects.
+    expect(item.note.split('\n')[1]).toContain('deadline_health: 9+');
   });
 
   it('carries the floor into the headline count, not just the per-queue breakdown', () => {
@@ -183,8 +204,9 @@ describe('buildInboxItem', () => {
       },
     };
     const item = buildInboxItem(buildQueue(capped, slice, 'deep'), 'deep', new Date('2026-09-05T07:00:00'));
-    // total = 5 from the existing "deep mode" fixture math, +1 floor marker.
-    expect(item.name).toBe(`${ITEM_PREFIX}5+ decisions waiting`);
+    // total = missing_next_actions(2) + deadline_health(9, true total) +
+    // waiting_for(1) + dormant_projects(1) = 13, +1 floor marker.
+    expect(item.name).toBe(`${ITEM_PREFIX}13+ decisions waiting`);
   });
 });
 
@@ -281,6 +303,31 @@ describe('requireObject', () => {
   it('throws on null and on an array', () => {
     expect(() => requireObject(null, 'x')).toThrow(/x/);
     expect(() => requireObject([1, 2], 'x')).toThrow(/x/);
+  });
+});
+
+describe('requireDetectorKeys', () => {
+  it('throws, naming the missing key, when a QUEUE_ORDER detector key is absent', () => {
+    const data: Record<string, unknown> = { missing_next_actions: { items: [] }, waiting_for: { items: {} } };
+    expect(() => requireDetectorKeys(data, QUEUE_ORDER.quick)).toThrow(/pattern_analysis: data\.deadline_health/);
+  });
+
+  it('passes when every key is present, including a present-but-empty detector', () => {
+    const data: Record<string, unknown> = {
+      missing_next_actions: { items: [] },
+      deadline_health: { items: {} },
+      waiting_for: { items: {} },
+    };
+    expect(() => requireDetectorKeys(data, QUEUE_ORDER.quick)).not.toThrow();
+  });
+
+  it('checks every key in deep mode, including dormant_projects', () => {
+    const data: Record<string, unknown> = {
+      missing_next_actions: { items: [] },
+      deadline_health: { items: {} },
+      waiting_for: { items: {} },
+    };
+    expect(() => requireDetectorKeys(data, QUEUE_ORDER.deep)).toThrow(/pattern_analysis: data\.dormant_projects/);
   });
 });
 

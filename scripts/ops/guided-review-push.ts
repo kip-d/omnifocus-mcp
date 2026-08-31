@@ -153,8 +153,17 @@ export function buildQueue(patterns: PatternData, slice: ReviewProject[], mode: 
     all.push(...items);
   }
   // deadline_health returns at most 5 samples; if the detector saw more, the count above is a floor.
+  // In deep mode there is no slice filter, so overdue_count (the detector's true
+  // total) is a safe stand-in for the returned-sample count and replaces it —
+  // mirrors exactly what waiting_for does with candidates_total and
+  // dormant_projects does with count. Quick mode keeps the filtered row count
+  // (the un-returned overdue tasks were never checked against the review
+  // slice) but still flags the floor.
   const dh = patterns.deadline_health?.items;
-  if (dh && (dh.overdue_count ?? 0) > (dh.overdue_samples?.length ?? 0)) floors.deadline_health = true;
+  if (dh && (dh.overdue_count ?? 0) > (dh.overdue_samples?.length ?? 0)) {
+    floors.deadline_health = true;
+    if (mode === 'deep') perQueue.deadline_health = dh.overdue_count as number;
+  }
 
   // waiting_for is capped LOUDLY by the detector (screen.capped) — see
   // analyzeWaitingFor in OmniFocusAnalyzeTool.ts. In deep mode there is no
@@ -255,6 +264,15 @@ export function requireObject(value: unknown, label: string): Record<string, unk
     throw new Error(`${label}: expected an object, got ${value === undefined ? 'undefined' : typeof value}`);
   }
   return value as Record<string, unknown>;
+}
+
+// A detector key silently missing from pattern_analysis's response must never
+// read as "0 items in that queue" — same reasoning as requireArray/requireObject
+// above, applied per-key so one dropped insight can't hide as a clean zero.
+export function requireDetectorKeys(data: Record<string, unknown>, keys: string[]): void {
+  for (const key of keys) {
+    requireObject(data[key], `pattern_analysis: data.${key}`);
+  }
 }
 
 // createTaskResponseV2 (src/utils/response-format.ts) keys the same three
@@ -360,9 +378,17 @@ async function main(): Promise<void> {
       throw new Error(`server build is stale (buildId ${vd.buildId}); rebuild before running the push`);
     }
 
-    const reviews = await call('omnifocus_analyze', {
-      analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
-    });
+    // manage_reviews and pattern_analysis have no data dependency on each
+    // other — run them concurrently. Promise.all rejects (loudly) on the
+    // first failure, same error propagation as the sequential calls before.
+    const [reviews, patterns] = await Promise.all([
+      call('omnifocus_analyze', {
+        analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+      }),
+      call('omnifocus_analyze', {
+        analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
+      }),
+    ]);
     const projects = requireArray(reviews.data?.projects, 'manage_reviews list_for_review: data.projects');
     const slice: ReviewProject[] = projects.map((p: any) => ({
       id: p.id,
@@ -370,10 +396,10 @@ async function main(): Promise<void> {
       reviewStatus: p.reviewStatus,
     }));
 
-    const patterns = await call('omnifocus_analyze', {
-      analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
-    });
     const patternsData = requireObject(patterns.data, 'pattern_analysis: data');
+    // A detector key missing from the response must throw, not silently count
+    // as 0 for that queue — see requireDetectorKeys.
+    requireDetectorKeys(patternsData, QUEUE_ORDER[mode]);
     const queue = buildQueue(patternsData as PatternData, slice, mode);
 
     const inbox = await call('omnifocus_read', {
@@ -388,7 +414,13 @@ async function main(): Promise<void> {
     // A truncated response could hide the existing Review: item, causing a
     // duplicate to be created — see assertNotTruncated.
     assertNotTruncated(inbox.metadata, 'inbox review-item lookup');
-    const open: Array<{ id: string; name: string }> = (inbox.data?.tasks ?? inbox.data?.items ?? []).map((t: any) => ({
+    // A missing list (neither `tasks` nor `items` present) must throw, not
+    // silently become "no existing item" — an empty array still means that.
+    const inboxList = inbox.data?.tasks ?? inbox.data?.items;
+    const open: Array<{ id: string; name: string }> = requireArray(
+      inboxList,
+      'omnifocus_read inbox: data.tasks/items',
+    ).map((t: any) => ({
       id: t.id,
       name: t.name,
     }));
