@@ -1802,7 +1802,11 @@ TIME-WINDOW SCOPING:
     for (const p of projects) {
       if (p.status !== 'onHold') continue;
 
-      const projTasks = tasksByProject.get(p.id) ?? [];
+      // Both terminal states excluded: a dropped task has completed===false
+      // (fetchSlimmedData's include_completed:false only filters completed),
+      // so without the status check a dropped task's stale defer/due date
+      // would still fire here.
+      const projTasks = (tasksByProject.get(p.id) ?? []).filter((t) => t.status !== 'dropped');
       const pastDeferTask = projTasks.find((t) => t.deferDate && new Date(t.deferDate).getTime() <= now);
       if (pastDeferTask) {
         candidates.push({
@@ -1868,7 +1872,10 @@ TIME-WINDOW SCOPING:
 
     for (const p of projects) {
       if (p.status !== 'active' || p.sequential !== true) continue;
-      const incomplete = (tasksByProject.get(p.id) ?? []).filter((t) => !t.completed);
+      // Both terminal states excluded: a dropped task has completed===false,
+      // so without the status check a dropped task could be picked as the
+      // sequential project's "head" blocking task.
+      const incomplete = (tasksByProject.get(p.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
       if (incomplete.length === 0) continue;
 
       const head = incomplete[0];

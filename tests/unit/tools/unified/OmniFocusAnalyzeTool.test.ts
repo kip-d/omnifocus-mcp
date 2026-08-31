@@ -2484,6 +2484,44 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(finding.count).toBe(1);
       expect(finding.items[0].reason).toContain('defer date passed');
     });
+
+    it('does not fire on a dropped task with a past defer date or a near-term due date — dropped has completed:false', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't10',
+              name: 'Abandoned, past defer',
+              project: 'On hold G',
+              projectId: 'poh10',
+              deferDate: pastDefer,
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'dropped',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh10',
+              name: 'On hold G',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation.count).toBe(0);
+    });
   });
 
   describe('pattern_analysis sequential_blocked_far (OMN-315)', () => {
@@ -2788,6 +2826,56 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(finding.count).toBe(1);
       expect(finding.items[0].blockingTaskName).toBe('True head');
       expect(finding.items[0].tasksBehind).toBe(0);
+    });
+
+    it('skips a dropped task at the front of the array — dropped has completed:false but is not the head', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't8c',
+              name: 'Abandoned',
+              project: 'Seq H',
+              projectId: 'pseq7',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'dropped',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't8d',
+              name: 'True head 2',
+              project: 'Seq H',
+              projectId: 'pseq7',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq7',
+              name: 'Seq H',
+              status: 'active status',
+              taskCount: 2,
+              availableTaskCount: 1,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
     });
   });
 
