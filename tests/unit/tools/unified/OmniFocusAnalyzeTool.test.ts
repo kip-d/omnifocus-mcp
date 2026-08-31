@@ -2697,6 +2697,98 @@ describe('OmniFocusAnalyzeTool', () => {
       });
       expect(res.data.sequential_blocked_far.count).toBe(0);
     });
+
+    it('a task deferred exactly at the daysOut boundary (30 days) is not reported — only strictly more', async () => {
+      const exactlyAtBoundary = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't7',
+              name: 'At boundary',
+              project: 'Seq F',
+              projectId: 'pseq5',
+              deferDate: exactlyAtBoundary,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq5',
+              name: 'Seq F',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('skips a completed task at the front of the array — the first INCOMPLETE task is what counts', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't8a',
+              name: 'Already done',
+              project: 'Seq G',
+              projectId: 'pseq6',
+              completed: true,
+              flagged: false,
+              status: 'completed',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't8b',
+              name: 'True head',
+              project: 'Seq G',
+              projectId: 'pseq6',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq6',
+              name: 'Seq G',
+              status: 'active status',
+              taskCount: 2,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      const finding = res.data.sequential_blocked_far;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].blockingTaskName).toBe('True head');
+      expect(finding.items[0].tasksBehind).toBe(0);
+    });
   });
 
   // OMN-315: `sequential` is a new field on the project scan, needed by
