@@ -104,6 +104,14 @@ wait "$probe_pid" 2>/dev/null || preflight_rc=$?
 kill "$watchdog_pid" 2>/dev/null || true
 
 if [ "$preflight_rc" -ne 0 ]; then
+  # OmniFocus can quit in the window between the liveness pgrep above and this
+  # probe timing out (a user-initiated quit mid-preflight, e.g.). That is
+  # SKIPPED (nothing to push against), not WEDGED (an app that is still
+  # running but not answering) — re-check liveness before deciding which.
+  if ! pgrep -x OmniFocus >/dev/null 2>&1; then
+    log "STATUS: SKIPPED — OmniFocus quit between the liveness check and the preflight probe; nothing pushed."
+    exit 0
+  fi
   log "STATUS: WEDGED — OmniFocus is running but did not answer an AppleEvent within ${PREFLIGHT_TIMEOUT}s (rc=$preflight_rc)."
   log "  The push was NOT run. This is an environment blocker, not a code bug."
   log "  Two different causes look identical here and need different fixes:"
