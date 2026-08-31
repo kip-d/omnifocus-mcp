@@ -350,10 +350,15 @@ describe('assertNotTruncated', () => {
     expect(() => assertNotTruncated({ total_count: 3, returned_count: 3 }, 'x')).not.toThrow();
   });
 
-  it('passes when the truncation fields are entirely absent (absence is not ambiguous here — createTaskResponseV2 only ever sets truncated:true, never false, so missing means not truncated)', () => {
+  it('passes when the truncation FIELDS are entirely absent from a real metadata object (absence is not ambiguous here — createTaskResponseV2 only ever sets truncated:true, never false, so missing means not truncated)', () => {
     expect(() => assertNotTruncated({}, 'x')).not.toThrow();
-    expect(() => assertNotTruncated(undefined, 'x')).not.toThrow();
-    expect(() => assertNotTruncated(null, 'x')).not.toThrow();
+  });
+
+  it('throws when the metadata ENVELOPE itself is missing/null/non-object — that is an unverifiable listing, not "not truncated"', () => {
+    expect(() => assertNotTruncated(undefined, 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
+    expect(() => assertNotTruncated(null, 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
+    expect(() => assertNotTruncated('nope', 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
+    expect(() => assertNotTruncated([], 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
   });
 });
 

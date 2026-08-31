@@ -280,13 +280,20 @@ export function requireDetectorKeys(data: Record<string, unknown>, keys: string[
 // applyCountHonesty finds offset+returned < population, and total_count/
 // returned_count always accompany it (response-format.ts:130-136,741-746;
 // wired for `mode: 'inbox'` task queries at
-// src/tools/unified/OmniFocusReadTool.ts:636). Absence of `truncated` is
-// therefore unambiguous — it's never explicitly cleared, so a missing field
-// means "not truncated", not "unknown". total_count > returned_count is kept
-// as a second, independent check in case a future response shape carries the
-// counts without the boolean.
+// src/tools/unified/OmniFocusReadTool.ts:636). Absence of the `truncated`
+// FIELD on a real metadata object is therefore unambiguous — it's never
+// explicitly cleared, so a missing field means "not truncated", not
+// "unknown". total_count > returned_count is kept as a second, independent
+// check in case a future response shape carries the counts without the
+// boolean. But absence of the metadata ENVELOPE itself (missing/null/
+// non-object) is a different failure: the response shape changed and this
+// script can no longer see whether the listing was truncated at all — same
+// "never silently read as fine" reasoning as requireArray/requireObject
+// above, so it throws rather than treating an unverifiable listing as safe.
 export function assertNotTruncated(metadata: unknown, label: string): void {
-  if (typeof metadata !== 'object' || metadata === null) return;
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+    throw new Error(`${label}: response has no metadata envelope — refusing to trust an unverifiable listing`);
+  }
   const m = metadata as { truncated?: unknown; total_count?: unknown; returned_count?: unknown };
   const total = typeof m.total_count === 'number' ? m.total_count : undefined;
   const returned = typeof m.returned_count === 'number' ? m.returned_count : undefined;
@@ -375,7 +382,8 @@ async function main(): Promise<void> {
     const version = await call('system', { operation: 'version' });
     const vd = version.data ?? version;
     if (vd.stale === true) {
-      throw new Error(`server build is stale (buildId ${vd.buildId}); rebuild before running the push`);
+      const buildId = vd.build?.buildId ?? vd.buildId;
+      throw new Error(`server build is stale (buildId ${buildId}); rebuild before running the push`);
     }
 
     // manage_reviews and pattern_analysis have no data dependency on each

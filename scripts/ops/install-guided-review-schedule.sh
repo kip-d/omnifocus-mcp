@@ -43,8 +43,8 @@ ITEM_PREFIX_VALUE="${OF_MCP_REVIEW_ITEM_PREFIX:-Review: }"
 # twice.
 RUN_TIMEOUT_VALUE="${OF_MCP_GUIDED_REVIEW_TIMEOUT:-600}"
 case "$RUN_TIMEOUT_VALUE" in
-  ''|*[!0-9]*|0)
-    echo "ERROR: OF_MCP_GUIDED_REVIEW_TIMEOUT must be a positive integer (got \"$RUN_TIMEOUT_VALUE\")." >&2
+  ''|*[!0-9]*|0|0[0-9]*)
+    echo "ERROR: OF_MCP_GUIDED_REVIEW_TIMEOUT must be a positive integer with no leading zero (got \"$RUN_TIMEOUT_VALUE\")." >&2
     exit 1 ;;
 esac
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
@@ -205,7 +205,7 @@ if [ "$MODE" = "verify" ]; then
   # reading the env var independently here (rather than reusing
   # RUN_TIMEOUT_VALUE) could let the poll budget and the deployed timeout
   # disagree if the variable changed between the two reads.
-  verify_budget=$(( RUN_TIMEOUT_VALUE * 12 / 10 ))
+  verify_budget=$(( 10#$RUN_TIMEOUT_VALUE * 12 / 10 ))
   verify_polls=$(( verify_budget / 5 + 1 ))
   echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
   new_region=""
