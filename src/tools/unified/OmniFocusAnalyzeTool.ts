@@ -268,6 +268,8 @@ export const KNOWN_PATTERNS = [
   'wip_limits',
   'due_date_bunching',
   'missing_next_actions',
+  'onhold_reactivation',
+  'sequential_blocked_far',
 ];
 
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
@@ -1171,6 +1173,7 @@ TIME-WINDOW SCOPING:
         max_tasks: 3000,
         wip_limit: 5,
         bunching_threshold: 8,
+        reactivation_days_ahead: 14,
       };
 
       // Expand 'all' to include all patterns (KNOWN_PATTERNS is module-level, exported)
@@ -1277,6 +1280,13 @@ TIME-WINDOW SCOPING:
             break;
           case 'missing_next_actions':
             findings.missing_next_actions = this.detectMissingNextActions(slimData.projects);
+            break;
+          case 'onhold_reactivation':
+            findings.onhold_reactivation = this.detectOnholdReactivation(
+              slimData.projects,
+              slimData.tasks,
+              options.reactivation_days_ahead,
+            );
             break;
         }
       }
@@ -1763,6 +1773,69 @@ TIME-WINDOW SCOPING:
         stalled.length > 0
           ? `${stalled.length} active project(s) have no available next action. Each needs a next action defined, or should be completed, put on hold, or dropped.`
           : 'Every active project has at least one available next action.',
+    };
+  }
+
+  // OMN-315: reactivation-readiness check for deliberately on-hold projects.
+  // "Is this ready to reactivate?", never "why is this on hold?" — an
+  // on-hold project with none of these signals is left alone, not flagged.
+  private detectOnholdReactivation(projects: ProjectData[], tasks: SlimTask[], daysAhead: number): PatternFinding {
+    const now = Date.now();
+    const dueSoonCutoff = now + daysAhead * 24 * 60 * 60 * 1000;
+    const tasksByProject = new Map<string, SlimTask[]>();
+    for (const t of tasks) {
+      if (!t.projectId) continue;
+      const arr = tasksByProject.get(t.projectId) ?? [];
+      arr.push(t);
+      tasksByProject.set(t.projectId, arr);
+    }
+
+    const candidates: Array<{ id: string; name: string; folder: string | null; reason: string }> = [];
+    for (const p of projects) {
+      if (p.status !== 'onHold') continue;
+
+      const projTasks = tasksByProject.get(p.id) ?? [];
+      const pastDeferTask = projTasks.find((t) => t.deferDate && new Date(t.deferDate).getTime() <= now);
+      if (pastDeferTask) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `task "${pastDeferTask.name}" defer date passed (${pastDeferTask.deferDate})`,
+        });
+        continue;
+      }
+
+      const dueSoonTask = projTasks.find((t) => t.dueDate && new Date(t.dueDate).getTime() <= dueSoonCutoff);
+      if (dueSoonTask) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `task "${dueSoonTask.name}" due within ${daysAhead} days (${dueSoonTask.dueDate})`,
+        });
+        continue;
+      }
+
+      if (p.nextReviewDate && new Date(p.nextReviewDate).getTime() <= now) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `review overdue (nextReviewDate ${p.nextReviewDate})`,
+        });
+      }
+    }
+
+    return {
+      type: 'onhold_reactivation',
+      severity: candidates.length > 5 ? 'warning' : 'info',
+      count: candidates.length,
+      items: candidates,
+      recommendation:
+        candidates.length > 0
+          ? `${candidates.length} on-hold project(s) show a signal they may be ready to reactivate.`
+          : 'No on-hold projects show a reactivation signal.',
     };
   }
 

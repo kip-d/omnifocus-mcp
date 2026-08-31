@@ -2250,6 +2250,201 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  describe('pattern_analysis onhold_reactivation (OMN-315)', () => {
+    const now = new Date('2026-08-31T12:00:00Z');
+    const pastDefer = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days ago
+    const soonDue = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days from now
+    const farDue = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days from now
+    const pastReview = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString(); // 1 day ago
+
+    it('reports an on-hold project with a task whose defer date has passed', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Follow up',
+              project: 'On hold A',
+              projectId: 'poh1',
+              deferDate: pastDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh1',
+              name: 'On hold A',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'pact',
+              name: 'Active, not on hold',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.success).toBe(true);
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items.map((i: any) => i.id)).toEqual(['poh1']);
+      expect(finding.items[0].reason).toContain('defer date passed');
+    });
+
+    it('reports an on-hold project with a task due within the window, but not one due far out', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't2',
+              name: 'Due soon',
+              project: 'On hold B',
+              projectId: 'poh2',
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't3',
+              name: 'Due far',
+              project: 'On hold C',
+              projectId: 'poh3',
+              dueDate: farDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh2',
+              name: 'On hold B',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'poh3',
+              name: 'On hold C',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const ids = res.data.onhold_reactivation.items.map((i: any) => i.id);
+      expect(ids).toEqual(['poh2']);
+    });
+
+    it('reports an on-hold project whose nextReviewDate has passed, even with no qualifying task', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'poh4',
+              name: 'Review overdue',
+              status: 'on hold status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+              nextReviewDate: pastReview,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].reason).toContain('review overdue');
+    });
+
+    it('does not report an on-hold project with no qualifying signal, or an active project at all', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't5',
+              name: 'Far out task',
+              project: 'On hold D',
+              projectId: 'poh5',
+              deferDate: farDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh5',
+              name: 'On hold D',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'pact2',
+              name: 'Active E',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation.count).toBe(0);
+    });
+
+    it('empty case: no on-hold projects at all', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation).toMatchObject({ type: 'onhold_reactivation', count: 0, severity: 'info' });
+    });
+  });
+
   // OMN-315: `sequential` is a new field on the project scan, needed by
   // sequential_blocked_far. This test only proves the field survives the
   // Zod boundary (SlimProjectSchema) end-to-end through pattern_analysis —
