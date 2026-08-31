@@ -39,7 +39,8 @@ describe('GuidedReviewPrompt', () => {
       'deadline_health',
       'waiting_for',
       'dormant_projects',
-      'on_hold_projects',
+      'onhold_reactivation',
+      'sequential_blocked_far',
       'wip_limits',
       'clarify_candidates',
       'review_gaps',
@@ -58,11 +59,11 @@ describe('GuidedReviewPrompt', () => {
       const match = text.match(/insights: (\[.*?\])/);
       expect(match).not.toBeNull();
       const insights = JSON.parse(match![1]);
-      expect(insights).not.toContain('on_hold_projects');
       expect(insights).not.toContain('productivity_check');
+      expect(insights).toContain('onhold_reactivation');
+      expect(insights).toContain('sequential_blocked_far');
 
       const queueOrderLine = text.split('\n').find((l) => l.startsWith('Queue order:'));
-      expect(queueOrderLine).toContain('on_hold_projects');
       if (mode === 'deep') {
         expect(queueOrderLine).toContain('productivity_check');
       }
