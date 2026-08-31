@@ -1362,6 +1362,41 @@ describe('SlimmedDataSchema', () => {
   });
 });
 
+// OMN-315: the OmniFocusAnalyzeTool.test.ts mocked test for this field can't
+// exercise SlimProjectSchema's .strict() at all (mockOmni.executeJson bypasses
+// real Zod validation). This is the actual regression guard.
+describe('SlimmedDataSchema (OMN-315)', () => {
+  it('accepts a project with sequential:true and preserves the value', () => {
+    const result = SlimmedDataSchema.parse({
+      tasks: [],
+      projects: [
+        {
+          id: 'p1',
+          name: 'Seq',
+          status: 'active',
+          taskCount: 0,
+          availableTaskCount: 0,
+          folder: null,
+          sequential: true,
+        },
+      ],
+      tags: [],
+    });
+    expect(result.projects[0].sequential).toBe(true);
+  });
+
+  it('accepts a project without a sequential key at all (genuinely optional)', () => {
+    const result = SlimmedDataSchema.parse({
+      tasks: [],
+      projects: [
+        { id: 'p2', name: 'No seq field', status: 'active', taskCount: 0, availableTaskCount: 0, folder: null },
+      ],
+      tags: [],
+    });
+    expect(result.projects[0].sequential).toBeUndefined();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // RecurringPatternsSchema
 // Source: GET_RECURRING_PATTERNS_SCRIPT → JSON.stringify({...parsed, duration, debug})
