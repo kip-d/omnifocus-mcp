@@ -12,6 +12,7 @@ import {
   requireObject,
   requireDetectorKeys,
   assertNotTruncated,
+  fetchReviewData,
   type PatternData,
   type ReviewProject,
 } from '../../../scripts/ops/guided-review-push.js';
@@ -359,6 +360,38 @@ describe('assertNotTruncated', () => {
     expect(() => assertNotTruncated(null, 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
     expect(() => assertNotTruncated('nope', 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
     expect(() => assertNotTruncated([], 'inbox lookup')).toThrow(/inbox lookup.*no metadata envelope/i);
+  });
+});
+
+describe('fetchReviewData (OMN-320 regression guard)', () => {
+  // This exact call site has flip-flopped sequential -> concurrent -> sequential
+  // once already; concurrent Promise.all killed a real production run (the
+  // bridge is not reentrant for two multi-second calls, and the client's
+  // fail-fast teardown signal-killed the still-in-flight sibling). This test
+  // fails immediately if a future edit re-parallelizes the two calls.
+  it('awaits list_for_review to completion before starting pattern_analysis (never overlaps)', async () => {
+    let concurrentCalls = 0;
+    let maxConcurrentCalls = 0;
+    const callOrder: string[] = [];
+
+    const call = async (_name: string, args: unknown): Promise<any> => {
+      concurrentCalls++;
+      maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+      const op = (args as any)?.analysis?.params?.operation ?? (args as any)?.analysis?.type;
+      callOrder.push(op);
+      // Yield so a concurrent (incorrect) second call would overlap this one.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      concurrentCalls--;
+      if (op === 'list_for_review') return { data: { projects: [] } };
+      return {
+        data: { missing_next_actions: { items: [] }, deadline_health: { items: {} }, waiting_for: { items: {} } },
+      };
+    };
+
+    await fetchReviewData(call, 'quick');
+
+    expect(maxConcurrentCalls).toBe(1);
+    expect(callOrder).toEqual(['list_for_review', 'pattern_analysis']);
   });
 });
 
