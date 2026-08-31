@@ -2443,6 +2443,47 @@ describe('OmniFocusAnalyzeTool', () => {
       });
       expect(res.data.onhold_reactivation).toMatchObject({ type: 'onhold_reactivation', count: 0, severity: 'info' });
     });
+
+    it('reports a project matching multiple signals only once, in priority order (defer > due > review)', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't9',
+              name: 'Both signals',
+              project: 'On hold F',
+              projectId: 'poh9',
+              deferDate: pastDefer,
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh9',
+              name: 'On hold F',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              nextReviewDate: pastReview,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].reason).toContain('defer date passed');
+    });
   });
 
   // OMN-315: `sequential` is a new field on the project scan, needed by
