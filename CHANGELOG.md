@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`of-mcp-guided-review`, installer, plist template) that runs the review detectors and creates/updates ONE OmniFocus
   inbox item `Review: N decisions waiting`; silent when nothing is waiting; Saturday runs deep mode. Runbook:
   `docs/dev/guided-review-push.md`.
+- **`onhold_reactivation` + `sequential_blocked_far` pattern_analysis detectors** (OMN-315) — reactivation-readiness
+  signals for deliberately on-hold projects (a task's defer date passed, a task due soon, or an overdue review), and a
+  silently-blocked-sequential-project check (first incomplete task deferred far out). Both are scan + evidence bundles,
+  no severity verdict. `guided_review`'s `standard`/`deep` modes now route through these instead of a raw "list all
+  on-hold projects" read. New `ProjectData.sequential` field on the `pattern_analysis` project scan.
 
 ### Changed
 

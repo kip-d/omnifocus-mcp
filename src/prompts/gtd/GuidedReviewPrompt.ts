@@ -10,8 +10,8 @@ import { BasePrompt, PromptArgument, PromptArgumentError } from '../base.js';
 export const REVIEW_MODES = ['quick', 'standard', 'deep'] as const;
 export type ReviewMode = (typeof REVIEW_MODES)[number];
 
-// Order is the presentation order. `on_hold_projects` and `productivity_check`
-// are read/analyze calls, not pattern_analysis detectors — see NON_DETECTOR_QUEUES.
+// Order is the presentation order. `productivity_check` is a read/analyze
+// call, not a pattern_analysis detector — see NON_DETECTOR_QUEUES.
 export const QUEUES_BY_MODE: Record<ReviewMode, readonly string[]> = {
   quick: ['missing_next_actions', 'deadline_health', 'waiting_for'],
   standard: [
@@ -19,7 +19,8 @@ export const QUEUES_BY_MODE: Record<ReviewMode, readonly string[]> = {
     'deadline_health',
     'waiting_for',
     'dormant_projects',
-    'on_hold_projects',
+    'onhold_reactivation',
+    'sequential_blocked_far',
     'wip_limits',
   ],
   deep: [
@@ -27,7 +28,8 @@ export const QUEUES_BY_MODE: Record<ReviewMode, readonly string[]> = {
     'deadline_health',
     'waiting_for',
     'dormant_projects',
-    'on_hold_projects',
+    'onhold_reactivation',
+    'sequential_blocked_far',
     'wip_limits',
     'clarify_candidates',
     'review_gaps',
@@ -40,7 +42,7 @@ export const QUEUES_BY_MODE: Record<ReviewMode, readonly string[]> = {
 // words (the OMN-258 verb-whitelist screen is a different, demoted thing).
 export const DECISION_OUTCOMES = ['define', 'hold', 'handoff', 'drop', 'done', 'skip'] as const;
 
-const NON_DETECTOR_QUEUES = new Set(['on_hold_projects', 'productivity_check']);
+const NON_DETECTOR_QUEUES = new Set(['productivity_check']);
 
 // Coerces an arbitrary argument value into a string candidate mode, without
 // normalizing case — exact lowercase match against REVIEW_MODES is deliberate.
@@ -88,9 +90,6 @@ export class GuidedReviewPrompt extends BasePrompt {
     const population = describePopulation(mode);
 
     const extraCalls = [
-      queues.includes('on_hold_projects')
-        ? 'on_hold_projects = omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } }).'
-        : '',
       queues.includes('productivity_check')
         ? 'productivity_check = omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } }) — read, do not act.'
         : '',

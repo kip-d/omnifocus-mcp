@@ -186,6 +186,9 @@ interface ProjectData {
   creationDate?: string;
   modificationDate?: string;
   completionDate?: string;
+  // OMN-315: whether the project is a sequential action group. Optional to
+  // match the emitter's try/catch-degrades-to-omitted convention.
+  sequential?: boolean;
 }
 
 interface TagData {
@@ -265,6 +268,8 @@ export const KNOWN_PATTERNS = [
   'wip_limits',
   'due_date_bunching',
   'missing_next_actions',
+  'onhold_reactivation',
+  'sequential_blocked_far',
 ];
 
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
@@ -1168,6 +1173,8 @@ TIME-WINDOW SCOPING:
         max_tasks: 3000,
         wip_limit: 5,
         bunching_threshold: 8,
+        reactivation_days_ahead: 14,
+        sequential_blocked_days: 30,
       };
 
       // Expand 'all' to include all patterns (KNOWN_PATTERNS is module-level, exported)
@@ -1275,6 +1282,20 @@ TIME-WINDOW SCOPING:
           case 'missing_next_actions':
             findings.missing_next_actions = this.detectMissingNextActions(slimData.projects);
             break;
+          case 'onhold_reactivation':
+            findings.onhold_reactivation = this.detectOnholdReactivation(
+              slimData.projects,
+              slimData.tasks,
+              options.reactivation_days_ahead,
+            );
+            break;
+          case 'sequential_blocked_far':
+            findings.sequential_blocked_far = this.detectSequentialBlockedFar(
+              slimData.projects,
+              slimData.tasks,
+              options.sequential_blocked_days,
+            );
+            break;
         }
       }
 
@@ -1296,19 +1317,25 @@ TIME-WINDOW SCOPING:
     }
   }
 
+  // OMN-315: shared by analyzeWipPattern, detectOnholdReactivation, and
+  // detectSequentialBlockedFar — was duplicated three times independently
+  // before this extraction (flagged in the OMN-315 Task 2 code review).
+  private groupTasksByProject(tasks: SlimTask[]): Map<string, SlimTask[]> {
+    const byProject = new Map<string, SlimTask[]>();
+    for (const task of tasks) {
+      if (!task.projectId) continue;
+      const arr = byProject.get(task.projectId) ?? [];
+      arr.push(task);
+      byProject.set(task.projectId, arr);
+    }
+    return byProject;
+  }
+
   private analyzeWipPattern(
     slimData: { tasks: SlimTask[]; projects: ProjectData[] },
     wipLimit: number,
   ): PatternFinding {
-    const tasksByProject = new Map<string, SlimTask[]>();
-    for (const task of slimData.tasks) {
-      if (task.projectId) {
-        if (!tasksByProject.has(task.projectId)) {
-          tasksByProject.set(task.projectId, []);
-        }
-        tasksByProject.get(task.projectId)!.push(task);
-      }
-    }
+    const tasksByProject = this.groupTasksByProject(slimData.tasks);
 
     const projectsWithTasks = slimData.projects.map((project) => ({
       id: project.id,
@@ -1525,6 +1552,7 @@ TIME-WINDOW SCOPING:
           putISO(projectData, 'creationDate', project, 'added');
           putISO(projectData, 'modificationDate', project, 'modified');
           putISO(projectData, 'completionDate', project, 'completionDate');
+          try { projectData.sequential = project.sequential; } catch(e) {}
 
           projects.push(projectData);
         } catch(e) {}
@@ -1759,6 +1787,121 @@ TIME-WINDOW SCOPING:
         stalled.length > 0
           ? `${stalled.length} active project(s) have no available next action. Each needs a next action defined, or should be completed, put on hold, or dropped.`
           : 'Every active project has at least one available next action.',
+    };
+  }
+
+  // OMN-315: reactivation-readiness check for deliberately on-hold projects.
+  // "Is this ready to reactivate?", never "why is this on hold?" — an
+  // on-hold project with none of these signals is left alone, not flagged.
+  private detectOnholdReactivation(projects: ProjectData[], tasks: SlimTask[], daysAhead: number): PatternFinding {
+    const now = Date.now();
+    const dueSoonCutoff = now + daysAhead * 24 * 60 * 60 * 1000;
+    const tasksByProject = this.groupTasksByProject(tasks);
+
+    const candidates: Array<{ id: string; name: string; folder: string | null; reason: string }> = [];
+    for (const p of projects) {
+      if (p.status !== 'onHold') continue;
+
+      // Both terminal states excluded: a dropped task has completed===false
+      // (fetchSlimmedData's include_completed:false only filters completed),
+      // so without the status check a dropped task's stale defer/due date
+      // would still fire here.
+      const projTasks = (tasksByProject.get(p.id) ?? []).filter((t) => t.status !== 'dropped');
+      const pastDeferTask = projTasks.find((t) => t.deferDate && new Date(t.deferDate).getTime() <= now);
+      if (pastDeferTask) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `task "${pastDeferTask.name}" defer date passed (${pastDeferTask.deferDate})`,
+        });
+        continue;
+      }
+
+      const dueSoonTask = projTasks.find((t) => t.dueDate && new Date(t.dueDate).getTime() <= dueSoonCutoff);
+      if (dueSoonTask) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `task "${dueSoonTask.name}" due within ${daysAhead} days (${dueSoonTask.dueDate})`,
+        });
+        continue;
+      }
+
+      if (p.nextReviewDate && new Date(p.nextReviewDate).getTime() <= now) {
+        candidates.push({
+          id: p.id,
+          name: p.name,
+          folder: p.folder,
+          reason: `review overdue (nextReviewDate ${p.nextReviewDate})`,
+        });
+      }
+    }
+
+    return {
+      type: 'onhold_reactivation',
+      severity: candidates.length > 5 ? 'warning' : 'info',
+      count: candidates.length,
+      items: candidates,
+      recommendation:
+        candidates.length > 0
+          ? `${candidates.length} on-hold project(s) show a signal they may be ready to reactivate.`
+          : 'No on-hold projects show a reactivation signal.',
+    };
+  }
+
+  // OMN-255 ride-along: a sequential project whose first incomplete task is
+  // deferred far out silently blocks every task behind it — invisible to
+  // missing_next_actions. Task order here is scan order, which Task 0's live
+  // probe confirmed matches flattenedTasks' outline order for a
+  // project-scoped filter.
+  private detectSequentialBlockedFar(projects: ProjectData[], tasks: SlimTask[], daysOut: number): PatternFinding {
+    const now = Date.now();
+    const cutoff = now + daysOut * 24 * 60 * 60 * 1000;
+    const tasksByProject = this.groupTasksByProject(tasks);
+
+    const candidates: Array<{
+      id: string;
+      name: string;
+      folder: string | null;
+      blockingTaskName: string;
+      blockingDeferDate: string;
+      tasksBehind: number;
+    }> = [];
+
+    for (const p of projects) {
+      if (p.status !== 'active' || p.sequential !== true) continue;
+      // Both terminal states excluded: a dropped task has completed===false,
+      // so without the status check a dropped task could be picked as the
+      // sequential project's "head" blocking task.
+      const incomplete = (tasksByProject.get(p.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
+      if (incomplete.length === 0) continue;
+
+      const head = incomplete[0];
+      if (!head.deferDate) continue;
+      const deferMs = new Date(head.deferDate).getTime();
+      if (deferMs <= cutoff) continue;
+
+      candidates.push({
+        id: p.id,
+        name: p.name,
+        folder: p.folder,
+        blockingTaskName: head.name,
+        blockingDeferDate: head.deferDate,
+        tasksBehind: incomplete.length - 1,
+      });
+    }
+
+    return {
+      type: 'sequential_blocked_far',
+      severity: candidates.length > 5 ? 'warning' : 'info',
+      count: candidates.length,
+      items: candidates,
+      recommendation:
+        candidates.length > 0
+          ? `${candidates.length} sequential project(s) are blocked by a task deferred more than ${daysOut} days out.`
+          : 'No sequential projects are blocked by a far-future defer date.',
     };
   }
 

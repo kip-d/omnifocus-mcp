@@ -8,11 +8,11 @@ time." The server scans and evidences; you present; the user judges. Never prese
 
 ## Modes
 
-| Mode              | Time      | Queues, in this order                                            | Population                           |
-| ----------------- | --------- | ---------------------------------------------------------------- | ------------------------------------ |
-| `quick` (default) | 10–15 min | missing_next_actions → deadline_health → waiting_for             | Today's `list_for_review` slice only |
-| `standard`        | 30 min    | quick + dormant_projects → on-hold projects → wip_limits         | All active + on-hold projects        |
-| `deep`            | 60 min    | standard + clarify_candidates → review_gaps → productivity check | Whole database                       |
+| Mode              | Time      | Queues, in this order                                                                | Population                           |
+| ----------------- | --------- | ------------------------------------------------------------------------------------ | ------------------------------------ |
+| `quick` (default) | 10–15 min | missing_next_actions → deadline_health → waiting_for                                 | Today's `list_for_review` slice only |
+| `standard`        | 30 min    | quick + dormant_projects → onhold_reactivation → sequential_blocked_far → wip_limits | All active + on-hold projects        |
+| `deep`            | 60 min    | standard + clarify_candidates → review_gaps → productivity check                     | Whole database                       |
 
 ## Step 1 — fetch the queues (two calls, never per-project fan-out)
 
@@ -20,23 +20,24 @@ time." The server scans and evidences; you present; the user judges. Never prese
 omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
 omnifocus_analyze({ analysis: { type: "pattern_analysis", params: { insights: [
   "missing_next_actions", "deadline_health", "waiting_for"            // quick
-  , "dormant_projects", "wip_limits"                                  // + standard
+  , "dormant_projects", "onhold_reactivation", "sequential_blocked_far", "wip_limits" // + standard
   , "clarify_candidates", "review_gaps"                               // + deep
 ] } } })
 ```
 
 Where each queue's items live in the `pattern_analysis` response:
 
-| Queue                | Path                                                                                                | Surfacing reason to quote                                                                |
-| -------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| missing_next_actions | `data.missing_next_actions.items[]` `{id,name,folder,task_count}`                                   | "active, 0 available tasks, N tasks total"                                               |
-| deadline_health      | `data.deadline_health.items.overdue_samples[]` `{id,name,project,days_overdue}` (+ `overdue_count`) | "due N days ago"                                                                         |
-| waiting_for          | `data.waiting_for.items.candidates[]` `{id,name,screen_reasons,note_head,defer_date,…}`             | the `screen_reasons` + `defer_date` — this is a **screen**, judge each from its evidence |
-| dormant_projects     | `data.dormant_projects.items[]` `{id,name,days_dormant,last_modified,available_tasks}`              | "no change in N days"                                                                    |
-| on-hold projects     | `omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })`                   | "on hold; N tasks" (until the `onhold_reactivation` detector lands — OMN-315)            |
-| wip_limits           | `data.wip_limits.items.projects_over_limit[]`                                                       | "N available actions at once"                                                            |
-| clarify_candidates   | `data.clarify_candidates.items.candidates[]`                                                        | screen reasons — judge from evidence                                                     |
-| review_gaps          | `data.review_gaps.items.never_reviewed[]` / `.overdue[]`                                            | "never reviewed" / "review overdue"                                                      |
+| Queue                  | Path                                                                                                    | Surfacing reason to quote                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| missing_next_actions   | `data.missing_next_actions.items[]` `{id,name,folder,task_count}`                                       | "active, 0 available tasks, N tasks total"                                               |
+| deadline_health        | `data.deadline_health.items.overdue_samples[]` `{id,name,project,days_overdue}` (+ `overdue_count`)     | "due N days ago"                                                                         |
+| waiting_for            | `data.waiting_for.items.candidates[]` `{id,name,screen_reasons,note_head,defer_date,…}`                 | the `screen_reasons` + `defer_date` — this is a **screen**, judge each from its evidence |
+| dormant_projects       | `data.dormant_projects.items[]` `{id,name,days_dormant,last_modified,available_tasks}`                  | "no change in N days"                                                                    |
+| onhold_reactivation    | `data.onhold_reactivation.items[]` `{id,name,folder,reason}`                                            | the `reason` field, verbatim — it already names the triggering task/date                 |
+| sequential_blocked_far | `data.sequential_blocked_far.items[]` `{id,name,folder,blockingTaskName,blockingDeferDate,tasksBehind}` | "blocked by \"<blockingTaskName>\" until <blockingDeferDate>, N tasks behind"            |
+| wip_limits             | `data.wip_limits.items.projects_over_limit[]`                                                           | "N available actions at once"                                                            |
+| clarify_candidates     | `data.clarify_candidates.items.candidates[]`                                                            | screen reasons — judge from evidence                                                     |
+| review_gaps            | `data.review_gaps.items.never_reviewed[]` / `.overdue[]`                                                | "never reviewed" / "review overdue"                                                      |
 
 **Quick mode population:** keep only items whose project id appears in `list_for_review`'s `data.projects[]` with
 `reviewStatus` of `overdue` or `due_today`. If that slice is empty, say so and offer `standard`.

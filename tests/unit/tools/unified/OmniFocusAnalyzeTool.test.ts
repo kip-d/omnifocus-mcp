@@ -2250,6 +2250,669 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  describe('pattern_analysis onhold_reactivation (OMN-315)', () => {
+    const now = new Date('2026-08-31T12:00:00Z');
+    const pastDefer = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days ago
+    const soonDue = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days from now
+    const farDue = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days from now
+    const pastReview = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString(); // 1 day ago
+
+    it('reports an on-hold project with a task whose defer date has passed', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Follow up',
+              project: 'On hold A',
+              projectId: 'poh1',
+              deferDate: pastDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh1',
+              name: 'On hold A',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'pact',
+              name: 'Active, not on hold',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.success).toBe(true);
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items.map((i: any) => i.id)).toEqual(['poh1']);
+      expect(finding.items[0].reason).toContain('defer date passed');
+    });
+
+    it('reports an on-hold project with a task due within the window, but not one due far out', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't2',
+              name: 'Due soon',
+              project: 'On hold B',
+              projectId: 'poh2',
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't3',
+              name: 'Due far',
+              project: 'On hold C',
+              projectId: 'poh3',
+              dueDate: farDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh2',
+              name: 'On hold B',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'poh3',
+              name: 'On hold C',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const ids = res.data.onhold_reactivation.items.map((i: any) => i.id);
+      expect(ids).toEqual(['poh2']);
+    });
+
+    it('reports an on-hold project whose nextReviewDate has passed, even with no qualifying task', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'poh4',
+              name: 'Review overdue',
+              status: 'on hold status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+              nextReviewDate: pastReview,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].reason).toContain('review overdue');
+    });
+
+    it('does not report an on-hold project with no qualifying signal, or an active project at all', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't5',
+              name: 'Far out task',
+              project: 'On hold D',
+              projectId: 'poh5',
+              deferDate: farDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh5',
+              name: 'On hold D',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+            {
+              id: 'pact2',
+              name: 'Active E',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation.count).toBe(0);
+    });
+
+    it('empty case: no on-hold projects at all', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation).toMatchObject({ type: 'onhold_reactivation', count: 0, severity: 'info' });
+    });
+
+    it('reports a project matching multiple signals only once, in priority order (defer > due > review)', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't9',
+              name: 'Both signals',
+              project: 'On hold F',
+              projectId: 'poh9',
+              deferDate: pastDefer,
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh9',
+              name: 'On hold F',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              nextReviewDate: pastReview,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      const finding = res.data.onhold_reactivation;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].reason).toContain('defer date passed');
+    });
+
+    it('does not fire on a dropped task with a past defer date or a near-term due date — dropped has completed:false', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't10',
+              name: 'Abandoned, past defer',
+              project: 'On hold G',
+              projectId: 'poh10',
+              deferDate: pastDefer,
+              dueDate: soonDue,
+              completed: false,
+              flagged: false,
+              status: 'dropped',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh10',
+              name: 'On hold G',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.data.onhold_reactivation.count).toBe(0);
+    });
+  });
+
+  describe('pattern_analysis sequential_blocked_far (OMN-315)', () => {
+    const now = new Date('2026-08-31T12:00:00Z');
+    const farDefer = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString(); // 45 days out
+    const soonDefer = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days out
+
+    it('reports a sequential project whose first incomplete task is deferred far out, with the count of tasks behind it', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Blocked head',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't2',
+              name: 'Behind 1',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't3',
+              name: 'Behind 2',
+              project: 'Seq A',
+              projectId: 'pseq1',
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq1',
+              name: 'Seq A',
+              status: 'active status',
+              taskCount: 3,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.success).toBe(true);
+      const finding = res.data.sequential_blocked_far;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0]).toMatchObject({
+        id: 'pseq1',
+        name: 'Seq A',
+        blockingTaskName: 'Blocked head',
+        tasksBehind: 2,
+      });
+    });
+
+    it('does not report a sequential project whose first incomplete task is deferred soon', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't4',
+              name: 'Blocked head 2',
+              project: 'Seq B',
+              projectId: 'pseq2',
+              deferDate: soonDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq2',
+              name: 'Seq B',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('does not report a non-sequential (parallel) project, even with a far-deferred first task', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't5',
+              name: 'Parallel task',
+              project: 'Parallel C',
+              projectId: 'ppar1',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'ppar1',
+              name: 'Parallel C',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: false,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('a sequential project with no incomplete tasks at all is not reported (nothing to block on)', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'pseq3',
+              name: 'Seq D empty',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('a sequential project whose first incomplete task has no defer date at all is not reported', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't6',
+              name: 'No defer',
+              project: 'Seq E',
+              projectId: 'pseq4',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq4',
+              name: 'Seq E',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('a task deferred exactly at the daysOut boundary (30 days) is not reported — only strictly more', async () => {
+      const exactlyAtBoundary = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't7',
+              name: 'At boundary',
+              project: 'Seq F',
+              projectId: 'pseq5',
+              deferDate: exactlyAtBoundary,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq5',
+              name: 'Seq F',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+
+    it('skips a completed task at the front of the array — the first INCOMPLETE task is what counts', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't8a',
+              name: 'Already done',
+              project: 'Seq G',
+              projectId: 'pseq6',
+              completed: true,
+              flagged: false,
+              status: 'completed',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't8b',
+              name: 'True head',
+              project: 'Seq G',
+              projectId: 'pseq6',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'blocked',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq6',
+              name: 'Seq G',
+              status: 'active status',
+              taskCount: 2,
+              availableTaskCount: 0,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      const finding = res.data.sequential_blocked_far;
+      expect(finding.count).toBe(1);
+      expect(finding.items[0].blockingTaskName).toBe('True head');
+      expect(finding.items[0].tasksBehind).toBe(0);
+    });
+
+    it('skips a dropped task at the front of the array — dropped has completed:false but is not the head', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't8c',
+              name: 'Abandoned',
+              project: 'Seq H',
+              projectId: 'pseq7',
+              deferDate: farDefer,
+              completed: false,
+              flagged: false,
+              status: 'dropped',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+            {
+              id: 't8d',
+              name: 'True head 2',
+              project: 'Seq H',
+              projectId: 'pseq7',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'pseq7',
+              name: 'Seq H',
+              status: 'active status',
+              taskCount: 2,
+              availableTaskCount: 1,
+              folder: null,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
+      });
+      expect(res.data.sequential_blocked_far.count).toBe(0);
+    });
+  });
+
+  // OMN-315: `sequential` is a new field on the project scan, needed by
+  // sequential_blocked_far. This test only proves the field survives the
+  // Zod boundary (SlimProjectSchema) end-to-end through pattern_analysis —
+  // the detector logic itself is tested separately.
+  describe('fetchSlimmedData sequential field (OMN-315)', () => {
+    it('a project with sequential:true survives the scan and reaches a detector that reads it', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'seq1',
+              name: 'Sequential proj',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      // missing_next_actions doesn't read sequential, but it DOES read the same
+      // ProjectData rows the scan produces — if SlimProjectSchema rejected the
+      // sequential key (e.g. .strict() without the field declared), this whole
+      // call would throw, not silently drop the field. A throw-free 200 here is
+      // the proof the field is accepted at the Zod boundary.
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+      expect(res.success).toBe(true);
+    });
+  });
+
   // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
 
   describe('inputSchema (MCP advertisement)', () => {
