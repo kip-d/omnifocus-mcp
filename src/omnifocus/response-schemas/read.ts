@@ -493,6 +493,10 @@ const SlimProjectSchema = z
     creationDate: z.string().optional(),
     modificationDate: z.string().optional(),
     completionDate: z.string().optional(),
+    // OMN-315: needed by sequential_blocked_far. Optional — the emitter's
+    // try/catch degrades a bad read to an omitted key, same as every other
+    // field here, never to a fabricated default.
+    sequential: z.boolean().optional(),
   })
   .strict();
 

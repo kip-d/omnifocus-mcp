@@ -2250,6 +2250,40 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  // OMN-315: `sequential` is a new field on the project scan, needed by
+  // sequential_blocked_far. This test only proves the field survives the
+  // Zod boundary (SlimProjectSchema) end-to-end through pattern_analysis —
+  // the detector logic itself is tested separately.
+  describe('fetchSlimmedData sequential field (OMN-315)', () => {
+    it('a project with sequential:true survives the scan and reaches a detector that reads it', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [],
+          projects: [
+            {
+              id: 'seq1',
+              name: 'Sequential proj',
+              status: 'active status',
+              taskCount: 0,
+              availableTaskCount: 0,
+              sequential: true,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      // missing_next_actions doesn't read sequential, but it DOES read the same
+      // ProjectData rows the scan produces — if SlimProjectSchema rejected the
+      // sequential key (e.g. .strict() without the field declared), this whole
+      // call would throw, not silently drop the field. A throw-free 200 here is
+      // the proof the field is accepted at the Zod boundary.
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['missing_next_actions'] } },
+      });
+      expect(res.success).toBe(true);
+    });
+  });
+
   // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
 
   describe('inputSchema (MCP advertisement)', () => {

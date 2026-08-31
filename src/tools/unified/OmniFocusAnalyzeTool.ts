@@ -186,6 +186,9 @@ interface ProjectData {
   creationDate?: string;
   modificationDate?: string;
   completionDate?: string;
+  // OMN-315: whether the project is a sequential action group. Optional to
+  // match the emitter's try/catch-degrades-to-omitted convention.
+  sequential?: boolean;
 }
 
 interface TagData {
@@ -1525,6 +1528,7 @@ TIME-WINDOW SCOPING:
           putISO(projectData, 'creationDate', project, 'added');
           putISO(projectData, 'modificationDate', project, 'modified');
           putISO(projectData, 'completionDate', project, 'completionDate');
+          try { projectData.sequential = project.sequential; } catch(e) {}
 
           projects.push(projectData);
         } catch(e) {}
