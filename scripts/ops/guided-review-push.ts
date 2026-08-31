@@ -333,6 +333,31 @@ export function parseArgs(argv: string[]): PushArgs {
 
 // JSON-RPC payloads are untyped by design here (same as scripts/verify-deploy.ts).
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * Deliberately SEQUENTIAL, not Promise.all (OMN-320 — corrects OMN-314's own
+ * round-2 "efficiency" fix). Full forensics in docs/dev/guided-review-push.md
+ * and the OMN-320 ticket; short version: the bridge is not safely reentrant
+ * for two concurrent multi-second calls from one client, and Promise.all's
+ * fail-fast teardown killed the still-in-flight sibling mid-scan on the first
+ * real scheduled run. Do not re-parallelize this without re-reading that
+ * postmortem first — this is the second time these two lines have flipped.
+ * Exported and dependency-injected on `call` so a test can assert the two
+ * calls never overlap (see tests/unit/scripts/guided-review-push.test.ts).
+ */
+export async function fetchReviewData(
+  call: (name: string, args: unknown) => Promise<any>,
+  mode: PushMode,
+): Promise<{ reviews: any; patterns: any }> {
+  const reviews = await call('omnifocus_analyze', {
+    analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+  });
+  const patterns = await call('omnifocus_analyze', {
+    analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
+  });
+  return { reviews, patterns };
+}
+
 async function main(): Promise<void> {
   const { server, mode, timeoutMs } = parseArgs(process.argv.slice(2));
   const transport = new StdioJsonRpcTransport({ serverPath: server });
@@ -386,29 +411,7 @@ async function main(): Promise<void> {
       throw new Error(`server build is stale (buildId ${buildId}); rebuild before running the push`);
     }
 
-    // Deliberately SEQUENTIAL, not Promise.all (OMN-320 — corrects OMN-314's
-    // own round-2 "efficiency" fix, which made these concurrent on the
-    // reasoning that they have no data dependency). That reasoning holds for
-    // data but not for resource contention: both are whole-DB OmniJS scans
-    // (~14-16s each on this database, confirmed live). OmniFocus's
-    // evaluateJavascript scripting engine is not safely reentrant for two
-    // concurrent multi-second calls from the same client — under launchd,
-    // firing them via Promise.all produced a `code: null` (signal-killed)
-    // failure on the first real scheduled run: the unified system log showed
-    // every AppleEvent got a clean reply from OmniFocus, but when one call
-    // rejected, Promise.all's fail-fast tore down the transport and killed
-    // the still-in-flight sibling's osascript child mid-execution. Each call
-    // verified to succeed cleanly and completely on its own. Running them
-    // concurrently buys nothing anyway — they're CPU/engine-bound on a
-    // shared single-threaded resource (OmniFocus's scripting engine), not
-    // independent I/O, so there is no wall-clock win to trade the reliability
-    // away for.
-    const reviews = await call('omnifocus_analyze', {
-      analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
-    });
-    const patterns = await call('omnifocus_analyze', {
-      analysis: { type: 'pattern_analysis', params: { insights: QUEUE_ORDER[mode] } },
-    });
+    const { reviews, patterns } = await fetchReviewData(call, mode);
     const projects = requireArray(reviews.data?.projects, 'manage_reviews list_for_review: data.projects');
     const slice: ReviewProject[] = projects.map((p: any) => ({
       id: p.id,
