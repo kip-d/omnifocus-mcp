@@ -81,6 +81,11 @@ export class CacheWarmer {
     const startTime = Date.now();
     logger.info('Starting cache warming...');
 
+    // The ops below are LAUNCHED concurrently but their osascript spawns run
+    // one at a time through the process-wide queue (OMN-321,
+    // src/omnifocus/osascript-queue.ts). OmniFocus already serialized them on
+    // its side, so wall-clock is unchanged (live: 14.0s queued vs 15.4s
+    // before); the per-op durations below include queue wait, not own work.
     const operations: Promise<WarmingResult>[] = [];
     const { categories, taskWarmingOptions } = this.strategy;
 

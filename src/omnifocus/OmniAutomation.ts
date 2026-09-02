@@ -141,14 +141,7 @@ export class OmniAutomation {
 
     // OMN-321: the spawn itself is queued process-wide; the spawn timeout only
     // starts once this script actually runs, not while it waits for a sibling.
-    const queuedAt = Date.now();
-    const promise = runSerialized(() => {
-      const queueWaitMs = Date.now() - queuedAt;
-      if (queueWaitMs > 100) {
-        logger.info(`osascript spawn waited ${queueWaitMs}ms for a preceding script to finish`);
-      }
-      return this.spawnScript<T>(wrappedScript);
-    });
+    const promise = runSerialized(() => this.spawnScript<T>(wrappedScript));
 
     // Track this promise to prevent premature server exit
     if (globalPendingOperations) {
@@ -392,7 +385,6 @@ export class OmniAutomation {
 
   // Execute OmniFocus automation via URL scheme (for operations requiring higher permissions)
   public async executeViaUrlScheme<T = unknown>(script: string): Promise<T> {
-    const { spawn } = await import('node:child_process');
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
@@ -403,6 +395,13 @@ export class OmniAutomation {
 
     logger.debug('Executing OmniAutomation script via URL scheme', { scriptLength: script.length });
 
+    // OMN-321: same process-wide queue as osascript — this also drives
+    // OmniFocus's automation channel, so it must not overlap a queued script.
+    return runSerialized(() => this.spawnUrlScheme<T>(url, script), 'open omnifocus://');
+  }
+
+  private async spawnUrlScheme<T>(url: string, script: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
     return new Promise((resolve, reject) => {
       // Use 'open' command to execute URL scheme
       const proc = spawn('open', [url], {

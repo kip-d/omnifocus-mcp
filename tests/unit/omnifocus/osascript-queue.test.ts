@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runSerialized } from '../../../src/omnifocus/osascript-queue.js';
 
 /**
@@ -57,6 +57,28 @@ describe('runSerialized (OMN-321)', () => {
     const next = runSerialized(async () => 'ran');
     await expect(failing).rejects.toThrow('boom');
     await expect(next).resolves.toBe('ran');
+  });
+
+  it('logs the queue wait with the caller label when a task waited more than 100ms', async () => {
+    // The logger writes straight to process.stderr; observe that seam rather
+    // than module-mocking the logger (a vi.mock of the logger module does not
+    // take effect for this import graph — the real logger still ran).
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    try {
+      const first = runSerialized(() => new Promise((r) => setTimeout(() => r('a'), 150)), 'first');
+      const second = runSerialized(async () => 'b', 'diagnostic osascript');
+      await Promise.all([first, second]);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(written.some((m) => m.includes('diagnostic osascript spawn waited') && /waited \d+ms/.test(m))).toBe(true);
+    // The first task never waited, so it must not be logged.
+    expect(written.some((m) => m.includes('first spawn waited'))).toBe(false);
   });
 
   it('propagates a synchronous throw from the task factory without wedging the queue', async () => {

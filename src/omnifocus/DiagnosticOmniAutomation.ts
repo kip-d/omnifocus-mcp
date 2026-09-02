@@ -45,7 +45,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
     // OMN-321: same process-wide osascript queue as OmniAutomation — a
     // diagnostics call must not run alongside a tool's script.
-    return runSerialized(() => this.spawnDiagnostic<T>(script, wrappedScript));
+    return runSerialized(() => this.spawnDiagnostic<T>(script, wrappedScript), 'diagnostic osascript');
   }
 
   private spawnDiagnostic<T>(script: string, wrappedScript: string): Promise<T> {
