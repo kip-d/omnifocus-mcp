@@ -325,6 +325,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Export test output path uses `os.tmpdir()` so the suite runs cleanly on systems without a writable repo root.
 - SonarJS lint plugin adopted with `--max-warnings=0`; cognitive-complexity threshold tightened from 25 to 20.
 - New developer docs: architecture map, session handoff notes, dual-schema (Zod vs `inputSchema`) guidance in CLAUDE.md.
+- **`detectOnholdReactivation`'s three reactivation signals are now a table** (OMN-323) — defer-passed / due-soon /
+  review-overdue were three near-identical candidate blocks differing only in predicate and reason string; a fourth
+  signal meant copy-pasting a fourth block. Now a `REACTIVATION_SIGNALS` list checked in priority order, first match
+  wins. No behavior change.
 
 ## [4.1.0] - 2026-03-13
 

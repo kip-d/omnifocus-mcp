@@ -1802,6 +1802,34 @@ TIME-WINDOW SCOPING:
     };
   }
 
+  // OMN-323: signals are a table, checked in priority order (defer > due >
+  // review), first match wins. Each returns its own reason string (rather
+  // than a separate predicate + reasonFn pair) because the due/defer checks
+  // need the SAME matched task for both "does this fire" and "what's the
+  // reason" — splitting them would mean finding that task twice.
+  private static readonly REACTIVATION_SIGNALS: ReadonlyArray<
+    (ctx: {
+      project: ProjectData;
+      projTasks: SlimTask[];
+      now: number;
+      dueSoonCutoff: number;
+      daysAhead: number;
+    }) => string | null
+  > = [
+    ({ projTasks, now }) => {
+      const task = projTasks.find((t) => t.deferDate && new Date(t.deferDate).getTime() <= now);
+      return task ? `task "${task.name}" defer date passed (${task.deferDate})` : null;
+    },
+    ({ projTasks, dueSoonCutoff, daysAhead }) => {
+      const task = projTasks.find((t) => t.dueDate && new Date(t.dueDate).getTime() <= dueSoonCutoff);
+      return task ? `task "${task.name}" due within ${daysAhead} days (${task.dueDate})` : null;
+    },
+    ({ project, now }) =>
+      project.nextReviewDate && new Date(project.nextReviewDate).getTime() <= now
+        ? `review overdue (nextReviewDate ${project.nextReviewDate})`
+        : null,
+  ];
+
   // OMN-315: reactivation-readiness check for deliberately on-hold projects.
   // "Is this ready to reactivate?", never "why is this on hold?" — an
   // on-hold project with none of these signals is left alone, not flagged.
@@ -1814,43 +1842,21 @@ TIME-WINDOW SCOPING:
     const dueSoonCutoff = now + daysAhead * 24 * 60 * 60 * 1000;
 
     const candidates: Array<{ id: string; name: string; folder: string | null; reason: string }> = [];
-    for (const p of projects) {
-      if (p.status !== 'onHold') continue;
+    for (const project of projects) {
+      if (project.status !== 'onHold') continue;
 
       // Both terminal states excluded: a dropped task has completed===false
       // (fetchSlimmedData's include_completed:false only filters completed),
       // so without the status check a dropped task's stale defer/due date
       // would still fire here.
-      const projTasks = (tasksByProject.get(p.id) ?? []).filter((t) => t.status !== 'dropped');
-      const pastDeferTask = projTasks.find((t) => t.deferDate && new Date(t.deferDate).getTime() <= now);
-      if (pastDeferTask) {
-        candidates.push({
-          id: p.id,
-          name: p.name,
-          folder: p.folder,
-          reason: `task "${pastDeferTask.name}" defer date passed (${pastDeferTask.deferDate})`,
-        });
-        continue;
-      }
+      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => t.status !== 'dropped');
 
-      const dueSoonTask = projTasks.find((t) => t.dueDate && new Date(t.dueDate).getTime() <= dueSoonCutoff);
-      if (dueSoonTask) {
-        candidates.push({
-          id: p.id,
-          name: p.name,
-          folder: p.folder,
-          reason: `task "${dueSoonTask.name}" due within ${daysAhead} days (${dueSoonTask.dueDate})`,
-        });
-        continue;
-      }
-
-      if (p.nextReviewDate && new Date(p.nextReviewDate).getTime() <= now) {
-        candidates.push({
-          id: p.id,
-          name: p.name,
-          folder: p.folder,
-          reason: `review overdue (nextReviewDate ${p.nextReviewDate})`,
-        });
+      for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
+        const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
+        if (reason) {
+          candidates.push({ id: project.id, name: project.name, folder: project.folder, reason });
+          break;
+        }
       }
     }
 
