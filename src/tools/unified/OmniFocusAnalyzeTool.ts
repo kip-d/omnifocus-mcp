@@ -1802,10 +1802,6 @@ TIME-WINDOW SCOPING:
     };
   }
 
-  // OMN-315: reactivation-readiness check for deliberately on-hold projects.
-  // "Is this ready to reactivate?", never "why is this on hold?" — an
-  // on-hold project with none of these signals is left alone, not flagged.
-  //
   // OMN-323: signals are a table, checked in priority order (defer > due >
   // review), first match wins. Each returns its own reason string (rather
   // than a separate predicate + reasonFn pair) because the due/defer checks
@@ -1834,6 +1830,9 @@ TIME-WINDOW SCOPING:
         : null,
   ];
 
+  // OMN-315: reactivation-readiness check for deliberately on-hold projects.
+  // "Is this ready to reactivate?", never "why is this on hold?" — an
+  // on-hold project with none of these signals is left alone, not flagged.
   private detectOnholdReactivation(
     projects: ProjectData[],
     tasksByProject: Map<string, SlimTask[]>,
