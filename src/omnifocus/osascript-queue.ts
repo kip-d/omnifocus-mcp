@@ -3,9 +3,9 @@
  *
  * Why module state, not instance state: every tool constructs its own
  * OmniAutomation (src/tools/base.ts) and CacheWarmer builds one per warm op,
- * so an instance-level lock would serialize nothing. Every path that spawns a
- * child against OmniFocus — OmniAutomation's `osascript` and `open omnifocus://`
- * paths, DiagnosticOmniAutomation — must run its spawn through runSerialized().
+ * so an instance-level lock would serialize nothing. Every path that spawns
+ * `osascript` against OmniFocus — OmniAutomation, DiagnosticOmniAutomation —
+ * must run its spawn through runSerialized().
  *
  * Why serialize at all: OmniFocus runs automation scripts on one channel, so
  * two concurrent multi-second bridge calls from one server do not overlap —

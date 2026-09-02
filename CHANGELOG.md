@@ -340,6 +340,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   signal meant copy-pasting a fourth block. Now a `REACTIVATION_SIGNALS` list checked in priority order, first match
   wins. No behavior change.
 
+### Removed
+
+- **`OmniAutomation.executeViaUrlScheme()`** (OMN-321 review) — the `open omnifocus:///omnijs-run?script=…` fallback
+  added 2025-06-25 for task complete/delete when the JXA setter was denied. Its callers left with the V1 tool removal
+  and the v2.1.0 consolidation (2025); the 2025-07 lessons doc already recorded it as "requires user interaction for
+  each operation, not suitable for bulk, last resort" and that doc was retired 2025-08-02. Zero callers, no tests, and
+  it spawned outside the new osascript queue. Deleted rather than queued.
+
 ## [4.1.0] - 2026-03-13
 
 ### Fixed
