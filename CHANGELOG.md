@@ -31,6 +31,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **`osascript` spawns are serialized process-wide** (OMN-321) — `OmniAutomation` and `DiagnosticOmniAutomation` now run
+  every `osascript` spawn through a FIFO queue (`src/omnifocus/osascript-queue.ts`): the second of two concurrent bridge
+  calls is not spawned until the first child has closed. Previously nothing gated concurrent tool calls after startup;
+  two long whole-database scans from one client contended on OmniFocus's single automation channel, with the latecomer's
+  spawn timeout already running while it waited — the OMN-320 signal-killed-sibling crash class. Client-visible effect:
+  concurrent calls that reach OmniFocus now complete in submission order and the later one's latency includes the wait
+  (logged as `osascript spawn waited Nms …` when over 100ms); cache-hit reads never touch the queue. No schema, field,
+  or operation change. The OMN-228 startup gate is unchanged and still orders tool dispatch after the cache warm; the
+  warm's own calls now queue behind one another (OmniFocus already serialized them, so measured cost is negligible). The
+  OMN-320 sequential-reads fix in `guided-review-push.ts` stays as belt-and-braces.
 - **`pattern_analysis` computes its task-by-project grouping once per request, not once per detector** (OMN-322) —
   `wip_limits`, `onhold_reactivation`, and `sequential_blocked_far` each independently rebuilt the same `Map` over up to
   3000 tasks; requesting all three together (exactly what `guided_review`'s `standard` mode does in one call) tripled

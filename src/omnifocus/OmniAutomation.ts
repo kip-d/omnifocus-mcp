@@ -12,7 +12,7 @@ import {
   slimUnionIssues,
 } from './script-result-types.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
-// Remove conflicting import
+import { runSerialized } from './osascript-queue.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -53,13 +53,13 @@ export class OmniAutomation {
       timeout || (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
   }
 
-  // OMN-228 concurrency note: there is NO serialization lock here. During
-  // startup, the no-concurrent-osascript invariant is enforced one layer up —
-  // MCP tool dispatch awaits the startupGate (src/tools/index.ts) while the
-  // cache warm's own execute() calls run ungated (they ARE the warm). Any NEW
-  // code path that reaches execute() outside tool dispatch (resource handlers,
-  // HTTP diagnostics, direct tool instantiation) must either gate on the warm
-  // or tolerate racing it.
+  // Concurrency (OMN-228 → OMN-321): osascript spawns are serialized
+  // process-wide by runSerialized() (./osascript-queue.ts) — two concurrent
+  // execute() calls from any instances queue FIFO; the second child is not
+  // spawned until the first has closed. The OMN-228 startupGate in
+  // src/tools/index.ts still holds tool dispatch until the cache warm
+  // finishes (start-vs-warm ordering); the queue covers everything after that,
+  // including paths outside tool dispatch (the warm itself, diagnostics).
   public async execute<T = unknown>(script: string): Promise<T> {
     // Use empirical size monitoring for better feedback
     const sizeAnalysis = monitorScriptSize(script, 'jxa');
@@ -134,15 +134,41 @@ export class OmniAutomation {
   }
 
   private async createTrackedExecutionPromise<T>(wrappedScript: string): Promise<T> {
-    const { spawn } = await import('node:child_process');
-
     logger.debug('Executing OmniAutomation script', {
       scriptLength: wrappedScript.length,
     });
     logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
-    // Create the execution promise
-    const promise = new Promise<T>((resolve, reject) => {
+    // OMN-321: the spawn itself is queued process-wide; the spawn timeout only
+    // starts once this script actually runs, not while it waits for a sibling.
+    const queuedAt = Date.now();
+    const promise = runSerialized(() => {
+      const queueWaitMs = Date.now() - queuedAt;
+      if (queueWaitMs > 100) {
+        logger.info(`osascript spawn waited ${queueWaitMs}ms for a preceding script to finish`);
+      }
+      return this.spawnScript<T>(wrappedScript);
+    });
+
+    // Track this promise to prevent premature server exit
+    if (globalPendingOperations) {
+      globalPendingOperations.add(promise);
+
+      // Remove from set when completed (success or failure)
+      promise.finally(() => {
+        if (globalPendingOperations) {
+          globalPendingOperations.delete(promise);
+        }
+      });
+    }
+
+    return promise;
+  }
+
+  private async spawnScript<T>(wrappedScript: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
+
+    return new Promise<T>((resolve, reject) => {
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
         timeout: this.timeout,
       });
@@ -233,20 +259,6 @@ export class OmniAutomation {
 
       proc.stdin.end();
     });
-
-    // Track this promise to prevent premature server exit
-    if (globalPendingOperations) {
-      globalPendingOperations.add(promise);
-
-      // Remove from set when completed (success or failure)
-      promise.finally(() => {
-        if (globalPendingOperations) {
-          globalPendingOperations.delete(promise);
-        }
-      });
-    }
-
-    return promise;
   }
 
   private wrapScript(script: string): string {

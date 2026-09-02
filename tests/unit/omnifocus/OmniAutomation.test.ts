@@ -179,7 +179,7 @@ describe('OmniAutomation', () => {
     it('should wrap scripts without IIFE structure', async () => {
       const script = 'JSON.stringify({ test: true })';
 
-      omniAutomation.execute(script);
+      const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
       await new Promise((resolve) => setImmediate(resolve));
@@ -187,6 +187,11 @@ describe('OmniAutomation', () => {
       // Check that the script was wrapped
       expect(mockProcess.stdin.write).toHaveBeenCalledWith(expect.stringContaining('(() => {'));
       expect(mockProcess.stdin.write).toHaveBeenCalledWith(expect.stringContaining("Application('OmniFocus')"));
+
+      // OMN-321: spawns are queued process-wide, so a mock child that never
+      // closes would hold the queue for every later test in this file.
+      mockProcess.emit('close', 0);
+      await executePromise;
     });
 
     it('should not double-wrap scripts with existing IIFE and app init', async () => {
@@ -195,13 +200,16 @@ describe('OmniAutomation', () => {
         return JSON.stringify({ test: true });
       })()`;
 
-      omniAutomation.execute(script);
+      const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
       await new Promise((resolve) => setImmediate(resolve));
 
       // Check that the script was NOT wrapped again
       expect(mockProcess.stdin.write).toHaveBeenCalledWith(script);
+
+      mockProcess.emit('close', 0);
+      await executePromise;
     });
   });
 
@@ -596,5 +604,80 @@ describe('OmniAutomation', () => {
       // Both branches match completed:literal(true) → multiple match → issues unchanged (still invalid_union)
       expect(details.issues[0].code).toBe('invalid_union');
     });
+  });
+});
+
+/**
+ * OMN-321: process-wide serialization of osascript spawns. Instances are
+ * deliberately DIFFERENT here — every tool constructs its own OmniAutomation
+ * (src/tools/base.ts), so a lock that lived on the instance would serialize
+ * nothing. The assertion is on the spawn() call count over time: the second
+ * child must not be spawned until the first has closed.
+ */
+describe('OmniAutomation concurrent execute() serialization (OMN-321)', () => {
+  function makeMockProcess() {
+    return Object.assign(new EventEmitter(), {
+      stdin: { write: vi.fn(), end: vi.fn() },
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+  }
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not spawn the second osascript until the first has closed', async () => {
+    const procA = makeMockProcess();
+    const procB = makeMockProcess();
+    vi.mocked(spawn)
+      .mockReturnValueOnce(procA as any)
+      .mockReturnValueOnce(procB as any);
+
+    const a = new OmniAutomation(100000, 1000);
+    const b = new OmniAutomation(100000, 1000);
+
+    const pa = a.execute('JSON.stringify({ who: "a" })');
+    const pb = b.execute('JSON.stringify({ who: "b" })');
+
+    await new Promise((r) => setImmediate(r));
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    procA.stdout.emit('data', JSON.stringify({ who: 'a' }));
+    procA.emit('close', 0);
+    await expect(pa).resolves.toEqual({ who: 'a' });
+
+    await new Promise((r) => setImmediate(r));
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    procB.stdout.emit('data', JSON.stringify({ who: 'b' }));
+    procB.emit('close', 0);
+    await expect(pb).resolves.toEqual({ who: 'b' });
+  });
+
+  it('a failed first script still lets the queued second script spawn', async () => {
+    const procA = makeMockProcess();
+    const procB = makeMockProcess();
+    vi.mocked(spawn)
+      .mockReturnValueOnce(procA as any)
+      .mockReturnValueOnce(procB as any);
+
+    const a = new OmniAutomation(100000, 1000);
+    const pa = a.execute('first');
+    const pb = a.execute('second');
+
+    await new Promise((r) => setImmediate(r));
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    // Signal-killed child (OMN-320's failure signature): close with null code.
+    procA.emit('close', null);
+    await expect(pa).rejects.toThrow(OmniAutomationError);
+
+    await new Promise((r) => setImmediate(r));
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    procB.stdout.emit('data', JSON.stringify({ ok: true }));
+    procB.emit('close', 0);
+    await expect(pb).resolves.toEqual({ ok: true });
   });
 });

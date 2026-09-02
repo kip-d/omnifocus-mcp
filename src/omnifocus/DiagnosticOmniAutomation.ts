@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { OmniAutomation, OmniAutomationError } from './OmniAutomation.js';
+import { runSerialized } from './osascript-queue.js';
 import { createLogger } from '../utils/logger.js';
 import { safeStringify } from '../utils/safe-io.js';
 
@@ -42,6 +43,12 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
     this.log('Wrapped script created', { wrappedLength: wrappedScript.length });
     this.log('First 500 chars of wrapped script', wrappedScript.substring(0, 500));
 
+    // OMN-321: same process-wide osascript queue as OmniAutomation — a
+    // diagnostics call must not run alongside a tool's script.
+    return runSerialized(() => this.spawnDiagnostic<T>(script, wrappedScript));
+  }
+
+  private spawnDiagnostic<T>(script: string, wrappedScript: string): Promise<T> {
     return new Promise((resolve, reject) => {
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
         timeout: 120000, // 120 second timeout for large databases
