@@ -2913,6 +2913,50 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  describe('pattern_analysis groupTasksByProject dedup (OMN-322)', () => {
+    it('computes the task-by-project grouping once, even when all three consumers are requested together', async () => {
+      const groupSpy = vi.spyOn(tool as any, 'groupTasksByProject');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Some task',
+              project: 'Proj',
+              projectId: 'p1',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'p1',
+              name: 'Proj',
+              status: 'active status',
+              taskCount: 1,
+              availableTaskCount: 1,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      // guided_review's standard mode requests exactly this combination in one call.
+      const res: any = await tool.execute({
+        analysis: {
+          type: 'pattern_analysis',
+          params: { insights: ['onhold_reactivation', 'sequential_blocked_far', 'wip_limits'] },
+        },
+      });
+      expect(res.success).toBe(true);
+      expect(groupSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
 
   describe('inputSchema (MCP advertisement)', () => {

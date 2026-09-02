@@ -1211,6 +1211,16 @@ TIME-WINDOW SCOPING:
       // Run requested pattern analyses
       const findings: Record<string, PatternFinding> = {};
 
+      // OMN-322: computed at most once, on first use, and shared by whichever
+      // of analyzeWipPattern/detectOnholdReactivation/detectSequentialBlockedFar
+      // are actually requested — was previously rebuilt by each independently
+      // (guided_review's standard mode requests all three in one call).
+      let tasksByProject: Map<string, SlimTask[]> | undefined;
+      const getTasksByProject = (): Map<string, SlimTask[]> => {
+        tasksByProject ??= this.groupTasksByProject(slimData.tasks);
+        return tasksByProject;
+      };
+
       for (const pattern of patterns) {
         switch (pattern) {
           case 'duplicates':
@@ -1274,7 +1284,7 @@ TIME-WINDOW SCOPING:
             break;
           }
           case 'wip_limits':
-            findings.wip_limits = this.analyzeWipPattern(slimData, options.wip_limit);
+            findings.wip_limits = this.analyzeWipPattern(slimData.projects, getTasksByProject(), options.wip_limit);
             break;
           case 'due_date_bunching':
             findings.due_date_bunching = this.analyzeBunchingPattern(slimData.tasks, options.bunching_threshold);
@@ -1285,14 +1295,14 @@ TIME-WINDOW SCOPING:
           case 'onhold_reactivation':
             findings.onhold_reactivation = this.detectOnholdReactivation(
               slimData.projects,
-              slimData.tasks,
+              getTasksByProject(),
               options.reactivation_days_ahead,
             );
             break;
           case 'sequential_blocked_far':
             findings.sequential_blocked_far = this.detectSequentialBlockedFar(
               slimData.projects,
-              slimData.tasks,
+              getTasksByProject(),
               options.sequential_blocked_days,
             );
             break;
@@ -1320,6 +1330,9 @@ TIME-WINDOW SCOPING:
   // OMN-315: shared by analyzeWipPattern, detectOnholdReactivation, and
   // detectSequentialBlockedFar — was duplicated three times independently
   // before this extraction (flagged in the OMN-315 Task 2 code review).
+  // OMN-322: executePatternAnalysis now calls this at most once per request
+  // and passes the resulting Map to whichever of the three are requested,
+  // rather than each detector rebuilding it.
   private groupTasksByProject(tasks: SlimTask[]): Map<string, SlimTask[]> {
     const byProject = new Map<string, SlimTask[]>();
     for (const task of tasks) {
@@ -1332,12 +1345,11 @@ TIME-WINDOW SCOPING:
   }
 
   private analyzeWipPattern(
-    slimData: { tasks: SlimTask[]; projects: ProjectData[] },
+    projects: ProjectData[],
+    tasksByProject: Map<string, SlimTask[]>,
     wipLimit: number,
   ): PatternFinding {
-    const tasksByProject = this.groupTasksByProject(slimData.tasks);
-
-    const projectsWithTasks = slimData.projects.map((project) => ({
+    const projectsWithTasks = projects.map((project) => ({
       id: project.id,
       name: project.name,
       status: project.status,
@@ -1793,10 +1805,13 @@ TIME-WINDOW SCOPING:
   // OMN-315: reactivation-readiness check for deliberately on-hold projects.
   // "Is this ready to reactivate?", never "why is this on hold?" — an
   // on-hold project with none of these signals is left alone, not flagged.
-  private detectOnholdReactivation(projects: ProjectData[], tasks: SlimTask[], daysAhead: number): PatternFinding {
+  private detectOnholdReactivation(
+    projects: ProjectData[],
+    tasksByProject: Map<string, SlimTask[]>,
+    daysAhead: number,
+  ): PatternFinding {
     const now = Date.now();
     const dueSoonCutoff = now + daysAhead * 24 * 60 * 60 * 1000;
-    const tasksByProject = this.groupTasksByProject(tasks);
 
     const candidates: Array<{ id: string; name: string; folder: string | null; reason: string }> = [];
     for (const p of projects) {
@@ -1856,10 +1871,13 @@ TIME-WINDOW SCOPING:
   // missing_next_actions. Task order here is scan order, which Task 0's live
   // probe confirmed matches flattenedTasks' outline order for a
   // project-scoped filter.
-  private detectSequentialBlockedFar(projects: ProjectData[], tasks: SlimTask[], daysOut: number): PatternFinding {
+  private detectSequentialBlockedFar(
+    projects: ProjectData[],
+    tasksByProject: Map<string, SlimTask[]>,
+    daysOut: number,
+  ): PatternFinding {
     const now = Date.now();
     const cutoff = now + daysOut * 24 * 60 * 60 * 1000;
-    const tasksByProject = this.groupTasksByProject(tasks);
 
     const candidates: Array<{
       id: string;

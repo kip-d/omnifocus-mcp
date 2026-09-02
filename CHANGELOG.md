@@ -31,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **`pattern_analysis` computes its task-by-project grouping once per request, not once per detector** (OMN-322) —
+  `wip_limits`, `onhold_reactivation`, and `sequential_blocked_far` each independently rebuilt the same `Map` over up to
+  3000 tasks; requesting all three together (exactly what `guided_review`'s `standard` mode does in one call) tripled
+  that O(n) pass for no reason. No behavior change — same data, computed once and shared.
 - **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
   `productivity_stats` surfaces three computed fields it was discarding** (OMN-289) — the response now contains exactly
   what was actually computed: nothing real hidden, nothing fake shipped. **Added to `velocity`:** `averageCreated`,
