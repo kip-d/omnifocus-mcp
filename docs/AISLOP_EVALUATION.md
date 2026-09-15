@@ -63,12 +63,12 @@ exclude:
 
 **Why each exclude exists**
 
-| Pattern                   | Reason                                                                                                                                                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `**/*.d.ts`, `**/*-d.ts`  | OmniFocus's TypeScript export. The `// ClassName` section labels it emits trip `narrative-comment`; the 2k-line files trip `file-too-large`. The `-d.ts` variant catches the versioned `OmniFocus-4.8.6-d.ts` naming that `*.d.ts` misses. |
-| `**/omnifocus/api/**`     | Belt-and-suspenders for the whole vendored API dir (mirrors the `.prettierignore` entry).                                                                                                                                                  |
-| `**/contracts/ast/**`     | AST → JXA/OmniJS **script builders**. The "code" is largely JS-in-strings; empty `catch(e){}` there is deliberate best-effort, not a swallowed error.                                                                                      |
-| `**/omnifocus/scripts/**` | The JXA scripts themselves / their generators. Same embedded-script false-positive class.                                                                                                                                                  |
+| Pattern                   | Reason                                                                                                                                                                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `**/*.d.ts`, `**/*-d.ts`  | OmniFocus's TypeScript export. The `// ClassName` section labels it emits trip `narrative-comment`; the 2k-line files trip `file-too-large`. The `-d.ts` variant catches the versioned `OmniFocus-4.9-d.ts` naming that `*.d.ts` misses. |
+| `**/omnifocus/api/**`     | Belt-and-suspenders for the whole vendored API dir (mirrors the `.prettierignore` entry).                                                                                                                                                |
+| `**/contracts/ast/**`     | AST → JXA/OmniJS **script builders**. The "code" is largely JS-in-strings; empty `catch(e){}` there is deliberate best-effort, not a swallowed error.                                                                                    |
+| `**/omnifocus/scripts/**` | The JXA scripts themselves / their generators. Same embedded-script false-positive class.                                                                                                                                                |
 
 **Candidate excludes we deliberately did _not_ add** (your call):
 
