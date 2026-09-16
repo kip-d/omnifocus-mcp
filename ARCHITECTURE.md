@@ -23,12 +23,12 @@
 
 ## The 4 Tools
 
-| Tool                | Class                  | Lines | Purpose                                                    |
-| ------------------- | ---------------------- | ----- | ---------------------------------------------------------- |
-| `omnifocus_read`    | `OmniFocusReadTool`    | 1,006 | Query tasks, projects, tags, perspectives, folders, export |
-| `omnifocus_write`   | `OmniFocusWriteTool`   | 2,083 | Create/update/complete/delete, batch ops, tag management   |
-| `omnifocus_analyze` | `OmniFocusAnalyzeTool` | 2,870 | 8 analytics modes (productivity, overdue, velocity, etc.)  |
-| `system`            | `SystemTool`           | ~200  | Version, diagnostics, metrics, cache stats                 |
+| Tool                | Class                  | Purpose                                                    |
+| ------------------- | ---------------------- | ---------------------------------------------------------- |
+| `omnifocus_read`    | `OmniFocusReadTool`    | Query tasks, projects, tags, perspectives, folders, export |
+| `omnifocus_write`   | `OmniFocusWriteTool`   | Create/update/complete/delete, batch ops, tag management   |
+| `omnifocus_analyze` | `OmniFocusAnalyzeTool` | 8 analytics modes (productivity, overdue, velocity, etc.)  |
+| `system`            | `SystemTool`           | Version, diagnostics, metrics, cache stats                 |
 
 ## Data Flow — Read Request
 
