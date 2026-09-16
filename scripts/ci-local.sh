@@ -129,21 +129,23 @@ else
 fi
 
 # Step 8: Sample tool execution
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# OMN-326: drive the server through scripts/verify-deploy.ts (full init
+# handshake, stdin held open, response correlated by JSON-RPC id). The old
+# one-shot `echo | node dist/index.js` pipe EOF'd stdin immediately; the server
+# then ran the tool to completion behind the startup cache warm (~15s since
+# OMN-321 serialized osascript spawns) and exited gracefully without the
+# response ever reaching stdout — so this step failed every time. Steps 6 and
+# 7 keep their pipes: initialize and tools/list answer before the warm.
+# --timeout bounds each RPC; 60s covers a cold warm with headroom.
 print_step "Sample tool execution test"
-if [ -n "$TIMEOUT_CMD" ]; then
-    # 30s timeout is safety net - server normally responds and exits in ~5s
-    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
+RESULT=$(npx tsx scripts/verify-deploy.ts dist/index.js --timeout 60000 2>/dev/null || echo "error")
 
-    if echo "$RESULT" | grep -q "version"; then
-        print_success "Sample tool execution successful"
-    else
-        print_error "Sample tool execution failed"
-        echo "Result: $RESULT"
-        exit 1
-    fi
+if echo "$RESULT" | grep -q '"probe": "version"'; then
+    print_success "Sample tool execution successful"
 else
-    print_warning "Skipping sample tool execution test (timeout command not available)"
+    print_error "Sample tool execution failed"
+    echo "Result: $RESULT"
+    exit 1
 fi
 
 echo -e "\n${GREEN}🎉 All CI checks passed!${NC}"
