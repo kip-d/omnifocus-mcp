@@ -25,12 +25,25 @@ function run() {
       const value = obj[propName];
       // Try to access the property - some properties are functions
       const actualValue = typeof value === 'function' ? value() : value;
+      // JXA object specifiers (e.g. the Task returned by project.nextTask) throw
+      // "Can't convert types" on String(); describe them by name instead.
+      let shown = null;
+      if (actualValue !== null && actualValue !== undefined) {
+        try {
+          shown =
+            typeof actualValue === 'object' && typeof actualValue.name === 'function'
+              ? `<${actualValue.name()}>`
+              : String(actualValue);
+        } catch (e) {
+          shown = `<object: ${e.message}>`;
+        }
+      }
       results.tests[objType][propName] = {
         exists: true,
         type: typeof actualValue,
-        value: actualValue !== null && actualValue !== undefined ? String(actualValue) : null,
+        value: shown,
       };
-      console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${actualValue}`);
+      console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${shown}`);
       return true;
     } catch (e) {
       results.tests[objType][propName] = {
