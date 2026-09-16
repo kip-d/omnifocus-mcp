@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
@@ -2251,7 +2251,11 @@ describe('OmniFocusAnalyzeTool', () => {
   });
 
   describe('pattern_analysis onhold_reactivation (OMN-315)', () => {
+    // The detector reads Date.now(); pin the clock so the relative fixtures below stay relative
+    // (OMN-325: without this, the fixtures rot as the calendar passes them).
     const now = new Date('2026-08-31T12:00:00Z');
+    beforeEach(() => vi.useFakeTimers({ now, toFake: ['Date'] }));
+    afterEach(() => vi.useRealTimers());
     const pastDefer = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days ago
     const soonDue = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days from now
     const farDue = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days from now
@@ -2525,7 +2529,11 @@ describe('OmniFocusAnalyzeTool', () => {
   });
 
   describe('pattern_analysis sequential_blocked_far (OMN-315)', () => {
+    // The detector reads Date.now(); pin the clock so the relative fixtures below stay relative
+    // (OMN-325: the "45 days out" fixture became exactly 30 days out on 2026-09-15 and went red).
     const now = new Date('2026-08-31T12:00:00Z');
+    beforeEach(() => vi.useFakeTimers({ now, toFake: ['Date'] }));
+    afterEach(() => vi.useRealTimers());
     const farDefer = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString(); // 45 days out
     const soonDefer = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days out
 
