@@ -26,9 +26,9 @@ Manual carry-overs each regeneration:
    when a required parameter follows it (e.g. `openDocument(from?: Document | null, url: URL, …)`). That is invalid
    TypeScript (TS1016) and breaks `npm run build`, because `tsconfig` includes this directory. Drop the `?` on every
    optional parameter that precedes a required one (seven sites in 4.9: `Application.openDocument`,
-   `FileWrapper.withContents`/`withChildren`, two `Form.Field.Option` constructors, `LanguageModel.Tool` constructor,
-   `Preferences.setObjectForKey`). The type stays `T | null`, so nothing is lost. Do this on the raw single-line export
-   before prettier wraps signatures.
+   `FileWrapper.withContents`/`withChildren`, the `Form.Field.MultipleOptions` and `Form.Field.Option` constructors,
+   `LanguageModel.Tool` constructor, `Preferences.setObjectForKey`). The type stays `T | null`, so nothing is lost. Do
+   this on the raw single-line export before prettier wraps signatures.
 
 The `_omnijs_AnonymousProxy` placeholder that 4.8.x exports needed is gone — 4.9 declares `LanguageModel.Tool` and types
 `Session.withTools()` against it.
