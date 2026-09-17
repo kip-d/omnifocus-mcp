@@ -71,10 +71,19 @@ print_step "TypeScript compilation check"
 run_command "npm run build" "TypeScript compilation"
 print_success "TypeScript compilation successful"
 
-# Step 2: Type checking
+# Step 2: Type checking (src)
 print_step "TypeScript type checking"
 npm run typecheck
 print_success "TypeScript type checking passed"
+
+# Step 2b: Type checking (tests + scripts) — OMN-307
+# vitest runs through esbuild, which STRIPS types without checking them, and the
+# main tsconfig excludes tests/. So `npm run test:unit` can be fully green while
+# tests/ has type errors. CI's Quick Validation runs this separately; without it
+# here, "ci:local passed" does not imply CI will pass.
+print_step "TypeScript type checking (tests + scripts)"
+npm run typecheck:test
+print_success "Test/script type checking passed"
 
 # Step 3: Lint check (zero-warnings ceiling — mirrors CI, OMN-212)
 print_step "Lint check (eslint --max-warnings=0)"
@@ -151,7 +160,8 @@ echo "================================="
 echo -e "${BLUE}Summary:${NC}"
 echo "- Code formatting: ✅"
 echo "- TypeScript compilation: ✅"
-echo "- Type checking: ✅"
+echo "- Type checking (src): ✅"
+echo "- Type checking (tests + scripts): ✅"
 echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually)"
