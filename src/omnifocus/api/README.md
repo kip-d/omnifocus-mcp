@@ -30,7 +30,8 @@ Both are mechanical and hand-done today; OMN-328 tracks scripting them.
    versioned files are named `OmniFocus-X.Y-d.ts`, and hyphen-d is not a declaration file, so `skipLibCheck` does not
    cover them and `npm run build` fails. Drop the `?` on every optional parameter that precedes a required one; the type
    stays `T | null`, so nothing is lost. Do this on the raw single-line export, before prettier wraps signatures.
-   `npx tsc --noEmit -p tsconfig.json` lists every site you missed. The seven in 4.9:
+   `npx tsc --noEmit -p tsconfig.json` lists every site you missed. Re-derive the site list from that output at every
+   regeneration; the table below records what 4.9 needed and is a snapshot, not a checklist for later versions:
 
    | Declaration                              | Parameter(s) losing `?` | Required parameter that follows |
    | ---------------------------------------- | ----------------------- | ------------------------------- |
@@ -52,8 +53,8 @@ The `_omnijs_AnonymousProxy` placeholder that 4.8.x exports needed is gone — 4
 Compare by class and member name, never by line. The pre-commit hook prettier-reformats the export (4-space → 2-space
 indents), 4.9 marks optional parameters `?:` where 4.8.x did not, and prettier then wraps the longer signatures across
 lines — so both a bare `diff` and a sorted-line diff are pure noise. Parse each file into
-`{container → set of whitespace-stripped member lines}` (drop `?` markers and trailing punctuation) and diff the sets; a
-~40-line Node script does it.
+`{container → set of whitespace-stripped member lines}` (drop `?` markers and trailing punctuation) and diff the sets.
+No checked-in script does this yet; OMN-328 adds one alongside the regen tooling.
 
 ## Usage
 
@@ -129,7 +130,12 @@ Replace `[VERSION]` with the version from the first line of the output (e.g., `4
 per-member doc comments; keep them.
 
 Fallback for OmniFocus older than 4.9 (no `getTypeScriptDeclarations`): **Automation** → **API Reference** → export icon
-→ **TypeScript** format, then move the file into this directory under the same name.
+→ **TypeScript** format saves `OmniFocus.ts` to Downloads. Its first line names the version too (or check **OmniFocus →
+About OmniFocus**), then:
+
+```bash
+mv ~/Downloads/OmniFocus.ts src/omnifocus/api/OmniFocus-[VERSION]-d.ts
+```
 
 ### Step 2: Version and Archive
 
@@ -158,8 +164,8 @@ Fallback for OmniFocus older than 4.9 (no `getTypeScriptDeclarations`): **Automa
 ### Step 4: Test and Verify
 
 1. Run `npm run ci:local`: format check, build, typecheck, lint, unit tests, then three live checks against the built
-   server (startup, tool registration, and a `system version` call through `scripts/verify-deploy.ts`) — so the vendored
-   types are exercised by a real server boot, not only by `tsc`
+   server (startup, tool registration, and a `system version` tool call) — so the vendored types are exercised by a real
+   server boot, not only by `tsc`
 2. Test any scripts that use new API features
 
 ### Step 5: Commit Changes
@@ -172,7 +178,7 @@ git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
 ## Version History
 
 - **4.9** - Current version (September 2026; build 187.2.1, exported 2026-09-15 on macOS 27)
-  - New: `Application.getTypeScriptDeclarations(filter?)` — the export itself is now an API call
+  - New: `Application.getTypeScriptDeclarations(filterString?)` — the export itself is now an API call
   - New: `LanguageModel.Tool` class; `LanguageModel.Session.withTools()` now takes `Array<LanguageModel.Tool>` (replaces
     the undocumented `_omnijs_AnonymousProxy`)
   - New: `PlugIn.Action.image` (readonly), `URL.revealFile()`
