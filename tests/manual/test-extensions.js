@@ -1,7 +1,7 @@
 #!/usr/bin/env osascript -l JavaScript
 
 // Test script to verify undocumented OmniFocus API extensions
-// Tests properties on OmniFocus 4.8.3
+// Tests properties on the running OmniFocus (version printed at start)
 
 function run() {
   const app = Application('OmniFocus');
@@ -26,20 +26,43 @@ function run() {
       // Try to access the property - some properties are functions
       const actualValue = typeof value === 'function' ? value() : value;
       // JXA object specifiers (e.g. the Task returned by project.nextTask) throw
-      // "Can't convert types" on String(); describe them by name instead.
+      // "Can't convert types" on String(); describe them by name instead. A
+      // value we can read but cannot describe is NOT a pass: record it as
+      // exists:true / inspectable:false and count it as a failure, so the
+      // summary never reports success for a property nobody could inspect.
       let shown = null;
+      let inspectError = null;
       if (actualValue !== null && actualValue !== undefined) {
         try {
-          shown =
-            typeof actualValue === 'object' && typeof actualValue.name === 'function'
-              ? `<${actualValue.name()}>`
-              : String(actualValue);
+          // JXA specifiers report typeof 'function' (project.nextTask does), not 'object'.
+          const isSpecifier =
+            (typeof actualValue === 'object' || typeof actualValue === 'function') &&
+            typeof actualValue.name === 'function';
+          if (isSpecifier) {
+            const name = actualValue.name();
+            shown = name === '' ? '<(unnamed)>' : `<${name}>`;
+          } else {
+            shown = String(actualValue);
+          }
         } catch (e) {
-          shown = `<object: ${e.message}>`;
+          inspectError = e.message;
         }
+      }
+      if (inspectError !== null) {
+        results.tests[objType][propName] = {
+          exists: true,
+          inspectable: false,
+          type: typeof actualValue,
+          error: inspectError,
+        };
+        console.log(
+          `⚠️  ${objType}.${propName}: ${typeof actualValue} read OK but could not be described - ${inspectError}`,
+        );
+        return false;
       }
       results.tests[objType][propName] = {
         exists: true,
+        inspectable: true,
         type: typeof actualValue,
         value: shown,
       };
@@ -108,7 +131,8 @@ function run() {
   for (const objType in results.tests) {
     for (const prop in results.tests[objType]) {
       totalTests++;
-      if (results.tests[objType][prop].exists) {
+      const r = results.tests[objType][prop];
+      if (r.exists && r.inspectable !== false) {
         passedTests++;
       }
     }
