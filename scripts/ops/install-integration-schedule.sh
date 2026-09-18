@@ -160,24 +160,119 @@ if [ "$MODE" = "verify" ]; then
 
   launchctl kickstart -k "$GUI/$LABEL"
 
-  # DERIVE the budget from the wrapper's own timeouts instead of hardcoding one.
-  # A fixed 360x5s = 30 min was shorter than the wrapper's worst case (build 600
-  # + suite 2700 + cleanup 600 = 65 min), so a merely-slow-but-healthy run —
-  # still well inside its own SUITE_TIMEOUT, not hung — was reported as
-  # "VERIFY FAILED: the job did not execute" while it ran on unattended against
-  # the live database. Read the same env vars with the same defaults, sum them,
-  # and add 20% slack; a hardcoded number here silently rots the moment any of
-  # those defaults change.
-  verify_budget=$(( (${OF_MCP_BUILD_TIMEOUT:-600} + ${OF_MCP_SUITE_TIMEOUT:-2700} + ${OF_MCP_CLEANUP_TIMEOUT:-600}) * 12 / 10 ))
-  verify_polls=$(( verify_budget / 5 + 1 ))
-  echo "  waiting up to $((verify_budget / 60)) min for this run's STATUS line ..."
-  new_region=""
-  for _ in $(seq 1 "$verify_polls"); do
+  # DERIVE the budgets from the wrapper's own timeouts instead of hardcoding
+  # them. A fixed 360x5s = 30 min was shorter than the wrapper's worst case
+  # (build 600 + suite 2700 + cleanup 600 = 65 min), so a merely-slow-but-
+  # healthy run — still well inside its own SUITE_TIMEOUT, not hung — was
+  # reported as "VERIFY FAILED: the job did not execute" while it ran on
+  # unattended against the live database.
+  #
+  # The wrapper SOURCE is the authority for the defaults: the plist bakes no
+  # OF_MCP_* variables, so the launchd-spawned job always runs on the wrapper's
+  # own defaults, and an edited default there would silently desync a copy
+  # hardcoded here. Parse each default out of the wrapper source; env vars
+  # still override (an operator exporting one for --verify is asserting it
+  # matches how they run the wrapper manually — the same contract as before).
+  # The literal fallback only fires if the wrapper line ever stops matching.
+  wrapper_default() { # <NAME> — reads NAME="${OF_MCP_NAME:-N}" from the wrapper
+    local v
+    v="$(sed -n "s/^${1}=\"\\\${OF_MCP_${1}:-\\([0-9][0-9]*\\)}\"\$/\\1/p" "$WRAPPER_SRC")"
+    if [ -z "$v" ]; then
+      # Fail HARD, not a stderr warning a skimmed run misses: a baked fallback
+      # here silently desyncs the budgets the moment the wrapper line is
+      # reformatted alongside a bumped default, and the first symptom would be
+      # the original OMN-304 false VERIFY FAILED on a healthy long run.
+      # --verify is a manual command; fix the parse (or the wrapper line) and
+      # re-run.
+      echo "ERROR: could not parse the ${1} default out of $WRAPPER_SRC —" >&2
+      echo "       the NAME=\"\${OF_MCP_NAME:-N}\" line changed shape. Verify cannot" >&2
+      echo "       size its wait budgets truthfully; fix the pattern and re-run." >&2
+      exit 2
+    fi
+    printf '%s' "$v"
+  }
+  preflight_t="${OF_MCP_PREFLIGHT_TIMEOUT:-$(wrapper_default PREFLIGHT_TIMEOUT)}"
+  build_t="${OF_MCP_BUILD_TIMEOUT:-$(wrapper_default BUILD_TIMEOUT)}"
+  suite_t="${OF_MCP_SUITE_TIMEOUT:-$(wrapper_default SUITE_TIMEOUT)}"
+  cleanup_t="${OF_MCP_CLEANUP_TIMEOUT:-$(wrapper_default CLEANUP_TIMEOUT)}"
+
+  # One slack formula for every wait budget: (phase timeouts + one SIGKILL
+  # grace per run_bounded phase) + 20% — the `timeout -k` grace is a fixed
+  # cost, so it goes inside the proportional slack, and with small tuned
+  # timeouts the slack alone is thinner than the kill window. Preflight bounds
+  # itself with an exact watchdog (no grace), so it contributes no grace count.
+  # The grace is parsed from run_bounded's own `timeout -k Ns` invocation —
+  # same source-is-authority rule as wrapper_default, same loud fallback.
+  KILL_GRACE="$(sed -n 's/^.*"\$TIMEOUT_CMD" -k \([0-9][0-9]*\)s .*$/\1/p' "$WRAPPER_SRC" | head -1)"
+  if [ -z "$KILL_GRACE" ]; then
+    # Same fail-hard rule as wrapper_default: a baked grace silently desyncs
+    # the budgets the moment run_bounded's `-k` value changes shape or size.
+    echo "ERROR: could not parse run_bounded's 'timeout -k' grace out of $WRAPPER_SRC;" >&2
+    echo "       verify cannot size its wait budgets truthfully. Fix the pattern and re-run." >&2
+    exit 2
+  fi
+  budget_with_slack() { # <sum-of-phase-timeouts> <run_bounded-phase-count>
+    printf '%s' $(( ($1 + $2 * KILL_GRACE) * 12 / 10 ))
+  }
+  # Integer minutes floor to a misleading "0 min" for sub-minute budgets
+  # (small tuned timeouts) — print seconds until a minute is worth rounding.
+  fmt_duration() { # <seconds>
+    if [ "$1" -ge 60 ]; then printf '%s min' $(( $1 / 60 )); else printf '%ss' "$1"; fi
+  }
+
+  # Poll PREDICATE every 5s until it succeeds (0) or BUDGET seconds are
+  # exhausted (1). Both waits below share this: two hand-rolled copies of the
+  # same cadence math is how one copy gets a fix and the other keeps the bug.
+  poll_for() { # <budget-seconds> <predicate...>
+    local budget="$1"; shift
+    local _i
+    for _i in $(seq 1 $(( budget / 5 + 1 ))); do
+      "$@" && return 0
+      sleep 5
+    done
+    return 1
+  }
+  status_appeared() {
     new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
-    printf '%s' "$new_region" | grep -qaE '^STATUS: ' && break
+    printf '%s' "$new_region" | grep -qaE '^STATUS: '
+  }
+  # NOT `launchctl print | grep -q`: under pipefail, grep -q exiting at the
+  # first match can SIGPIPE a still-writing launchctl and turn a running job
+  # into a non-zero pipeline — i.e. a false "terminated" on iteration 1, the
+  # same stale-read defect by another road. Capture, then match against a
+  # herestring (no writer left to kill).
+  # A failing `launchctl print` is NOT evidence of termination: for a loaded
+  # job the command succeeds whether or not an instance is running (the pid
+  # line just disappears), so a failure is a transient launchctl error — and
+  # treating its empty output as "no pid line" would report terminated while
+  # cleanup still mutates the live database. Only a successful print with no
+  # pid line counts; on failure keep polling, and if the failure persists the
+  # budget exhausts into the honest "cleanup still running" message.
+  # Records whether the most recent probe could ask launchd at all, so the
+  # budget-exhausted message can distinguish "cleanup is still running" from
+  # "launchctl itself could not be queried" — different diagnoses, and the
+  # wrong one sends the operator to the wrong place.
+  job_probe_failed=""
+  job_terminated() {
+    local out
+    if ! out="$(launchctl print "$GUI/$LABEL" 2>/dev/null)"; then
+      job_probe_failed=1
+      return 1
+    fi
+    job_probe_failed=""
+    ! grep -qE '^[[:space:]]*pid =' <<< "$out"
+  }
+
+  # In the normal path STATUS is written only after preflight plus all three
+  # run_bounded phases return, so the budget covers all four — three of them
+  # with the kill grace.
+  verify_budget="$(budget_with_slack $(( preflight_t + build_t + suite_t + cleanup_t )) 3)"
+  echo "  waiting up to $(fmt_duration "$verify_budget") for this run's STATUS line ..."
+  if ! poll_for "$verify_budget" status_appeared; then
+    # status_appeared leaves the last (non-matching) tail in new_region; the
+    # failure branch below keys off emptiness, so clear it explicitly.
     new_region=""
-    sleep 5
-  done
+  fi
 
   if [ -z "$new_region" ]; then
     echo "  VERIFY FAILED — no STATUS line appeared in $RUN_LOG within the budget;" >&2
@@ -185,28 +280,62 @@ if [ "$MODE" = "verify" ]; then
     exit 1
   fi
 
-  # A STATUS line exists, but the wrapper is NOT done: it still writes the LEAK:
-  # line and then exits, and launchd only updates "last exit code" once the
-  # process actually terminates. Reading it here would race that exit and see an
-  # empty or previous-run value — reporting VERIFY FAILED for a run that passed.
+  # A STATUS line exists, but the wrapper is NOT done. In the mid-suite WEDGED
+  # path it logs STATUS first and THEN runs the leak scan, which has its own
+  # budget of up to CLEANUP_TIMEOUT before the LEAK: line appears; launchd
+  # likewise only updates "last exit code" once the process actually
+  # terminates. Reading either too early sees an empty or previous-run value.
   # (Detecting STATUS closed the read-too-early-after-SPAWN half of this race;
   # this closes the read-too-early-before-TERMINATION half.)
   #
   # Wait for the job to leave launchd's running set. `pid =` is present only
-  # while an instance is alive, so its absence is the termination signal.
-  for _ in $(seq 1 60); do
-    launchctl print "$GUI/$LABEL" 2>/dev/null | grep -qE '^[[:space:]]*pid =' || break
-    sleep 1
-  done
+  # while an instance is alive, so its absence is the termination signal. The
+  # wait budget must cover cleanup's own budget: a hardcoded 60s here was a
+  # tenth of it, and when cleanup ran longer the fall-through reused the log
+  # region captured at STATUS time and printed the reassuring
+  # "LEAK: (none recorded)" while cleanup was still running against the live
+  # database (OMN-304).
+  term_budget="$(budget_with_slack "$cleanup_t" 1)"
+  echo "  STATUS seen; waiting up to $(fmt_duration "$term_budget") for the job to finish (cleanup may still be running) ..."
+  terminated=""
+  if poll_for "$term_budget" job_terminated; then
+    terminated=1
+  fi
 
-  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}')"
+  # Re-read this run's region now that the run is over. Anything the wrapper
+  # wrote AFTER its STATUS line — the LEAK: line, in the WEDGED path — is
+  # invisible to the region captured at STATUS-detection time; reusing that
+  # stale capture was the other half of OMN-304.
+  new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
+
+  # `|| true` inside the substitution: under pipefail a failing launchctl (or
+  # an awk SIGPIPE) would otherwise fail the assignment and set -e would kill
+  # the whole verify with no verdict printed at all — observed via the
+  # launchctl-down harness scenario. An empty rc already prints as "unknown".
+  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}' || true)"
   echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
 
   # Read the verdict ONLY from this run's region of the log.
   status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
   leak_line="$(printf '%s' "$new_region" | grep -aE '^LEAK: ' | tail -1 || true)"
+  if [ -z "$leak_line" ]; then
+    # No LEAK line is two different facts, and neither may print the old
+    # clean-looking "(none recorded)" default (which read as "scan ran,
+    # nothing found"): either the job is still deciding the question, or it
+    # ended down a path that never runs the scan (build failure, preflight
+    # wedge) — say which.
+    if [ -z "$terminated" ]; then
+      if [ -n "$job_probe_failed" ]; then
+        leak_line="LEAK: unknown — launchctl could not be queried, so termination was never observed; check launchd and $RUN_LOG"
+      else
+        leak_line="LEAK: unknown — cleanup still running after ${term_budget}s; check $RUN_LOG once it settles"
+      fi
+    else
+      leak_line="LEAK: not scanned — this run ended without a leak scan (see STATUS above)"
+    fi
+  fi
   echo "  ${status_line:-STATUS: (none recorded)}"
-  echo "  ${leak_line:-LEAK: (none recorded)}"
+  echo "  $leak_line"
 
   # A WEDGED run is not a pass and not a failure: the job worked, the
   # environment didn't. Say so plainly rather than reporting green.
