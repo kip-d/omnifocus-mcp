@@ -19,25 +19,39 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 - `OmniFocus-4.8.11-d.ts` - TypeScript definitions for OmniFocus 4.8.11 (previous)
 - `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
 
-Manual carry-overs each regeneration:
+### Manual carry-overs each regeneration
+
+Both are mechanical and hand-done today; OMN-328 tracks scripting them.
 
 1. The regen-instructions header block (the raw export lacks it).
 2. **Optional-before-required normalization.** The 4.9 export marks a parameter `?:` whenever it accepts `null`, even
-   when a required parameter follows it (e.g. `openDocument(from?: Document | null, url: URL, …)`). TypeScript's grammar
-   rejects that (TS1016). Saved as a real `.d.ts` with `skipLibCheck` (tsc's default, and set in this repo's `tsconfig`)
-   the export compiles clean — but this directory's versioned files are named `OmniFocus-X.Y-d.ts`, and hyphen-d is not
-   a declaration file, so `skipLibCheck` does not cover them and `npm run build` fails. Drop the `?` on every optional
-   parameter that precedes a required one (seven sites in 4.9: `Application.openDocument`,
-   `FileWrapper.withContents`/`withChildren`, the `Form.Field.MultipleOptions` and `Form.Field.Option` constructors,
-   `LanguageModel.Tool` constructor, `Preferences.setObjectForKey`). The type stays `T | null`, so nothing is lost. Do
-   this on the raw single-line export before prettier wraps signatures.
+   when a required parameter follows it. TypeScript's grammar rejects that (TS1016). Saved as a real `.d.ts` with
+   `skipLibCheck` (tsc's default, and set in this repo's `tsconfig`) the export compiles clean — but this directory's
+   versioned files are named `OmniFocus-X.Y-d.ts`, and hyphen-d is not a declaration file, so `skipLibCheck` does not
+   cover them and `npm run build` fails. Drop the `?` on every optional parameter that precedes a required one; the type
+   stays `T | null`, so nothing is lost. Do this on the raw single-line export, before prettier wraps signatures.
+   `npx tsc --noEmit -p tsconfig.json` lists every site you missed. The seven in 4.9:
+
+   | Declaration                              | Parameter(s) losing `?` | Required parameter that follows |
+   | ---------------------------------------- | ----------------------- | ------------------------------- |
+   | `Application.openDocument`               | `from`                  | `url`, `completed`              |
+   | `FileWrapper.withContents`               | `name`                  | `contents`                      |
+   | `FileWrapper.withChildren`               | `name`                  | `children`                      |
+   | `Form.Field.MultipleOptions` constructor | `displayName`, `names`  | `options`, `selected`           |
+   | `Form.Field.Option` constructor          | `displayName`           | `options`                       |
+   | `LanguageModel.Tool` constructor         | `inputSchema`           | `f`                             |
+   | `Settings.setObjectForKey`               | `value`                 | `key`                           |
+
+### Retired carry-over
 
 The `_omnijs_AnonymousProxy` placeholder that 4.8.x exports needed is gone — 4.9 declares `LanguageModel.Tool` and types
 `Session.withTools()` against it.
 
-**Diffing two snapshots:** compare by class and member name, never by line. The pre-commit hook prettier-reformats the
-export (4-space → 2-space indents), 4.9 marks optional parameters `?:` where 4.8.x did not, and prettier then wraps the
-longer signatures across lines — so both a bare `diff` and a sorted-line diff are pure noise. Parse each file into
+### Diffing two snapshots
+
+Compare by class and member name, never by line. The pre-commit hook prettier-reformats the export (4-space → 2-space
+indents), 4.9 marks optional parameters `?:` where 4.8.x did not, and prettier then wraps the longer signatures across
+lines — so both a bare `diff` and a sorted-line diff are pure noise. Parse each file into
 `{container → set of whitespace-stripped member lines}` (drop `?` markers and trailing punctuation) and diff the sets; a
 ~40-line Node script does it.
 
@@ -143,7 +157,9 @@ Fallback for OmniFocus older than 4.9 (no `getTypeScriptDeclarations`): **Automa
 
 ### Step 4: Test and Verify
 
-1. Run the local check set from CLAUDE.md: `npm run ci:local` (build, lint, format:check, unit tests)
+1. Run `npm run ci:local`: format check, build, typecheck, lint, unit tests, then three live checks against the built
+   server (startup, tool registration, and a `system version` call through `scripts/verify-deploy.ts`) — so the vendored
+   types are exercised by a real server boot, not only by `tsc`
 2. Test any scripts that use new API features
 
 ### Step 5: Commit Changes
