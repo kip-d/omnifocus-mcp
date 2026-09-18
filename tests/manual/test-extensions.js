@@ -21,59 +21,44 @@ function run() {
 
   // Helper function to test a property
   function testProperty(obj, propName, objType) {
+    // Step 1: read the property. Some properties are functions in JXA.
+    let actualValue;
     try {
       const value = obj[propName];
-      // Try to access the property - some properties are functions
-      const actualValue = typeof value === 'function' ? value() : value;
-      // JXA object specifiers (e.g. the Task returned by project.nextTask) throw
-      // "Can't convert types" on String(); describe them by name instead. A
-      // value we can read but cannot describe is NOT a pass: record it as
-      // exists:true / inspectable:false and count it as a failure, so the
-      // summary never reports success for a property nobody could inspect.
-      let shown = null;
-      let inspectError = null;
-      if (actualValue !== null && actualValue !== undefined) {
-        try {
-          // JXA specifiers report typeof 'function' (project.nextTask does), not 'object'.
-          const isSpecifier =
-            (typeof actualValue === 'object' || typeof actualValue === 'function') &&
-            typeof actualValue.name === 'function';
-          if (isSpecifier) {
-            const name = actualValue.name();
-            shown = name === '' ? '<(unnamed)>' : `<${name}>`;
-          } else {
-            shown = String(actualValue);
-          }
-        } catch (e) {
-          inspectError = e.message;
-        }
-      }
-      if (inspectError !== null) {
-        results.tests[objType][propName] = {
-          exists: true,
-          inspectable: false,
-          type: typeof actualValue,
-          error: inspectError,
-        };
-        console.log(
-          `⚠️  ${objType}.${propName}: ${typeof actualValue} read OK but could not be described - ${inspectError}`,
-        );
-        return false;
-      }
+      actualValue = typeof value === 'function' ? value() : value;
+    } catch (e) {
+      results.tests[objType][propName] = { exists: false, error: e.message };
+      console.log(`❌ ${objType}.${propName}: ERROR - ${e.message}`);
+      return false;
+    }
+
+    // Step 2: describe it with JXA's own formatter. Automation.getDisplayString
+    // renders object specifiers (project.nextTask returns one; String() on it
+    // throws "Can't convert types", and typeof reports 'function') as their
+    // object path, and passes strings, numbers, booleans, dates, and null
+    // through. A value we can read but cannot describe is NOT a pass: it is
+    // recorded exists:true / inspectable:false and counted as a failure, so
+    // the summary never reports success for a property nobody could inspect.
+    try {
+      const shown = Automation.getDisplayString(actualValue);
       results.tests[objType][propName] = {
         exists: true,
         inspectable: true,
-        type: typeof actualValue,
+        type: typeof actualValue, // a specifier shows as 'function' here; its display string is the tell
         value: shown,
       };
       console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${shown}`);
       return true;
     } catch (e) {
       results.tests[objType][propName] = {
-        exists: false,
+        exists: true,
+        inspectable: false,
+        type: typeof actualValue,
         error: e.message,
       };
-      console.log(`❌ ${objType}.${propName}: ERROR - ${e.message}`);
+      console.log(
+        `⚠️  ${objType}.${propName}: ${typeof actualValue} read OK but could not be described - ${e.message}`,
+      );
       return false;
     }
   }

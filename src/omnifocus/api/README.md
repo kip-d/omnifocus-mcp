@@ -52,8 +52,9 @@ for Automation (JXA).
 The `OmniFocus-extensions.d.ts` file contains properties not included in the official API export but accessible via JXA.
 
 **Verified on OmniFocus 4.9** (2026-09-16, macOS 27) - All 14 properties tested ✅ (previously 4.8.3, October 2025).
-Note: `project.nextTask` returns a JXA object specifier; the probe script formats it by name because `String()` on a
-specifier throws "Can't convert types" — that error is the probe's, not the property's.
+Note: `project.nextTask` returns a JXA object specifier (`typeof` reports `'function'`, and `String()` on it throws
+"Can't convert types"). The probe describes every value with `Automation.getDisplayString()`, JXA's own formatter, so a
+specifier prints as its object path; a value that can be read but not described is counted as a failure, not a pass.
 
 ### Project Extensions (4 properties)
 
