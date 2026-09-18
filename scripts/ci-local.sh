@@ -140,14 +140,20 @@ fi
 # OMN-321 serialized osascript spawns) and exited gracefully without the
 # response ever reaching stdout — so this step failed every time. (Steps 6-7
 # keep their pipes; see the note above step 6.)
-# verify-deploy.ts bounds each RPC with --timeout itself (60s covers a cold warm
-# with headroom), so this step needs no coreutils timeout and runs even when
-# steps 6-7 are skipped. Its exit code is
-# the verdict (process.exitCode = 1 on every failure path) and its stderr
-# carries "VERIFY FAILED: <reason>" plus the server's own stderr tail, so both
-# streams flow through; the success line is the JSON probe printed above.
+# verify-deploy.ts's header documents its contract: --timeout bounds each RPC
+# internally (30s matches test-quick.sh / test-comprehensive.sh and fails a
+# dialog-wedged OmniFocus in seconds), exit code is the verdict, and stderr
+# carries "VERIFY FAILED: <reason>" plus the server's stderr tail — so both
+# streams flow through and this step runs even when steps 6-7 are skipped.
+# The explicit `system {operation:"version"}` tool argument matters: with no
+# tool, verify-deploy only proves the transport (a success:false envelope still
+# exits 0); with one it fails on success:false, as the old grep did. Coverage is
+# deliberately the version tool only, as before; data tools are exercised by
+# test-quick.sh / test-comprehensive.sh. When coreutils timeout is present it
+# wraps the whole invocation as a last-resort bound on the npx/tsx startup
+# phase, which verify-deploy's own timers do not cover.
 print_step "Sample tool execution test"
-if npx tsx scripts/verify-deploy.ts dist/index.js --timeout 60000; then
+if ${TIMEOUT_CMD:+$TIMEOUT_CMD 120s} npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000 system '{"operation":"version"}'; then
     print_success "Sample tool execution successful"
 else
     print_error "Sample tool execution failed (see VERIFY FAILED above)"
@@ -163,6 +169,9 @@ echo "- Type checking: ✅"
 echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually)"
+# Steps 6-7 need coreutils timeout and are skipped without it; step 8 does not
+# (verify-deploy.ts bounds its own RPCs) and always runs, so its line sits
+# outside the gate. Reaching this block at all means step 8 passed (set -e).
 if [ -n "$TIMEOUT_CMD" ]; then
     echo "- MCP server startup: ✅"
     echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
