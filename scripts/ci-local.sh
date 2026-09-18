@@ -101,7 +101,11 @@ print_step "Integration tests"
 print_warning "Skipping integration tests in pre-push hook (run 'npm test' manually or in CI)"
 
 # Step 6: MCP Server verification
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# Steps 6 and 7 keep one-shot pipes on purpose: `initialize` is answered before
+# the startup cache warm begins (OMN-228) and `tools/list` is served by the SDK
+# without the tool-call startup gate, so both responses reach stdout before the
+# stdin EOF triggers the graceful exit. Only tools/call waits on the warm — that
+# is why step 8 goes through verify-deploy.ts (OMN-326). Timeout is a safety net.
 print_step "MCP server startup verification"
 if [ -n "$TIMEOUT_CMD" ]; then
     # 30s timeout is safety net - server normally responds and exits in ~5s
@@ -110,8 +114,7 @@ else
     print_warning "Skipping MCP server startup test (timeout command not available)"
 fi
 
-# Step 7: Tool registration check
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# Step 7: Tool registration check (one-shot pipe on purpose; see the note above step 6)
 print_step "Tool registration verification"
 if [ -n "$TIMEOUT_CMD" ]; then
     # 30s timeout is safety net - server normally responds and exits in ~6s (includes cache warming)
@@ -129,21 +132,38 @@ else
 fi
 
 # Step 8: Sample tool execution
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# OMN-326: drive the server through scripts/verify-deploy.ts (full init
+# handshake, stdin held open, response correlated by JSON-RPC id). The old
+# one-shot `echo | node dist/index.js` pipe EOF'd stdin immediately; the server
+# then ran the tool to completion behind the startup cache warm (~15s since
+# OMN-321 serialized osascript spawns) and exited gracefully without the
+# response ever reaching stdout — so this step failed every time. (Steps 6-7
+# keep their pipes; see the note above step 6.)
+# verify-deploy.ts's header documents its contract: --timeout bounds each RPC
+# internally (30s matches test-quick.sh / test-comprehensive.sh and fails a
+# dialog-wedged OmniFocus in seconds), exit code is the verdict, and stderr
+# carries "VERIFY FAILED: <reason>" plus the server's stderr tail — so both
+# streams flow through and this step runs even when steps 6-7 are skipped.
+# The explicit `system {operation:"version"}` tool argument matters: with no
+# tool, verify-deploy only proves the transport (a success:false envelope still
+# exits 0); with one it fails on success:false, as the old grep did. Coverage is
+# deliberately the version tool only, as before; data tools are exercised by
+# test-quick.sh / test-comprehensive.sh. When coreutils timeout is present it
+# wraps the whole invocation as a last-resort bound on the npx/tsx startup
+# phase, which verify-deploy's own timers do not cover.
 print_step "Sample tool execution test"
-if [ -n "$TIMEOUT_CMD" ]; then
-    # 30s timeout is safety net - server normally responds and exits in ~5s
-    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
-
-    if echo "$RESULT" | grep -q "version"; then
-        print_success "Sample tool execution successful"
-    else
-        print_error "Sample tool execution failed"
-        echo "Result: $RESULT"
-        exit 1
-    fi
+if ${TIMEOUT_CMD:+$TIMEOUT_CMD 120s} npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000 system '{"operation":"version"}'; then
+    print_success "Sample tool execution successful"
 else
-    print_warning "Skipping sample tool execution test (timeout command not available)"
+    status=$?
+    if [ "$status" -eq 124 ]; then
+        # coreutils timeout exit code: the outer 120s bound fired before
+        # verify-deploy could report, so there is no VERIFY FAILED line above.
+        print_error "Sample tool execution timed out: outer ${TIMEOUT_CMD} 120s bound fired (npx/tsx startup or a stalled event loop)"
+    else
+        print_error "Sample tool execution failed (exit $status; see VERIFY FAILED above)"
+    fi
+    exit 1
 fi
 
 echo -e "\n${GREEN}🎉 All CI checks passed!${NC}"
@@ -152,15 +172,18 @@ echo -e "${BLUE}Summary:${NC}"
 echo "- Code formatting: ✅"
 echo "- TypeScript compilation: ✅"
 echo "- Type checking: ✅"
-echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
+echo "- Lint: ✅ (eslint --max-warnings=0)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually)"
+# Steps 6-7 need coreutils timeout and are skipped without it; step 8 does not
+# (verify-deploy.ts bounds its own RPCs) and always runs, so its line sits
+# outside the gate. Reaching this block at all means step 8 passed (set -e).
 if [ -n "$TIMEOUT_CMD" ]; then
     echo "- MCP server startup: ✅"
     echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
-    echo "- Sample tool execution: ✅"
 else
-    echo "- MCP server tests: ⚠️ (skipped - install coreutils for timeout command)"
+    echo "- MCP server startup / tool registration: ⚠️ (skipped - install coreutils for timeout command)"
 fi
+echo "- Sample tool execution: ✅"
 echo -e "\n${BLUE}Note: Run 'npm test' to include full integration tests with real OmniFocus queries${NC}"
 echo -e "${GREEN}Ready for quick push! 🚀${NC}"
