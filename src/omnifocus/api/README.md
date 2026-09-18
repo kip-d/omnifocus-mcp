@@ -110,7 +110,8 @@ specifier prints as its object path; a value that can be read but not described 
 - `effectivelyDropped: boolean` - Whether task or its container is dropped
 
 **Testing:** Run `osascript -l JavaScript tests/manual/test-extensions.js` to verify these properties on your OmniFocus
-version (it is a JXA script, not Node; `node` fails on `Application`).
+version. It is a JXA script: under plain `node` it exits 0 with no output, because JXA's `run()` entry point is never
+invoked — a silent no-op, not a failure, so check that the property lines actually printed.
 
 ## How to Regenerate API Definitions
 
@@ -166,7 +167,10 @@ mv ~/Downloads/OmniFocus.ts src/omnifocus/api/OmniFocus-[VERSION]-d.ts
 1. Run `npm run ci:local`: format check, build, typecheck, lint, unit tests, then three live checks against the built
    server (startup, tool registration, and a `system version` tool call) — so the vendored types are exercised by a real
    server boot, not only by `tsc`
-2. Test any scripts that use new API features
+2. Run the integration suite, which `ci:local` skips: `npm run test:integration` (long-running, against live OmniFocus;
+   run it in the background, see `tests/integration/PERFORMANCE.md`). A vendored-types change is exactly where a real
+   OmniFocus behavioral mismatch surfaces only here. For 4.9: 196 passed, 22 skipped, 0 failed on macOS 27.
+3. Test any scripts that use new API features
 
 ### Step 5: Commit Changes
 
