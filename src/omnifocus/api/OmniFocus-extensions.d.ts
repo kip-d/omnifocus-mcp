@@ -4,7 +4,7 @@
 // These properties are not included in the official OmniFocus API export
 // but are accessible via JXA and have been empirically verified to work.
 //
-// Verified on: OmniFocus 4.8.3 (October 2025) - All 14 properties tested ✅
+// Verified on: OmniFocus 4.9 (2026-09-16, macOS 27) - All 14 properties tested ✅ (previously 4.8.3, October 2025)
 // Test results: 14/14 passed
 //
 // This file augments the official OmniFocus.d.ts type definitions.
