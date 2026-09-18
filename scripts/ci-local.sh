@@ -114,8 +114,7 @@ else
     print_warning "Skipping MCP server startup test (timeout command not available)"
 fi
 
-# Step 7: Tool registration check
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# Step 7: Tool registration check (one-shot pipe on purpose; see the note above step 6)
 print_step "Tool registration verification"
 if [ -n "$TIMEOUT_CMD" ]; then
     # 30s timeout is safety net - server normally responds and exits in ~6s (includes cache warming)
@@ -156,7 +155,14 @@ print_step "Sample tool execution test"
 if ${TIMEOUT_CMD:+$TIMEOUT_CMD 120s} npx tsx scripts/verify-deploy.ts dist/index.js --timeout 30000 system '{"operation":"version"}'; then
     print_success "Sample tool execution successful"
 else
-    print_error "Sample tool execution failed (see VERIFY FAILED above)"
+    status=$?
+    if [ "$status" -eq 124 ]; then
+        # coreutils timeout exit code: the outer 120s bound fired before
+        # verify-deploy could report, so there is no VERIFY FAILED line above.
+        print_error "Sample tool execution timed out: outer ${TIMEOUT_CMD} 120s bound fired (npx/tsx startup or a stalled event loop)"
+    else
+        print_error "Sample tool execution failed (exit $status; see VERIFY FAILED above)"
+    fi
     exit 1
 fi
 
@@ -166,7 +172,7 @@ echo -e "${BLUE}Summary:${NC}"
 echo "- Code formatting: ✅"
 echo "- TypeScript compilation: ✅"
 echo "- Type checking: ✅"
-echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
+echo "- Lint: ✅ (eslint --max-warnings=0)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually)"
 # Steps 6-7 need coreutils timeout and are skipped without it; step 8 does not
