@@ -101,7 +101,11 @@ print_step "Integration tests"
 print_warning "Skipping integration tests in pre-push hook (run 'npm test' manually or in CI)"
 
 # Step 6: MCP Server verification
-# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
+# Steps 6 and 7 keep one-shot pipes on purpose: `initialize` is answered before
+# the startup cache warm begins (OMN-228) and `tools/list` is served by the SDK
+# without the tool-call startup gate, so both responses reach stdout before the
+# stdin EOF triggers the graceful exit. Only tools/call waits on the warm — that
+# is why step 8 goes through verify-deploy.ts (OMN-326). Timeout is a safety net.
 print_step "MCP server startup verification"
 if [ -n "$TIMEOUT_CMD" ]; then
     # 30s timeout is safety net - server normally responds and exits in ~5s
@@ -134,17 +138,19 @@ fi
 # one-shot `echo | node dist/index.js` pipe EOF'd stdin immediately; the server
 # then ran the tool to completion behind the startup cache warm (~15s since
 # OMN-321 serialized osascript spawns) and exited gracefully without the
-# response ever reaching stdout — so this step failed every time. Steps 6 and
-# 7 keep their pipes: initialize and tools/list answer before the warm.
-# --timeout bounds each RPC; 60s covers a cold warm with headroom.
+# response ever reaching stdout — so this step failed every time. (Steps 6-7
+# keep their pipes; see the note above step 6.)
+# verify-deploy.ts bounds each RPC with --timeout itself (60s covers a cold warm
+# with headroom), so this step needs no coreutils timeout and runs even when
+# steps 6-7 are skipped. Its exit code is
+# the verdict (process.exitCode = 1 on every failure path) and its stderr
+# carries "VERIFY FAILED: <reason>" plus the server's own stderr tail, so both
+# streams flow through; the success line is the JSON probe printed above.
 print_step "Sample tool execution test"
-RESULT=$(npx tsx scripts/verify-deploy.ts dist/index.js --timeout 60000 2>/dev/null || echo "error")
-
-if echo "$RESULT" | grep -q '"probe": "version"'; then
+if npx tsx scripts/verify-deploy.ts dist/index.js --timeout 60000; then
     print_success "Sample tool execution successful"
 else
-    print_error "Sample tool execution failed"
-    echo "Result: $RESULT"
+    print_error "Sample tool execution failed (see VERIFY FAILED above)"
     exit 1
 fi
 
@@ -160,9 +166,9 @@ echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually
 if [ -n "$TIMEOUT_CMD" ]; then
     echo "- MCP server startup: ✅"
     echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
-    echo "- Sample tool execution: ✅"
 else
-    echo "- MCP server tests: ⚠️ (skipped - install coreutils for timeout command)"
+    echo "- MCP server startup / tool registration: ⚠️ (skipped - install coreutils for timeout command)"
 fi
+echo "- Sample tool execution: ✅"
 echo -e "\n${BLUE}Note: Run 'npm test' to include full integration tests with real OmniFocus queries${NC}"
 echo -e "${GREEN}Ready for quick push! 🚀${NC}"
