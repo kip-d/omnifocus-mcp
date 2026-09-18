@@ -228,15 +228,26 @@ describe('buildAST', () => {
       });
     });
 
-    it('transforms search alias (legacy) the same as text', () => {
-      const filter: TaskFilter = { search: 'meeting notes' };
+    // OMN-307: the legacy `search` alias is deleted. The schema never exposed a
+    // `filters.search` door, so this lowering branch was unreachable from every
+    // MCP client while still being pinned by tests — a layer-5 path with no
+    // layer-1 entrance. `text` is now the single spelling.
+    it('OMN-307: ignores the removed search alias (produces no text node)', () => {
+      const filter = { search: 'meeting notes' } as unknown as TaskFilter;
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual(buildAST({}));
+    });
+
+    it('OMN-307: a stray search key does not interfere with text', () => {
+      const filter = { text: 'review', search: 'meeting notes' } as unknown as TaskFilter;
       const ast = buildAST(filter);
 
       expect(ast).toEqual({
         type: 'or',
         children: [
-          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'meeting notes' },
-          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'meeting notes' },
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'review' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'review' },
         ],
       });
     });
@@ -265,16 +276,13 @@ describe('buildAST', () => {
       });
     });
 
-    it('OMN-115: fastSearch:true matches name only for the search alias', () => {
-      const filter: TaskFilter = { search: 'meeting notes', fastSearch: true };
+    it('OMN-115: fastSearch:true with no text term produces no node', () => {
+      // Previously asserted via the `search` alias (removed in OMN-307).
+      // fastSearch is a modifier on a text term, not a term itself.
+      const filter: TaskFilter = { fastSearch: true };
       const ast = buildAST(filter);
 
-      expect(ast).toEqual({
-        type: 'comparison',
-        field: 'task.name',
-        operator: 'includes',
-        value: 'meeting notes',
-      });
+      expect(ast).toEqual(buildAST({}));
     });
 
     it('OMN-115: fastSearch:false still matches both name and note', () => {

@@ -239,21 +239,27 @@ describe('QueryCompiler.transformFilters', () => {
     });
   });
 
-  // OMN-142: name is a name-scoped filter, distinct from text/search which
-  // also match note content.
+  // OMN-142: name is a name-scoped filter, distinct from `text`, which also
+  // matches note content.
+  // OMN-307: these previously asserted `result.search` was unset. The `search`
+  // alias is deleted, so the note-matching field to guard against is now `text`
+  // — that is the assertion carrying OMN-142's intent. The extra cast-based
+  // check pins that the alias does not come back by any route.
   describe('name filter transformation', () => {
-    it('transforms name.contains to name + CONTAINS operator (not search)', () => {
+    it('transforms name.contains to name + CONTAINS operator (not a note-matching filter)', () => {
       const result = compiler.transformFilters({ name: { contains: 'weekly' } });
       expect(result.name).toBe('weekly');
       expect(result.nameOperator).toBe('CONTAINS');
-      expect(result.search).toBeUndefined();
+      expect(result.text).toBeUndefined();
+      expect((result as Record<string, unknown>).search).toBeUndefined();
     });
 
-    it('transforms name.matches to name + MATCHES operator (not search)', () => {
+    it('transforms name.matches to name + MATCHES operator (not a note-matching filter)', () => {
       const result = compiler.transformFilters({ name: { matches: '^Q[1-4]' } });
       expect(result.name).toBe('^Q[1-4]');
       expect(result.nameOperator).toBe('MATCHES');
-      expect(result.search).toBeUndefined();
+      expect(result.text).toBeUndefined();
+      expect((result as Record<string, unknown>).search).toBeUndefined();
     });
   });
 

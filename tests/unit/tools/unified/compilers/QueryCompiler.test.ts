@@ -758,22 +758,28 @@ describe('QueryCompiler', () => {
       });
     });
 
-    // OMN-142: `name` must compile to a name-scoped filter, never the legacy
-    // `search` field — `search` matches note content too, and that over-match
-    // collaterally deleted a real user task on 2026-06-09.
+    // OMN-142: `name` must compile to a name-scoped filter, never a
+    // note-matching one — that over-match collaterally deleted a real user task
+    // on 2026-06-09.
+    // OMN-307: the legacy `search` field this originally guarded is deleted, so
+    // the live note-matching field is `text`; asserting on it is what preserves
+    // OMN-142's intent. The cast-based check additionally pins that `search`
+    // cannot reappear.
     describe('name filter transformation (OMN-142)', () => {
-      it('name.contains compiles to name + CONTAINS, not search', () => {
+      it('name.contains compiles to name + CONTAINS, not a note-matching filter', () => {
         const result = compiler.transformFilters({ name: { contains: 'Quarterly' } });
         expect(result.name).toBe('Quarterly');
         expect(result.nameOperator).toBe('CONTAINS');
-        expect(result.search).toBeUndefined();
+        expect(result.text).toBeUndefined();
+        expect((result as Record<string, unknown>).search).toBeUndefined();
       });
 
       it('name.matches compiles to name + MATCHES (regex no longer degrades to substring)', () => {
         const result = compiler.transformFilters({ name: { matches: 'Review.*' } });
         expect(result.name).toBe('Review.*');
         expect(result.nameOperator).toBe('MATCHES');
-        expect(result.search).toBeUndefined();
+        expect(result.text).toBeUndefined();
+        expect((result as Record<string, unknown>).search).toBeUndefined();
       });
 
       it('name and text filters coexist — neither silently drops the other', () => {

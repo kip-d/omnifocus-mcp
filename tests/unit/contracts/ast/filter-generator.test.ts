@@ -43,16 +43,19 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toBe('true');
     });
 
+    // OMN-307: these previously exercised the `search` alias, which the schema
+    // never accepted. Re-pointed at `text` — the spelling clients can actually
+    // reach — so the OMN-115 fast path stays covered on a live code path.
     it('OMN-115: fastSearch emits a name-only predicate (no task.note read)', () => {
-      const filter: TaskFilter = { search: 'review', fastSearch: true };
+      const filter: TaskFilter = { text: 'review', fastSearch: true };
       const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
       expect(result.predicate).not.toContain('task.note');
     });
 
-    it('OMN-115: default search still reads task.note', () => {
-      const filter: TaskFilter = { search: 'review' };
+    it('OMN-115: default text search still reads task.note', () => {
+      const filter: TaskFilter = { text: 'review' };
       const result = generateFilterCode(filter);
 
       expect(result.predicate).toContain('task.name');
