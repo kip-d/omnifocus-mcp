@@ -43,7 +43,8 @@ version: 1
 # Export TypeScript) and the `// ClassName` section labels it emits otherwise
 # trip ai-slop/narrative-comment; the 2k-line exports also trip file-too-large.
 # Keep them in the tree (267 ambient-type usages across src/) but out of the
-# score. Mirrors the .prettierignore entry.
+# score. (.prettierignore lists only the OmniFocus.d.ts symlink; the versioned
+# exports ARE prettier-formatted, by the pre-commit hook and format:check.)
 #
 # Note: the exporter names versioned files `OmniFocus-X.Y.Z-d.ts` (hyphen-d),
 # so `*.d.ts` alone misses them — exclude the whole api/ dir as well.
@@ -66,7 +67,7 @@ exclude:
 | Pattern                   | Reason                                                                                                                                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `**/*.d.ts`, `**/*-d.ts`  | OmniFocus's TypeScript export. The `// ClassName` section labels it emits trip `narrative-comment`; the 2k-line files trip `file-too-large`. The `-d.ts` variant catches the versioned `OmniFocus-4.8.6-d.ts` naming that `*.d.ts` misses. |
-| `**/omnifocus/api/**`     | Belt-and-suspenders for the whole vendored API dir (mirrors the `.prettierignore` entry).                                                                                                                                                  |
+| `**/omnifocus/api/**`     | Belt-and-suspenders for the whole vendored API dir. (Unlike `.prettierignore`, which lists only the `OmniFocus.d.ts` symlink.)                                                                                                             |
 | `**/contracts/ast/**`     | AST → JXA/OmniJS **script builders**. The "code" is largely JS-in-strings; empty `catch(e){}` there is deliberate best-effort, not a swallowed error.                                                                                      |
 | `**/omnifocus/scripts/**` | The JXA scripts themselves / their generators. Same embedded-script false-positive class.                                                                                                                                                  |
 

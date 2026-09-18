@@ -1,7 +1,7 @@
 #!/usr/bin/env osascript -l JavaScript
 
 // Test script to verify undocumented OmniFocus API extensions
-// Tests properties on OmniFocus 4.8.3
+// Tests properties on the running OmniFocus (version printed at start)
 
 function run() {
   const app = Application('OmniFocus');
@@ -21,23 +21,44 @@ function run() {
 
   // Helper function to test a property
   function testProperty(obj, propName, objType) {
+    // Step 1: read the property. Some properties are functions in JXA.
+    let actualValue;
     try {
       const value = obj[propName];
-      // Try to access the property - some properties are functions
-      const actualValue = typeof value === 'function' ? value() : value;
+      actualValue = typeof value === 'function' ? value() : value;
+    } catch (e) {
+      results.tests[objType][propName] = { exists: false, error: e.message };
+      console.log(`❌ ${objType}.${propName}: ERROR - ${e.message}`);
+      return false;
+    }
+
+    // Step 2: describe it with JXA's own formatter. Automation.getDisplayString
+    // renders object specifiers (project.nextTask returns one; String() on it
+    // throws "Can't convert types", and typeof reports 'function') as their
+    // object path, and passes strings, numbers, booleans, dates, and null
+    // through. A value we can read but cannot describe is NOT a pass: it is
+    // recorded exists:true / inspectable:false and counted as a failure, so
+    // the summary never reports success for a property nobody could inspect.
+    try {
+      const shown = Automation.getDisplayString(actualValue);
       results.tests[objType][propName] = {
         exists: true,
-        type: typeof actualValue,
-        value: actualValue !== null && actualValue !== undefined ? String(actualValue) : null,
+        inspectable: true,
+        type: typeof actualValue, // a specifier shows as 'function' here; its display string is the tell
+        value: shown,
       };
-      console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${actualValue}`);
+      console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${shown}`);
       return true;
     } catch (e) {
       results.tests[objType][propName] = {
-        exists: false,
+        exists: true,
+        inspectable: false,
+        type: typeof actualValue,
         error: e.message,
       };
-      console.log(`❌ ${objType}.${propName}: ERROR - ${e.message}`);
+      console.log(
+        `⚠️  ${objType}.${propName}: ${typeof actualValue} read OK but could not be described - ${e.message}`,
+      );
       return false;
     }
   }
@@ -95,7 +116,8 @@ function run() {
   for (const objType in results.tests) {
     for (const prop in results.tests[objType]) {
       totalTests++;
-      if (results.tests[objType][prop].exists) {
+      const r = results.tests[objType][prop];
+      if (r.exists && r.inspectable !== false) {
         passedTests++;
       }
     }
