@@ -23,9 +23,11 @@ Manual carry-overs each regeneration:
 
 1. The regen-instructions header block (the raw export lacks it).
 2. **Optional-before-required normalization.** The 4.9 export marks a parameter `?:` whenever it accepts `null`, even
-   when a required parameter follows it (e.g. `openDocument(from?: Document | null, url: URL, …)`). That is invalid
-   TypeScript (TS1016) and breaks `npm run build`, because `tsconfig` includes this directory. Drop the `?` on every
-   optional parameter that precedes a required one (seven sites in 4.9: `Application.openDocument`,
+   when a required parameter follows it (e.g. `openDocument(from?: Document | null, url: URL, …)`). TypeScript's grammar
+   rejects that (TS1016). Saved as a real `.d.ts` with `skipLibCheck` (tsc's default, and set in this repo's `tsconfig`)
+   the export compiles clean — but this directory's versioned files are named `OmniFocus-X.Y-d.ts`, and hyphen-d is not
+   a declaration file, so `skipLibCheck` does not cover them and `npm run build` fails. Drop the `?` on every optional
+   parameter that precedes a required one (seven sites in 4.9: `Application.openDocument`,
    `FileWrapper.withContents`/`withChildren`, the `Form.Field.MultipleOptions` and `Form.Field.Option` constructors,
    `LanguageModel.Tool` constructor, `Preferences.setObjectForKey`). The type stays `T | null`, so nothing is lost. Do
    this on the raw single-line export before prettier wraps signatures.
@@ -89,7 +91,8 @@ The `OmniFocus-extensions.d.ts` file contains properties not included in the off
 - `effectivelyCompleted: boolean` - Whether task or its container is completed
 - `effectivelyDropped: boolean` - Whether task or its container is dropped
 
-**Testing:** Run `node tests/manual/test-extensions.js` to verify these properties on your OmniFocus version.
+**Testing:** Run `osascript -l JavaScript tests/manual/test-extensions.js` to verify these properties on your OmniFocus
+version (it is a JXA script, not Node; `node` fails on `Application`).
 
 ## How to Regenerate API Definitions
 
