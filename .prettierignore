@@ -6,3 +6,6 @@ dist/
 
 # Generated files
 *.generated.ts
+
+# Local-only project skills (git-excluded via .git/info/exclude, not tracked here)
+.claude/skills/
