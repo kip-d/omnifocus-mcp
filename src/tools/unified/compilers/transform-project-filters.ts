@@ -144,6 +144,11 @@ function mapFlatProjectFilter(merged: Record<string, unknown>, pathPrefix: Array
 
   // 4. id is an exclusive fast path (design spec §3.3): silently ignoring
   //    co-filters is the same drop class this module closes.
+  // OMN-331: a blank id reads as "no id" to every truthy check downstream and
+  // matched every project — reject it here.
+  if (typeof merged.id === 'string' && merged.id.trim() === '') {
+    throw projectsError([...pathPrefix, 'id'], "'id' must be a non-empty project ID.");
+  }
   const keys = Object.keys(merged);
   if (merged.id !== undefined && keys.length > 1) {
     throw projectsError(
@@ -223,6 +228,19 @@ export function transformProjectFilters(input: FilterValue): ProjectFilter {
       }
       mergeFrom(`AND[${i}]`, cond as Record<string, unknown>);
     });
+  }
+
+  // OMN-331: OR and NOT sit outside the flat-merged keys, so mapFlatProjectFilter's id
+  // exclusivity check can't see them. Without this, countOnly ANDed them with id while
+  // the row path's id lookup ignored them. Checked after the AND merge so an id that
+  // arrives via AND is covered too.
+  if (merged.id !== undefined && (OR !== undefined || NOT !== undefined)) {
+    const others = [OR !== undefined && 'OR', NOT !== undefined && 'NOT'].filter(Boolean).join(', ');
+    throw projectsError(
+      ['id'],
+      `'id' is an exact lookup and cannot combine with other filters (got: ${others}). ` +
+        'Remove the other filters, or drop id to search.',
+    );
   }
 
   // 2. NOT → status-array complement (OMN-171). Computed before mapping so it can

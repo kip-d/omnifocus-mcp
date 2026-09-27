@@ -285,6 +285,16 @@ function projectTextCondition(field: 'name' | 'note', term: string, operator?: T
 export function generateProjectFilterCode(filter: ProjectFilter): string {
   const conditions: string[] = [];
 
+  // OMN-331: id. The compiler rejects id combined with sibling keys (per filter and per
+  // OR branch), so this is effectively the whole predicate wherever it appears. Without
+  // it, countOnly (which runs before the id-lookup fast path) and id-only OR branches
+  // compiled to `true` and matched every project. `!== undefined`, not truthiness: a
+  // blank id (rejected by the compiler) must still match nothing rather than everything.
+  if (filter.id !== undefined) {
+    const escapedId = JSON.stringify(filter.id);
+    conditions.push(`(project.id.primaryKey === ${escapedId})`);
+  }
+
   // Status filter - can match multiple statuses
   if (filter.status && filter.status.length > 0) {
     const statusChecks = filter.status.map((s) => `project.status === ${PROJECT_STATUS_MAP[s]}`);
@@ -358,6 +368,7 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
  */
 export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
   return (
+    filter.id === undefined && // OMN-331
     (!filter.status || filter.status.length === 0) &&
     filter.flagged === undefined &&
     filter.needsReview === undefined &&

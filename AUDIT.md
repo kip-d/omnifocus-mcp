@@ -45,7 +45,7 @@ both keep the advertised JSON byte-for-byte as it is today.
      (Technique: Split Temporary Variable). Verified: `npx tsx /tmp/audit-31d52e9e/s3/mode-inbox.ts` shows the `flagged`
      predicate is `task.inInbox === true && … && task.project === null`, with no flagged term; the verifier reported
      HOLDS.
-- [ ] 3. [OMN-331] Project filters ignore `id` everywhere except on the id-lookup fast path. `generateProjectFilterCode`
+- [x] 3. [OMN-331] Project filters ignore `id` everywhere except on the id-lookup fast path. `generateProjectFilterCode`
      emits nothing for `ProjectFilter.id`, and `isEmptyProjectFilter` ignores it. So
      `{type:'projects', filters:{id:'X'}, countOnly:true}` counts **all** projects, because count runs before the id
      short-circuit. And `filters:{status:'active', OR:[{id:'a'},{id:'b'}]}` returns every active project

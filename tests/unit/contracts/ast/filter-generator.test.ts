@@ -9,8 +9,10 @@ import {
   generateFolderFilterCode,
   isEmptyFolderFilter,
   describeFolderFilter,
+  generateProjectFilterCode,
+  isEmptyProjectFilter,
 } from '../../../../src/contracts/ast/filter-generator.js';
-import type { TaskFilter, FolderFilter } from '../../../../src/contracts/filters.js';
+import type { TaskFilter, FolderFilter, ProjectFilter } from '../../../../src/contracts/filters.js';
 
 describe('generateFilterCode', () => {
   describe('end-to-end pipeline', () => {
@@ -447,5 +449,39 @@ describe('generateFolderFilterCode (OMN-170 S2)', () => {
     expect(describeFolderFilter({})).toBe('all folders');
     expect(describeFolderFilter({ name: 'Work', nameOperator: 'CONTAINS' })).toContain('name contains "Work"');
     expect(describeFolderFilter({ topLevelOnly: true })).toContain('top-level');
+  });
+});
+
+// OMN-331: `id` emitted no predicate and didn't count toward "non-empty", so any path
+// that reached the generator with an id (countOnly, OR branches) matched every project.
+describe('generateProjectFilterCode — id (OMN-331)', () => {
+  it('emits an id predicate for a top-level id', () => {
+    expect(generateProjectFilterCode({ id: 'abc123' })).toBe('(project.id.primaryKey === "abc123")');
+  });
+
+  it('counts id as a non-empty filter', () => {
+    expect(isEmptyProjectFilter({ id: 'abc123' })).toBe(false);
+  });
+
+  it('JSON-escapes the id so it cannot break out of the string literal', () => {
+    expect(generateProjectFilterCode({ id: 'a"b\\c' })).toBe('(project.id.primaryKey === "a\\"b\\\\c")');
+  });
+
+  it('ORs id-only branches and ANDs them with the base status', () => {
+    const filter: ProjectFilter = { status: ['active'], orBranches: [{ id: 'aaa' }, { id: 'bbb' }] };
+    expect(generateProjectFilterCode(filter)).toBe(
+      '(project.status === Project.Status.Active) && ' +
+        '(((project.id.primaryKey === "aaa")) || ((project.id.primaryKey === "bbb")))',
+    );
+  });
+
+  it('a blank id that slips past the compiler still matches nothing, not everything', () => {
+    expect(generateProjectFilterCode({ id: '' })).toBe('(project.id.primaryKey === "")');
+    expect(isEmptyProjectFilter({ id: '' })).toBe(false);
+  });
+
+  it('never emits a bare `true` branch for an id branch', () => {
+    const code = generateProjectFilterCode({ orBranches: [{ id: 'aaa' }, { id: 'bbb' }] });
+    expect(code).not.toContain('(true)');
   });
 });

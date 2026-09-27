@@ -61,6 +61,33 @@ describe('transformProjectFilters — id exclusivity', () => {
   it('id inside AND with other conditions rejects (merge happens first)', () => {
     reject({ AND: [{ id: 'abc' }, { name: { contains: 'x' } }] });
   });
+
+  // OMN-331 review: top-level OR and NOT sit outside the flat-merged keys, so they got
+  // past the check above — countOnly ANDed them with id while the row path's id lookup
+  // ignored them, and the two disagreed.
+  it('top-level id + OR rejects', () => {
+    expect(msgOf({ id: 'abc', OR: [{ status: 'active' }] })).toMatch(/exact lookup/i);
+  });
+  it('top-level id + NOT rejects', () => {
+    expect(msgOf({ id: 'abc', NOT: { status: 'dropped' } })).toMatch(/exact lookup/i);
+  });
+  it('id arriving via AND + OR rejects', () => {
+    expect(msgOf({ AND: [{ id: 'abc' }], OR: [{ status: 'active' }] })).toMatch(/exact lookup/i);
+  });
+  it('a base filter + OR of id-only branches is still allowed', () => {
+    expect(transformProjectFilters({ status: 'active', OR: [{ id: 'aaa' }, { id: 'bbb' }] })).toEqual({
+      status: ['active'],
+      orBranches: [{ id: 'aaa' }, { id: 'bbb' }],
+    });
+  });
+
+  // OMN-331 review: a blank id passed every truthy check as "no id" and matched everything.
+  it.each(['', '   '])('blank id %j rejects', (id) => {
+    expect(msgOf({ id })).toMatch(/non-empty/i);
+  });
+  it('blank id inside an OR branch rejects', () => {
+    expect(msgOf({ OR: [{ id: '' }, { id: 'bbb' }] })).toMatch(/non-empty/i);
+  });
 });
 
 describe('transformProjectFilters — AND input-space merge', () => {
