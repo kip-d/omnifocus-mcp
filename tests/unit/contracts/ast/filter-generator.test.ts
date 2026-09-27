@@ -475,6 +475,11 @@ describe('generateProjectFilterCode — id (OMN-331)', () => {
     );
   });
 
+  it('a blank id that slips past the compiler still matches nothing, not everything', () => {
+    expect(generateProjectFilterCode({ id: '' })).toBe('(project.id.primaryKey === "")');
+    expect(isEmptyProjectFilter({ id: '' })).toBe(false);
+  });
+
   it('never emits a bare `true` branch for an id branch', () => {
     const code = generateProjectFilterCode({ orBranches: [{ id: 'aaa' }, { id: 'bbb' }] });
     expect(code).not.toContain('(true)');
