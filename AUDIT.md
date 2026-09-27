@@ -25,7 +25,7 @@ both keep the advertised JSON byte-for-byte as it is today.
 
 ### P0 — broken today
 
-- [ ] 1. [OMN-329] `coerceBoolean()` turns `null`, `"null"`, `"unflag"`, `"off"` and every other unrecognized value into
+- [x] 1. [OMN-329] `coerceBoolean()` turns `null`, `"null"`, `"unflag"`, `"off"` and every other unrecognized value into
      `true`, because it falls back to `return Boolean(strVal)`. It guards destructive write fields: `flagged: null`
      flags the task, and `clearDueDate: null` clears the due date. A required `coerceBoolean()` field that is missing
      also parses to `true` (`src/tools/schemas/coercion-helpers.ts:15-22`, `coerceBoolean`; used at
