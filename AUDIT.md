@@ -35,7 +35,7 @@ both keep the advertised JSON byte-for-byte as it is today.
      (Technique: Substitute Algorithm). Verified: `npx tsx` against `WriteSchema.safeParse` gives
      `{"flagged":null} -> {"flagged":true}` and `{"clearDueDate":null} -> {"clearDueDate":true}`; the independent
      verifier reported HOLDS.
-- [ ] 2. [OMN-330] A tasks `mode` is silently dropped whenever the filter targets the inbox.
+- [x] 2. [OMN-330] A tasks `mode` is silently dropped whenever the filter targets the inbox.
      `const mode = compiled.filters.inInbox ? 'inbox' : compiled.mode`, and `project: null` compiles to `inInbox: true`
      (`QueryCompiler.ts:391-392`). So
      `{mode:'flagged'|'overdue'|'available'|'today'|'upcoming'|'blocked'|'smart_suggest', filters:{project:null}}`
