@@ -11,20 +11,35 @@ import { z } from 'zod';
 
 /**
  * Coerce boolean values from MCP bridge (handles string conversion)
+ *
+ * Only recognized tokens are converted. Anything else (null, "null", "unflag",
+ * 2, a missing required key) passes through unchanged so z.boolean() rejects
+ * it — OMN-329: the old `Boolean(strVal)` fallback turned `flagged:null` and
+ * `clearDueDate:null` into true.
  */
 export const coerceBoolean = () =>
   z.preprocess((val) => {
-    if (typeof val === 'boolean') return val;
+    if (typeof val !== 'string' && typeof val !== 'number') return val;
     const strVal = String(val).toLowerCase().trim();
     if (strVal === 'true' || strVal === '1' || strVal === 'yes') return true;
     if (strVal === 'false' || strVal === '0' || strVal === 'no' || strVal === '') return false;
-    return Boolean(strVal);
+    return val;
   }, z.boolean());
 
 /**
  * Coerce number values from MCP bridge
+ *
+ * Converts numeric strings only. null, blank strings and booleans pass through
+ * unchanged so the inner schema rejects them (OMN-329: `z.coerce.number()`
+ * turned null/"" into 0 and true into 1). Pass the bounded schema as `inner`,
+ * e.g. `coerceNumber(z.number().min(1).max(500))`.
  */
-export const coerceNumber = () => z.coerce.number();
+export const coerceNumber = (inner: z.ZodNumber = z.number()) =>
+  z.preprocess((val) => {
+    if (typeof val !== 'string' || val.trim() === '') return val;
+    const num = Number(val);
+    return Number.isNaN(num) ? val : num;
+  }, inner);
 
 /**
  * Coerce object values from MCP bridge (handles JSON string conversion)
