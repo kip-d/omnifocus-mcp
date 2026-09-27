@@ -2240,4 +2240,40 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.mode).toBe('inbox');
     });
   });
+
+  // OMN-331: countOnly runs before the id-lookup fast path, and OR branches never reach
+  // it — both went through generateProjectFilterCode, which ignored `id`.
+  describe('project id filters reach the generated predicate (OMN-331)', () => {
+    const idPredicate = (id: string) => new RegExp(`project\\.id\\.primaryKey === \\\\?"${id}\\\\?"`);
+
+    it('countOnly by id scopes the count script to that id', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_matched: 1 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { id: 'abc123' }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy.mock.calls[0][0] as string).toMatch(idPredicate('abc123'));
+    });
+
+    it('status + OR of ids scopes rows to those ids', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active', OR: [{ id: 'aaa' }, { id: 'bbb' }] } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toMatch(idPredicate('aaa'));
+      expect(script).toMatch(idPredicate('bbb'));
+    });
+  });
 });
