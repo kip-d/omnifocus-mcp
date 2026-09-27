@@ -783,7 +783,12 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   // OMN-190: describe the effective filter (inbox + auto-injected exclusions),
   // not the user's filter — see buildFilteredTasksScript.
   const filterDescription = describeFilterForScript(applyHonestyDefaults(filter, includeCompleted));
-  const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
+  // OMN-330: thread dueSoonDays like buildFilteredTasksScript, so today mode on the
+  // inbox computes `reason` with the caller's daysAhead instead of the default 3.
+  const fieldProjection = generateFieldProjection(fields, {
+    dueSoonDays: (filter as TaskFilter).dueSoonDays,
+    noteTruncateLength,
+  });
 
   // Determine completion filter - exclude completed by default for inbox
   // (completed is a real OmniJS property; dropped is handled in effectiveFilter)

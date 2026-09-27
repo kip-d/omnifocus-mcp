@@ -246,8 +246,8 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // default, which adds no constraint). Overwriting every mode whenever the filter
   // targets the inbox (project:null → inInbox) dropped the mode's constraint. Routing to
   // the inbox script is a separate concern — buildListTasksScriptV4 routes on filter.inInbox.
-  const requestedMode = compiled.mode === 'all' ? undefined : compiled.mode;
-  const mode = (requestedMode ?? (compiled.filters.inInbox ? 'inbox' : compiled.mode)) as TaskQueryMode | undefined;
+  const unconstrained = (compiled.mode ?? 'all') === 'all';
+  const mode = (unconstrained && compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
   const inboxRoute = mode === 'inbox' || compiled.filters.inInbox === true;
 
   // OMN-153/192: includeProjectRoot is a query-level param threaded onto the

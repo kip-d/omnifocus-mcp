@@ -2184,6 +2184,20 @@ describe('OmniFocusReadTool', () => {
       expect(result.data.tasks[0].screen_reasons).toEqual(expect.arrayContaining(['flagged']));
     });
 
+    it('today on the inbox honors daysAhead in the reason projection, not the default 3', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'today', filters: { project: null }, daysAhead: 7 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('inbox.forEach');
+      expect(script).toContain('_cutoff.getDate() + 7');
+      expect(script).not.toContain('_cutoff.getDate() + 3');
+    });
+
     it('no mode + project:null still takes the inbox route and reports mode inbox', async () => {
       execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
 
