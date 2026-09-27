@@ -19,4 +19,4 @@
 // - list-tasks: buildListTasksScriptV4 from list-tasks-ast.ts (74% smaller)
 // - mutations: buildCreateTaskScript, buildUpdateTaskScript from mutation-script-builder.ts
 // Old templates archived: list-tasks-omnijs.ts, update-task-v3.ts
-export { buildListTasksScriptV4 } from './tasks/list-tasks-ast.js';
+export { buildListTasksScriptV4, isInboxRoute } from './tasks/list-tasks-ast.js';

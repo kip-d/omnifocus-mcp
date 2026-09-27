@@ -26,6 +26,15 @@ import {
 } from '../../../contracts/ast/script-builder.js';
 
 /**
+ * Whether a task list query runs on the inbox script. The single definition of the
+ * route: buildListTasksScriptV4 dispatches on it, and callers use it for anything that
+ * depends on the route (e.g. the inbox script never sorts in-script). OMN-330.
+ */
+export function isInboxRoute(mode: string | undefined, filter: Pick<TaskFilter, 'inInbox'>): boolean {
+  return mode === 'inbox' || filter.inInbox === true;
+}
+
+/**
  * Build a V4 task query script using AST-generated filters
  *
  * This is the main entry point for AST-powered task queries.
@@ -55,7 +64,7 @@ export function buildListTasksScriptV4(params: {
   if (filter.id) {
     // ID lookup mode
     generatedScript = buildTaskByIdScript(filter.id, fields);
-  } else if (mode === 'inbox' || filter.inInbox) {
+  } else if (isInboxRoute(mode, filter)) {
     // Inbox mode - exclude completed items by default
     const inboxFilter = { ...filter };
     delete inboxFilter.inInbox; // Already handled by inbox collection

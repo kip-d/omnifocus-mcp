@@ -224,6 +224,19 @@ export function resolveEffectiveProjectFields(
 }
 
 /**
+ * Field projection for a filtered task list. The one place the list builders derive
+ * projection context from the filter (OMN-330: the inbox builder once skipped
+ * dueSoonDays, so today mode labeled `reason` with the default cutoff).
+ */
+function generateTaskListProjection(
+  fields: string[],
+  filter: TaskFilter | NormalizedTaskFilter,
+  noteTruncateLength: number | undefined,
+): string {
+  return generateFieldProjection(fields, { dueSoonDays: (filter as TaskFilter).dueSoonDays, noteTruncateLength });
+}
+
+/**
  * Generate the field projection code for a task object
  */
 function generateFieldProjection(
@@ -652,11 +665,8 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // tasks" for a query that silently excludes three populations.
   const filterDescription = describeFilterForScript(applyHonestyDefaults(filter, includeCompleted));
 
-  // Generate field projection (thread dueSoonDays from filter for reason field)
-  const fieldProjection = generateFieldProjection(fields, {
-    dueSoonDays: (filter as TaskFilter).dueSoonDays,
-    noteTruncateLength,
-  });
+  // Generate field projection (threads dueSoonDays from filter for reason field)
+  const fieldProjection = generateTaskListProjection(fields, filter, noteTruncateLength);
 
   // Determine completion filter behavior
   // If filter explicitly sets completed, use that; otherwise, use includeCompleted option
@@ -783,12 +793,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   // OMN-190: describe the effective filter (inbox + auto-injected exclusions),
   // not the user's filter — see buildFilteredTasksScript.
   const filterDescription = describeFilterForScript(applyHonestyDefaults(filter, includeCompleted));
-  // OMN-330: thread dueSoonDays like buildFilteredTasksScript, so today mode on the
-  // inbox computes `reason` with the caller's daysAhead instead of the default 3.
-  const fieldProjection = generateFieldProjection(fields, {
-    dueSoonDays: (filter as TaskFilter).dueSoonDays,
-    noteTruncateLength,
-  });
+  const fieldProjection = generateTaskListProjection(fields, filter, noteTruncateLength);
 
   // Determine completion filter - exclude completed by default for inbox
   // (completed is a real OmniJS property; dropped is handled in effectiveFilter)

@@ -2,7 +2,7 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
 import { QueryCompiler, type CompiledQuery } from './compilers/QueryCompiler.js';
-import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4, isInboxRoute } from '../../omnifocus/scripts/tasks.js';
 import {
   buildTaskCountScript,
   buildFilteredProjectsScript,
@@ -242,13 +242,15 @@ export function isNarrowLookupFilter(filter: NarrowLookupFilter): boolean {
 function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
   if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
   const limit = compiled.limit || 25;
-  // OMN-330: a constraining mode wins; 'inbox' replaces only 'all' (the compiler's
-  // default, which adds no constraint). Overwriting every mode whenever the filter
-  // targets the inbox (project:null → inInbox) dropped the mode's constraint. Routing to
-  // the inbox script is a separate concern — buildListTasksScriptV4 routes on filter.inInbox.
-  const unconstrained = (compiled.mode ?? 'all') === 'all';
+  // OMN-330: a constraining mode wins. 'inbox' replaces only the modes that add no
+  // constraint — 'all' (the compiler's default) and 'search' — so their label reflects
+  // the inbox scope. Overwriting every mode whenever the filter targets the inbox
+  // (project:null → inInbox) dropped the mode's constraint. Routing is a separate
+  // concern, decided by the shared isInboxRoute.
+  const requested = compiled.mode ?? 'all';
+  const unconstrained = requested === 'all' || requested === 'search';
   const mode = (unconstrained && compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
-  const inboxRoute = mode === 'inbox' || compiled.filters.inInbox === true;
+  const inboxRoute = isInboxRoute(mode, compiled.filters);
 
   // OMN-153/192: includeProjectRoot is a query-level param threaded onto the
   // compiled filter at compile time (QueryCompiler, same path as fastSearch), so
@@ -724,8 +726,10 @@ PERFORMANCE:
     mode: TaskQueryMode | undefined,
     timer: OperationTimerV2,
   ): Promise<unknown> {
-    // Ensure inbox mode sets the inInbox filter (mode: "inbox" is not in
-    // MODE_DEFINITIONS, so augmentFilterForMode passes through unchanged)
+    // mode is 'inbox' either because the caller asked for it or because an
+    // unconstrained mode met an inInbox filter (buildTaskQuery, OMN-330). 'inbox' is
+    // not in MODE_DEFINITIONS, so augmentFilterForMode adds nothing — this guard is
+    // what scopes an explicit mode:'inbox' count (no project:null) to the inbox.
     const countFilter = { ...filter };
     if (mode === 'inbox' && !countFilter.inInbox) {
       countFilter.inInbox = true;

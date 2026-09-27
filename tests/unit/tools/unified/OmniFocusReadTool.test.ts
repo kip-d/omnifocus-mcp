@@ -2198,6 +2198,38 @@ describe('OmniFocusReadTool', () => {
       expect(script).not.toContain('_cutoff.getDate() + 3');
     });
 
+    it("today on the inbox applies today's default sort (modified desc) post-hoc", async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't_old', name: 'Old', flagged: true, modified: '2026-09-01T12:00:00.000Z' },
+            { id: 't_new', name: 'New', flagged: true, modified: '2026-09-20T12:00:00.000Z' },
+            { id: 't_mid', name: 'Mid', flagged: true, modified: '2026-09-10T12:00:00.000Z' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'today', filters: { project: null } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t_new', 't_mid', 't_old']);
+    });
+
+    it('search + project:null takes the inbox route and reports mode inbox, like all', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'search', filters: { project: null } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy.mock.calls[0][0] as string).toContain('inbox.forEach');
+      expect(result.metadata.mode).toBe('inbox');
+    });
+
     it('no mode + project:null still takes the inbox route and reports mode inbox', async () => {
       execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
 
