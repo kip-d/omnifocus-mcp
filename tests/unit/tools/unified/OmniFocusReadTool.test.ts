@@ -2129,4 +2129,69 @@ describe('OmniFocusReadTool', () => {
       expect(result.error.code).toBe('SCRIPT_ERROR');
     });
   });
+
+  // OMN-330: filters.project:null compiles to inInbox:true, and buildTaskQuery used to
+  // overwrite the requested mode with 'inbox' — so the mode's constraint never reached
+  // the script and every active inbox task came back, reported as mode:'inbox'.
+  describe('mode combined with the inbox (project: null) keeps its constraint (OMN-330)', () => {
+    const MODE_PREDICATES: Array<[string, string]> = [
+      ['flagged', 'task.flagged === true'],
+      ['overdue', 'task.dueDate < new Date('],
+      ['today', '|| task.flagged === true'],
+      ['upcoming', 'task.dueDate >= new Date('],
+      ['available', 'Task.Status.Available, Task.Status.DueSoon'],
+      ['blocked', 'task.taskStatus === Task.Status.Blocked'],
+    ];
+
+    it.each(MODE_PREDICATES)('row path: mode %s emits its predicate on the inbox route', async (mode, predicate) => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode, filters: { project: null } } })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain(predicate);
+      expect(script).toContain('inbox.forEach');
+      expect(result.metadata.mode).toBe(mode);
+    });
+
+    it.each(MODE_PREDICATES)('countOnly: mode %s emits its predicate on the inbox route', async (mode, predicate) => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { count: 2 } } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode, filters: { project: null }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain(predicate);
+      expect(script).toContain('inInbox');
+      expect(result.metadata.mode).toBe(mode);
+    });
+
+    it('smart_suggest on the inbox scores rows and reports its own mode', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Inbox thing', flagged: true, available: true }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', filters: { project: null } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('smart_suggest');
+      expect(result.data.tasks[0].screen_reasons).toEqual(expect.arrayContaining(['flagged']));
+    });
+
+    it('no mode + project:null still takes the inbox route and reports mode inbox', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', filters: { project: null } } })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy.mock.calls[0][0] as string).toContain('inbox.forEach');
+      expect(result.metadata.mode).toBe('inbox');
+    });
+  });
 });

@@ -242,7 +242,13 @@ export function isNarrowLookupFilter(filter: NarrowLookupFilter): boolean {
 function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
   if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
   const limit = compiled.limit || 25;
-  const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
+  // OMN-330: a constraining mode wins; 'inbox' replaces only 'all' (the compiler's
+  // default, which adds no constraint). Overwriting every mode whenever the filter
+  // targets the inbox (project:null → inInbox) dropped the mode's constraint. Routing to
+  // the inbox script is a separate concern — buildListTasksScriptV4 routes on filter.inInbox.
+  const requestedMode = compiled.mode === 'all' ? undefined : compiled.mode;
+  const mode = (requestedMode ?? (compiled.filters.inInbox ? 'inbox' : compiled.mode)) as TaskQueryMode | undefined;
+  const inboxRoute = mode === 'inbox' || compiled.filters.inInbox === true;
 
   // OMN-153/192: includeProjectRoot is a query-level param threaded onto the
   // compiled filter at compile time (QueryCompiler, same path as fastSearch), so
@@ -296,15 +302,14 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
     fields: scriptFields,
     limit,
     offset: compiled.offset,
-    mode: mode === 'inbox' ? 'inbox' : undefined,
+    mode: inboxRoute ? 'inbox' : undefined,
     sort: userSort,
     noteTruncateLength,
   });
 
   // Inbox path doesn't pass sort to buildInboxScript, so sort is never applied in-script.
   // Mark sortedInScript false so the post-hoc sort handles it instead.
-  const isInboxPath = mode === 'inbox';
-  return { script, filter, mode, scriptFields, limit, sortedInScript: !isInboxPath && !!userSort, fieldsMode };
+  return { script, filter, mode, scriptFields, limit, sortedInScript: !inboxRoute && !!userSort, fieldsMode };
 }
 
 // OMN-88: date fields parseProjects converts string → Date. Mirrors the
