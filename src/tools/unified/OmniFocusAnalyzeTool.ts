@@ -428,7 +428,7 @@ TIME-WINDOW SCOPING:
                   type: 'object',
                   // OMN-334: the read-filter date formats; date-only bounds are whole local days.
                   description:
-                    'Local "YYYY-MM-DD" or "YYYY-MM-DD HH:mm", start <= end. Date-only bounds are inclusive whole days.',
+                    'Local "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Date-only bounds are inclusive whole days (a date-only end runs through the end of that day); start must not be after end.',
                   properties: { start: { type: 'string' }, end: { type: 'string' } },
                   required: ['start', 'end'],
                 },

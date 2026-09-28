@@ -561,7 +561,10 @@ describe('OmniFocusAnalyzeTool', () => {
         // local midnight from the tool's. Only Date is faked; timers stay real.
         vi.useFakeTimers({ toFake: ['Date'] });
         try {
-          vi.setSystemTime(new Date(2026, 8, 28, 23, 30)); // late evening: UTC is already the 29th
+          // Built from local components, so the expected days hold in any TZ. West of
+          // Greenwich this instant is already the 29th in UTC — the case the old
+          // toISOString() default got wrong.
+          vi.setSystemTime(new Date(2026, 8, 28, 23, 30));
           await tool.execute({ analysis: { type: 'task_velocity' } });
           expect(velocityOptions().startDate).toBe(new Date(2026, 8, 21).toISOString());
           expect(velocityOptions().endDate).toBe(new Date(2026, 8, 28, 23, 59, 59, 999).toISOString());
