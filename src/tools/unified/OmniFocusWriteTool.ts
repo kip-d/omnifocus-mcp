@@ -60,7 +60,7 @@ import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import { flattenBatchResults, liftWarnings } from './batch-response-flatten.js';
+import { flattenBatchResults, liftWarnings, returnedFailureMessage } from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -1577,16 +1577,27 @@ SAFETY:
       if (halted || ops.length === 0) continue;
 
       for (const op of ops) {
+        // OMN-333: handlers RETURN an error envelope on a script failure ("Task not
+        // found") rather than throwing. Both forms are failures: recorded in errors[]
+        // (so top-level success is false and the summary doesn't count them) and
+        // honored by stopOnError. An unresolved tempId reaches the handler as-is and
+        // fails here too, named by the id the caller sent.
+        let failure: string | null;
         try {
           const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
           const result = await this.dispatchBatchOp(op, resolvedId);
-          results[phase.resultKey].push(result);
-        } catch (err) {
-          results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
-          if (compiled.stopOnError) {
-            halted = true;
-            break;
+          failure = returnedFailureMessage(result);
+          if (failure === null) {
+            results[phase.resultKey].push(result);
+            continue;
           }
+        } catch (err) {
+          failure = String(err);
+        }
+        results.errors.push({ phase: phase.name, id: op.id, error: failure });
+        if (compiled.stopOnError) {
+          halted = true;
+          break;
         }
       }
     }

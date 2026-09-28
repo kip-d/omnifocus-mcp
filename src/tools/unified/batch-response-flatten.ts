@@ -37,6 +37,26 @@ export function liftWarnings(source: unknown): { warnings?: string[] } {
   return strings.length > 0 ? { warnings: strings } : {};
 }
 
+/** The message of an `error` field: a string, or an object's string `message`. */
+function errorMessageOf(error: unknown): string | undefined {
+  if (typeof error === 'string') return error;
+  const message = (error as { message?: unknown } | null | undefined)?.message;
+  return typeof message === 'string' ? message : undefined;
+}
+
+/**
+ * OMN-333: the failure message of a handler result that reports `success: false`,
+ * or null when it succeeded. Batch handlers RETURN an error envelope
+ * (createErrorResponseV2: `{ success: false, error: { code, message } }`) rather
+ * than throwing, so the batch must inspect what comes back, not only catch.
+ */
+export function returnedFailureMessage(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as { success?: unknown; error?: unknown };
+  if (r.success !== false) return null;
+  return errorMessageOf(r.error) ?? 'Operation failed';
+}
+
 /** Shape of the nested results object from routeToBatch() */
 interface NestedBatchResults {
   created: unknown[];
@@ -137,8 +157,15 @@ function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
  * Extract id, name, and operation-specific fields from a per-operation result.
  *
  * Handles two shapes:
- * 1. StandardResponseV2 envelope: { success, data: { task: { id, name, ... } }, metadata }
+ * 1. StandardResponseV2 envelope. The entity sits in one of (OMN-333):
+ *    - `data.task` — `{ id, name, changes }` (task update) or the script's
+ *      `{ taskId, name, ... }` (task complete/delete)
+ *    - `data.project` — the script's `{ projectId, name, ... }` (project complete/delete)
+ *    - `data` itself — `{ projectId, name, ... }` spread in (project update)
  * 2. minimalResponse: { success, id, fields_updated: [...] }
+ *
+ * Reading only `data.task.id` gave every complete/delete row and every project
+ * row `id: 'unknown'`. A row with no id anywhere now gets null (OMN-141).
  */
 function extractOperationResult(
   operation: 'update' | 'complete' | 'delete',
@@ -159,18 +186,26 @@ function extractOperationResult(
     return entry;
   }
 
-  // StandardResponseV2 envelope: { success, data: { task: { id, name, ... } }, metadata }
   const data = result.data as Record<string, unknown> | undefined;
   const task = data?.task as Record<string, unknown> | undefined;
+  const entity = task ?? (data?.project as Record<string, unknown> | undefined) ?? data;
+  const id = firstString(entity?.id, entity?.taskId, entity?.projectId);
+  const name = firstString(entity?.name);
 
   const entry: FlatBatchResult = {
     operation,
     success: result.success !== false,
-    id: (task?.id as string) || 'unknown',
+    id: id ?? null,
   };
 
-  if (task?.name) {
-    entry.name = task.name as string;
+  if (name) {
+    entry.name = name;
+  }
+
+  // Failures are routed to errors[] before flattening (OMN-333); if one reaches
+  // this path anyway, keep its message rather than dropping it.
+  if (!entry.success) {
+    entry.error = errorMessageOf(result.error) ?? 'Operation failed';
   }
 
   if (operation === 'update' && task?.changes) {
@@ -181,4 +216,9 @@ function extractOperationResult(
   Object.assign(entry, liftWarnings(data));
 
   return entry;
+}
+
+/** First non-empty string among the candidates. */
+function firstString(...candidates: unknown[]): string | undefined {
+  return candidates.find((c): c is string => typeof c === 'string' && c.length > 0);
 }

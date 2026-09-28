@@ -1960,3 +1960,169 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 });
+
+// ─── BATCH: RETURNED FAILURES (OMN-333) ───────────────────────────────
+// Handlers RETURN an error envelope on a script failure ("Task not found");
+// they don't throw. The batch recorded only thrown errors, so a failed
+// update/complete/delete kept top-level success:true, was counted in the
+// summary, never halted stopOnError, and flattened to id:'unknown' with no
+// message. These go through the real handlers; only the script layer is mocked.
+describe('OmniFocusWriteTool batch — returned handler failures (OMN-333)', () => {
+  let tool: OmniFocusWriteTool;
+  let execJsonSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    tool = new OmniFocusWriteTool(createMockCache());
+    execJsonSpy = vi.fn();
+    vi.spyOn(tool as any, 'execJson').mockImplementation(execJsonSpy);
+  });
+
+  const updatedTask = (taskId: string) =>
+    createScriptSuccess({ taskId, name: 'ok row', flagged: false, updated: true, warnings: [] });
+  const notFound = (id: string) => createScriptError(`Task not found: ${id}`);
+
+  it('a failed update makes the batch fail, is not counted as updated, and names the id and message', async () => {
+    execJsonSpy.mockResolvedValueOnce(updatedTask('task-ok')).mockResolvedValueOnce(notFound('zzNONEXISTENTzz'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        stopOnError: false,
+        operations: [
+          { operation: 'update', target: 'task', id: 'task-ok', changes: { note: 'batch ok row' } },
+          { operation: 'update', target: 'task', id: 'zzNONEXISTENTzz', changes: { note: 'should fail' } },
+        ],
+      },
+    })) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.data.summary).toMatchObject({ updated: 1, errors: 1 });
+    const rows = result.data.results as Array<Record<string, unknown>>;
+    expect(rows).toContainEqual(expect.objectContaining({ operation: 'update', success: true, id: 'task-ok' }));
+    const failed = rows.find((r) => r.success === false);
+    expect(failed).toMatchObject({ operation: 'update', id: 'zzNONEXISTENTzz' });
+    expect(failed?.error).toContain('Task not found: zzNONEXISTENTzz');
+  });
+
+  it('stopOnError (the default) halts at the first returned failure', async () => {
+    execJsonSpy.mockResolvedValueOnce(notFound('zzNONEXISTENTzz')).mockResolvedValue(updatedTask('task-ok'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'update', target: 'task', id: 'zzNONEXISTENTzz', changes: { note: 'should fail' } },
+          { operation: 'update', target: 'task', id: 'task-ok', changes: { note: 'must not run' } },
+          { operation: 'complete', target: 'task', id: 'task-ok' },
+        ],
+      },
+    })) as any;
+
+    expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    expect(result.data.summary).toMatchObject({ updated: 0, completed: 0, errors: 1 });
+  });
+
+  it('a failed complete or delete is an error too, not a counted success', async () => {
+    execJsonSpy
+      .mockResolvedValueOnce(createScriptError('Task not found: gone-1'))
+      .mockResolvedValueOnce(createScriptError('Task not found: gone-2'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        stopOnError: false,
+        operations: [
+          { operation: 'complete', target: 'task', id: 'gone-1' },
+          { operation: 'delete', target: 'task', id: 'gone-2' },
+        ],
+      },
+    })) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.data.summary).toMatchObject({ completed: 0, deleted: 0, errors: 2 });
+    expect(result.data.results).toEqual([
+      expect.objectContaining({ operation: 'complete', success: false, id: 'gone-1' }),
+      expect.objectContaining({ operation: 'delete', success: false, id: 'gone-2' }),
+    ]);
+  });
+
+  it('an unresolved tempId surfaces as an error naming the tempId', async () => {
+    const buildSpy = mockFastPathCreate();
+    execJsonSpy
+      .mockResolvedValueOnce({
+        success: true,
+        data: { results: [{ tempId: 't1', taskId: 'real-1', success: true }] },
+      })
+      .mockResolvedValueOnce(updatedTask('real-1'))
+      .mockResolvedValueOnce(notFound('t9'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        stopOnError: false,
+        operations: [
+          { operation: 'create', target: 'task', data: { tempId: 't1', name: '__TEST__ a' } },
+          { operation: 'update', target: 'task', id: 't1', changes: { note: 'resolved' } },
+          { operation: 'update', target: 'task', id: 't9', changes: { note: 'typo tempId' } },
+        ],
+      },
+    })) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.data.summary).toMatchObject({ created: 1, updated: 1, errors: 1 });
+    const rows = result.data.results as Array<Record<string, unknown>>;
+    expect(rows).toContainEqual(expect.objectContaining({ operation: 'update', success: true, id: 'real-1' }));
+    expect(rows).toContainEqual(expect.objectContaining({ operation: 'update', success: false, id: 't9' }));
+    buildSpy.mockRestore();
+  });
+
+  it('successful task complete/delete and project update/complete/delete rows carry their real ids', async () => {
+    execJsonSpy
+      .mockResolvedValueOnce(
+        createScriptSuccess({
+          projectId: 'proj-u',
+          name: 'P',
+          flagged: false,
+          status: 'active',
+          updated: true,
+          warnings: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createScriptSuccess({ taskId: 'task-c', name: 'T', completed: true, completionDate: null }),
+      )
+      .mockResolvedValueOnce(
+        createScriptSuccess({ projectId: 'proj-c', name: 'P2', completed: true, completionDate: null }),
+      )
+      .mockResolvedValueOnce(createScriptSuccess({ taskId: 'task-d', name: 'T2', deleted: true }))
+      .mockResolvedValueOnce(createScriptSuccess({ projectId: 'proj-d', name: 'P3', deleted: true }));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'update', target: 'project', id: 'proj-u', changes: { flagged: false } },
+          { operation: 'complete', target: 'task', id: 'task-c' },
+          { operation: 'complete', target: 'project', id: 'proj-c' },
+          { operation: 'delete', target: 'task', id: 'task-d' },
+          { operation: 'delete', target: 'project', id: 'proj-d' },
+        ],
+      },
+    })) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.data.results).toEqual([
+      expect.objectContaining({ operation: 'update', success: true, id: 'proj-u', name: 'P' }),
+      expect.objectContaining({ operation: 'complete', success: true, id: 'task-c', name: 'T' }),
+      expect.objectContaining({ operation: 'complete', success: true, id: 'proj-c', name: 'P2' }),
+      expect.objectContaining({ operation: 'delete', success: true, id: 'task-d', name: 'T2' }),
+      expect.objectContaining({ operation: 'delete', success: true, id: 'proj-d', name: 'P3' }),
+    ]);
+  });
+});
