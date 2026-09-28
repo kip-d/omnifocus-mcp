@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { coerceObject } from '../../schemas/coercion-helpers.js';
-import { isLocalDateString } from '../../../utils/timezone.js';
+import { isLocalDateString, localDateBoundToUTC } from '../../../utils/timezone.js';
 
 // OMN-90: every nested object literal carries `.strict()`. Zod's
 // `discriminatedUnion` does NOT propagate strictness to its members, and
@@ -38,6 +38,16 @@ const VelocityScopeSchema = z
         end: VelocityDateBoundSchema,
       })
       .strict()
+      // Review of #281: a swapped range (each bound valid) matched nothing and
+      // returned ok:true with every count 0. Compared as resolved instants, so
+      // "2026-09-26 09:00".."2026-09-26" (same day, date-only end) is valid.
+      .refine(
+        ({ start, end }) =>
+          !isLocalDateString(start) ||
+          !isLocalDateString(end) ||
+          localDateBoundToUTC(start, 'start') <= localDateBoundToUTC(end, 'end'),
+        { message: 'dateRange.start must not be after dateRange.end', path: ['end'] },
+      )
       .optional(),
   })
   .strict();

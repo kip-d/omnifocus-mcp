@@ -141,6 +141,16 @@ export function localDateBoundToUTC(s: string, edge: 'start' | 'end'): string {
 }
 
 /**
+ * Format a Date as its LOCAL calendar day, "YYYY-MM-DD" (OMN-334/OMN-351).
+ * toISOString().slice(0, 10) gives the UTC day — one day ahead in the evening
+ * west of Greenwich.
+ */
+export function formatLocalDay(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
  * Render a date-filter bound for humans (filter_description) as LOCAL
  * "YYYY-MM-DD HH:mm" (OMN-332). Bounds are stored as UTC ISO instants, and printing
  * those raw showed a day-end bound as the next calendar date. A value already in local

@@ -70,6 +70,34 @@ describe('AnalyzeSchema', () => {
         expect(result.success).toBe(true);
       });
 
+      // Review of #281: each bound valid, order swapped, used to pass and return
+      // ok:true with every count 0 — the same silent-zero class.
+      it('rejects a range whose start is after its end', () => {
+        const result = parse({
+          type: 'task_velocity',
+          scope: { dateRange: { start: '2026-09-26', end: '2026-09-01' } },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('accepts a single-day range and a same-day HH:mm window', () => {
+        for (const dateRange of [
+          { start: '2026-09-26', end: '2026-09-26' },
+          { start: '2026-09-26 09:00', end: '2026-09-26' },
+          { start: '2026-09-26 09:00', end: '2026-09-26 09:00' },
+        ]) {
+          expect(parse({ type: 'task_velocity', scope: { dateRange } }).success).toBe(true);
+        }
+      });
+
+      it('rejects an HH:mm end before the HH:mm start on the same day', () => {
+        const result = parse({
+          type: 'task_velocity',
+          scope: { dateRange: { start: '2026-09-26 17:00', end: '2026-09-26 09:00' } },
+        });
+        expect(result.success).toBe(false);
+      });
+
       for (const bad of ["2026-09-01'); x('", '2026-09-01T09:00:00Z', '2026-02-30', 'last week', '']) {
         it(`rejects dateRange bound ${JSON.stringify(bad)}`, () => {
           for (const dateRange of [

@@ -35,7 +35,7 @@ import {
   MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
-import { localDateBoundToUTC } from '../../utils/timezone.js';
+import { formatLocalDay, localDateBoundToUTC } from '../../utils/timezone.js';
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
@@ -427,8 +427,10 @@ TIME-WINDOW SCOPING:
                 dateRange: {
                   type: 'object',
                   // OMN-334: the read-filter date formats; date-only bounds are whole local days.
-                  description: 'Local "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Date-only bounds are inclusive whole days.',
+                  description:
+                    'Local "YYYY-MM-DD" or "YYYY-MM-DD HH:mm", start <= end. Date-only bounds are inclusive whole days.',
                   properties: { start: { type: 'string' }, end: { type: 'string' } },
+                  required: ['start', 'end'],
                 },
               },
             },
@@ -789,13 +791,11 @@ TIME-WINDOW SCOPING:
         rangeStart = compiled.scope.dateRange.start;
         rangeEnd = compiled.scope.dateRange.end;
       } else {
-        const localDay = (d: Date) =>
-          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const now = new Date();
         const start = new Date(now);
         start.setDate(start.getDate() - days);
-        rangeStart = localDay(start);
-        rangeEnd = localDay(now);
+        rangeStart = formatLocalDay(start);
+        rangeEnd = formatLocalDay(now);
       }
 
       // OMN-334: the script receives UTC instants, never the caller's text — the

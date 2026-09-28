@@ -557,13 +557,17 @@ describe('OmniFocusAnalyzeTool', () => {
       });
 
       it('the default window is the last 7 local days', async () => {
-        await tool.execute({ analysis: { type: 'task_velocity' } });
-        const today = new Date();
-        const weekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
-        expect(velocityOptions().startDate).toBe(weekAgo.toISOString());
-        expect(velocityOptions().endDate).toBe(
-          new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString(),
-        );
+        // Frozen clock: a second new Date() here could land on the other side of
+        // local midnight from the tool's. Only Date is faked; timers stay real.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          vi.setSystemTime(new Date(2026, 8, 28, 23, 30)); // late evening: UTC is already the 29th
+          await tool.execute({ analysis: { type: 'task_velocity' } });
+          expect(velocityOptions().startDate).toBe(new Date(2026, 8, 21).toISOString());
+          expect(velocityOptions().endDate).toBe(new Date(2026, 8, 28, 23, 59, 59, 999).toISOString());
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('keys the cache on the resolved instants, not the spelling', async () => {
