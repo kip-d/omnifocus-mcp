@@ -84,6 +84,9 @@ export function getCurrentTimezoneOffset(): number {
   return new Date().getTimezoneOffset();
 }
 
+// Read-filter date format (OMN-332). Sibling write-side validators — keep in step:
+// DATE_REGEX (schemas/write-schema.ts) and ITEM_DATE_REGEX (schemas/analyze-schema.ts).
+// Deliberately stricter than those: no "T" separator, no seconds.
 const LOCAL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
 
 /**
@@ -96,7 +99,11 @@ function parseLocalDate(s: string): { date: Date; hasTime: boolean } | undefined
   const m = LOCAL_DATE_RE.exec(s);
   if (!m) return undefined;
   const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4] ?? '0', m[5] ?? '0'].map(Number);
-  const date = new Date(y, mo - 1, d, h, mi, 0, 0);
+  // setFullYear, not the multi-argument constructor: the constructor maps years
+  // 0–99 to 1900+y, which would fail the round-trip for a valid 4-digit year.
+  const date = new Date(2000, 0, 1, 0, 0, 0, 0);
+  date.setFullYear(y, mo - 1, d);
+  date.setHours(h, mi, 0, 0);
   const roundTrips =
     date.getFullYear() === y &&
     date.getMonth() === mo - 1 &&

@@ -59,7 +59,7 @@ describe('local date bounds under America/Detroit (OMN-332)', () => {
 });
 
 describe('isLocalDateString (OMN-332)', () => {
-  it.each(['2026-03-31', '2026-03-31 17:00', '2024-02-29', '2026-12-31 23:59', '2026-01-01 00:00'])(
+  it.each(['2026-03-31', '2026-03-31 17:00', '2024-02-29', '2026-12-31 23:59', '2026-01-01 00:00', '0050-01-01'])(
     'accepts %j',
     (s) => {
       expect(isLocalDateString(s)).toBe(true);

@@ -42,6 +42,8 @@ const VelocityScopeSchema = z
 // Mirror of write-schema's DATE_REGEX (not exported there). Validating dates
 // here keeps the "ready to send" promise honest — a bad date is rejected at this
 // boundary instead of silently riding into a batchPayload the write tool rejects.
+// Mirror of DATE_REGEX (write-schema.ts); the read-filter validator LOCAL_DATE_RE
+// (utils/timezone.ts, OMN-332) is the stricter sibling.
 const ITEM_DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
 const ITEM_DATE_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 

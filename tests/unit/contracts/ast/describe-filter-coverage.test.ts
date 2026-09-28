@@ -3,6 +3,7 @@ import type { NormalizedTaskFilter, ProjectFilter } from '../../../../src/contra
 import { describeFilterForScript } from '../../../../src/contracts/ast/script-builder.js';
 import { describeProjectFilter, describeFilter } from '../../../../src/contracts/ast/filter-generator.js';
 import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryCompiler.js';
+import { augmentFilterForMode } from '../../../../src/tools/tasks/task-query-pipeline.js';
 
 // OMN-172 F10 forcing function: every key of NormalizedTaskFilter is classified
 // 'described' or 'exempt'. Adding a new filter key makes this `satisfies` fail to
@@ -199,5 +200,20 @@ describe('date bounds are described in local time (OMN-332)', () => {
 
   it('never shows a raw ISO instant', () => {
     expect(describeFilterForScript(compile({ before: '2025-12-31' }))).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  // Review round 2: mode- and forecast_past-generated bounds are ISO instants computed
+  // server-side (never user strings); they're described in local time too.
+  it.each(['overdue', 'upcoming', 'today'] as const)('mode %s bounds read as local "YYYY-MM-DD HH:mm"', (mode) => {
+    const text = describeFilterForScript(augmentFilterForMode(mode, {}, {}));
+    expect(text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('a forecast_past-style cutoff (startOfToday ISO) reads as local midnight', () => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const text = describeFilterForScript({ dueBefore: startOfToday.toISOString(), dueDateOperator: '<' });
+    expect(text).toMatch(/due before: \d{4}-\d{2}-\d{2} 00:00/);
   });
 });
