@@ -23,6 +23,7 @@ import { transformProjectFilters } from './transform-project-filters.js';
 import { transformTagFilters, transformFolderFilters, transformPerspectiveFilters } from './reject-filters.js';
 import { TASK_KEY_DISPOSITION, ON_HOLD_TASKS_REJECTION, terminalBranchRejection } from './task-key-disposition.js';
 import { assertValidFolderPath } from './folder-path-validation.js';
+import { localDateBoundToUTC } from '../../../utils/timezone.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -525,15 +526,20 @@ export class QueryCompiler {
         | undefined;
       if (!dateFilter) continue;
 
+      // OMN-332: bounds are LOCAL time, matching writes (localToUTC). A date-only
+      // bound is a whole local day, inclusive — `after`/between-start is 00:00 local,
+      // `before`/between-end is 23:59:59.999 local — so a task due at the default
+      // 17:00 on the named day is included. Emitted as ISO instants; the schema has
+      // already rejected any other format.
       if ('before' in dateFilter && dateFilter.before) {
-        (result as Record<string, unknown>)[def.beforeKey] = dateFilter.before;
+        (result as Record<string, unknown>)[def.beforeKey] = localDateBoundToUTC(dateFilter.before, 'end');
       }
       if ('after' in dateFilter && dateFilter.after) {
-        (result as Record<string, unknown>)[def.afterKey] = dateFilter.after;
+        (result as Record<string, unknown>)[def.afterKey] = localDateBoundToUTC(dateFilter.after, 'start');
       }
       if ('between' in dateFilter && dateFilter.between) {
-        (result as Record<string, unknown>)[def.afterKey] = dateFilter.between[0];
-        (result as Record<string, unknown>)[def.beforeKey] = dateFilter.between[1];
+        (result as Record<string, unknown>)[def.afterKey] = localDateBoundToUTC(dateFilter.between[0], 'start');
+        (result as Record<string, unknown>)[def.beforeKey] = localDateBoundToUTC(dateFilter.between[1], 'end');
         if (def.operatorKey) {
           (result as Record<string, unknown>)[def.operatorKey] = 'BETWEEN';
         }
