@@ -37,6 +37,29 @@ export function liftWarnings(source: unknown): { warnings?: string[] } {
   return strings.length > 0 ? { warnings: strings } : {};
 }
 
+/** Fallback `error` text for a failure that carries no usable message — one string on every path. */
+const UNKNOWN_ERROR = 'Unknown error';
+
+/** The message of an `error` field: a string, or an object's string `message`. */
+function errorMessageOf(error: unknown): string | undefined {
+  if (typeof error === 'string') return error;
+  const message = (error as { message?: unknown } | null | undefined)?.message;
+  return typeof message === 'string' ? message : undefined;
+}
+
+/**
+ * OMN-333: the failure message of a handler result that reports `success: false`,
+ * or null when it succeeded. Batch handlers RETURN an error envelope
+ * (createErrorResponseV2: `{ success: false, error: { code, message } }`) rather
+ * than throwing, so the batch must inspect what comes back, not only catch.
+ */
+export function returnedFailureMessage(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as { success?: unknown; error?: unknown };
+  if (r.success !== false) return null;
+  return errorMessageOf(r.error) ?? UNKNOWN_ERROR;
+}
+
 /** Shape of the nested results object from routeToBatch() */
 interface NestedBatchResults {
   created: unknown[];
@@ -90,7 +113,7 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
 
   // Errors — map from { phase, id, error } to flat format
   for (const errorItem of results.errors) {
-    const err = errorItem as { phase?: string; id?: string; error?: string | { message?: string } };
+    const err = errorItem as { phase?: string; id?: string; tempId?: string; error?: string | { message?: string } };
     const errorFallback = typeof err.error === 'object' ? err.error?.message : String(err.error);
     const errorMsg = typeof err.error === 'string' ? err.error : errorFallback;
     flat.push({
@@ -99,7 +122,9 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
       // Phase-level errors (OMN-141: stopOnError halt, atomic rollback) have no
       // item id — null is honest where the string 'unknown' was a lie.
       id: err.id ?? null,
-      error: errorMsg || 'Unknown error',
+      // OMN-333: a follow-up op addressed by a resolved tempId names both.
+      ...(err.tempId ? { tempId: err.tempId } : {}),
+      error: errorMsg || UNKNOWN_ERROR,
     });
   }
 
@@ -137,8 +162,15 @@ function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
  * Extract id, name, and operation-specific fields from a per-operation result.
  *
  * Handles two shapes:
- * 1. StandardResponseV2 envelope: { success, data: { task: { id, name, ... } }, metadata }
+ * 1. StandardResponseV2 envelope. The entity sits in one of (OMN-333):
+ *    - `data.task` — `{ id, name, changes }` (task update) or the script's
+ *      `{ taskId, name, ... }` (task complete/delete)
+ *    - `data.project` — the script's `{ projectId, name, ... }` (project complete/delete)
+ *    - `data` itself — `{ projectId, name, ... }` spread in (project update)
  * 2. minimalResponse: { success, id, fields_updated: [...] }
+ *
+ * Reading only `data.task.id` gave every complete/delete row and every project
+ * row `id: 'unknown'`. A row with no id anywhere now gets null (OMN-141).
  */
 function extractOperationResult(
   operation: 'update' | 'complete' | 'delete',
@@ -154,23 +186,34 @@ function extractOperationResult(
     if (operation === 'update') {
       entry.changes = result.fields_updated as string[];
     }
+    if (!entry.success) {
+      entry.error = errorMessageOf(result.error) ?? UNKNOWN_ERROR;
+    }
     // OMN-137: minimalResponse updates carry warnings at the top level — keep them (non-empty only).
     Object.assign(entry, liftWarnings(result));
     return entry;
   }
 
-  // StandardResponseV2 envelope: { success, data: { task: { id, name, ... } }, metadata }
   const data = result.data as Record<string, unknown> | undefined;
   const task = data?.task as Record<string, unknown> | undefined;
+  const entity = task ?? (data?.project as Record<string, unknown> | undefined) ?? data;
+  const id = firstString(entity?.id, entity?.taskId, entity?.projectId);
+  const name = firstString(entity?.name);
 
   const entry: FlatBatchResult = {
     operation,
     success: result.success !== false,
-    id: (task?.id as string) || 'unknown',
+    id: id ?? null,
   };
 
-  if (task?.name) {
-    entry.name = task.name as string;
+  if (name) {
+    entry.name = name;
+  }
+
+  // Failures are routed to errors[] before flattening (OMN-333); if one reaches
+  // this path anyway, keep its message rather than dropping it.
+  if (!entry.success) {
+    entry.error = errorMessageOf(result.error) ?? UNKNOWN_ERROR;
   }
 
   if (operation === 'update' && task?.changes) {
@@ -181,4 +224,9 @@ function extractOperationResult(
   Object.assign(entry, liftWarnings(data));
 
   return entry;
+}
+
+/** First non-empty string among the candidates. */
+function firstString(...candidates: unknown[]): string | undefined {
+  return candidates.find((c): c is string => typeof c === 'string' && c.length > 0);
 }

@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   flattenBatchResults,
   liftWarnings,
+  returnedFailureMessage,
   type FlatBatchResult,
 } from '../../../../src/tools/unified/batch-response-flatten.js';
 
@@ -161,6 +162,63 @@ describe('flattenBatchResults', () => {
       id: 'missing1',
       error: 'Task not found',
     });
+  });
+
+  // OMN-333: the real handlers' success shapes. Only data.task.id was read, so
+  // every one of these flattened to id:'unknown'.
+  it.each([
+    ['task complete', 'complete', { task: { taskId: 't1', name: 'T', completed: true } }, 't1', 'T'],
+    ['task delete', 'delete', { task: { taskId: 't2', name: 'T2', deleted: true } }, 't2', 'T2'],
+    ['project complete', 'complete', { project: { projectId: 'p1', name: 'P', completed: true } }, 'p1', 'P'],
+    ['project delete', 'delete', { project: { projectId: 'p2', name: 'P2', deleted: true } }, 'p2', 'P2'],
+    ['project update', 'update', { operation: 'update', target: 'project', projectId: 'p3', name: 'P3' }, 'p3', 'P3'],
+  ] as const)('OMN-333: %s rows flatten with their real id and name', (_label, op, data, id, name) => {
+    const nested: Parameters<typeof flattenBatchResults>[0] = {
+      created: [],
+      updated: [],
+      completed: [],
+      deleted: [],
+      errors: [],
+    };
+    nested[op === 'update' ? 'updated' : op === 'complete' ? 'completed' : 'deleted'].push({ success: true, data });
+
+    const flat = flattenBatchResults(nested);
+
+    expect(flat).toEqual([expect.objectContaining({ operation: op, success: true, id, name })]);
+  });
+
+  // Review of #282: the minimalResponse branch dropped a failure's message, and
+  // error rows can carry the caller's tempId beside the real id.
+  it('OMN-333: a failed minimalResponse row keeps its message; error rows carry tempId', () => {
+    const flat = flattenBatchResults({
+      created: [],
+      updated: [{ success: false, id: 'm1', fields_updated: [], error: 'nope' }],
+      completed: [],
+      deleted: [],
+      errors: [{ phase: 'update', id: 'real-1', tempId: 't1', error: 'Task not found: real-1' }],
+    });
+
+    expect(flat[0]).toMatchObject({ operation: 'update', success: false, id: 'm1', error: 'nope' });
+    expect(flat[1]).toEqual({
+      operation: 'update',
+      success: false,
+      id: 'real-1',
+      tempId: 't1',
+      error: 'Task not found: real-1',
+    });
+  });
+
+  it('OMN-333: a row with no id anywhere gets id:null, and a failed envelope keeps its message', () => {
+    const flat = flattenBatchResults({
+      created: [],
+      updated: [{ success: true, data: {} }],
+      completed: [{ success: false, error: { code: 'SCRIPT_ERROR', message: 'Task not found: x' } }],
+      deleted: [],
+      errors: [],
+    });
+
+    expect(flat[0]).toMatchObject({ operation: 'update', id: null });
+    expect(flat[1]).toMatchObject({ operation: 'complete', success: false, id: null, error: 'Task not found: x' });
   });
 
   it('OMN-141: phase-level errors without an id flatten with id:null, not the string "unknown"', () => {
@@ -509,5 +567,21 @@ describe('previewBatch per-operation target', () => {
     // Bug fix: items should use per-operation target, not top-level
     expect(result.data.wouldAffect.items[0].type).toBe('project');
     expect(result.data.wouldAffect.items[1].type).toBe('task');
+  });
+});
+
+describe('returnedFailureMessage (OMN-333)', () => {
+  it('is null for anything that is not success:false', () => {
+    for (const r of [{ success: true }, { data: {} }, null, undefined, 'x', { success: 'false' }]) {
+      expect(returnedFailureMessage(r)).toBeNull();
+    }
+  });
+
+  it('reads the message from an error object or string, with a fallback', () => {
+    expect(returnedFailureMessage({ success: false, error: { code: 'X', message: 'Task not found' } })).toBe(
+      'Task not found',
+    );
+    expect(returnedFailureMessage({ success: false, error: 'plain' })).toBe('plain');
+    expect(returnedFailureMessage({ success: false })).toBe('Unknown error');
   });
 });

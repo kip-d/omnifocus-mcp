@@ -60,7 +60,7 @@ import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import { flattenBatchResults, liftWarnings } from './batch-response-flatten.js';
+import { flattenBatchResults, liftWarnings, returnedFailureMessage } from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -1577,18 +1577,52 @@ SAFETY:
       if (halted || ops.length === 0) continue;
 
       for (const op of ops) {
-        try {
-          const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-          const result = await this.dispatchBatchOp(op, resolvedId);
-          results[phase.resultKey].push(result);
-        } catch (err) {
-          results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
-          if (compiled.stopOnError) {
-            halted = true;
-            break;
-          }
+        const outcome = await this.runBatchFollowupOp(phase.name, op, tempIdMapping);
+        if (outcome.ok) {
+          results[phase.resultKey].push(outcome.result);
+          continue;
+        }
+        results.errors.push(outcome.error);
+        if (compiled.stopOnError) {
+          halted = true;
+          break;
         }
       }
+    }
+  }
+
+  /**
+   * Dispatch one follow-up batch op and classify the outcome (OMN-333).
+   *
+   * Handlers RETURN an error envelope on a script failure ("Task not found")
+   * rather than throwing. Both forms are failures, reported as an errors[] entry
+   * so top-level success is false, the summary doesn't count them, and the caller
+   * can honor stopOnError. An unresolved tempId reaches the handler as-is and fails
+   * too, named by the id the caller sent; a resolved one is named by the real id it
+   * targeted, with the caller's tempId beside it.
+   */
+  private async runBatchFollowupOp(
+    phaseName: string,
+    op: Extract<CompiledMutation, { operation: 'batch' }>['operations'][number],
+    tempIdMapping: Record<string, string>,
+  ): Promise<{ ok: true; result: unknown } | { ok: false; error: Record<string, unknown> }> {
+    const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
+    const failed = (message: string) => ({
+      ok: false as const,
+      error: {
+        phase: phaseName,
+        id: resolvedId,
+        ...(resolvedId !== op.id ? { tempId: op.id } : {}),
+        error: message,
+      },
+    });
+    try {
+      const result = await this.dispatchBatchOp(op, resolvedId);
+      const failure = returnedFailureMessage(result);
+      return failure === null ? { ok: true, result } : failed(failure);
+    } catch (err) {
+      // The bare message, as a returned failure reports it — not "Error: …".
+      return failed(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -1727,6 +1761,14 @@ SAFETY:
           error: `${createResult.failed} of ${createResult.totalItems} creates failed; batch halted (stopOnError)`,
         });
         hadError = true;
+      } else if (createResult.failed > 0) {
+        // OMN-333 (review of #282): without stopOnError the batch continues, but a
+        // failed create is still a failed batch — top-level success reads errors[].
+        results.created.push(createResult);
+        results.errors.push({
+          phase: 'create',
+          error: `${createResult.failed} of ${createResult.totalItems} creates failed`,
+        });
       } else {
         results.created.push(createResult);
       }
