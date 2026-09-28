@@ -35,6 +35,7 @@ import {
   MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
+import { localDateBoundToUTC } from '../../utils/timezone.js';
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
@@ -380,7 +381,7 @@ PERFORMANCE WARNINGS:
 - Most others: <1 second with caching
 
 TIME-WINDOW SCOPING:
-- task_velocity accepts scope.dateRange ({ start, end }) — the only honored scope input.
+- task_velocity accepts scope.dateRange ({ start, end }) — the only honored scope input. Bounds are local "YYYY-MM-DD" (whole day, inclusive) or "YYYY-MM-DD HH:mm" (exact instant); no ISO T/Z.
 - All other analysis types take no scope and run against the whole database.
 - Passing scope elsewhere (or scope.tags/projects anywhere) is rejected, not ignored.`;
 
@@ -425,6 +426,8 @@ TIME-WINDOW SCOPING:
               properties: {
                 dateRange: {
                   type: 'object',
+                  // OMN-334: the read-filter date formats; date-only bounds are whole local days.
+                  description: 'Local "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Date-only bounds are inclusive whole days.',
                   properties: { start: { type: 'string' }, end: { type: 'string' } },
                 },
               },
@@ -775,7 +778,10 @@ TIME-WINDOW SCOPING:
       const includeWeekends = true;
       const days = 7;
 
-      // Compute actual date range
+      // Compute actual date range: local "YYYY-MM-DD[ HH:mm]" bounds, as the caller
+      // wrote them (the schema admits only those forms). The default window is the
+      // last `days` LOCAL days — toISOString() dates were UTC days, off by one in
+      // the evening west of Greenwich.
       let rangeStart: string;
       let rangeEnd: string;
 
@@ -783,19 +789,28 @@ TIME-WINDOW SCOPING:
         rangeStart = compiled.scope.dateRange.start;
         rangeEnd = compiled.scope.dateRange.end;
       } else {
+        const localDay = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const now = new Date();
         const start = new Date(now);
         start.setDate(start.getDate() - days);
-        rangeStart = start.toISOString().split('T')[0];
-        rangeEnd = now.toISOString().split('T')[0];
+        rangeStart = localDay(start);
+        rangeEnd = localDay(now);
       }
+
+      // OMN-334: the script receives UTC instants, never the caller's text — the
+      // read-filter conversion (OMN-332): date-only bounds are whole local days.
+      const startInstant = localDateBoundToUTC(rangeStart, 'start');
+      const endInstant = localDateBoundToUTC(rangeEnd, 'end');
 
       // OMN-289: version-bumped v2 -> v3. This cache stores the RESHAPED response
       // object (see `cache.set(..., responseData)` below), NOT the script envelope,
       // so entries written before this change would keep serving the old shape —
       // peakDay/trend/patterns/insights present, the four real numbers missing —
       // until TTL expiry after deploy. Same class as OMN-292's productivity bump.
-      const cacheKey = `velocity_v3_${rangeStart}_${rangeEnd}_${groupBy}_${includeWeekends}`;
+      // OMN-334: keyed on the resolved instants, so two spellings of one window
+      // ("2026-09-01" / "2026-09-01 00:00") share an entry.
+      const cacheKey = `velocity_v3_${startInstant}_${endInstant}_${groupBy}_${includeWeekends}`;
 
       const cached = this.cache.get<{
         velocity?: { period?: string; tasksCompleted?: number; averagePerDay?: number };
@@ -819,7 +834,7 @@ TIME-WINDOW SCOPING:
       }
 
       const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
-        options: { period: groupBy, startDate: rangeStart, endDate: rangeEnd },
+        options: { period: groupBy, startDate: startInstant, endDate: endInstant },
       });
 
       const result = await this.execJson(script, TASK_VELOCITY_V3_SCHEMA);

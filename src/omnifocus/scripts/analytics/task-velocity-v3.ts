@@ -21,13 +21,15 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
     try {
       // Build OmniJS script for data collection
       const period = options.period || 'week';
+      // OMN-334: UTC ISO instants from the tool (localDateBoundToUTC), never the
+      // caller's text. They reach the inner program only as JSON literals.
       const startDateStr = options.startDate;
       const endDateStr = options.endDate;
       const intervalDays = period === 'day' ? 1 : period === 'week' ? 7 : 30;
 
       // Calculate number of intervals to cover the date range
-      const startMs = new Date(startDateStr + 'T00:00:00').getTime();
-      const endMs = new Date(endDateStr + 'T23:59:59').getTime();
+      const startMs = new Date(startDateStr).getTime();
+      const endMs = new Date(endDateStr).getTime();
       const rangeDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
       const numIntervals = Math.max(1, Math.ceil(rangeDays / intervalDays));
 
@@ -36,8 +38,8 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           ${IS_PROJECT_ROOT_ROW_SNIPPET}
 
           // Parse date range from options
-          const rangeStart = new Date('$\{startDateStr}T00:00:00');
-          const rangeEnd = new Date('$\{endDateStr}T23:59:59');
+          const rangeStart = new Date($\{JSON.stringify(startDateStr)});
+          const rangeEnd = new Date($\{JSON.stringify(endDateStr)});
           const intervalDays = $\{intervalDays};
           const numIntervals = $\{numIntervals};
 
@@ -177,8 +179,8 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
               },
               optimization: 'omnijs_v3',
               dateRange: {
-                start: '$\{startDateStr}',
-                end: '$\{endDateStr}'
+                start: $\{JSON.stringify(startDateStr)},
+                end: $\{JSON.stringify(endDateStr)}
               }
             }
           });

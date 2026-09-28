@@ -331,7 +331,9 @@ export class OmniAutomation {
     for (const [key, value] of Object.entries(safeParams)) {
       const placeholder = `{{${key}}}`;
       const replacement = this.formatValue(value);
-      script = script.replace(new RegExp(placeholder, 'g'), replacement);
+      // Function replacer (OMN-334): a string replacement expands $&, $`, $' and
+      // $$ inside the value, rewriting it and splicing template text into it.
+      script = script.replace(new RegExp(placeholder, 'g'), () => replacement);
     }
 
     return script;

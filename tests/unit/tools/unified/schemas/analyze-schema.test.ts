@@ -59,6 +59,29 @@ describe('AnalyzeSchema', () => {
         expect(result.success).toBe(true);
       });
 
+      // OMN-334: dateRange bounds take the read-filter formats (OMN-332). Anything
+      // else used to reach the script, where it became Invalid Date (success with
+      // all-zero counts) or, with a quote, rewrote the OmniJS program.
+      it('accepts "YYYY-MM-DD HH:mm" bounds', () => {
+        const result = parse({
+          type: 'task_velocity',
+          scope: { dateRange: { start: '2026-09-01 09:00', end: '2026-09-26 17:00' } },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      for (const bad of ["2026-09-01'); x('", '2026-09-01T09:00:00Z', '2026-02-30', 'last week', '']) {
+        it(`rejects dateRange bound ${JSON.stringify(bad)}`, () => {
+          for (const dateRange of [
+            { start: bad, end: '2026-09-26' },
+            { start: '2026-09-01', end: bad },
+          ]) {
+            const result = parse({ type: 'task_velocity', scope: { dateRange } });
+            expect(result.success).toBe(false);
+          }
+        });
+      }
+
       for (const key of ['tags', 'projects', 'includeCompleted', 'includeDropped']) {
         it(`rejects scope.${key} (never honored, even on velocity)`, () => {
           const value = key === 'tags' || key === 'projects' ? ['x'] : true;
