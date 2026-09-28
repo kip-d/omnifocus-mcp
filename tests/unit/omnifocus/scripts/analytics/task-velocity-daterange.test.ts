@@ -67,6 +67,8 @@ describe('OMN-334 — task_velocity range bounds', () => {
   it('a quote in a bound stays data — it cannot rewrite the OmniJS program', () => {
     // Schema validation rejects this first; the script must not depend on it.
     // Pre-fix this closed the string literal and threw from inside OmniFocus.
+    // Post-fix the payload reaches the inner program's range guard intact, as an
+    // unparseable date — the guard's own message proves the program ran as written.
     const payload = "2026-09-01'); throw new Error('INJECTED'); ('";
     const parsed = runAnalyticsScript(
       TASK_VELOCITY_SCRIPT_V3,
@@ -74,8 +76,26 @@ describe('OMN-334 — task_velocity range bounds', () => {
       { flattenedTasks: [] },
     ) as VelocityEnvelope;
 
-    expect(parsed.error?.message ?? '').not.toContain('INJECTED');
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.dateRange).toEqual({ start: payload, end: payload });
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error?.message).toMatch(/^Invalid task_velocity date range/);
+    expect(parsed.error?.message).not.toContain('INJECTED');
+  });
+
+  // Review of #281: the tool's schema is the only thing ordering and validating
+  // the bounds; a caller that bypasses it must get an error, not ok:true with
+  // every count 0 (the silent-zero class this ticket removes).
+  it.each([
+    ['unparseable', 'not a date', localDateBoundToUTC('2026-09-26', 'end')],
+    ['swapped', localDateBoundToUTC('2026-09-26', 'start'), localDateBoundToUTC('2026-09-01', 'end')],
+    ['missing', undefined, localDateBoundToUTC('2026-09-26', 'end')],
+  ])('an %s range is an error, not ok:true with zeros', (_label, startDate, endDate) => {
+    const parsed = runAnalyticsScript(
+      TASK_VELOCITY_SCRIPT_V3,
+      { period: 'day', startDate, endDate },
+      { flattenedTasks: [completedAt('would count', new Date(2026, 8, 10, 12, 0))] },
+    ) as VelocityEnvelope;
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error?.message).toMatch(/^Invalid task_velocity date range/);
   });
 });

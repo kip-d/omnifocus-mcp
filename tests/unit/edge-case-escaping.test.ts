@@ -36,6 +36,13 @@ describe('JSON Escaping Edge Cases', () => {
         expect(script).toBe(`const v = ${JSON.stringify(value)};`);
       });
     }
+
+    // Review of #281: the placeholder was compiled as a regex from the key, so a
+    // key with regex metacharacters matched unintended text.
+    test('matches the placeholder literally, not as a regex', () => {
+      const script = omni.buildScript('{{a.b}} {{aXb}} {{a.b}}', { 'a.b': 1 });
+      expect(script).toBe('1 {{aXb}} 1');
+    });
   });
 
   describe('formatValue escaping', () => {

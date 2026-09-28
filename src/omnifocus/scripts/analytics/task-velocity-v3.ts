@@ -40,6 +40,17 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           // Parse date range from options
           const rangeStart = new Date($\{JSON.stringify(startInstant)});
           const rangeEnd = new Date($\{JSON.stringify(endInstant)});
+
+          // OMN-334: an unparseable or swapped range matches nothing and would
+          // report ok:true with every count 0. The tool's schema rules both out;
+          // this guard keeps that from being the only line of defense.
+          if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime()) || rangeStart > rangeEnd) {
+            return JSON.stringify({
+              ok: false,
+              error: { message: 'Invalid task_velocity date range: expected valid start and end instants with start <= end' },
+              v: '3'
+            });
+          }
           const intervalDays = $\{intervalDays};
           const numIntervals = $\{numIntervals};
 
