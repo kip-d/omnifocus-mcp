@@ -64,7 +64,7 @@ both keep the advertised JSON byte-for-byte as it is today.
      Verified: `TZ=America/Detroit node -e` gives `cutoff local: Mon Mar 30 2026 20:00`; the verifier reported HOLDS.
      Unverified at runtime in OmniJS: settled by an integration test with a task due at 17:00 local on the `between` end
      date. `tests/unit/contracts/ast/emitters/omnijs.test.ts:68` currently pins the raw form.
-- [ ] 5. [OMN-333] A batch reports `success: true` when an update, complete or delete inside it fails. Handlers
+- [x] 5. [OMN-333] A batch reports `success: true` when an update, complete or delete inside it fails. Handlers
      **return** `createErrorResponseV2` on script failure rather than throwing, and `runBatchFollowupPhases` pushes the
      returned value into `results.updated/completed/deleted`. Only a `catch` records into `results.errors`. The
      consequences:
@@ -213,7 +213,9 @@ both keep the advertised JSON byte-for-byte as it is today.
       (`src/tools/unified/OmniFocusWriteTool.ts:1581,1670,1735-1737,1909-1911`). Fix: always carry
       `resolver.getMappings()` internally, and apply `returnMapping` only to the response (Technique: Separate Query
       from Modifier). Verified: read; the verifier reported HOLDS (the default is `true`). Unverified at runtime: a unit
-      test with `returnMapping:false`, a create `t1` and an update `t1`.
+      test with `returnMapping:false`, a create `t1` and an update `t1`. Status 2026-09-28: since item #5 (PR #282) the
+      miss is reported as a failed row naming `t1`, no longer as success. The mapping itself is still not carried, so
+      this item stays open.
 - [ ] 20. [OMN-346] The `omnifocus_write` description states three things the code does not do:
       - "planned=8am", but `localToUTC` uses 12:00.
       - "Batch supports up to 100 operations", but `operations` has no min or max; 0, 101 and 500 all parse.
@@ -283,7 +285,9 @@ both keep the advertised JSON byte-for-byte as it is today.
         (`src/tools/unified/OmniFocusAnalyzeTool.ts:786-790,2104`;
         `src/omnifocus/scripts/analytics/due-date-bunching-analyzer.ts:36`). Fix: one shared local `YYYY-MM-DD`
         formatter (Technique: Extract Function). Verified: `TZ=America/New_York` and `TZ=America/Los_Angeles` `node -e`
-        probes; the verifier reported HOLDS.
+        probes; the verifier reported HOLDS. Status 2026-09-28: the `task_velocity` bullet landed with item #6 (PR
+        #281), which also added the shared formatter (`formatLocalDay` in `src/utils/timezone.ts`). The
+        due-date-bunching bullet is still open.
 - [ ] 27. [OMN-340] Analyze ops cap or truncate silently in three places:
       - `pattern_analysis` scans `Math.min(flattenedTasks.length, 3000)` **raw** rows, with completed, dropped and root
         rows using up the budget, and no capped flag.
