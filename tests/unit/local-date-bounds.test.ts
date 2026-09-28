@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isLocalDateString, localDateBoundToUTC, formatBoundForDisplay } from '../../src/utils/timezone.js';
+import {
+  isLocalDateString,
+  localDateBoundToUTC,
+  formatBoundForDisplay,
+  formatLocalDay,
+} from '../../src/utils/timezone.js';
 import { ReadSchema } from '../../src/tools/unified/schemas/read-schema.js';
 
 // OMN-332: read-side date filters use the SAME local-time semantics as writes.
@@ -113,4 +118,28 @@ describe('ReadSchema rejects malformed date filters (OMN-332)', () => {
       expect(parse(dueDate).success).toBe(true);
     },
   );
+});
+
+// OMN-334 / OMN-351: the shared local "YYYY-MM-DD" formatter. toISOString() dates
+// are UTC days, one day ahead in the evening west of Greenwich.
+describe('formatLocalDay under America/Detroit', () => {
+  const savedTZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/Detroit';
+  });
+  afterAll(() => {
+    if (savedTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTZ;
+  });
+
+  it('uses the local calendar day, not the UTC one', () => {
+    const evening = new Date(2026, 8, 28, 21, 30); // 01:30Z on the 29th
+    expect(evening.toISOString().slice(0, 10)).toBe('2026-09-29');
+    expect(formatLocalDay(evening)).toBe('2026-09-28');
+  });
+
+  it('zero-pads month and day, and round-trips through isLocalDateString', () => {
+    expect(formatLocalDay(new Date(2026, 0, 5))).toBe('2026-01-05');
+    expect(isLocalDateString(formatLocalDay(new Date()))).toBe(true);
+  });
 });

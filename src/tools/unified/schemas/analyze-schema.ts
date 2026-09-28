@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { coerceObject } from '../../schemas/coercion-helpers.js';
+import { isLocalDateString, localDateBoundToUTC } from '../../../utils/timezone.js';
 
 // OMN-90: every nested object literal carries `.strict()`. Zod's
 // `discriminatedUnion` does NOT propagate strictness to its members, and
@@ -21,14 +22,32 @@ import { coerceObject } from '../../schemas/coercion-helpers.js';
 // failures pipeline records the mismatch (the OMN-90 rationale above).
 //
 // Renamed to say where it applies. Real scope FILTERING is OMN-293, post-migration.
+//
+// OMN-334: bounds take the read-filter formats (isLocalDateString, OMN-332). A bare
+// z.string() let "YYYY-MM-DD HH:mm" through to become Invalid Date in the script
+// (ok:true, every count 0) and let a quote rewrite the OmniJS program.
+const VelocityDateBoundSchema = z.string().refine(isLocalDateString, {
+  message: 'Expected a local date "YYYY-MM-DD" or date-time "YYYY-MM-DD HH:mm"',
+});
+
 const VelocityScopeSchema = z
   .object({
     dateRange: z
       .object({
-        start: z.string(),
-        end: z.string(),
+        start: VelocityDateBoundSchema,
+        end: VelocityDateBoundSchema,
       })
       .strict()
+      // Review of #281: a swapped range (each bound valid) matched nothing and
+      // returned ok:true with every count 0. Compared as resolved instants, so
+      // "2026-09-26 09:00".."2026-09-26" (same day, date-only end) is valid.
+      .refine(
+        ({ start, end }) =>
+          !isLocalDateString(start) ||
+          !isLocalDateString(end) ||
+          localDateBoundToUTC(start, 'start') <= localDateBoundToUTC(end, 'end'),
+        { message: 'dateRange.start must not be after dateRange.end', path: ['end'] },
+      )
       .optional(),
   })
   .strict();

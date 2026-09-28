@@ -331,7 +331,10 @@ export class OmniAutomation {
     for (const [key, value] of Object.entries(safeParams)) {
       const placeholder = `{{${key}}}`;
       const replacement = this.formatValue(value);
-      script = script.replace(new RegExp(placeholder, 'g'), replacement);
+      // Literal split/join (OMN-334): String.replace with a string replacement
+      // expands $&, $`, $' and $$ inside the value, and a RegExp built from the
+      // key treats metacharacters in it as pattern syntax.
+      script = script.split(placeholder).join(replacement);
     }
 
     return script;

@@ -21,13 +21,15 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
     try {
       // Build OmniJS script for data collection
       const period = options.period || 'week';
-      const startDateStr = options.startDate;
-      const endDateStr = options.endDate;
+      // OMN-334: UTC ISO instants from the tool (localDateBoundToUTC), never the
+      // caller's text. They reach the inner program only as JSON literals.
+      const startInstant = options.startDate;
+      const endInstant = options.endDate;
       const intervalDays = period === 'day' ? 1 : period === 'week' ? 7 : 30;
 
       // Calculate number of intervals to cover the date range
-      const startMs = new Date(startDateStr + 'T00:00:00').getTime();
-      const endMs = new Date(endDateStr + 'T23:59:59').getTime();
+      const startMs = new Date(startInstant).getTime();
+      const endMs = new Date(endInstant).getTime();
       const rangeDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
       const numIntervals = Math.max(1, Math.ceil(rangeDays / intervalDays));
 
@@ -36,8 +38,19 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           ${IS_PROJECT_ROOT_ROW_SNIPPET}
 
           // Parse date range from options
-          const rangeStart = new Date('$\{startDateStr}T00:00:00');
-          const rangeEnd = new Date('$\{endDateStr}T23:59:59');
+          const rangeStart = new Date($\{JSON.stringify(startInstant)});
+          const rangeEnd = new Date($\{JSON.stringify(endInstant)});
+
+          // OMN-334: an unparseable or swapped range matches nothing and would
+          // report ok:true with every count 0. The tool's schema rules both out;
+          // this guard keeps that from being the only line of defense.
+          if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime()) || rangeStart > rangeEnd) {
+            return JSON.stringify({
+              ok: false,
+              error: { message: 'Invalid task_velocity date range: expected valid start and end instants with start <= end' },
+              v: '3'
+            });
+          }
           const intervalDays = $\{intervalDays};
           const numIntervals = $\{numIntervals};
 
@@ -177,8 +190,8 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
               },
               optimization: 'omnijs_v3',
               dateRange: {
-                start: '$\{startDateStr}',
-                end: '$\{endDateStr}'
+                start: $\{JSON.stringify(startInstant)},
+                end: $\{JSON.stringify(endInstant)}
               }
             }
           });

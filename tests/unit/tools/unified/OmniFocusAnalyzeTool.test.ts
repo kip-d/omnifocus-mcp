@@ -517,6 +517,76 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.velocity.tasksCompleted).toBe(45);
       expect(res.data.velocity.predictedCapacity).toBe(45.5);
     });
+
+    // OMN-334: the script receives UTC instants computed here, never the caller's
+    // text — the same conversion read filters use (OMN-332).
+    describe('dateRange reaches the script as local-day UTC instants', () => {
+      const emptyResult = createScriptSuccess({
+        ok: true,
+        v: '3',
+        data: { throughput: { totalCompleted: 0, intervals: [] } },
+      });
+
+      function velocityOptions(): { startDate: string; endDate: string } {
+        return mockOmni.buildScript.mock.calls[0][1].options;
+      }
+
+      beforeEach(() => {
+        mockCache.get.mockReturnValue(null);
+        mockOmni.buildScript.mockReturnValue('script');
+        mockOmni.executeJson.mockResolvedValue(emptyResult);
+      });
+
+      it('date-only bounds cover whole local days', async () => {
+        await tool.execute({
+          analysis: { type: 'task_velocity', scope: { dateRange: { start: '2026-09-01', end: '2026-09-26' } } },
+        });
+        expect(velocityOptions().startDate).toBe(new Date(2026, 8, 1, 0, 0, 0, 0).toISOString());
+        expect(velocityOptions().endDate).toBe(new Date(2026, 8, 26, 23, 59, 59, 999).toISOString());
+      });
+
+      it('"YYYY-MM-DD HH:mm" bounds are exact local instants', async () => {
+        await tool.execute({
+          analysis: {
+            type: 'task_velocity',
+            scope: { dateRange: { start: '2026-09-01 09:00', end: '2026-09-26 17:00' } },
+          },
+        });
+        expect(velocityOptions().startDate).toBe(new Date(2026, 8, 1, 9, 0).toISOString());
+        expect(velocityOptions().endDate).toBe(new Date(2026, 8, 26, 17, 0).toISOString());
+      });
+
+      it('the default window is the last 7 local days', async () => {
+        // Frozen clock: a second new Date() here could land on the other side of
+        // local midnight from the tool's. Only Date is faked; timers stay real.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          // Built from local components, so the expected days hold in any TZ. West of
+          // Greenwich this instant is already the 29th in UTC — the case the old
+          // toISOString() default got wrong.
+          vi.setSystemTime(new Date(2026, 8, 28, 23, 30));
+          await tool.execute({ analysis: { type: 'task_velocity' } });
+          expect(velocityOptions().startDate).toBe(new Date(2026, 8, 21).toISOString());
+          expect(velocityOptions().endDate).toBe(new Date(2026, 8, 28, 23, 59, 59, 999).toISOString());
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('keys the cache on the resolved instants, not the spelling', async () => {
+        await tool.execute({
+          analysis: { type: 'task_velocity', scope: { dateRange: { start: '2026-09-01', end: '2026-09-26' } } },
+        });
+        await tool.execute({
+          analysis: {
+            type: 'task_velocity',
+            scope: { dateRange: { start: '2026-09-01 00:00', end: '2026-09-26' } },
+          },
+        });
+        const keys = mockCache.get.mock.calls.map((c: unknown[]) => c[1]);
+        expect(keys[0]).toBe(keys[1]);
+      });
+    });
   });
 
   // ==========================================================================

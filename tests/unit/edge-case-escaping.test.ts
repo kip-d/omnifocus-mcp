@@ -27,6 +27,24 @@ const ESCAPING_TEST_TEMPLATE = `
 describe('JSON Escaping Edge Cases', () => {
   const omni = new OmniAutomation();
 
+  // OMN-334 (AUDIT #43): a string replacement expands $&, $`, $' and $$ as
+  // replacement patterns, so values containing them were rewritten on the way in.
+  describe('buildScript keeps $ replacement patterns literal', () => {
+    for (const value of ['a$$b', 'x$&y', "x$'y", 'x$`y', 'x$1y']) {
+      test(`preserves ${JSON.stringify(value)} verbatim`, () => {
+        const script = omni.buildScript('const v = {{v}};', { v: value });
+        expect(script).toBe(`const v = ${JSON.stringify(value)};`);
+      });
+    }
+
+    // Review of #281: the placeholder was compiled as a regex from the key, so a
+    // key with regex metacharacters matched unintended text.
+    test('matches the placeholder literally, not as a regex', () => {
+      const script = omni.buildScript('{{a.b}} {{aXb}} {{a.b}}', { 'a.b': 1 });
+      expect(script).toBe('1 {{aXb}} 1');
+    });
+  });
+
   describe('formatValue escaping', () => {
     test('should handle double quotes in task name', () => {
       const taskData = {
