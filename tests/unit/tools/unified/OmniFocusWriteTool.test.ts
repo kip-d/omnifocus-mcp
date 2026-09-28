@@ -2081,6 +2081,55 @@ describe('OmniFocusWriteTool batch — returned handler failures (OMN-333)', () 
     buildSpy.mockRestore();
   });
 
+  // Review of #282: a resolved tempId's failure names the real id it targeted, with
+  // the caller's tempId beside it; a thrown error reads like a returned one.
+  it('a failure on a RESOLVED tempId reports the real id and the tempId', async () => {
+    const buildSpy = mockFastPathCreate();
+    execJsonSpy
+      .mockResolvedValueOnce({
+        success: true,
+        data: { results: [{ tempId: 't1', taskId: 'real-1', success: true }] },
+      })
+      .mockResolvedValueOnce(notFound('real-1'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'create', target: 'task', data: { tempId: 't1', name: '__TEST__ a' } },
+          { operation: 'update', target: 'task', id: 't1', changes: { note: 'x' } },
+        ],
+      },
+    })) as any;
+
+    expect(result.data.results).toContainEqual({
+      operation: 'update',
+      success: false,
+      id: 'real-1',
+      tempId: 't1',
+      error: 'Task not found: real-1',
+    });
+    buildSpy.mockRestore();
+  });
+
+  it('a THROWN failure is recorded with the bare message, like a returned one', async () => {
+    execJsonSpy.mockRejectedValueOnce(new Error('osascript exploded'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [{ operation: 'update', target: 'task', id: 'task-x', changes: { note: 'x' } }],
+      },
+    })) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.data.results).toEqual([
+      { operation: 'update', success: false, id: 'task-x', error: 'osascript exploded' },
+    ]);
+  });
+
   it('successful task complete/delete and project update/complete/delete rows carry their real ids', async () => {
     execJsonSpy
       .mockResolvedValueOnce(

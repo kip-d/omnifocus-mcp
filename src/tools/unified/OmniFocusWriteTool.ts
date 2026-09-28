@@ -1577,30 +1577,54 @@ SAFETY:
       if (halted || ops.length === 0) continue;
 
       for (const op of ops) {
-        // OMN-333: handlers RETURN an error envelope on a script failure ("Task not
-        // found") rather than throwing. Both forms are failures: recorded in errors[]
-        // (so top-level success is false and the summary doesn't count them) and
-        // honored by stopOnError. An unresolved tempId reaches the handler as-is and
-        // fails here too, named by the id the caller sent.
-        let failure: string | null;
-        try {
-          const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-          const result = await this.dispatchBatchOp(op, resolvedId);
-          failure = returnedFailureMessage(result);
-          if (failure === null) {
-            results[phase.resultKey].push(result);
-            continue;
-          }
-        } catch (err) {
-          failure = String(err);
+        const outcome = await this.runBatchFollowupOp(phase.name, op, tempIdMapping);
+        if (outcome.ok) {
+          results[phase.resultKey].push(outcome.result);
+          continue;
         }
-        results.errors.push({ phase: phase.name, id: op.id, error: failure });
+        results.errors.push(outcome.error);
         if (compiled.stopOnError) {
           halted = true;
           break;
         }
       }
     }
+  }
+
+  /**
+   * Dispatch one follow-up batch op and classify the outcome (OMN-333).
+   *
+   * Handlers RETURN an error envelope on a script failure ("Task not found")
+   * rather than throwing. Both forms are failures, reported as an errors[] entry
+   * so top-level success is false, the summary doesn't count them, and the caller
+   * can honor stopOnError. An unresolved tempId reaches the handler as-is and fails
+   * too, named by the id the caller sent; a resolved one is named by the real id it
+   * targeted, with the caller's tempId beside it.
+   */
+  private async runBatchFollowupOp(
+    phaseName: string,
+    op: Extract<CompiledMutation, { operation: 'batch' }>['operations'][number],
+    tempIdMapping: Record<string, string>,
+  ): Promise<{ ok: true; result: unknown } | { ok: false; error: Record<string, unknown> }> {
+    const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
+    let failure: string | null;
+    try {
+      const result = await this.dispatchBatchOp(op, resolvedId);
+      failure = returnedFailureMessage(result);
+      if (failure === null) return { ok: true, result };
+    } catch (err) {
+      // The bare message, as a returned failure reports it — not "Error: …".
+      failure = err instanceof Error ? err.message : String(err);
+    }
+    return {
+      ok: false,
+      error: {
+        phase: phaseName,
+        id: resolvedId,
+        ...(resolvedId !== op.id ? { tempId: op.id } : {}),
+        error: failure,
+      },
+    };
   }
 
   /**

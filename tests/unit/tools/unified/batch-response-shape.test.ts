@@ -187,6 +187,27 @@ describe('flattenBatchResults', () => {
     expect(flat).toEqual([expect.objectContaining({ operation: op, success: true, id, name })]);
   });
 
+  // Review of #282: the minimalResponse branch dropped a failure's message, and
+  // error rows can carry the caller's tempId beside the real id.
+  it('OMN-333: a failed minimalResponse row keeps its message; error rows carry tempId', () => {
+    const flat = flattenBatchResults({
+      created: [],
+      updated: [{ success: false, id: 'm1', fields_updated: [], error: 'nope' }],
+      completed: [],
+      deleted: [],
+      errors: [{ phase: 'update', id: 'real-1', tempId: 't1', error: 'Task not found: real-1' }],
+    });
+
+    expect(flat[0]).toMatchObject({ operation: 'update', success: false, id: 'm1', error: 'nope' });
+    expect(flat[1]).toEqual({
+      operation: 'update',
+      success: false,
+      id: 'real-1',
+      tempId: 't1',
+      error: 'Task not found: real-1',
+    });
+  });
+
   it('OMN-333: a row with no id anywhere gets id:null, and a failed envelope keeps its message', () => {
     const flat = flattenBatchResults({
       created: [],
@@ -561,6 +582,6 @@ describe('returnedFailureMessage (OMN-333)', () => {
       'Task not found',
     );
     expect(returnedFailureMessage({ success: false, error: 'plain' })).toBe('plain');
-    expect(returnedFailureMessage({ success: false })).toBe('Operation failed');
+    expect(returnedFailureMessage({ success: false })).toBe('Unknown error');
   });
 });
