@@ -17,17 +17,7 @@ import { emitOmniJS } from '../../../../src/contracts/ast/emitters/omnijs.js';
 import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
 import { normalizeFilter } from '../../../../src/contracts/filters.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
-
-// OMN-332: date-only bounds are whole LOCAL days, inclusive (TZ-independent expectations).
-const ymd = (s: string) => s.split('-').map(Number) as [number, number, number];
-const localStartOfDay = (s: string) => {
-  const [y, m, d] = ymd(s);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
-};
-const localEndOfDay = (s: string) => {
-  const [y, m, d] = ymd(s);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
-};
+import { localStartOfDay, localEndOfDay } from '../../helpers/local-day.js'; // OMN-332
 
 // =============================================================================
 // QueryCompiler.transformFilters

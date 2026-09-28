@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isLocalDateString, localDateBoundToUTC } from '../../src/utils/timezone.js';
+import { isLocalDateString, localDateBoundToUTC, formatBoundForDisplay } from '../../src/utils/timezone.js';
 import { ReadSchema } from '../../src/tools/unified/schemas/read-schema.js';
 
 // OMN-332: read-side date filters use the SAME local-time semantics as writes.
@@ -39,6 +39,22 @@ describe('local date bounds under America/Detroit (OMN-332)', () => {
 
   it('the spring-forward day still ends at local 23:59:59.999', () => {
     expect(localDateBoundToUTC('2026-03-08', 'end')).toBe('2026-03-09T03:59:59.999Z');
+  });
+
+  // OMN-332 review: descriptions render bounds in local time, not raw UTC.
+  it('formatBoundForDisplay renders an ISO instant as local "YYYY-MM-DD HH:mm"', () => {
+    expect(formatBoundForDisplay('2026-04-01T03:59:59.999Z')).toBe('2026-03-31 23:59');
+    expect(formatBoundForDisplay('2026-03-01T05:00:00.000Z')).toBe('2026-03-01 00:00');
+    expect(formatBoundForDisplay('2026-03-31T21:00:00.000Z')).toBe('2026-03-31 17:00');
+  });
+
+  it('formatBoundForDisplay passes a non-date through unchanged', () => {
+    expect(formatBoundForDisplay('not a date')).toBe('not a date');
+  });
+
+  it('formatBoundForDisplay leaves an already-local date string alone (no UTC misread)', () => {
+    expect(formatBoundForDisplay('2025-12-31')).toBe('2025-12-31');
+    expect(formatBoundForDisplay('2025-12-31 17:00')).toBe('2025-12-31 17:00');
   });
 });
 

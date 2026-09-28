@@ -108,7 +108,9 @@ function parseLocalDate(s: string): { date: Date; hasTime: boolean } | undefined
 
 /**
  * True for "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" naming a real local date/time — the
- * read-side date filter formats (OMN-332). Same formats writes accept via localToUTC.
+ * read-side date filter formats (OMN-332). Stricter than localToUTC, which also
+ * tolerates a "T" separator on writes; read filters accept only the two documented
+ * forms.
  */
 export function isLocalDateString(s: string): boolean {
   return parseLocalDate(s) !== undefined;
@@ -129,6 +131,21 @@ export function localDateBoundToUTC(s: string, edge: 'start' | 'end'): string {
   }
   if (!parsed.hasTime && edge === 'end') parsed.date.setHours(23, 59, 59, 999);
   return parsed.date.toISOString();
+}
+
+/**
+ * Render a date-filter bound for humans (filter_description) as LOCAL
+ * "YYYY-MM-DD HH:mm" (OMN-332). Bounds are stored as UTC ISO instants, and printing
+ * those raw showed a day-end bound as the next calendar date. A value already in local
+ * "YYYY-MM-DD[ HH:mm]" form passes through unchanged (Date(string) would misread a
+ * bare date as UTC midnight), as does anything that isn't a parseable date.
+ */
+export function formatBoundForDisplay(value: string): string {
+  if (isLocalDateString(value)) return value;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /**

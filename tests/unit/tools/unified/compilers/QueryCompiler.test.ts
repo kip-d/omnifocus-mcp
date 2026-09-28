@@ -3,18 +3,7 @@ import { z } from 'zod';
 import { QueryCompiler, type CompiledQuery } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
-
-// OMN-332: date-only bounds are whole LOCAL days, inclusive. Computed with the
-// local-time Date constructor so these expectations hold in any TZ.
-const ymd = (s: string) => s.split('-').map(Number) as [number, number, number];
-const localStartOfDay = (s: string) => {
-  const [y, m, d] = ymd(s);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
-};
-const localEndOfDay = (s: string) => {
-  const [y, m, d] = ymd(s);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
-};
+import { localStartOfDay, localEndOfDay } from '../../../helpers/local-day.js'; // OMN-332
 
 type CompiledTasks = Extract<CompiledQuery, { type: 'tasks' }>;
 type CompiledProjects = Extract<CompiledQuery, { type: 'projects' }>;
