@@ -80,7 +80,7 @@ both keep the advertised JSON byte-for-byte as it is today.
        Consolidate Conditional Expression). Verified: `npx tsx /tmp/audit-31d52e9e/s2-flatten.ts` gives
        `{"topLevelSuccess":true,"flat":[{"operation":"update","success":false,"id":"unknown"}]}`; the verifier reported
        HOLDS.
-- [ ] 6. [OMN-334] `task_velocity` splices `scope.dateRange.start/end` raw into the nested OmniJS program, for example
+- [x] 6. [OMN-334] `task_velocity` splices `scope.dateRange.start/end` raw into the nested OmniJS program, for example
      `new Date('${startDateStr}T00:00:00')`. `VelocityScopeSchema` accepts any string, so a `'` rewrites the program
      inside OmniFocus. The documented `YYYY-MM-DD HH:mm` form, or any ISO datetime, becomes `Invalid Date`: then
      `numIntervals` is NaN, and the op returns `success` with every count at 0
@@ -411,7 +411,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       Substitute Algorithm). Verified: tsx with the real `DependencyGraph`/`TempIdResolver` gives
       `rollback delete order [ 'p', 'c' ]`; the verifier reported HOLDS. Unverified at runtime: the cascade-delete step
       (settled by an integration test with `atomicOperation:true`).
-- [ ] 43. [OMN-334] `OmniAutomation.buildScript` substitutes values with a **string** replacement, so `$&`, `` $` ``,
+- [x] 43. [OMN-334] `OmniAutomation.buildScript` substitutes values with a **string** replacement, so `$&`, `` $` ``,
       `$'` and `$$` inside a JSON-serialized value are expanded as replacement patterns: `a$$b` becomes `a$b`, and
       `x$'y` splices template text into the literal. `task_velocity`'s `dateRange` (#6) is the only caller that passes
       user strings today (`src/omnifocus/OmniAutomation.ts:322-337`, `buildScript`). Fix:
