@@ -53,7 +53,7 @@ both keep the advertised JSON byte-for-byte as it is today.
      emit `project.id.primaryKey === ${JSON.stringify(id)}` and include `id` in `isEmptyProjectFilter` (Technique:
      Substitute Algorithm). Verified: the tsx probe gives `predicate: true, isEmptyFilter: true` and
      `(project.status === Project.Status.Active) && ((true) || (true))`; the verifier reported HOLDS.
-- [ ] 4. [OMN-332] Date-only read filters are parsed as UTC midnight, but writes treat the same string as local time.
+- [x] 4. [OMN-332] Date-only read filters are parsed as UTC midnight, but writes treat the same string as local time.
      The emitter writes `new Date("2026-03-31")`, which is UTC, while the write path sends the same format through
      `localToUTC` (local time, due 17:00). In US Eastern, `between:["2026-03-01","2026-03-31"]` ends at Mar 30 20:00
      local. That excludes tasks due Mar 31 at 17:00, and `after:"2026-03-31"` includes Mar 30 evening
@@ -93,7 +93,7 @@ both keep the advertised JSON byte-for-byte as it is today.
 
 ### P1 — misleading today
 
-- [ ] 7. [OMN-332] Date filter strings are the one read-side value that reaches generated OmniJS without
+- [x] 7. [OMN-332] Date filter strings are the one read-side value that reaches generated OmniJS without
      `JSON.stringify`: `` `${accessor} ${operator} new Date("${dateStr}")` ``. `DateFilterSchema` is a bare
      `z.string()`, so `dueDate:{before:'2026-01-01") || true || ("'}` passes validation and turns the clause into
      `… || true`, inside a tool marked `readOnlyHint: true` (`src/contracts/ast/emitters/omnijs.ts:224`,
