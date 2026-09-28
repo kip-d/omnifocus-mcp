@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { coerceNumber, coerceObject } from '../../schemas/coercion-helpers.js';
+import { isLocalDateString } from '../../../utils/timezone.js';
 
 // Filter operators for flexible queries
 const TagFilterSchema = z.object({
@@ -8,11 +9,18 @@ const TagFilterSchema = z.object({
   none: z.array(z.string()).optional(),
 });
 
+// OMN-332: the only date formats a read filter accepts — the same local-time forms
+// writes use. Anything else (ISO with T/Z, relative words, a stray quote) is
+// rejected here instead of being misread as UTC or spliced into the script.
+const LocalDateStringSchema = z.string().refine(isLocalDateString, {
+  message: 'Expected a local date "YYYY-MM-DD" or date-time "YYYY-MM-DD HH:mm"',
+});
+
 // Date filter as discriminated union - only ONE operator allowed
 const DateFilterSchema = z.union([
-  z.object({ before: z.string() }).strict(),
-  z.object({ after: z.string() }).strict(),
-  z.object({ between: z.tuple([z.string(), z.string()]) }).strict(),
+  z.object({ before: LocalDateStringSchema }).strict(),
+  z.object({ after: LocalDateStringSchema }).strict(),
+  z.object({ between: z.tuple([LocalDateStringSchema, LocalDateStringSchema]) }).strict(),
 ]);
 
 // Validates that a string is a syntactically valid regex pattern (OMN-150).

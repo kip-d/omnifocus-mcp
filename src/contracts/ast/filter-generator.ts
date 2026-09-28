@@ -28,6 +28,7 @@ import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 import { emitFolderPathMatch } from './folder-path-match.js';
 import { emitTextCondition, matchVerb } from './text-condition.js';
+import { formatBoundForDisplay } from '../../utils/timezone.js';
 
 // =============================================================================
 // TYPES
@@ -224,8 +225,11 @@ function describeBooleanFlags(filter: TaskFilter): string[] {
 
 function describeDateRange(filter: TaskFilter): string | null {
   if (!filter.dueBefore && !filter.dueAfter) return null;
-  if (filter.dueBefore && filter.dueAfter) return `due between ${filter.dueAfter} and ${filter.dueBefore}`;
-  return filter.dueBefore ? `due before ${filter.dueBefore}` : `due after ${filter.dueAfter}`;
+  // OMN-332: bounds are UTC ISO instants; describe them in local time.
+  const before = filter.dueBefore ? formatBoundForDisplay(filter.dueBefore) : undefined;
+  const after = filter.dueAfter ? formatBoundForDisplay(filter.dueAfter) : undefined;
+  if (before && after) return `due between ${after} and ${before}`;
+  return before ? `due before ${before}` : `due after ${after}`;
 }
 
 export function describeFilter(filter: TaskFilter): string {

@@ -84,6 +84,77 @@ export function getCurrentTimezoneOffset(): number {
   return new Date().getTimezoneOffset();
 }
 
+// Read-filter date format (OMN-332). Sibling write-side validators — keep in step:
+// DATE_REGEX (schemas/write-schema.ts) and ITEM_DATE_REGEX (schemas/analyze-schema.ts).
+// Deliberately stricter than those: no "T" separator, no seconds.
+const LOCAL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
+
+/**
+ * Parse "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" into local-time components, or
+ * undefined when the string isn't in that form or names an impossible date/time
+ * (2026-02-30, 24:00). Built with the local-time Date constructor, never by parsing
+ * the string, so the result is local by definition.
+ */
+function parseLocalDate(s: string): { date: Date; hasTime: boolean } | undefined {
+  const m = LOCAL_DATE_RE.exec(s);
+  if (!m) return undefined;
+  const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4] ?? '0', m[5] ?? '0'].map(Number);
+  // setFullYear, not the multi-argument constructor: the constructor maps years
+  // 0–99 to 1900+y, which would fail the round-trip for a valid 4-digit year.
+  const date = new Date(2000, 0, 1, 0, 0, 0, 0);
+  date.setFullYear(y, mo - 1, d);
+  date.setHours(h, mi, 0, 0);
+  const roundTrips =
+    date.getFullYear() === y &&
+    date.getMonth() === mo - 1 &&
+    date.getDate() === d &&
+    date.getHours() === h &&
+    date.getMinutes() === mi;
+  return roundTrips ? { date, hasTime: s.length > 10 } : undefined;
+}
+
+/**
+ * True for "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" naming a real local date/time — the
+ * read-side date filter formats (OMN-332). Stricter than localToUTC, which also
+ * tolerates a "T" separator on writes; read filters accept only the two documented
+ * forms.
+ */
+export function isLocalDateString(s: string): boolean {
+  return parseLocalDate(s) !== undefined;
+}
+
+/**
+ * Convert a read-side date filter bound to a UTC ISO instant (OMN-332).
+ *
+ * Date-only bounds are whole LOCAL days, inclusive: 'start' is 00:00:00.000 local,
+ * 'end' is 23:59:59.999 local. A "YYYY-MM-DD HH:mm" bound is that exact local
+ * instant for either edge. Throws on anything else — the read schema rejects those
+ * first, so a throw here means a caller bypassed validation.
+ */
+export function localDateBoundToUTC(s: string, edge: 'start' | 'end'): string {
+  const parsed = parseLocalDate(s);
+  if (!parsed) {
+    throw new Error(`Invalid date filter value ${JSON.stringify(s)}: expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"`);
+  }
+  if (!parsed.hasTime && edge === 'end') parsed.date.setHours(23, 59, 59, 999);
+  return parsed.date.toISOString();
+}
+
+/**
+ * Render a date-filter bound for humans (filter_description) as LOCAL
+ * "YYYY-MM-DD HH:mm" (OMN-332). Bounds are stored as UTC ISO instants, and printing
+ * those raw showed a day-end bound as the next calendar date. A value already in local
+ * "YYYY-MM-DD[ HH:mm]" form passes through unchanged (Date(string) would misread a
+ * bare date as UTC midnight), as does anything that isn't a parseable date.
+ */
+export function formatBoundForDisplay(value: string): string {
+  if (isLocalDateString(value)) return value;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /**
  * Convert a local date/time string to UTC ISO string
  * Handles the user's system timezone automatically

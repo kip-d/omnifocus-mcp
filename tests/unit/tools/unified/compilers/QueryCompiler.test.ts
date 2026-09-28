@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { QueryCompiler, type CompiledQuery } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
+import { localStartOfDay, localEndOfDay } from '../../../helpers/local-day.js'; // OMN-332
 
 type CompiledTasks = Extract<CompiledQuery, { type: 'tasks' }>;
 type CompiledProjects = Extract<CompiledQuery, { type: 'projects' }>;
@@ -204,7 +205,7 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           dueDate: { before: '2025-12-31' },
         });
-        expect(result.dueBefore).toBe('2025-12-31');
+        expect(result.dueBefore).toBe(localEndOfDay('2025-12-31'));
       });
 
       it('transforms dueDate.after to dueAfter', () => {
@@ -212,7 +213,7 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           dueDate: { after: '2025-01-01' },
         });
-        expect(result.dueAfter).toBe('2025-01-01');
+        expect(result.dueAfter).toBe(localStartOfDay('2025-01-01'));
       });
 
       it('transforms dueDate.between to dueAfter + dueBefore + operator', () => {
@@ -220,8 +221,8 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           dueDate: { between: ['2025-01-01', '2025-01-31'] },
         });
-        expect(result.dueAfter).toBe('2025-01-01');
-        expect(result.dueBefore).toBe('2025-01-31');
+        expect(result.dueAfter).toBe(localStartOfDay('2025-01-01'));
+        expect(result.dueBefore).toBe(localEndOfDay('2025-01-31'));
         expect(result.dueDateOperator).toBe('BETWEEN');
       });
 
@@ -230,7 +231,7 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           deferDate: { before: '2025-06-01' },
         });
-        expect(result.deferBefore).toBe('2025-06-01');
+        expect(result.deferBefore).toBe(localEndOfDay('2025-06-01'));
       });
 
       it('transforms plannedDate.before to plannedBefore', () => {
@@ -238,7 +239,7 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           plannedDate: { before: '2026-02-01' },
         });
-        expect(result.plannedBefore).toBe('2026-02-01');
+        expect(result.plannedBefore).toBe(localEndOfDay('2026-02-01'));
       });
 
       it('transforms plannedDate.after to plannedAfter', () => {
@@ -246,7 +247,7 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           plannedDate: { after: '2026-01-15' },
         });
-        expect(result.plannedAfter).toBe('2026-01-15');
+        expect(result.plannedAfter).toBe(localStartOfDay('2026-01-15'));
       });
 
       it('transforms plannedDate.between to plannedAfter + plannedBefore + operator', () => {
@@ -254,9 +255,15 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           plannedDate: { between: ['2026-01-01', '2026-01-31'] },
         });
-        expect(result.plannedAfter).toBe('2026-01-01');
-        expect(result.plannedBefore).toBe('2026-01-31');
+        expect(result.plannedAfter).toBe(localStartOfDay('2026-01-01'));
+        expect(result.plannedBefore).toBe(localEndOfDay('2026-01-31'));
         expect(result.plannedDateOperator).toBe('BETWEEN');
+      });
+
+      it('a YYYY-MM-DD HH:mm bound is the exact local instant, not a whole day', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ dueDate: { before: '2026-03-31 17:00' } });
+        expect(result.dueBefore).toBe(new Date(2026, 2, 31, 17, 0, 0, 0).toISOString());
       });
     });
 
@@ -306,20 +313,20 @@ describe('QueryCompiler', () => {
       it('added: { after } sets addedAfter', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({ added: { after: '2024-01-01' } });
-        expect(result.addedAfter).toBe('2024-01-01');
+        expect(result.addedAfter).toBe(localStartOfDay('2024-01-01'));
       });
 
       it('added: { before } sets addedBefore', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({ added: { before: '2024-12-31' } });
-        expect(result.addedBefore).toBe('2024-12-31');
+        expect(result.addedBefore).toBe(localEndOfDay('2024-12-31'));
       });
 
       it('added: { between: [a, b] } sets both bounds and BETWEEN operator', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({ added: { between: ['2024-01-01', '2024-12-31'] } });
-        expect(result.addedAfter).toBe('2024-01-01');
-        expect(result.addedBefore).toBe('2024-12-31');
+        expect(result.addedAfter).toBe(localStartOfDay('2024-01-01'));
+        expect(result.addedBefore).toBe(localEndOfDay('2024-12-31'));
         expect(result.addedDateOperator).toBe('BETWEEN');
       });
     });
@@ -468,7 +475,7 @@ describe('QueryCompiler', () => {
       expect(result.filters.completed).toBe(false);
       expect(result.filters.tags).toEqual(['urgent', 'home']);
       expect(result.filters.tagsOperator).toBe('OR');
-      expect(result.filters.dueBefore).toBe('2025-12-31');
+      expect(result.filters.dueBefore).toBe(localEndOfDay('2025-12-31'));
       expect(result.filters.flagged).toBe(true);
       expect(result.limit).toBe(10);
     });
@@ -611,13 +618,13 @@ describe('QueryCompiler', () => {
     it('transforms completionDate.before to completionBefore', () => {
       const compiler = new QueryCompiler();
       const result = compiler.transformFilters({ completionDate: { before: '2025-12-31' } });
-      expect(result.completionBefore).toBe('2025-12-31');
+      expect(result.completionBefore).toBe(localEndOfDay('2025-12-31'));
     });
 
     it('transforms completionDate.after to completionAfter', () => {
       const compiler = new QueryCompiler();
       const result = compiler.transformFilters({ completionDate: { after: '2025-01-01' } });
-      expect(result.completionAfter).toBe('2025-01-01');
+      expect(result.completionAfter).toBe(localStartOfDay('2025-01-01'));
     });
 
     it('transforms completionDate.between to completionAfter + completionBefore + BETWEEN operator', () => {
@@ -625,8 +632,8 @@ describe('QueryCompiler', () => {
       const result = compiler.transformFilters({
         completionDate: { between: ['2025-01-01', '2025-06-30'] },
       });
-      expect(result.completionAfter).toBe('2025-01-01');
-      expect(result.completionBefore).toBe('2025-06-30');
+      expect(result.completionAfter).toBe(localStartOfDay('2025-01-01'));
+      expect(result.completionBefore).toBe(localEndOfDay('2025-06-30'));
       expect(result.completionDateOperator).toBe('BETWEEN');
     });
   });
@@ -664,7 +671,7 @@ describe('QueryCompiler', () => {
     describe('deferDate transformation', () => {
       it('maps deferDate.after to deferAfter (only)', () => {
         const result = compiler.transformFilters({ deferDate: { after: '2026-01-01' } });
-        expect(result.deferAfter).toBe('2026-01-01');
+        expect(result.deferAfter).toBe(localStartOfDay('2026-01-01'));
         expect(result.deferBefore).toBeUndefined();
       });
 
@@ -674,8 +681,8 @@ describe('QueryCompiler', () => {
         // so BETWEEN does NOT set a `deferDateOperator`. The downstream defer
         // pipeline doesn't consume one. Lock this in.
         const result = compiler.transformFilters({ deferDate: { between: ['2026-01-01', '2026-12-31'] } });
-        expect(result.deferAfter).toBe('2026-01-01');
-        expect(result.deferBefore).toBe('2026-12-31');
+        expect(result.deferAfter).toBe(localStartOfDay('2026-01-01'));
+        expect(result.deferBefore).toBe(localEndOfDay('2026-12-31'));
         expect((result as Record<string, unknown>).deferDateOperator).toBeUndefined();
       });
     });
@@ -852,8 +859,8 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({
           AND: [{ dueDate: { after: '2026-01-01' } }, { dueDate: { before: '2026-02-01' } }],
         });
-        expect(result.dueAfter).toBe('2026-01-01');
-        expect(result.dueBefore).toBe('2026-02-01');
+        expect(result.dueAfter).toBe(localStartOfDay('2026-01-01'));
+        expect(result.dueBefore).toBe(localEndOfDay('2026-02-01'));
       });
 
       it('rejects base-vs-NOT contradiction: completed:true with NOT completed (cross-source)', () => {

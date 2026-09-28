@@ -220,8 +220,10 @@ function emitTagComparison(operator: ComparisonOperator, tags: string[]): string
   }
 }
 
+// OMN-332: JSON.stringify, never a raw splice — the date was the one read-side value
+// that reached OmniJS unescaped, so a `"` in it rewrote the predicate.
 function emitDateComparison(accessor: string, operator: string, dateStr: string): string {
-  return `${accessor} ${operator} new Date("${dateStr}")`;
+  return `${accessor} ${operator} new Date(${JSON.stringify(dateStr)})`;
 }
 
 function emitExists(node: ExistsNode): string {

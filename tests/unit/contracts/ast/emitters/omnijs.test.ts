@@ -68,6 +68,20 @@ describe('emitOmniJS', () => {
       expectPredicate(code, 'task.dueDate <= new Date("2025-12-31")');
     });
 
+    // OMN-332: the date was the one read-side value spliced raw into OmniJS. A hostile
+    // value must stay inside the string literal (the schema rejects it first; this is
+    // defense in depth at the emitter).
+    it('escapes the date value so it cannot break out of the string literal', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dueDate',
+        operator: '<=',
+        value: '2026-01-01") || true || ("',
+      };
+      const code = emitOmniJS(ast);
+      expectPredicate(code, 'task.dueDate <= new Date("2026-01-01\\") || true || (\\"")');
+    });
+
     it('emits includes for string contains', () => {
       const ast: FilterNode = {
         type: 'comparison',

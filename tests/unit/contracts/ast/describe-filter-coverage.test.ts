@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { NormalizedTaskFilter, ProjectFilter } from '../../../../src/contracts/filters.js';
 import { describeFilterForScript } from '../../../../src/contracts/ast/script-builder.js';
-import { describeProjectFilter } from '../../../../src/contracts/ast/filter-generator.js';
+import { describeProjectFilter, describeFilter } from '../../../../src/contracts/ast/filter-generator.js';
+import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryCompiler.js';
+import { augmentFilterForMode } from '../../../../src/tools/tasks/task-query-pipeline.js';
 
 // OMN-172 F10 forcing function: every key of NormalizedTaskFilter is classified
 // 'described' or 'exempt'. Adding a new filter key makes this `satisfies` fail to
@@ -169,4 +171,49 @@ describe('OMN-175 F10 parity: describeProjectFilter key coverage', () => {
       expect(describeProjectFilter(sample!)).not.toBe('all projects');
     });
   }
+});
+
+// OMN-332 review: date bounds are now ISO instants (local-day edges converted to UTC).
+// Descriptions must render them in LOCAL time — the raw UTC form showed
+// `due before: 2026-01-01T04:59:59.999Z` for a before:"2025-12-31" query (a different
+// calendar date than the user asked for). Both sides are local, so this holds in any TZ.
+describe('date bounds are described in local time (OMN-332)', () => {
+  const compile = (dueDate: unknown) => new QueryCompiler().transformFilters({ dueDate } as never);
+
+  it('describeFilterForScript: before', () => {
+    expect(describeFilterForScript(compile({ before: '2025-12-31' }))).toContain('due before: 2025-12-31 23:59');
+  });
+
+  it('describeFilterForScript: between', () => {
+    expect(describeFilterForScript(compile({ between: ['2025-12-01', '2025-12-31'] }))).toContain(
+      'due: 2025-12-01 00:00 to 2025-12-31 23:59',
+    );
+  });
+
+  it('describeFilterForScript: a datetime bound keeps its minute', () => {
+    expect(describeFilterForScript(compile({ after: '2025-12-31 08:30' }))).toContain('due after: 2025-12-31 08:30');
+  });
+
+  it('describeFilter: before', () => {
+    expect(describeFilter(compile({ before: '2025-12-31' }))).toContain('due before 2025-12-31 23:59');
+  });
+
+  it('never shows a raw ISO instant', () => {
+    expect(describeFilterForScript(compile({ before: '2025-12-31' }))).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  // Review round 2: mode- and forecast_past-generated bounds are ISO instants computed
+  // server-side (never user strings); they're described in local time too.
+  it.each(['overdue', 'upcoming', 'today'] as const)('mode %s bounds read as local "YYYY-MM-DD HH:mm"', (mode) => {
+    const text = describeFilterForScript(augmentFilterForMode(mode, {}, {}));
+    expect(text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('a forecast_past-style cutoff (startOfToday ISO) reads as local midnight', () => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const text = describeFilterForScript({ dueBefore: startOfToday.toISOString(), dueDateOperator: '<' });
+    expect(text).toMatch(/due before: \d{4}-\d{2}-\d{2} 00:00/);
+  });
 });

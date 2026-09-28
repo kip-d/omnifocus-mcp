@@ -27,6 +27,7 @@ import {
 import { buildAST } from './builder.js';
 import { sanitizeForScriptComment } from './bridge-escape.js';
 import { emitFolderNotFoundGuardsForFilter } from './folder-path-match.js';
+import { formatBoundForDisplay } from '../../utils/timezone.js';
 import {
   ACTIONABLE_STATUSES_ARRAY_LITERAL,
   FOLDER_STATUS_STRING_SNIPPET,
@@ -969,8 +970,11 @@ function describeDateRange(
   after: keyof TaskFilter,
   before: keyof TaskFilter,
 ): string | undefined {
-  const a = filter[after] as string | undefined;
-  const b = filter[before] as string | undefined;
+  // OMN-332: bounds are UTC ISO instants; describe them in local time.
+  const rawA = filter[after] as string | undefined;
+  const rawB = filter[before] as string | undefined;
+  const a = rawA ? formatBoundForDisplay(rawA) : undefined;
+  const b = rawB ? formatBoundForDisplay(rawB) : undefined;
   if (!a && !b) return undefined;
   if (a && b) return `${label}: ${a} to ${b}`;
   if (b) return `${label} before: ${b}`;

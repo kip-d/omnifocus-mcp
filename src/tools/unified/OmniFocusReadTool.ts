@@ -363,7 +363,8 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
-- dates (dueDate, deferDate, plannedDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
+- dates (dueDate, deferDate, plannedDate, completionDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
+  Local time zone (same as writes), but bounds are whole days — the 17:00/08:00 write defaults do not apply. Values must be "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (no ISO T/Z). A date-only bound is a whole local day, INCLUSIVE: before:"2026-03-31" includes tasks due any time on Mar 31; after:"2026-03-31" starts at Mar 31 00:00; between covers both named days fully. A "HH:mm" bound is that exact local instant.
 - text: { contains: "..." }, { matches: "regex" } — full-text: matches name OR note
 - name: { contains: "..." }, { matches: "regex" } — name ONLY (never matches note content)
 - boolean: flagged, blocked, available, inInbox

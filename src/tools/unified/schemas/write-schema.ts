@@ -92,6 +92,8 @@ const ReviewIntervalSchema = z
   .pipe(z.number().min(1));
 
 // Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
+// Siblings — keep in step: ITEM_DATE_REGEX (analyze-schema.ts) mirrors this; the
+// read-filter validator LOCAL_DATE_RE (utils/timezone.ts, OMN-332) is stricter.
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
 const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 
