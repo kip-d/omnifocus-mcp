@@ -1607,24 +1607,23 @@ SAFETY:
     tempIdMapping: Record<string, string>,
   ): Promise<{ ok: true; result: unknown } | { ok: false; error: Record<string, unknown> }> {
     const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-    let failure: string | null;
-    try {
-      const result = await this.dispatchBatchOp(op, resolvedId);
-      failure = returnedFailureMessage(result);
-      if (failure === null) return { ok: true, result };
-    } catch (err) {
-      // The bare message, as a returned failure reports it — not "Error: …".
-      failure = err instanceof Error ? err.message : String(err);
-    }
-    return {
-      ok: false,
+    const failed = (message: string) => ({
+      ok: false as const,
       error: {
         phase: phaseName,
         id: resolvedId,
         ...(resolvedId !== op.id ? { tempId: op.id } : {}),
-        error: failure,
+        error: message,
       },
-    };
+    });
+    try {
+      const result = await this.dispatchBatchOp(op, resolvedId);
+      const failure = returnedFailureMessage(result);
+      return failure === null ? { ok: true, result } : failed(failure);
+    } catch (err) {
+      // The bare message, as a returned failure reports it — not "Error: …".
+      return failed(err instanceof Error ? err.message : String(err));
+    }
   }
 
   /**
@@ -1762,6 +1761,14 @@ SAFETY:
           error: `${createResult.failed} of ${createResult.totalItems} creates failed; batch halted (stopOnError)`,
         });
         hadError = true;
+      } else if (createResult.failed > 0) {
+        // OMN-333 (review of #282): without stopOnError the batch continues, but a
+        // failed create is still a failed batch — top-level success reads errors[].
+        results.created.push(createResult);
+        results.errors.push({
+          phase: 'create',
+          error: `${createResult.failed} of ${createResult.totalItems} creates failed`,
+        });
       } else {
         results.created.push(createResult);
       }

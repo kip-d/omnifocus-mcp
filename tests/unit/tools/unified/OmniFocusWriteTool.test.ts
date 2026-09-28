@@ -2130,6 +2130,51 @@ describe('OmniFocusWriteTool batch — returned handler failures (OMN-333)', () 
     ]);
   });
 
+  // Review of #282: the create phase had the same false success — with
+  // stopOnError:false and no atomic rollback, failed creates recorded nothing in
+  // errors[], so top-level success stayed true.
+  it('failed creates with stopOnError:false make the batch fail, and follow-ups still run', async () => {
+    const buildSpy = mockFastPathCreate();
+    execJsonSpy
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          results: [
+            { tempId: 't1', taskId: 'real-1', success: true },
+            { tempId: 't2', taskId: null, success: false, error: 'Parent task not found: nope' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce(updatedTask('real-1'));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        stopOnError: false,
+        operations: [
+          { operation: 'create', target: 'task', data: { tempId: 't1', name: '__TEST__ a' } },
+          { operation: 'create', target: 'task', data: { tempId: 't2', name: '__TEST__ b', parentTaskId: 'nope' } },
+          { operation: 'update', target: 'task', id: 't1', changes: { note: 'still runs' } },
+        ],
+      },
+    })) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.data.summary).toMatchObject({ created: 1, updated: 1, errors: 1 });
+    const rows = result.data.results as Array<Record<string, unknown>>;
+    // Per-item create rows survive (OMN-141), plus one phase-level error row.
+    expect(rows).toContainEqual(expect.objectContaining({ operation: 'create', success: false, tempId: 't2' }));
+    expect(rows).toContainEqual(expect.objectContaining({ operation: 'update', success: true, id: 'real-1' }));
+    expect(rows).toContainEqual({
+      operation: 'create',
+      success: false,
+      id: null,
+      error: '1 of 2 creates failed',
+    });
+    buildSpy.mockRestore();
+  });
+
   it('successful task complete/delete and project update/complete/delete rows carry their real ids', async () => {
     execJsonSpy
       .mockResolvedValueOnce(
