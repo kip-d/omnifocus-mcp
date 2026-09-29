@@ -331,21 +331,20 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.task.id).toBe('task-v3u');
     });
 
+    // OMN-363: the old version asserted only inside `catch`, so a resolved
+    // success (update no longer requiring an id) passed silently.
     it('returns error when taskId is missing', async () => {
-      // The schema requires 'id' for update operations, so this should fail at validation
-      try {
-        await tool.execute({
+      await expect(
+        tool.execute({
           mutation: {
             operation: 'update',
             target: 'task',
             // id is intentionally missing
             changes: { name: 'No ID' },
           } as any,
-        });
-        // If it doesn't throw, check for error response
-      } catch (e: any) {
-        expect(e.message || e.code).toBeDefined();
-      }
+        }),
+      ).rejects.toThrow(/Invalid parameters/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
     it('calls cache.invalidateForTaskChange with affected tags', async () => {
@@ -1939,24 +1938,19 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(false);
     });
 
+    // OMN-363: the old version's `expect(result.success).toBe(false)` sat inside
+    // the `try`, so its own AssertionError was caught by the `catch` and passed.
     it('rejects invalid date format in create', async () => {
-      // The write schema should reject invalid dates at validation level
-      try {
-        const result = (await tool.execute({
+      await expect(
+        tool.execute({
           mutation: {
             operation: 'create',
             target: 'task',
             data: { name: 'Bad Date', dueDate: 'not-a-date' },
           },
-        })) as any;
-        // If schema validation fails, it throws; otherwise check result
-        if (result) {
-          expect(result.success).toBe(false);
-        }
-      } catch (e: any) {
-        // Schema validation error is expected
-        expect(e.message || e.code).toBeDefined();
-      }
+        }),
+      ).rejects.toThrow(/Invalid parameters/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
     });
   });
 });
