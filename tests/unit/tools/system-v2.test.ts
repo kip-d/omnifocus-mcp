@@ -128,7 +128,10 @@ describe('SystemTool', () => {
             { test: 'task_id', success: true, value: 'task123' },
             { test: 'task_name', success: true, value: 'Test Task' },
           ],
-        });
+        })
+        // method_availability test (OMN-337: this mock was missing, and the
+        // undefined result it produced used to count as a passing test)
+        .mockResolvedValueOnce({ test: 'method_availability', methods: {} });
 
       const result = await tool.executeValidated({
         operation: 'diagnostics',
@@ -147,6 +150,7 @@ describe('SystemTool', () => {
         .mockResolvedValueOnce({ test: 'basic_connection', appName: 'OmniFocus', docAvailable: true })
         .mockResolvedValueOnce({ test: 'collection_access', collections: {} })
         .mockResolvedValueOnce({ test: 'property_access', tests: [] })
+        .mockResolvedValueOnce({ test: 'method_availability', methods: {} })
         .mockResolvedValueOnce({ test: 'list_tasks', tasks: [] }); // Custom test
 
       const result = await tool.executeValidated({
@@ -173,6 +177,44 @@ describe('SystemTool', () => {
       expect(result.success).toBe(true);
       expect((result.data as DiagnosticsData).tests.basic_connection.success).toBe(false);
       expect((result.data as DiagnosticsData).tests.basic_connection.error).toBe('Connection failed');
+      expect(result.metadata.health).toBe('degraded');
+    });
+
+    // OMN-337: execute RESOLVES the wrapper's own error payloads; resolving is
+    // not success. Each known error dialect must fail its test.
+    it.each([
+      [
+        'legacy {error:true}',
+        { error: true, message: 'No OmniFocus document available. Please ensure OmniFocus is running.' },
+        'No OmniFocus document available',
+      ],
+      ['envelope {ok:false}', { ok: false, error: { message: 'bridge exploded' }, v: '1' }, 'bridge exploded'],
+      ['{success:false}', { success: false, error: 'script said no' }, 'script said no'],
+    ])('a resolved %s payload fails that test and degrades health', async (_label, payload, message) => {
+      mockDiagnosticOmni.execute.mockResolvedValueOnce(payload).mockResolvedValue({ test: 'ok' });
+
+      const result = await tool.executeValidated({ operation: 'diagnostics' } as SystemArgs);
+
+      const basic = (result.data as DiagnosticsData).tests.basic_connection;
+      expect(basic.success).toBe(false);
+      expect(basic.error).toContain(message);
+      expect((result.data as DiagnosticsData).tests.collection_access.success).toBe(true);
+      expect(result.metadata.health).toBe('degraded');
+    });
+
+    it('an empty (null/undefined) result fails that test instead of reporting success with no payload', async () => {
+      mockDiagnosticOmni.execute
+        .mockResolvedValueOnce({ test: 'basic_connection' })
+        .mockResolvedValueOnce({ test: 'collection_access' })
+        .mockResolvedValueOnce({ test: 'property_access' })
+        .mockResolvedValueOnce({ test: 'method_availability' })
+        .mockResolvedValueOnce(undefined);
+
+      const result = await tool.executeValidated({ operation: 'diagnostics', testScript: 'list_tasks' } as SystemArgs);
+
+      const listTest = (result.data as DiagnosticsData).tests.list_tasks_script;
+      expect(listTest.success).toBe(false);
+      expect(listTest.error).toMatch(/no result/i);
       expect(result.metadata.health).toBe('degraded');
     });
 
