@@ -1543,7 +1543,7 @@ SAFETY:
           errors: results.errors.length,
         },
         results: flattenBatchResults(results),
-        ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
+        ...(compiled.returnMapping !== false && Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
         ...(orphanedItems ? { orphanedItems } : {}),
       },
       metadata: {
@@ -1701,7 +1701,6 @@ SAFETY:
       const createResult = await this.executeBatchCreates(items, {
         createSequentially: compiled.createSequentially ?? true,
         atomicOperation: compiled.atomicOperation ?? false,
-        returnMapping: compiled.returnMapping ?? true,
         stopOnError: compiled.stopOnError ?? true,
       });
 
@@ -1846,7 +1845,6 @@ SAFETY:
     options: {
       createSequentially: boolean;
       atomicOperation: boolean;
-      returnMapping: boolean;
       stopOnError: boolean;
     },
   ): Promise<{
@@ -1946,11 +1944,10 @@ SAFETY:
       failed: failedCount,
       totalItems: items.length,
       results: batchResults,
+      // OMN-345: always carried — the follow-up phases resolve same-batch
+      // tempIds against it. `returnMapping` only gates the response field.
+      mapping: resolver.getMappings(),
     };
-
-    if (options.returnMapping) {
-      response.mapping = resolver.getMappings();
-    }
 
     return response;
   }

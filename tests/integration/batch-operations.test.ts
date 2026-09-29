@@ -345,6 +345,88 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(errorResults[0].error).toContain('nonexistent');
   }, 30000);
 
+  it('OMN-345: returnMapping:false still resolves a same-batch tempId, and omits the mapping', async () => {
+    const response = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'm345', name: runScopedName(`OMN345_NoMapping_${timestamp}`), folder: SANDBOX_FOLDER_NAME },
+          },
+          { operation: 'update', target: 'project', id: 'm345', changes: { note: 'OMN-345 resolved via tempId' } },
+        ],
+        returnMapping: false,
+      },
+    })) as BatchResponse;
+
+    expectOk(response, 'returnMapping:false batch');
+    expect(response.data.summary).toMatchObject({ created: 1, updated: 1, errors: 0 });
+    expect(response.data).not.toHaveProperty('tempIdMapping');
+    const updateRow = response.data.results.find((r) => r.operation === 'update');
+    expect(updateRow?.success).toBe(true);
+    expect(updateRow?.id, 'update must target the real id, not the tempId').not.toBe('m345');
+  }, 60000);
+
+  it('OMN-345: atomic rollback removes a child listed before its parent cleanly (rolledBack true, no ORPHANED)', async () => {
+    const childName = runScopedName(`OMN345_RollbackChild_${timestamp}`);
+    const parentName = runScopedName(`OMN345_RollbackParent_${timestamp}`);
+    const response = (await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: { tempId: 'rb_child', name: childName, parentTempId: 'rb_parent' },
+          },
+          {
+            operation: 'create',
+            target: 'project',
+            data: { tempId: 'rb_parent', name: parentName, folder: SANDBOX_FOLDER_NAME },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'rb_fail',
+              name: runScopedName(`OMN345_RollbackFail_${timestamp}`),
+              project: runScopedName(`OMN345_NoSuchProject_${timestamp}`),
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: true,
+        stopOnError: false,
+      },
+    })) as BatchResponse;
+
+    expect(response.success).toBe(false);
+    // Non-vacuity: the third item really failed at create time.
+    const failRow = response.data.results.find((r) => r.tempId === 'rb_fail');
+    expect(failRow?.success, `failing item did not fail: ${JSON.stringify(failRow)}`).toBe(false);
+    expect(failRow?.error ?? '').toMatch(/not found/i);
+
+    const phaseError = response.data.results.find((r) => r.operation === 'create' && r.id === null && !r.tempId);
+    expect(phaseError?.error, JSON.stringify(response.data.results).slice(0, 500)).toContain(
+      'all created items were removed',
+    );
+    expect(phaseError?.error).not.toContain('ORPHANED');
+
+    // Persisted: neither the parent project nor the child task survived.
+    const projects = (await client.callTool('omnifocus_read', {
+      query: { type: 'projects', filters: { name: { contains: parentName } }, fields: ['id', 'name'] },
+    })) as { data?: { projects?: unknown[] } };
+    expect(projects.data?.projects ?? []).toHaveLength(0);
+    const tasks = (await client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { name: { contains: childName } }, fields: ['id', 'name'] },
+    })) as { data?: { tasks?: unknown[] } };
+    expect(tasks.data?.tasks ?? []).toHaveLength(0);
+  }, 90000);
+
   it('should validate circular dependencies', async () => {
     const response = (await client.callTool('omnifocus_write', {
       mutation: {
