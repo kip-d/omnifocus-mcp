@@ -16,10 +16,12 @@ import {
   validateBatchTaskSpecs,
   validateFolderCreate,
   validateProjectCreate,
+  validateProjectFolderDestination,
   validateProjectInSandbox,
   validateTagChanges,
   validateTaskCreate,
   validateTaskInSandbox,
+  validateTaskMoveDestination,
   type BatchTaskSpec,
 } from '../mutation-script-builder.js';
 import { lowerRepetitionRule } from './repetition.js';
@@ -1659,6 +1661,7 @@ export const MUTATION_DEFS = {
   'update/task': {
     guard: async (d) => {
       await validateTaskInSandbox(d.taskId, 'update');
+      await validateTaskMoveDestination(d.changes); // OMN-361
       validateTagChanges(d.changes);
     },
     build: buildUpdateTaskProgram,
@@ -1666,6 +1669,7 @@ export const MUTATION_DEFS = {
   'update/project': {
     guard: async (d) => {
       await validateProjectInSandbox(d.projectId, 'update');
+      await validateProjectFolderDestination(d.changes); // OMN-361
       validateTagChanges(d.changes);
     },
     build: buildUpdateProjectProgram,
