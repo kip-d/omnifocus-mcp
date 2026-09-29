@@ -1,5 +1,5 @@
 import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
-import { BasePrompt, PromptArgument } from '../base.js';
+import { BasePrompt, PromptArgument, parsePromptBool } from '../base.js';
 
 export class EisenhowerMatrixPrompt extends BasePrompt {
   name = 'eisenhower_matrix_inbox';
@@ -24,9 +24,10 @@ export class EisenhowerMatrixPrompt extends BasePrompt {
   ];
 
   generateMessages(args: Record<string, unknown>): PromptMessage[] {
-    const processAll = args.process_all !== false;
-    const autoFlag = args.auto_flag === true;
-    const createProjects = args.create_projects === true;
+    // OMN-357: flags arrive as "true"/"false" strings over MCP.
+    const processAll = parsePromptBool(args.process_all, true, 'process_all', this.name);
+    const autoFlag = parsePromptBool(args.auto_flag, false, 'auto_flag', this.name);
+    const createProjects = parsePromptBool(args.create_projects, false, 'create_projects', this.name);
 
     return [
       {
