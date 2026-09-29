@@ -1,5 +1,5 @@
 import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
-import { BasePrompt, PromptArgument } from '../base.js';
+import { BasePrompt, PromptArgument, parsePromptBool } from '../base.js';
 
 export class InboxProcessingPrompt extends BasePrompt {
   name = 'gtd_process_inbox';
@@ -31,9 +31,10 @@ export class InboxProcessingPrompt extends BasePrompt {
 
   generateMessages(args: Record<string, unknown>): PromptMessage[] {
     const batchSize = (args.batch_size as number) || 5;
-    const autoCreateProjects = args.auto_create_projects !== false;
-    const suggestContexts = args.suggest_contexts !== false;
-    const quickMode = args.quick_mode === true;
+    // OMN-357: flags arrive as "true"/"false" strings over MCP.
+    const autoCreateProjects = parsePromptBool(args.auto_create_projects, true, 'auto_create_projects', this.name);
+    const suggestContexts = parsePromptBool(args.suggest_contexts, true, 'suggest_contexts', this.name);
+    const quickMode = parsePromptBool(args.quick_mode, false, 'quick_mode', this.name);
 
     if (quickMode) {
       return [
