@@ -103,7 +103,7 @@ describe('delete/tag lowering', () => {
 });
 
 describe('merge/tag lowering', () => {
-  it('emits src/tgt resolves+guards → name binds → mergeRetag → bestEffort delete → branching return', async () => {
+  it('emits src/tgt resolves+guards → self/descendant guards → name binds → mergeRetag → bestEffort delete → branching return', async () => {
     const program = await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Beta' });
     expect(program.context).toBe('merge_tags');
     expect(program.snippetDeps).toEqual([]);
@@ -111,6 +111,9 @@ describe('merge/tag lowering', () => {
       'resolveTag',
       'guard',
       'resolveTag',
+      'guard',
+      'guard',
+      'bind',
       'guard',
       'bind',
       'bind',
@@ -120,7 +123,7 @@ describe('merge/tag lowering', () => {
     ]);
     expect(() => validateMutationProgram(program)).not.toThrow();
 
-    expect(program.statements[6]).toMatchObject({
+    expect(program.statements[9]).toMatchObject({
       type: 'mergeRetag',
       sourceVar: '_src',
       targetVar: '_tgt',
@@ -128,7 +131,7 @@ describe('merge/tag lowering', () => {
     });
     // Source delete is the ONE best-effort deleteObject consumer (spec §2.5):
     // retagging already happened, so the failure becomes a labeled warning.
-    expect(program.statements[7]).toMatchObject({
+    expect(program.statements[10]).toMatchObject({
       type: 'deleteObject',
       target: { type: 'ref', name: '_src' },
       bestEffort: true,
@@ -144,6 +147,17 @@ describe('merge/tag lowering', () => {
     expect(omnijs).toContain(
       'if (_tgt === null) return JSON.stringify({ error: true, message: "Target tag \'Beta\' not found", context: "merge_tags" });',
     );
+    // OMN-344: both identity guards run BEFORE the retag walk and the delete.
+    expect(omnijs).toContain(
+      'if (_src.id.primaryKey === _tgt.id.primaryKey) return JSON.stringify({ error: true, message: "Cannot merge tag \'Alpha\' into itself", context: "merge_tags" });',
+    );
+    expect(omnijs).toContain(
+      'const _tgtUnderSrc = (function () { var p = _tgt.parent; while (p) { if (p.id.primaryKey === _src.id.primaryKey) return true; p = p.parent; } return false; })();',
+    );
+    expect(omnijs).toContain(
+      'if (_tgtUnderSrc) return JSON.stringify({ error: true, message: "Cannot merge tag \'Alpha\' into its descendant \'Beta\': deleting the source would delete the target", context: "merge_tags" });',
+    );
+    expect(omnijs.indexOf('_tgtUnderSrc) return')).toBeLessThan(omnijs.indexOf('flattenedTasks.forEach'));
     expect(omnijs).toContain('const _srcName = "Alpha";');
     expect(omnijs).toContain('const _tgtName = "Beta";');
     expect(omnijs).toContain(
@@ -182,6 +196,8 @@ describe('merge/tag lowering', () => {
 describe('emitted merge-tag programs execute (vm)', () => {
   interface TagStub {
     name: string;
+    id: { primaryKey: string };
+    parent: TagStub | null;
   }
   interface TaskStub {
     tags: TagStub[];
@@ -196,8 +212,8 @@ describe('emitted merge-tag programs execute (vm)', () => {
     tasks: TaskStub[];
     deletedTags: TagStub[];
   } {
-    const src: TagStub = { name: 'Alpha' };
-    const tgt: TagStub = { name: 'Beta' };
+    const src: TagStub = { name: 'Alpha', id: { primaryKey: 'pk-alpha' }, parent: null };
+    const tgt: TagStub = { name: 'Beta', id: { primaryKey: 'pk-beta' }, parent: null };
     const makeTask = (tags: TagStub[]): TaskStub => ({
       tags: [...tags],
       removeTag(t) {
@@ -259,6 +275,56 @@ describe('emitted merge-tag programs execute (vm)', () => {
     // The retagging (the partial result the bestEffort exists to preserve)
     // still happened even though the delete failed.
     expect(tasks.every((t) => !t.tags.includes(src))).toBe(true);
+  });
+
+  // OMN-344: the refusal paths must leave every task's tags and every tag intact.
+  it('vm C: merging a tag into itself → error envelope, no retag, no delete', async () => {
+    const { sandbox, src, tasks, deletedTags } = makeMergeSandbox({ deleteThrows: false });
+    const before = tasks.map((t) => [...t.tags]);
+    const program = emitProgram(await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Alpha' }));
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+
+    expect(parsed).toEqual({ error: true, message: "Cannot merge tag 'Alpha' into itself", context: 'merge_tags' });
+    expect(tasks.map((t) => t.tags)).toEqual(before);
+    expect(tasks[0]!.tags).toContain(src);
+    expect(deletedTags).toEqual([]);
+  });
+
+  it.each([
+    ['child', 1],
+    ['grandchild', 2],
+  ])('vm D: merging a tag into its %s → error envelope, no retag, no delete', async (_label, depth) => {
+    const { sandbox, src, tgt, tasks, deletedTags } = makeMergeSandbox({ deleteThrows: false });
+    // Hang the target under the source, optionally through an intermediate tag.
+    let parent: TagStub = src;
+    for (let i = 1; i < depth; i++) {
+      const mid: TagStub = { name: `Mid${i}`, id: { primaryKey: `pk-mid${i}` }, parent };
+      (sandbox.flattenedTags as TagStub[]).push(mid);
+      parent = mid;
+    }
+    tgt.parent = parent;
+    const before = tasks.map((t) => [...t.tags]);
+    const program = emitProgram(await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Beta' }));
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+
+    expect(parsed).toEqual({
+      error: true,
+      message: "Cannot merge tag 'Alpha' into its descendant 'Beta': deleting the source would delete the target",
+      context: 'merge_tags',
+    });
+    expect(tasks.map((t) => t.tags)).toEqual(before);
+    expect(deletedTags).toEqual([]);
+  });
+
+  it('vm E: merging a child into its parent is allowed (ancestor check is one-directional)', async () => {
+    const { sandbox, src, tgt, tasks, deletedTags } = makeMergeSandbox({ deleteThrows: false });
+    src.parent = tgt;
+    const program = emitProgram(await dispatchMutation('merge/tag', { tagName: 'Alpha', targetTag: 'Beta' }));
+    const parsed = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+
+    expect(parsed.action).toBe('merged');
+    expect(tasks.every((t) => !t.tags.includes(src))).toBe(true);
+    expect(deletedTags).toEqual([src]);
   });
 });
 

@@ -2418,6 +2418,18 @@ SAFETY:
         timer.toMetadata(),
       );
     }
+    // OMN-344: a self-merge strips the tag from every task, then deletes it.
+    // Exact comparison matches the exact-name tag resolution in the script.
+    if (action === 'merge' && targetTag === tagName) {
+      return createErrorResponseV2(
+        'tags',
+        'VALIDATION_ERROR',
+        `Cannot merge tag '${tagName}' into itself`,
+        'Choose a different targetTag',
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
     return null;
   }
 

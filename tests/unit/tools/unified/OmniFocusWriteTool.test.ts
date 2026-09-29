@@ -1797,6 +1797,41 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.error.message).toContain('targetTag is required');
     });
 
+    // OMN-344: merging a tag into itself removed it from every task, deleted
+    // it, and reported "merged". Rejected before any script is built.
+    it('rejects merging a tag into itself without running a script', async () => {
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'merge',
+          tagName: 'Work',
+          targetTag: 'Work',
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('into itself');
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    // Tag resolution is exact-name (case-sensitive), so 'work' and 'Work' are
+    // two distinct tags and merging one into the other is legitimate.
+    it('allows merging tags whose names differ only by case', async () => {
+      execJsonSpy.mockResolvedValue({ success: true, data: { action: 'merged' } });
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'merge',
+          tagName: 'work',
+          targetTag: 'Work',
+        },
+      })) as any;
+
+      expect(execJsonSpy).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
     it('handles script errors for tag management', async () => {
       execJsonSpy.mockResolvedValue({
         success: false,
