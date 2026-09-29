@@ -25,7 +25,7 @@
  *   keywordMatched) and a top-10 detail list carrying a keywordMatched marker
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const WORKFLOW_ANALYSIS_V3 = `
   (() => {
@@ -49,6 +49,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
+          ${TERMINAL_STATUS_HELPER}
           const nowTime = \${nowTime};
           const includeRawData = \${includeRawData};
 
@@ -208,6 +209,12 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
               totalTasks++;
 
+              // OMN-339: dropped tasks (and tasks in dropped projects) keep
+              // completed === false, so the overdue / inbox / available gates
+              // use the shared terminal-status definition that
+              // productivity_stats and overdue_analysis already use. The raw
+              // completed flag still drives the per-project completed count.
+              const terminal = isTerminalStatus(task.taskStatus);
               const flagged = task.flagged || false;
               const blocked = task.taskStatus === Task.Status.Blocked;
               const isNext = !blocked && task.taskStatus === Task.Status.Available;
@@ -224,7 +231,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
               // Calculate overdue days
               let overdueDays = 0;
-              if (dueDate && !completed) {
+              if (dueDate && !terminal) {
                 const dueDateMs = dueDate.getTime();
                 if (dueDateMs < nowTime) {
                   overdueDays = Math.floor((nowTime - dueDateMs) / (1000 * 60 * 60 * 24));
@@ -246,7 +253,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
               }
               if (flagged) flaggedTasks++;
               if (blocked) blockedTasks++;
-              if (!completed && !blocked && isNext) availableTasks++;
+              if (!terminal && !blocked && isNext) availableTasks++;
 
               // Get project info
               const project = task.containingProject;
@@ -276,7 +283,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 });
               }
 
-              if (inInbox && !completed) totalInboxTasks++;
+              if (inInbox && !terminal) totalInboxTasks++;
 
               totalEstimatedTime += estimatedMinutes;
 
@@ -315,7 +322,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 if (overdueDays > 0) projectStats[projectName].overdue++;
                 if (flagged) projectStats[projectName].flagged++;
                 if (blocked) projectStats[projectName].blocked++;
-                if (!completed && !blocked && isNext) projectStats[projectName].available++;
+                if (!terminal && !blocked && isNext) projectStats[projectName].available++;
 
                 // Track deferrals by type
                 if (deferDate && deferDate.getTime() > nowTime) {
