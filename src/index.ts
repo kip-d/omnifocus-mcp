@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// eslint-disable-next-line sonarjs/deprecation -- Server required until MCP SDK supports inputSchema on McpServer
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { createMcpServer } from './server-factory.js';
+import { createHttpShutdown } from './utils/shutdown.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerTools } from './tools/index.js';
 import { registerPrompts } from './prompts/index.js';
@@ -180,24 +180,7 @@ export async function runServer() {
 async function runStdioServer(cacheManager: CacheManager, startupGate: Promise<void>) {
   logger.info('Starting server in stdio mode');
 
-  // Create server instance with MCP 2025-11-25 metadata
-  const versionInfo = getVersionInfo();
-  // eslint-disable-next-line sonarjs/deprecation
-  const stdioServer = new Server(
-    {
-      name: 'omnifocus-mcp-cached',
-      version: versionInfo.version,
-      description:
-        'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
-      websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
-    },
-    {
-      capabilities: {
-        tools: {},
-        prompts: {},
-      },
-    },
-  );
+  const stdioServer = createMcpServer();
 
   // Register all tools and prompts AFTER server creation but BEFORE connection
   await registerTools(stdioServer, cacheManager, pendingOperations, startupGate);
@@ -370,7 +353,13 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, s
   }
 
   // Create session manager
-  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken, undefined, startupGate);
+  const sessionManager = new SessionManager(
+    cacheManager,
+    pendingOperations,
+    cliConfig.authToken,
+    undefined,
+    startupGate,
+  );
   sessionManager.startCleanupInterval();
 
   // Create HTTP server manager
@@ -397,29 +386,14 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, s
   startupTimer.mark('ready');
   logger.info(startupTimer.summary('http'));
 
-  // Handle graceful shutdown for HTTP mode
-  const gracefulShutdown = async (signal: string) => {
-    logger.info(`Received ${signal}, shutting down gracefully...`);
-
-    try {
-      // Stop accepting new connections
-      logger.info('Stopping HTTP server...');
-      await httpServerManager.stop();
-
-      // Close all active sessions
-      logger.info('Closing all active sessions...');
-      await sessionManager.closeAllSessions();
-
-      logger.info('HTTP server shutdown complete');
-      process.exit(0);
-    } catch (error) {
-      logger.error('Error during graceful shutdown:', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      process.exit(1);
-    }
-  };
+  // OMN-347: bounded, single-commit shutdown: drain pending ops, close
+  // sessions, then stop the listener (see createHttpShutdown).
+  const gracefulShutdown = createHttpShutdown({
+    sessionManager,
+    httpServerManager,
+    pendingOperations,
+    exit: (code) => process.exit(code),
+  });
 
   // Handle termination signals
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

@@ -1,12 +1,11 @@
 import { createLogger } from './utils/logger.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // eslint-disable-next-line sonarjs/deprecation -- Server required until MCP SDK supports inputSchema on McpServer
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { registerTools } from './tools/index.js';
 import { registerPrompts } from './prompts/index.js';
-import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
-import { getVersionInfo } from './utils/version.js';
+import { createMcpServer } from './server-factory.js';
 
 const logger = createLogger('session-manager');
 
@@ -33,21 +32,24 @@ export class SessionManager {
   private cleanupInterval?: ReturnType<typeof setInterval>;
   private startupGate?: Promise<void>;
 
+  /**
+   * @param pendingOperations the process-wide tracker index.ts installs and
+   *   drains at shutdown (OMN-347). Session tools register their promises
+   *   here; this class never installs a tracker of its own.
+   */
   constructor(
     cacheManager: CacheManager,
+    pendingOperations: Set<Promise<unknown>>,
     authToken?: string,
     sessionTimeout: number = 30 * 60 * 1000,
     startupGate?: Promise<void>,
   ) {
     this.sessions = new Map();
     this.cacheManager = cacheManager;
-    this.pendingOperations = new Set();
+    this.pendingOperations = pendingOperations;
     this.authToken = authToken;
     this.sessionTimeout = sessionTimeout;
     this.startupGate = startupGate;
-
-    // Initialize pending operations tracking
-    setPendingOperationsTracker(this.pendingOperations);
 
     logger.info('SessionManager initialized', {
       sessionTimeoutMinutes: this.sessionTimeout / 60000,
@@ -99,24 +101,7 @@ export class SessionManager {
       },
     });
 
-    // Create a new server instance for this session with MCP 2025-11-25 metadata
-    const versionInfo = getVersionInfo();
-    // eslint-disable-next-line sonarjs/deprecation
-    const server = new Server(
-      {
-        name: 'omnifocus-mcp-cached',
-        version: versionInfo.version,
-        description:
-          'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
-        websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
-      },
-      {
-        capabilities: {
-          tools: {},
-          prompts: {},
-        },
-      },
-    );
+    const server = createMcpServer();
 
     // Register tools and prompts for this session
     await registerTools(server, this.cacheManager, this.pendingOperations, this.startupGate);
