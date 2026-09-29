@@ -2220,3 +2220,113 @@ describe('OmniFocusWriteTool batch — returned handler failures (OMN-333)', () 
     ]);
   });
 });
+
+describe('OmniFocusWriteTool batch — tempId mapping and rollback order (OMN-345)', () => {
+  let tool: OmniFocusWriteTool;
+  let execJsonSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    tool = new OmniFocusWriteTool(createMockCache());
+    execJsonSpy = vi.fn();
+    vi.spyOn(tool as any, 'execJson').mockImplementation(execJsonSpy);
+  });
+
+  // returnMapping:false used to drop the mapping the follow-up phases resolve
+  // against, so `update t1` targeted the raw tempId and failed "not found".
+  it('returnMapping:false still resolves same-batch tempIds, and omits the mapping from the response', async () => {
+    const buildSpy = mockFastPathCreate();
+    const updateSpy = vi.spyOn(scriptBuilder, 'buildUpdateTaskScript');
+    execJsonSpy
+      .mockResolvedValueOnce({ success: true, data: { results: [{ tempId: 't1', taskId: 'real-1', success: true }] } })
+      .mockResolvedValueOnce(
+        createScriptSuccess({ taskId: 'real-1', name: 'ok row', flagged: false, updated: true, warnings: [] }),
+      );
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        returnMapping: false,
+        operations: [
+          { operation: 'create', target: 'task', data: { tempId: 't1', name: '__TEST__ a' } },
+          { operation: 'update', target: 'task', id: 't1', changes: { note: 'resolved' } },
+        ],
+      },
+    })) as any;
+
+    expect(updateSpy).toHaveBeenCalledWith('real-1', expect.anything());
+    expect(result.success).toBe(true);
+    expect(result.data.summary).toMatchObject({ created: 1, updated: 1, errors: 0 });
+    expect(result.data.results).toContainEqual(
+      expect.objectContaining({ operation: 'update', success: true, id: 'real-1' }),
+    );
+    expect('tempIdMapping' in result.data).toBe(false);
+    buildSpy.mockRestore();
+    updateSpy.mockRestore();
+  });
+
+  it('control: the default (returnMapping true) still returns the mapping', async () => {
+    const buildSpy = mockFastPathCreate();
+    execJsonSpy.mockResolvedValueOnce({
+      success: true,
+      data: { results: [{ tempId: 't1', taskId: 'real-1', success: true }] },
+    });
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [{ operation: 'create', target: 'task', data: { tempId: 't1', name: '__TEST__ a' } }],
+      },
+    })) as any;
+
+    expect(result.data.tempIdMapping).toEqual({ t1: 'real-1' });
+    buildSpy.mockRestore();
+  });
+
+  // A child listed before its parent is created after it (dependency order), so
+  // it must be deleted before it. Input-order rollback deleted the parent first,
+  // the child then read "not found", and the batch reported a false ORPHANED.
+  it('atomic rollback deletes in reverse creation order: child before parent', async () => {
+    const buildSpy = mockFastPathCreate();
+    const deleteSpy = vi.spyOn(scriptBuilder, 'buildDeleteScript').mockResolvedValue({
+      script: 'mock delete script',
+      operation: 'delete',
+      target: 'task',
+      description: 'mock',
+    });
+    execJsonSpy
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          results: [
+            { tempId: 'p', taskId: 'real-p', success: true },
+            { tempId: 'c', taskId: 'real-c', success: true },
+            { tempId: 'f', taskId: null, success: false, error: 'boom' },
+          ],
+        },
+      })
+      .mockResolvedValue(createScriptSuccess({ deleted: true }));
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        atomicOperation: true,
+        stopOnError: false,
+        operations: [
+          { operation: 'create', target: 'task', data: { tempId: 'c', name: '__TEST__ child', parentTempId: 'p' } },
+          { operation: 'create', target: 'task', data: { tempId: 'p', name: '__TEST__ parent' } },
+          { operation: 'create', target: 'task', data: { tempId: 'f', name: '__TEST__ failing' } },
+        ],
+      },
+    })) as any;
+
+    expect(deleteSpy.mock.calls.map((call) => call[1])).toEqual(['real-c', 'real-p']);
+    const rows = result.data.results as Array<Record<string, unknown>>;
+    const phaseError = rows.find((r) => r.operation === 'create' && r.id === null && !('tempId' in r));
+    expect(phaseError?.error).toContain('all created items were removed');
+    buildSpy.mockRestore();
+    deleteSpy.mockRestore();
+  });
+});

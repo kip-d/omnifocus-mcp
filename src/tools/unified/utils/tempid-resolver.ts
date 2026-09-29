@@ -18,6 +18,10 @@ export interface TempIdMapping {
  */
 export class TempIdResolver {
   private readonly mappings: Map<string, TempIdMapping>;
+  /** tempIds in the order they were resolved (created). Registration follows
+   *  input order, which differs from dependency order when a child is listed
+   *  before its parent (OMN-345). */
+  private readonly creationOrder: string[] = [];
 
   constructor() {
     this.mappings = new Map();
@@ -48,6 +52,7 @@ export class TempIdResolver {
       throw new Error(`Unknown temporary ID: ${tempId}`);
     }
 
+    if (!mapping.created) this.creationOrder.push(tempId);
     mapping.realId = realId;
     mapping.created = true;
   }
@@ -90,13 +95,15 @@ export class TempIdResolver {
   }
 
   /**
-   * Get all successfully created IDs (for rollback)
+   * Get all successfully created IDs in creation order, so rollback can walk
+   * them in reverse (children before parents).
    */
   getCreatedIds(): Array<{ tempId: string; realId: string; type: 'project' | 'task' }> {
     const created: Array<{ tempId: string; realId: string; type: 'project' | 'task' }> = [];
 
-    for (const mapping of this.mappings.values()) {
-      if (mapping.created && mapping.realId) {
+    for (const tempId of this.creationOrder) {
+      const mapping = this.mappings.get(tempId);
+      if (mapping?.created && mapping.realId) {
         created.push({
           tempId: mapping.tempId,
           realId: mapping.realId,
