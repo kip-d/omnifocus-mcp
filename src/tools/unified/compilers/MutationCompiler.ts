@@ -1,61 +1,21 @@
 import type { WriteInput } from '../schemas/write-schema.js';
-import type { RepetitionRule, FolderCreateData } from '../../../contracts/mutations.js';
+import type { FolderCreateData } from '../../../contracts/mutations.js';
 
-interface CreateData {
-  name: string;
-  note?: string;
-  project?: string | null;
-  parentTaskId?: string; // Bug #17: Enable subtask creation
-  tags?: string[];
-  dueDate?: string;
-  deferDate?: string;
-  plannedDate?: string;
-  flagged?: boolean;
-  estimatedMinutes?: number;
-  repetitionRule?: RepetitionRule;
-  // Project-specific
-  folder?: string;
-  sequential?: boolean;
-  status?: 'active' | 'on_hold' | 'completed' | 'dropped';
-  // Batch-specific
-  tempId?: string;
-  parentTempId?: string;
-  reviewInterval?: number;
-}
+// OMN-362: these were hand-redeclared copies of the Zod output types, cast
+// into with no key guard, so a new write field had to be added in both places
+// (and silently vanished from the compiled mutation when it wasn't). They are
+// now DERIVED from WriteInput (= z.infer<typeof WriteSchema>), so the compiled
+// mutation carries exactly what the schema validated.
+type Mutation = WriteInput['mutation'];
+type CreateData = Extract<Mutation, { operation: 'create' }>['data'];
+type UpdateChanges = NonNullable<Extract<Mutation, { operation: 'update' }>['changes']>;
+type BatchOperation = Extract<Mutation, { operation: 'batch' }>['operations'][number];
 
-interface UpdateChanges {
-  name?: string;
-  note?: string;
-  tags?: string[];
-  addTags?: string[];
-  removeTags?: string[];
-  dueDate?: string | null;
-  deferDate?: string | null;
-  plannedDate?: string | null;
-  clearDueDate?: boolean;
-  clearDeferDate?: boolean;
-  clearPlannedDate?: boolean;
-  flagged?: boolean;
-  status?: 'active' | 'on_hold' | 'completed' | 'dropped';
-  project?: string | null;
-  parentTaskId?: string | null; // Bug OMN-5: Update parent task relationship
-  estimatedMinutes?: number;
-  clearEstimatedMinutes?: boolean; // Bug #18: Clear estimated time
-  repetitionRule?: RepetitionRule | null; // Set (object) or clear (null)
-  folder?: string | null; // Move project to folder (null = root)
-  // Project-specific update fields
-  sequential?: boolean;
-  reviewInterval?: number;
-}
-
-interface BatchOperation {
-  operation: 'create' | 'update' | 'complete' | 'delete';
-  target: 'task' | 'project';
-  data?: CreateData;
-  id?: string;
-  changes?: UpdateChanges;
-  completionDate?: string;
-}
+// The derived BatchOperation is a real discriminated union. The old flat
+// interface made `data`/`id` optional on every op, which let batch code read
+// them without narrowing. Consumers split ops with these instead.
+export type CompiledBatchCreateOp = Extract<BatchOperation, { operation: 'create' }>;
+export type CompiledBatchFollowupOp = Exclude<BatchOperation, { operation: 'create' }>;
 
 // Discriminated union for compiled mutations
 export type CompiledMutation =
@@ -126,14 +86,14 @@ export class MutationCompiler {
         return {
           operation: 'create',
           target: mutation.target,
-          data: mutation.data as CreateData,
+          data: mutation.data,
           minimalResponse: mutation.minimalResponse, // Bug #21
         };
 
       case 'create_folder':
         return {
           operation: 'create_folder',
-          data: mutation.data as FolderCreateData,
+          data: mutation.data,
         };
 
       case 'update': {
@@ -141,12 +101,17 @@ export class MutationCompiler {
         // also defended here so a missing target never silently routes to
         // projectId if compile() is handed unparsed input).
         const updateTarget = mutation.target ?? 'task';
+        // OMN-75: `data` is an accepted alias for `changes`. WriteSchema's
+        // superRefine guarantees at least one is present; the types can't see
+        // that, so fail loudly rather than cast (OMN-362) or compile an empty update.
+        const changes = mutation.changes ?? mutation.data;
+        if (!changes) {
+          throw new Error('update requires `changes` (or its `data` alias)');
+        }
         const result: Extract<CompiledMutation, { operation: 'update' }> = {
           operation: 'update',
           target: updateTarget,
-          // OMN-75: `data` is an accepted alias for `changes`. WriteSchema's
-          // superRefine guarantees at least one is present.
-          changes: (mutation.changes ?? mutation.data) as UpdateChanges,
+          changes,
           minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
@@ -196,7 +161,7 @@ export class MutationCompiler {
         return {
           operation: 'batch',
           target: mutation.target,
-          operations: mutation.operations as BatchOperation[],
+          operations: mutation.operations,
           createSequentially: mutation.createSequentially,
           atomicOperation: mutation.atomicOperation,
           returnMapping: mutation.returnMapping,

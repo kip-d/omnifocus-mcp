@@ -1,7 +1,12 @@
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
-import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
+import {
+  MutationCompiler,
+  type CompiledBatchCreateOp,
+  type CompiledBatchFollowupOp,
+  type CompiledMutation,
+} from './compilers/MutationCompiler.js';
 import { TempIdResolver } from './utils/tempid-resolver.js';
 import { DependencyGraph, DependencyGraphError } from './utils/dependency-graph.js';
 import type { BatchItem } from './schemas/batch-schemas.js';
@@ -1469,7 +1474,7 @@ SAFETY:
    * else null. Extracted from routeToBatch to keep that orchestrator's complexity in check.
    */
   private async guardBatchCreates(
-    createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
+    createOps: CompiledBatchCreateOp[],
     batchTimer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown> | null> {
     try {
@@ -1477,7 +1482,7 @@ SAFETY:
         createOps.map((op) => ({
           operation: op.operation,
           target: op.target,
-          data: (op.data ?? {}) as Parameters<typeof validateBatchCreateOps>[0][number]['data'],
+          data: op.data as Parameters<typeof validateBatchCreateOps>[0][number]['data'],
         })),
       );
       return null;
@@ -1496,7 +1501,7 @@ SAFETY:
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     const batchTimer = new OperationTimerV2();
 
-    const createOps = compiled.operations.filter((op) => op.operation === 'create');
+    const createOps = compiled.operations.filter((op): op is CompiledBatchCreateOp => op.operation === 'create');
 
     // OMN-119: batch creates run through a separate execution path that bypassed the
     // per-builder sandbox guard. Validate create sub-ops up front (no-op outside test mode)
@@ -1573,7 +1578,9 @@ SAFETY:
     ];
 
     for (const phase of phases) {
-      const ops = compiled.operations.filter((op) => op.operation === phase.name);
+      const ops = compiled.operations.filter(
+        (op): op is CompiledBatchFollowupOp => op.operation !== 'create' && op.operation === phase.name,
+      );
       if (halted || ops.length === 0) continue;
 
       for (const op of ops) {
@@ -1603,7 +1610,7 @@ SAFETY:
    */
   private async runBatchFollowupOp(
     phaseName: string,
-    op: Extract<CompiledMutation, { operation: 'batch' }>['operations'][number],
+    op: CompiledBatchFollowupOp,
     tempIdMapping: Record<string, string>,
   ): Promise<{ ok: true; result: unknown } | { ok: false; error: Record<string, unknown> }> {
     const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
@@ -1660,7 +1667,7 @@ SAFETY:
   }
 
   private async executeBatchCreatePhase(
-    createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
+    createOps: CompiledBatchCreateOp[],
     compiled: Extract<CompiledMutation, { operation: 'batch' }>,
     results: { created: unknown[]; errors: unknown[] },
   ): Promise<{
@@ -2520,7 +2527,7 @@ SAFETY:
     const timer = new OperationTimerV2();
 
     // Partition operations
-    const createOps = compiled.operations.filter((op) => op.operation === 'create');
+    const createOps = compiled.operations.filter((op): op is CompiledBatchCreateOp => op.operation === 'create');
     const updateOps = compiled.operations.filter((op) => op.operation === 'update');
     const completeOps = compiled.operations.filter((op) => op.operation === 'complete');
     const deleteOps = compiled.operations.filter((op) => op.operation === 'delete');
