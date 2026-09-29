@@ -44,11 +44,13 @@ function findDueDate(text: string): string | undefined {
   const duePhrases = ['by', 'due', 'before', 'until', 'deadline'];
 
   for (const phrase of duePhrases) {
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,]+?)(?:\\.|$|,|;)`, 'i');
+    // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
+    // context. Slash dates are only accepted from these phrase captures.
+    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,|;)`, 'i');
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
-      const parsed = parseRelativeDate(dateStr);
+      const parsed = parseRelativeDate(dateStr, true);
       if (parsed) {
         return parsed;
       }
@@ -57,7 +59,9 @@ function findDueDate(text: string): string | undefined {
 
   // Pattern: Direct date reference without preposition
   // "Friday", "next Monday", "this week", "end of month"
-  const directDate = parseRelativeDate(textLower);
+  // OMN-342: no slash dates here. Without a "by"/"due" context, "1/2" is far
+  // more often a fraction ("Buy 1/2 gallon milk") than a date.
+  const directDate = parseRelativeDate(textLower, false);
   if (directDate) {
     return directDate;
   }
@@ -75,11 +79,13 @@ function findDeferDate(text: string): string | undefined {
   const deferPhrases = ['after', 'starting', 'not until', 'wait until'];
 
   for (const phrase of deferPhrases) {
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,]+?)(?:\\.|$|,|;)`, 'i');
+    // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
+    // context. Slash dates are only accepted from these phrase captures.
+    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,|;)`, 'i');
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
-      const parsed = parseRelativeDate(dateStr);
+      const parsed = parseRelativeDate(dateStr, true);
       if (parsed) {
         return parsed;
       }
@@ -91,7 +97,7 @@ function findDeferDate(text: string): string | undefined {
     const followUpMatch =
       /follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.exec(text);
     if (followUpMatch) {
-      const parsed = parseRelativeDate(followUpMatch[1]);
+      const parsed = parseRelativeDate(followUpMatch[1], false);
       if (parsed) {
         return parsed;
       }
@@ -104,7 +110,7 @@ function findDeferDate(text: string): string | undefined {
 /**
  * Parse relative date expressions to YYYY-MM-DD
  */
-function parseRelativeDate(dateStr: string): string | undefined {
+function parseRelativeDate(dateStr: string, allowSlash: boolean): string | undefined {
   const now = new Date();
 
   // Today
@@ -147,14 +153,14 @@ function parseRelativeDate(dateStr: string): string | undefined {
 
   // Next month
   if (/\bnext month\b/i.test(dateStr)) {
-    const nextMonth = new Date(now);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    // Day 1, so adding a month can't overflow (Jan 31 + 1 month is not Mar 3).
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const endOfNextMonth = getEndOfMonth(nextMonth);
     return formatDate(endOfNextMonth);
   }
 
   // Specific date pattern: "October 15", "Oct 15", "10/15", "2025-10-15"
-  const specificDate = parseSpecificDate(dateStr);
+  const specificDate = parseSpecificDate(dateStr, now, allowSlash);
   if (specificDate) {
     return formatDate(specificDate);
   }
@@ -220,16 +226,26 @@ function getEndOfWeek(date: Date): Date {
  * Get last day of month
  */
 function getEndOfMonth(date: Date): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + 1);
-  result.setDate(0); // Last day of previous month
-  return result;
+  // Day 0 of the next month is the last day of this one. Built in one step:
+  // setMonth(+1) on the 31st overflowed whenever the next month is shorter.
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+/**
+ * OMN-342: a month/day with no explicit year means its NEXT occurrence. "by
+ * March 3" said in September is next March, not a date already past.
+ */
+function nextOccurrence(now: Date, month: number, day: number): Date {
+  const candidate = new Date(now.getFullYear(), month, day);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (candidate < today) candidate.setFullYear(now.getFullYear() + 1);
+  return candidate;
 }
 
 /**
  * Parse specific date formats
  */
-function parseSpecificDate(dateStr: string): Date | undefined {
+function parseSpecificDate(dateStr: string, now: Date, allowSlash: boolean): Date | undefined {
   // ISO format: YYYY-MM-DD
   const isoMatch = /(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
   if (isoMatch) {
@@ -238,11 +254,12 @@ function parseSpecificDate(dateStr: string): Date | undefined {
   }
 
   // Slash format: MM/DD or MM/DD/YYYY
-  const slashMatch = /(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/.exec(dateStr);
+  const slashMatch = allowSlash ? /(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/.exec(dateStr) : null;
   if (slashMatch) {
     const [, month, day, year] = slashMatch;
-    const currentYear = new Date().getFullYear();
-    return new Date(year ? parseInt(year) : currentYear, parseInt(month) - 1, parseInt(day));
+    return year
+      ? new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+      : nextOccurrence(now, parseInt(month) - 1, parseInt(day));
   }
 
   // Month name format: "October 15", "Oct 15"
@@ -272,9 +289,7 @@ function parseSpecificDate(dateStr: string): Date | undefined {
     if (fullMatch || abbrMatch) {
       const match = fullMatch || abbrMatch;
       if (match) {
-        const day = parseInt(match[1]);
-        const currentYear = new Date().getFullYear();
-        return new Date(currentYear, i, day);
+        return nextOccurrence(now, i, parseInt(match[1]));
       }
     }
   }

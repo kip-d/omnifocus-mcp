@@ -1230,6 +1230,23 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.extracted.unparsed).toHaveLength(0);
     });
 
+    // OMN-342: isNonActionable skipped `* ` lines before isListItem could treat
+    // `*` as a bullet, so the line landed in neither tasks[] nor unparsed[].
+    it('OMN-342: a "* " bullet becomes a task, never silently vanishes', async () => {
+      const res: any = await tool.execute({
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: '* Call Sarah about budget\n- Send the agenda' },
+        },
+      });
+
+      expect(res.success).toBe(true);
+      const joined = res.data.extracted.tasks.map((t: any) => t.name).join('\n');
+      expect(joined).toContain('Call Sarah about budget');
+      expect(joined).toContain('Send the agenda');
+      expect(res.data.extracted.unparsed).toHaveLength(0);
+    });
+
     it('OMN-123: preserves mid-sentence objects/proper nouns eaten by the old greedy strip', async () => {
       const res: any = await tool.execute({
         analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },
