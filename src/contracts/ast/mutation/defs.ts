@@ -1247,6 +1247,27 @@ export function buildMergeTagsProgram(data: TagMergeInput): Program {
       message: json(`Target tag '${data.targetTag}' not found`),
       context: json(context),
     }),
+    // OMN-344 identity guards, both BEFORE the retag walk. Self-merge would strip
+    // the tag from every task and then delete it. Merging into a descendant
+    // would delete the target along with the source's subtree.
+    guard('_src.id.primaryKey === _tgt.id.primaryKey', {
+      error: json(true),
+      message: json(`Cannot merge tag '${data.tagName}' into itself`),
+      context: json(context),
+    }),
+    bind(
+      '_tgtUnderSrc',
+      raw(
+        '(function () { var p = _tgt.parent; while (p) { if (p.id.primaryKey === _src.id.primaryKey) return true; p = p.parent; } return false; })()',
+      ),
+    ),
+    guard('_tgtUnderSrc', {
+      error: json(true),
+      message: json(
+        `Cannot merge tag '${data.tagName}' into its descendant '${data.targetTag}': deleting the source would delete the target`,
+      ),
+      context: json(context),
+    }),
     bind('_srcName', json(data.tagName)),
     bind('_tgtName', json(data.targetTag)),
     mergeRetag('_src', '_tgt', '_count'),
