@@ -3,6 +3,7 @@ import { URL } from 'node:url';
 import { createLogger } from './utils/logger.js';
 import { SessionManager } from './session-manager.js';
 import { randomUUID } from 'node:crypto';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { getVersionInfo } from './utils/version.js';
 
 const logger = createLogger('http-server');
@@ -251,13 +252,32 @@ export class HttpServerManager {
         return;
       }
 
+      // OMN-347: create a session ONLY for an id-less initialize request. An
+      // unknown/expired id gets 404, which tells a spec client to
+      // re-initialize, matching GET/DELETE. Creating a session there instead
+      // produced the SDK's 400 "Server not initialized" and leaked a full
+      // Server + tools per request until the idle timeout.
       let session = sessionId ? this.sessionManager.getSession(sessionId) : undefined;
-
-      // Create new session if no session ID provided or session doesn't exist
       if (!session) {
+        if (sessionId) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Not Found', message: 'Session not found' }));
+          return;
+        }
+        const messages = Array.isArray(body) ? (body as unknown[]) : [body];
+        if (!messages.some((m) => isInitializeRequest(m))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: 'Bad Request',
+              message: 'Session ID is required for non-initialize requests',
+            }),
+          );
+          return;
+        }
         const newSessionId = randomUUID();
         session = await this.sessionManager.createSession(newSessionId);
-        logger.info('Created new session for request', { requestId, sessionId: newSessionId });
+        logger.info('Created new session for initialize request', { requestId, sessionId: newSessionId });
       }
 
       // Handle the request using the session's transport
