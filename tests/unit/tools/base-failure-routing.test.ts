@@ -189,9 +189,19 @@ describe('BaseTool returned-ScriptError routing (OMN-159)', () => {
     throwingTool.omniAutomation = { executeJson: mockExecuteJson } as unknown as OmniAutomation;
 
     const recordSpy = vi.spyOn(metricsModule, 'recordToolExecution');
+    const writeFileSpy = vi.mocked(fs.writeFileSync);
+    writeFileSpy.mockClear();
 
     // Execute — this should NOT throw (handleExecuteError returns a V2 error response)
     await throwingTool.execute({ op: 'throw' });
+
+    // OMN-359: exactly ONE failure-log entry, and it carries the real input args.
+    // handleExecuteError logged, then handleErrorV2 logged again with {} args.
+    const failureWrites = writeFileSpy.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('failures-'),
+    );
+    expect(failureWrites).toHaveLength(1);
+    expect(JSON.stringify(JSON.parse(failureWrites[0][1] as string))).toContain('throw');
 
     // mockExecuteJson was never called (thrown before reaching execJson)
     expect(mockExecuteJson).not.toHaveBeenCalled();

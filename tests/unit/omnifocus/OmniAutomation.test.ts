@@ -7,6 +7,7 @@ import {
   type ScriptResult,
 } from '../../../src/omnifocus/script-result-types.js';
 import { TagMutationResultSchema, CompleteResultSchema } from '../../../src/omnifocus/script-response-schemas.js';
+import { categorizeError, ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
@@ -107,6 +108,32 @@ describe('OmniAutomation', () => {
       mockProcess.emit('close', 1);
 
       await expect(executePromise).rejects.toThrow(OmniAutomationError);
+    });
+
+    // OMN-359: spawn({timeout}) kills with SIGTERM and closes with (null, 'SIGTERM').
+    // That was reported as "failed with code null", so it never categorized as
+    // SCRIPT_TIMEOUT (lost the recovery advice, and diagnose-failures' IGNORE_SET
+    // missed it).
+    it('a signal kill at the timeout reports "timed out" and categorizes as SCRIPT_TIMEOUT', async () => {
+      const fast = new OmniAutomation(100000, 5);
+      const executePromise = fast.execute('return 1');
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      mockProcess.emit('close', null, 'SIGTERM');
+
+      const error = await executePromise.catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(OmniAutomationError);
+      expect((error as Error).message).toMatch(/timed out after 5ms \(signal SIGTERM\)/);
+      expect(categorizeError(error, 'test').errorType).toBe(ScriptErrorType.SCRIPT_TIMEOUT);
+    });
+
+    it('a signal kill well before the timeout is reported as a termination, not a timeout', async () => {
+      const executePromise = omniAutomation.execute('return 1');
+      await new Promise((resolve) => setImmediate(resolve));
+      mockProcess.emit('close', null, 'SIGTERM');
+
+      const error = await executePromise.catch((e: unknown) => e);
+      expect((error as Error).message).toMatch(/terminated by signal SIGTERM/);
+      expect((error as Error).message).not.toMatch(/timed out/);
     });
 
     it('should handle empty output as null', async () => {

@@ -245,7 +245,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage, undefined, categorizedError);
     recordFailure(categorizedError.errorType);
 
-    return this.handleErrorV2<TResponse>(error) as TResponse;
+    // OMN-359: already logged above WITH the caller's args, so don't log again.
+    return this.handleErrorV2<TResponse>(error, { logFailure: false }) as TResponse;
   }
 
   /**
@@ -604,15 +605,19 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   /**
    * V2 error handler: enhanced categorization with V2 response format
    */
-  protected handleErrorV2<T = unknown>(error: unknown): StandardResponseV2<T> {
+  protected handleErrorV2<T = unknown>(error: unknown, options: { logFailure?: boolean } = {}): StandardResponseV2<T> {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimerV2();
 
     // Categorize the error using the enhanced taxonomy
     const categorizedError = categorizeError(error, this.name);
 
-    // Log the failure with categorization information
-    this.logToolFailure({}, categorizedError.errorType, categorizedError.message, undefined, categorizedError);
+    // Log the failure with categorization information. OMN-359: callers that
+    // have already written the failure-log entry (handleExecuteError, with the
+    // real input args) opt out, or diagnose-failures double-counts it.
+    if (options.logFailure !== false) {
+      this.logToolFailure({}, categorizedError.errorType, categorizedError.message, undefined, categorizedError);
+    }
 
     // Merge original error details with enhanced categorization
     const originalErrorDetails =

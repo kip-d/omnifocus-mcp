@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process';
 import { OmniAutomation, OmniAutomationError } from './OmniAutomation.js';
 import { runSerialized } from './osascript-queue.js';
+import { describeAbnormalExit } from './process-exit.js';
 import { createLogger } from '../utils/logger.js';
 import { safeStringify } from '../utils/safe-io.js';
 
 const logger = createLogger('diagnostic-omniautomation');
+
+// 120 second timeout for large databases
+const DIAGNOSTIC_TIMEOUT_MS = 120000;
 
 export class DiagnosticOmniAutomation extends OmniAutomation {
   private diagnosticLog: string[] = [];
@@ -50,8 +54,9 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
   private spawnDiagnostic<T>(script: string, wrappedScript: string): Promise<T> {
     return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
-        timeout: 120000, // 120 second timeout for large databases
+        timeout: DIAGNOSTIC_TIMEOUT_MS,
       });
 
       let stdout = '';
@@ -74,16 +79,18 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
         reject(new OmniAutomationError('Failed to execute script', { script, stderr: error.message }));
       });
 
-      proc.on('close', (code) => {
-        this.log('Process closed', { code, stdoutLength: stdout.length, stderrLength: stderr.length });
+      proc.on('close', (code: number | null, signal: string | null) => {
+        this.log('Process closed', { code, signal, stdoutLength: stdout.length, stderrLength: stderr.length });
 
         if (code !== 0) {
-          this.log('Script execution failed with non-zero code', { code, stderr });
+          // OMN-359: a timeout kill closes with (null, 'SIGTERM'). Name it.
+          const message = describeAbnormalExit(code, signal, Date.now() - startedAt, DIAGNOSTIC_TIMEOUT_MS);
+          this.log('Script execution failed', { code, signal, stderr });
           reject(
-            new OmniAutomationError(`Script execution failed with code ${code}`, {
+            new OmniAutomationError(message, {
               script,
               stderr,
-              code: code || undefined,
+              code: code ?? undefined,
             }),
           );
           return;
