@@ -151,6 +151,21 @@ export function formatLocalDay(d: Date): string {
 }
 
 /**
+ * Local calendar-day key ("YYYY-MM-DD") for grouping by day (OMN-351). Cutting
+ * a UTC ISO string at 10 chars keyed a 17:00-PDT due onto the NEXT day.
+ * - Date / ISO instant: the LOCAL day of that instant.
+ * - Bare "YYYY-MM-DD" or local "YYYY-MM-DD HH:mm": already a local day, passed
+ *   through (Date("2026-09-25") would read it as UTC midnight).
+ * - Anything unparseable: its first 10 chars, as before.
+ */
+export function localDayKey(value: Date | string): string {
+  if (value instanceof Date) return formatLocalDay(value);
+  if (isLocalDateString(value)) return value.substring(0, 10);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value.substring(0, 10) : formatLocalDay(parsed);
+}
+
+/**
  * Render a date-filter bound for humans (filter_description) as LOCAL
  * "YYYY-MM-DD HH:mm" (OMN-332). Bounds are stored as UTC ISO instants, and printing
  * those raw showed a day-end bound as the next calendar date. A value already in local

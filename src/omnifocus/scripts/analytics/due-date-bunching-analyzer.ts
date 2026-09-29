@@ -1,3 +1,5 @@
+import { localDayKey } from '../../../utils/timezone.js';
+
 interface Task {
   id: string;
   dueDate: string | null;
@@ -32,8 +34,9 @@ export function analyzeDueDateBunching(tasks: Task[], options: DueDateBunchingOp
   // Group by date
   const dateGroups = new Map<string, Task[]>();
   incompleteTasks.forEach((task) => {
-    // Extract date portion - handles both ISO (2025-10-20T14:30:00Z) and local (2025-10-20 14:30) formats
-    const dateOnly = task.dueDate!.substring(0, 10); // Always get first 10 chars (YYYY-MM-DD)
+    // OMN-351: LOCAL calendar day. An ISO instant (the scan emits UTC
+    // toISOString) converts to its local day; local strings pass through.
+    const dateOnly = localDayKey(task.dueDate!);
     if (!dateGroups.has(dateOnly)) {
       dateGroups.set(dateOnly, []);
     }

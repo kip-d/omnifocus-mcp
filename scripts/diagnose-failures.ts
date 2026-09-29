@@ -12,6 +12,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { isRunDirectly } from './lib/run-directly.js';
 import { parseFailureLog } from '../src/diagnostics/failure-log.js';
+import { formatLocalDay } from '../src/utils/timezone.js';
 import { clusterFailures, isIgnored } from '../src/diagnostics/clustering.js';
 import {
   canonicalizeInputSchema,
@@ -292,7 +293,8 @@ async function main(): Promise<void> {
   let records: FailureRecord[] = [];
   let files: string[] = [];
   try {
-    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    // OMN-351: files are named by LOCAL day (src/tools/base.ts), so the cutoff is too.
+    const cutoff = formatLocalDay(new Date(Date.now() - days * 86_400_000));
     files = readdirSync(logDir).filter((f) => {
       const m = /failures-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f);
       return m && m[1] >= cutoff;

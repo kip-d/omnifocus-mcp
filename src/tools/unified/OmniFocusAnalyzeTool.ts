@@ -35,7 +35,7 @@ import {
   MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
-import { formatLocalDay, localDateBoundToUTC } from '../../utils/timezone.js';
+import { formatLocalDay, localDateBoundToUTC, localDayKey } from '../../utils/timezone.js';
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
@@ -2117,7 +2117,8 @@ TIME-WINDOW SCOPING:
         findings.due_this_week.push({ id: task.id, name: task.name, days_until: daysUntilDue });
       }
 
-      const dateKey = dueDate.toISOString().split('T')[0];
+      // OMN-351: local calendar day, not the UTC date (evening dues slid a day).
+      const dateKey = localDayKey(dueDate);
       findings.deadline_bunching.set(dateKey, (findings.deadline_bunching.get(dateKey) || 0) + 1);
     }
 
