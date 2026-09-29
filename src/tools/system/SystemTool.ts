@@ -3,6 +3,7 @@ import { BaseTool } from '../base.js';
 import { getVersionInfo, type VersionInfo } from '../../utils/version.js';
 import { getVersionInfo as getOmniFocusVersionInfo } from '../../omnifocus/version-detection.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
+import { detectKnownErrorShape } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -51,15 +52,17 @@ export const SystemToolSchema = z
   })
   .strict();
 
+interface DiagnosticTestResult {
+  success: boolean;
+  result?: unknown;
+  error?: string;
+  stderr?: string;
+}
+
 interface DiagnosticsResult {
   timestamp: string;
   tests: {
-    [key: string]: {
-      success: boolean;
-      result?: unknown;
-      error?: string;
-      stderr?: string;
-    };
+    [key: string]: DiagnosticTestResult;
   };
 }
 
@@ -226,20 +229,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         });
       `;
 
-      try {
-        const result: unknown = await this.diagnosticOmni.execute(basicScript);
-        results.tests.basic_connection = {
-          success: true,
-          result,
-        };
-      } catch (error: unknown) {
-        const err = error as { message?: string; stderr?: string };
-        results.tests.basic_connection = {
-          success: false,
-          error: err.message || 'Unknown error',
-          stderr: err.stderr,
-        };
-      }
+      results.tests.basic_connection = await this.runDiagnosticTest(basicScript);
 
       // Test 2: Collection access
       this.logger.info('Running Test 2: Collection Access');
@@ -288,21 +278,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         });
       `;
 
-      try {
-        // Prefer plain execute so tests can mock without schema
-        const result = await this.diagnosticOmni.execute(collectionScript);
-        results.tests.collection_access = {
-          success: true,
-          result,
-        };
-      } catch (error: unknown) {
-        const err = error as { message?: string; stderr?: string };
-        results.tests.collection_access = {
-          success: false,
-          error: err.message || 'Unknown error',
-          stderr: err.stderr,
-        };
-      }
+      results.tests.collection_access = await this.runDiagnosticTest(collectionScript);
 
       // Test 3: Property access
       this.logger.info('Running Test 3: Property Access');
@@ -351,20 +327,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         });
       `;
 
-      try {
-        const result = await this.diagnosticOmni.execute(propertyScript);
-        results.tests.property_access = {
-          success: true,
-          result,
-        };
-      } catch (error: unknown) {
-        const err = error as { message?: string; stderr?: string };
-        results.tests.property_access = {
-          success: false,
-          error: err.message || 'Unknown error',
-          stderr: err.stderr,
-        };
-      }
+      results.tests.property_access = await this.runDiagnosticTest(propertyScript);
 
       // Test 4: Method Availability (for analytics tools)
       this.logger.info('Running Test 4: Method Availability');
@@ -423,20 +386,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         });
       `;
 
-      try {
-        const result = await this.diagnosticOmni.execute(methodScript);
-        results.tests.method_availability = {
-          success: true,
-          result,
-        };
-      } catch (error: unknown) {
-        const err = error as { message?: string; stderr?: string };
-        results.tests.method_availability = {
-          success: false,
-          error: err.message || 'Unknown error',
-          stderr: err.stderr,
-        };
-      }
+      results.tests.method_availability = await this.runDiagnosticTest(methodScript);
 
       // Test 5: Run actual list tasks script if requested
       if (args.testScript === 'list_tasks') {
@@ -449,20 +399,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
           limit: 1,
         });
 
-        try {
-          const result = await this.diagnosticOmni.execute(script);
-          results.tests.list_tasks_script = {
-            success: true,
-            result,
-          };
-        } catch (error: unknown) {
-          const err = error as { message?: string; stderr?: string };
-          results.tests.list_tasks_script = {
-            success: false,
-            error: err.message || 'Unknown error',
-            stderr: err.stderr,
-          };
-        }
+        results.tests.list_tasks_script = await this.runDiagnosticTest(script);
       }
 
       // Determine overall health
@@ -483,6 +420,29 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         { operation: 'diagnostics' },
         timer.toMetadata(),
       );
+    }
+  }
+
+  /**
+   * Run one diagnostic script and classify the outcome. OMN-337: `execute`
+   * RESOLVES the wrapper's own error payloads ({error:true}, {ok:false},
+   * {success:false}), and an empty result means the script produced nothing.
+   * Neither is a passing test.
+   */
+  private async runDiagnosticTest(script: string): Promise<DiagnosticTestResult> {
+    try {
+      const result: unknown = await this.diagnosticOmni.execute(script);
+      if (result === null || result === undefined) {
+        return { success: false, error: 'Script returned no result' };
+      }
+      const knownError = detectKnownErrorShape(result);
+      if (knownError) {
+        return { success: false, error: knownError.error, result };
+      }
+      return { success: true, result };
+    } catch (error: unknown) {
+      const err = error as { message?: string; stderr?: string };
+      return { success: false, error: err.message || 'Unknown error', stderr: err.stderr };
     }
   }
 
