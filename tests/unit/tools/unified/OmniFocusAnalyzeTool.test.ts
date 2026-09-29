@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import vm from 'node:vm';
 import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
@@ -2277,6 +2278,70 @@ describe('OmniFocusAnalyzeTool', () => {
       // OmniJS enums don't stringify usefully — status must be mapped explicitly
       expect(script).toContain('Task.Status.Blocked');
       expect(script).toContain('Project.Status.OnHold');
+    });
+
+    // OMN-338: the capped task loop fed project ROOT rows and DROPPED tasks to
+    // every detector (deadline_health listed projects as overdue tasks,
+    // clarify_candidates listed project names, WIP counts got +1 per project).
+    describe('slim scan task loop skips project roots and dropped tasks (OMN-338)', () => {
+      async function slimProgram(): Promise<string> {
+        mockDb();
+        await tool.execute({ analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } } });
+        const script = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+        const m = script.match(/evaluateJavascript\(("(?:[^"\\]|\\.)*")\)/);
+        expect(m, 'OmniJS program not found in the bridge wrapper').not.toBeNull();
+        return JSON.parse(m![1]) as string;
+      }
+
+      it('emits both skips inside the task loop, before the row is built', async () => {
+        const program = await slimProgram();
+        const loopStart = program.indexOf('for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++)');
+        const rowBuilt = program.indexOf('const taskData = {');
+        expect(loopStart).toBeGreaterThan(-1);
+        const loopHead = program.slice(loopStart, rowBuilt);
+        expect(loopHead).toContain('if (task.project) continue;');
+        expect(loopHead).toContain('if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;');
+      });
+
+      it('executed against a stub DB, ships only the live non-root task', async () => {
+        const program = await slimProgram();
+        const S = {
+          Blocked: { s: 'Blocked' },
+          Available: { s: 'Available' },
+          Next: { s: 'Next' },
+          DueSoon: { s: 'DueSoon' },
+          Overdue: { s: 'Overdue' },
+          Completed: { s: 'Completed' },
+          Dropped: { s: 'Dropped' },
+        };
+        const proj = { id: { primaryKey: 'p1' }, name: 'Proj' };
+        const mk = (id: string, taskStatus: object, extra: Record<string, unknown> = {}) => ({
+          id: { primaryKey: id },
+          name: id,
+          completed: false,
+          flagged: false,
+          taskStatus,
+          tags: [],
+          containingProject: proj,
+          project: null,
+          note: '',
+          children: [],
+          ...extra,
+        });
+        const sandbox = {
+          Task: { Status: S },
+          Project: { Status: { Active: {}, OnHold: {}, Done: {}, Dropped: {} } },
+          flattenedTasks: [
+            mk('root', S.Available, { project: proj }),
+            mk('dropped', S.Dropped),
+            mk('live', S.Available),
+          ],
+          flattenedProjects: [],
+          flattenedTags: [],
+        };
+        const out = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+        expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['live']);
+      });
     });
 
     // OMN-269 supersedes the OMN-255 includeFolder gating: folder is property
