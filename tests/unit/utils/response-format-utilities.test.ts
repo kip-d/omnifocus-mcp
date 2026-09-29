@@ -647,7 +647,9 @@ describe('Response Format Utilities', () => {
 
       const summary = generateProjectSummary(projects);
 
-      expect(summary.bottlenecks).toBeDefined();
+      // OMN-363: `toBeDefined()` was always true (bottlenecks starts as []),
+      // so deleting the whole stalled-project branch failed no test.
+      expect(summary.bottlenecks).toContain('1 active projects with no activity in 14+ days');
       // Should detect stalled project
     });
 
