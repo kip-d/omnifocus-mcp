@@ -2231,6 +2231,59 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(never).not.toContain('r3');
     });
 
+    // OMN-351: both bunching insights keyed days off the UTC ISO string, so a
+    // due at 17:00 PDT (00:00Z next day) landed on the NEXT calendar day.
+    describe('bunching keys use the local calendar day (OMN-351)', () => {
+      const savedTZ = process.env.TZ;
+      beforeEach(() => {
+        process.env.TZ = 'America/Los_Angeles';
+      });
+      afterEach(() => {
+        if (savedTZ === undefined) delete process.env.TZ;
+        else process.env.TZ = savedTZ;
+      });
+
+      function mockEveningDues(): void {
+        const mkTask = (i: number) => ({
+          id: `d${i}`,
+          name: `due task ${i}`,
+          completed: false,
+          flagged: false,
+          status: 'available',
+          tags: [],
+          project: 'Work',
+          projectId: 'pw',
+          estimatedMinutes: null,
+          dueDate: '2026-09-26T00:00:00.000Z', // 2026-09-25 17:00 PDT
+        });
+        mockOmni.executeJson.mockResolvedValue(
+          createScriptSuccess({
+            tasks: Array.from({ length: 9 }, (_, i) => mkTask(i)),
+            projects: [{ id: 'pw', name: 'Work', status: 'active', taskCount: 9, availableTaskCount: 9 }],
+            tags: [],
+          }),
+        );
+      }
+
+      it('deadline_health.bunched_dates', async () => {
+        mockEveningDues();
+        const res: any = await tool.execute({
+          analysis: { type: 'pattern_analysis', params: { insights: ['deadline_health'] } },
+        });
+        const dates = (res.data.deadline_health.items.bunched_dates as Array<{ date: string }>).map((d) => d.date);
+        expect(dates).toEqual(['2026-09-25']);
+      });
+
+      it('due_date_bunching.bunched_dates', async () => {
+        mockEveningDues();
+        const res: any = await tool.execute({
+          analysis: { type: 'pattern_analysis', params: { insights: ['due_date_bunching'] } },
+        });
+        expect(JSON.stringify(res.data.due_date_bunching)).toContain('2026-09-25');
+        expect(JSON.stringify(res.data.due_date_bunching)).not.toContain('2026-09-26');
+      });
+    });
+
     it('wip_limits sees on-hold projects despite raw JXA status strings', async () => {
       const mkTask = (i: number) => ({
         id: `t${i}`,
