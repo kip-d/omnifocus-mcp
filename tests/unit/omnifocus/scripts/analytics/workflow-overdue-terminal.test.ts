@@ -69,6 +69,20 @@ describe('OMN-339 — workflow_analysis excludes terminal-status tasks from over
     expect(out.patterns.workloadDistribution.byProject.P.overdueRate).toBe(25);
   });
 
+  // Live verify (2026-10-01) found workflow overdue 155 vs overdue_analysis
+  // totalOverdue 157: workflow counted a task only once Math.floor(daysPast) > 0,
+  // so a task 1-23 hours past due was not overdue. OmniFocus (and
+  // overdue_analysis) treat any past due time as overdue.
+  it('a task past due by less than a day is overdue', () => {
+    const out = run([
+      task({ id: { primaryKey: 'hours-late' }, dueDate: new Date(Date.now() - 6 * 60 * 60 * 1000) }),
+      task({ id: { primaryKey: 'future' }, dueDate: new Date(Date.now() + 10 * DAY) }),
+    ]);
+
+    expect(out.patterns.workflowMetrics.overduePercentage).toBe(50);
+    expect(out.patterns.workloadDistribution.byProject.P.overdueRate).toBe(50);
+  });
+
   it('a dropped inbox task is not counted in the inbox', () => {
     const out = run([
       task({ id: { primaryKey: 'inbox-live' }, inInbox: true, containingProject: null }),

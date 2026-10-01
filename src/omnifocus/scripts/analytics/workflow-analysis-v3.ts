@@ -230,10 +230,15 @@ export const WORKFLOW_ANALYSIS_V3 = `
               const modificationDate = task.modified;
 
               // Calculate overdue days
+              // A task is overdue as soon as its due time passes (as in OmniFocus
+              // and overdue_analysis); overdueDays is whole days past, for averages
+              // and buckets only, so it is 0 for a task 1-23 hours late.
               let overdueDays = 0;
+              let isOverdue = false;
               if (dueDate && !terminal) {
                 const dueDateMs = dueDate.getTime();
                 if (dueDateMs < nowTime) {
+                  isOverdue = true;
                   overdueDays = Math.floor((nowTime - dueDateMs) / (1000 * 60 * 60 * 24));
                 }
               }
@@ -247,7 +252,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
               const inInbox = task.inInbox;
 
               // Update counters - focus on workflow health
-              if (overdueDays > 0) {
+              if (isOverdue) {
                 overdueTasks++;
                 totalOverdueDays += overdueDays;
               }
@@ -319,7 +324,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
                 projectStats[projectName].total++;
                 if (completed) projectStats[projectName].completed++;
-                if (overdueDays > 0) projectStats[projectName].overdue++;
+                if (isOverdue) projectStats[projectName].overdue++;
                 if (flagged) projectStats[projectName].flagged++;
                 if (blocked) projectStats[projectName].blocked++;
                 if (!terminal && !blocked && isNext) projectStats[projectName].available++;
@@ -366,7 +371,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 }
                 workloadByTag[tag].total++;
                 if (completed) workloadByTag[tag].completed++;
-                if (overdueDays > 0) workloadByTag[tag].overdue++;
+                if (isOverdue) workloadByTag[tag].overdue++;
                 workloadByTag[tag].estimatedTime += estimatedMinutes;
               });
 
