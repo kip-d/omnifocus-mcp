@@ -46,3 +46,44 @@ export function runAnalyticsScript(
   };
   return JSON.parse(vm.runInNewContext(script, outer) as string);
 }
+
+/** One fake OmniJS task as the workflow_analysis script reads it. Shared by the
+ * workflow_* fixture files so a new field the script starts reading is added
+ * once, here. */
+export interface FakeWorkflowTask {
+  completed: boolean;
+  flagged: boolean;
+  taskStatus: unknown;
+  dueDate: Date | null;
+  deferDate: Date | null;
+  added: Date | null;
+  modified: Date | null;
+  estimatedMinutes: number;
+  inInbox: boolean;
+  /** Non-null marks a project ROOT task (the live OmniJS marker). */
+  project: object | null;
+  containingProject: { name: string } | null;
+  tags: Array<{ name: string }>;
+  name: string;
+  id: { primaryKey: string };
+}
+
+export function fakeWorkflowTask(overrides: Partial<FakeWorkflowTask> = {}): FakeWorkflowTask {
+  return {
+    completed: false,
+    flagged: false,
+    taskStatus: FAKE_TASK_STATUS.Available,
+    dueDate: null,
+    deferDate: null,
+    added: null,
+    modified: null,
+    estimatedMinutes: 0,
+    inInbox: false,
+    project: null,
+    containingProject: { name: 'P' },
+    tags: [],
+    name: 'Fixture task',
+    id: { primaryKey: 't1' },
+    ...overrides,
+  };
+}

@@ -8,39 +8,27 @@
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { TERMINAL_STATUS_HELPER } from '../../../../../src/omnifocus/scripts/shared/helpers.js';
-import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
+import {
+  runAnalyticsScript,
+  FAKE_TASK_STATUS,
+  fakeWorkflowTask as task,
+  type FakeWorkflowTask,
+} from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
-
-function task(overrides: Record<string, unknown>): Record<string, unknown> {
-  return {
-    completed: false,
-    flagged: false,
-    taskStatus: FAKE_TASK_STATUS.Available,
-    dueDate: null,
-    deferDate: null,
-    added: null,
-    modified: null,
-    estimatedMinutes: 0,
-    inInbox: false,
-    project: null,
-    containingProject: { name: 'P' },
-    tags: [],
-    name: 'Fixture task',
-    id: { primaryKey: 't' },
-    ...overrides,
-  };
-}
 
 interface WorkflowOut {
   totalTasks: number;
   patterns: {
     workflowMetrics: { overduePercentage: number; inboxPercentage: number };
-    workloadDistribution: { byProject: Record<string, { overdueRate: number }> };
+    workloadDistribution: {
+      byProject: Record<string, { overdueRate: number }>;
+      timeBuckets: Record<string, number>;
+    };
   };
 }
 
-function run(tasks: Array<Record<string, unknown>>): WorkflowOut {
+function run(tasks: FakeWorkflowTask[]): WorkflowOut {
   const out = runAnalyticsScript(WORKFLOW_ANALYSIS_V3, { includeRawData: false }, { flattenedTasks: tasks }) as {
     data: WorkflowOut;
   };
@@ -81,6 +69,33 @@ describe('OMN-339 — workflow_analysis excludes terminal-status tasks from over
 
     expect(out.patterns.workflowMetrics.overduePercentage).toBe(50);
     expect(out.patterns.workloadDistribution.byProject.P.overdueRate).toBe(50);
+  });
+
+  // /code-review on #287: timeBuckets fell through on overdueDays, so every
+  // non-overdue task (future-due, no due date, terminal) landed in '0-1 days'.
+  // The buckets are overdue-age clusters ("Most overdue tasks cluster in…").
+  it('timeBuckets count only overdue tasks, by how late they are', () => {
+    const out = run([
+      task({ id: { primaryKey: 'hours-late' }, dueDate: new Date(Date.now() - 6 * 60 * 60 * 1000) }),
+      task({ id: { primaryKey: 'ten-days' }, dueDate: new Date(Date.now() - 10 * DAY) }),
+      task({ id: { primaryKey: 'future' }, dueDate: new Date(Date.now() + 10 * DAY) }),
+      task({ id: { primaryKey: 'no-due' } }),
+      task({
+        id: { primaryKey: 'dropped-old' },
+        dueDate: new Date(Date.now() - 400 * DAY),
+        taskStatus: FAKE_TASK_STATUS.Dropped,
+      }),
+    ]);
+
+    expect(out.patterns.workloadDistribution.timeBuckets).toEqual({
+      '0-1 days': 1,
+      '1-3 days': 0,
+      '3-7 days': 0,
+      '1-2 weeks': 1,
+      '2-4 weeks': 0,
+      '1-3 months': 0,
+      '3+ months': 0,
+    });
   });
 
   it('a dropped inbox task is not counted in the inbox', () => {
