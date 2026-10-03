@@ -25,7 +25,7 @@
  *   keywordMatched) and a top-10 detail list carrying a keywordMatched marker
  */
 
-import { ROUND1_HELPER } from '../shared/helpers.js';
+import { ROUND1_HELPER, TERMINAL_STATUS_HELPER } from '../shared/helpers.js';
 
 export const WORKFLOW_ANALYSIS_V3 = `
   (() => {
@@ -49,6 +49,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
       const analysisScript = \`
         (() => {
           ${ROUND1_HELPER}
+          ${TERMINAL_STATUS_HELPER}
           const nowTime = \${nowTime};
           const includeRawData = \${includeRawData};
 
@@ -208,6 +209,12 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
               totalTasks++;
 
+              // OMN-339: dropped tasks (and tasks in dropped projects) keep
+              // completed === false, so the overdue and inbox gates use the
+              // shared terminal-status definition that
+              // productivity_stats and overdue_analysis already use. The raw
+              // completed flag still drives the per-project completed count.
+              const terminal = isTerminalStatus(task.taskStatus);
               const flagged = task.flagged || false;
               const blocked = task.taskStatus === Task.Status.Blocked;
               const isNext = !blocked && task.taskStatus === Task.Status.Available;
@@ -223,10 +230,15 @@ export const WORKFLOW_ANALYSIS_V3 = `
               const modificationDate = task.modified;
 
               // Calculate overdue days
+              // A task is overdue as soon as its due time passes (as in OmniFocus
+              // and overdue_analysis); overdueDays is whole days past, for averages
+              // and buckets only, so it is 0 for a task 1-23 hours late.
               let overdueDays = 0;
-              if (dueDate && !completed) {
+              let isOverdue = false;
+              if (dueDate && !terminal) {
                 const dueDateMs = dueDate.getTime();
                 if (dueDateMs < nowTime) {
+                  isOverdue = true;
                   overdueDays = Math.floor((nowTime - dueDateMs) / (1000 * 60 * 60 * 24));
                 }
               }
@@ -240,13 +252,13 @@ export const WORKFLOW_ANALYSIS_V3 = `
               const inInbox = task.inInbox;
 
               // Update counters - focus on workflow health
-              if (overdueDays > 0) {
+              if (isOverdue) {
                 overdueTasks++;
                 totalOverdueDays += overdueDays;
               }
               if (flagged) flaggedTasks++;
               if (blocked) blockedTasks++;
-              if (!completed && !blocked && isNext) availableTasks++;
+              if (!blocked && isNext) availableTasks++;
 
               // Get project info
               const project = task.containingProject;
@@ -276,18 +288,22 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 });
               }
 
-              if (inInbox && !completed) totalInboxTasks++;
+              if (inInbox && !terminal) totalInboxTasks++;
 
               totalEstimatedTime += estimatedMinutes;
 
-              // Time bucket analysis
-              if (overdueDays <= 1) timeBuckets['0-1 days']++;
-              else if (overdueDays <= 3) timeBuckets['1-3 days']++;
-              else if (overdueDays <= 7) timeBuckets['3-7 days']++;
-              else if (overdueDays <= 14) timeBuckets['1-2 weeks']++;
-              else if (overdueDays <= 28) timeBuckets['2-4 weeks']++;
-              else if (overdueDays <= 90) timeBuckets['1-3 months']++;
-              else timeBuckets['3+ months']++;
+              // Time bucket analysis: how late each OVERDUE task is. Gated on
+              // isOverdue so future-due, undated and terminal tasks (all
+              // overdueDays 0) stay out of '0-1 days'.
+              if (isOverdue) {
+                if (overdueDays <= 1) timeBuckets['0-1 days']++;
+                else if (overdueDays <= 3) timeBuckets['1-3 days']++;
+                else if (overdueDays <= 7) timeBuckets['3-7 days']++;
+                else if (overdueDays <= 14) timeBuckets['1-2 weeks']++;
+                else if (overdueDays <= 28) timeBuckets['2-4 weeks']++;
+                else if (overdueDays <= 90) timeBuckets['1-3 months']++;
+                else timeBuckets['3+ months']++;
+              }
 
               // Project analysis - focus on momentum and workflow health
               if (!inInbox) {
@@ -312,10 +328,10 @@ export const WORKFLOW_ANALYSIS_V3 = `
 
                 projectStats[projectName].total++;
                 if (completed) projectStats[projectName].completed++;
-                if (overdueDays > 0) projectStats[projectName].overdue++;
+                if (isOverdue) projectStats[projectName].overdue++;
                 if (flagged) projectStats[projectName].flagged++;
                 if (blocked) projectStats[projectName].blocked++;
-                if (!completed && !blocked && isNext) projectStats[projectName].available++;
+                if (!blocked && isNext) projectStats[projectName].available++;
 
                 // Track deferrals by type
                 if (deferDate && deferDate.getTime() > nowTime) {
@@ -359,7 +375,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 }
                 workloadByTag[tag].total++;
                 if (completed) workloadByTag[tag].completed++;
-                if (overdueDays > 0) workloadByTag[tag].overdue++;
+                if (isOverdue) workloadByTag[tag].overdue++;
                 workloadByTag[tag].estimatedTime += estimatedMinutes;
               });
 

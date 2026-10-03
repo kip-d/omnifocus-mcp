@@ -13,47 +13,14 @@
 // omniFocusAvailable branch) only ever shipped the fallback path.
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
-import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
+import {
+  runAnalyticsScript,
+  FAKE_TASK_STATUS,
+  fakeWorkflowTask as task,
+  type FakeWorkflowTask,
+} from './run-analytics-script.js';
 
-interface FakeTask {
-  completed: boolean;
-  flagged: boolean;
-  taskStatus: unknown;
-  dueDate: Date | null;
-  deferDate: Date | null;
-  added: Date | null;
-  modified: Date | null;
-  estimatedMinutes: number;
-  inInbox: boolean;
-  /** Non-null marks a project ROOT task (the live OmniJS marker). */
-  project: object | null;
-  containingProject: { name: string } | null;
-  tags: Array<{ name: string }>;
-  name: string;
-  id: { primaryKey: string };
-}
-
-function task(overrides: Partial<FakeTask>): FakeTask {
-  return {
-    completed: false,
-    flagged: false,
-    taskStatus: FAKE_TASK_STATUS.Available,
-    dueDate: null,
-    deferDate: null,
-    added: null,
-    modified: null,
-    estimatedMinutes: 0,
-    inInbox: false,
-    project: null,
-    containingProject: { name: 'P' },
-    tags: [],
-    name: 'Fixture task',
-    id: { primaryKey: 't1' },
-    ...overrides,
-  };
-}
-
-function runScript(tasks: FakeTask[]): {
+function runScript(tasks: FakeWorkflowTask[]): {
   ok: boolean;
   data: {
     totalTasks: number;

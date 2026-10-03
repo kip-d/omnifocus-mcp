@@ -7,46 +7,15 @@
 import { describe, it, expect } from 'vitest';
 import { WORKFLOW_ANALYSIS_V3 } from '../../../../../src/omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { WORKFLOW_ANALYSIS_V3_SCHEMA } from '../../../../../src/omnifocus/response-schemas/analyze.js';
-import { runAnalyticsScript, FAKE_TASK_STATUS } from './run-analytics-script.js';
+import { runAnalyticsScript, fakeWorkflowTask, type FakeWorkflowTask } from './run-analytics-script.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
-interface FakeTask {
-  completed: boolean;
-  flagged: boolean;
-  taskStatus: unknown;
-  dueDate: Date | null;
-  deferDate: Date | null;
-  added: Date | null;
-  modified: Date | null;
-  estimatedMinutes: number;
-  inInbox: boolean;
-  containingProject: { name: string } | null;
-  tags: Array<{ name: string }>;
-  name: string;
-  id: { primaryKey: string };
+function makeLeafTask(overrides: Partial<FakeWorkflowTask>): FakeWorkflowTask {
+  return fakeWorkflowTask({ containingProject: { name: 'Aged Project' }, ...overrides });
 }
 
-function makeLeafTask(overrides: Partial<FakeTask>): FakeTask {
-  return {
-    completed: false,
-    flagged: false,
-    taskStatus: FAKE_TASK_STATUS.Available,
-    dueDate: null,
-    deferDate: null,
-    added: null,
-    modified: null,
-    estimatedMinutes: 0,
-    inInbox: false,
-    containingProject: { name: 'Aged Project' },
-    tags: [],
-    name: 'Fixture task',
-    id: { primaryKey: 't1' },
-    ...overrides,
-  };
-}
-
-function runScript(tasks: FakeTask[]): {
+function runScript(tasks: FakeWorkflowTask[]): {
   ok: boolean;
   data: { patterns: { workloadDistribution: { byProject: Record<string, { avgAge: number }> } } };
 } {

@@ -2394,7 +2394,9 @@ TIME-WINDOW SCOPING:
       // component named machinery this ticket deletes. Version-bumped to v4 so
       // entries written before the demote can never serve the old shape after
       // deploy; the stale v3 entries simply age out by TTL.
-      const cacheKey = 'workflow_analysis_v4';
+      // OMN-339: v5. Overdue/inbox/available now exclude terminal-status
+      // (dropped) tasks, so a v4 entry would serve the inflated pre-fix counts.
+      const cacheKey = 'workflow_analysis_v5';
 
       const cached = this.cache.get<{
         patterns?: Record<string, unknown>;

@@ -855,6 +855,14 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.metadata.from_cache).toBe(true);
     });
 
+    // OMN-339 changed what counts as overdue/inbox/available, so entries cached
+    // under the pre-fix key must not be served after deploy.
+    it('reads the cache under the v5 key (OMN-339)', async () => {
+      mockCache.get.mockReturnValue({ patterns: {}, metadata: { totalTasks: 0 } });
+      await tool.execute({ analysis: { type: 'workflow_analysis' } });
+      expect(mockCache.get).toHaveBeenCalledWith('analytics', 'workflow_analysis_v5');
+    });
+
     it('handles script error with structured error', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
@@ -994,8 +1002,9 @@ describe('OmniFocusAnalyzeTool', () => {
     it('inbox count should only include incomplete tasks', async () => {
       const fs = await import('fs');
       const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
-      // Completed inbox tasks (2-minute rule) should not inflate inboxPercentage
-      expect(source).toMatch(/if \(inInbox && !completed\) totalInboxTasks/);
+      // Completed inbox tasks (2-minute rule) should not inflate inboxPercentage.
+      // OMN-339: gated on the terminal-status helper (Completed OR Dropped).
+      expect(source).toMatch(/if \(inInbox && !terminal\) totalInboxTasks/);
       expect(source).not.toMatch(/if \(inInbox\) totalInboxTasks/);
     });
 
