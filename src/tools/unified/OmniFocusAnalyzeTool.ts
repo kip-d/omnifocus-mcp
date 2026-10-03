@@ -1871,11 +1871,11 @@ TIME-WINDOW SCOPING:
     for (const project of projects) {
       if (project.status !== 'onHold') continue;
 
-      // Both terminal states excluded: a dropped task has completed===false,
-      // so its stale defer/due date would otherwise fire here. The scan skips
-      // dropped rows when include_completed is false (OMN-338); this filter
-      // stays as the guard for an include_completed:true scan.
-      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => t.status !== 'dropped');
+      // Both terminal states excluded here, whatever the scan admitted: a
+      // terminal task's stale defer/due date must never signal reactivation.
+      // Dropped tasks keep completed===false, so both checks are needed. The
+      // scan already skips both when include_completed is false (OMN-338).
+      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
         const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
