@@ -1488,8 +1488,19 @@ TIME-WINDOW SCOPING:
       for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
         const task = allTasks[i];
         try {
+          // OMN-338: skip project ROOT rows (non-null .project), as the
+          // uncapped pass below does. Otherwise every detector sees each
+          // project as a task: deadline_health overdue, clarify_candidates
+          // names, +1 on every WIP count. Bare check inside this row's
+          // try/catch keeps the loop's fail-closed semantics (a throwing read
+          // drops the row, as before). Do NOT swap in the fail-open shared
+          // IS_PROJECT_ROOT_ROW_SNIPPET here (OMN-290 splice-site lesson).
+          if (task.project) continue;
           const completed = task.completed;
           if (!includeCompleted && completed) continue;
+          // Dropped tasks keep completed===false, so the completed filter
+          // alone let them through to every detector.
+          if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;
 
           const taskData = {
             id: task.id.primaryKey,
@@ -1860,11 +1871,11 @@ TIME-WINDOW SCOPING:
     for (const project of projects) {
       if (project.status !== 'onHold') continue;
 
-      // Both terminal states excluded: a dropped task has completed===false
-      // (fetchSlimmedData's include_completed:false only filters completed),
-      // so without the status check a dropped task's stale defer/due date
-      // would still fire here.
-      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => t.status !== 'dropped');
+      // Both terminal states excluded here, whatever the scan admitted: a
+      // terminal task's stale defer/due date must never signal reactivation.
+      // Dropped tasks keep completed===false, so both checks are needed. The
+      // scan already skips both when include_completed is false (OMN-338).
+      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
         const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
