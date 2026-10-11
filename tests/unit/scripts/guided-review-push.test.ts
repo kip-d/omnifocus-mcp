@@ -175,6 +175,22 @@ describe('buildInboxItem', () => {
     expect(lines.at(-1)).toBe('Start: ask Claude for a quick guided review');
   });
 
+  // Review finding on #290 (OMN-351): the note's date was the UTC day, so an evening
+  // run west of UTC stamped tomorrow's date.
+  it('dates the note with the local calendar day, not the UTC day', () => {
+    const savedTZ = process.env.TZ;
+    process.env.TZ = 'America/Detroit';
+    try {
+      const q = buildQueue(patterns, slice, 'quick');
+      // 01:00Z on the 26th is 21:00 on the 25th in Detroit (EDT, UTC-4).
+      const item = buildInboxItem(q, 'quick', new Date('2026-09-26T01:00:00Z'));
+      expect(item.note.split('\n')[0]).toBe('quick review — 2026-09-25');
+    } finally {
+      if (savedTZ === undefined) delete process.env.TZ;
+      else process.env.TZ = savedTZ;
+    }
+  });
+
   it('uses the singular for one decision', () => {
     const q = buildQueue(
       { ...patterns, missing_next_actions: { items: [] }, waiting_for: { items: { candidates: [] } } },

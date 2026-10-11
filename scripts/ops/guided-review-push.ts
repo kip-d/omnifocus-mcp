@@ -18,6 +18,7 @@
 import { StringDecoder } from 'node:string_decoder';
 import { StdioJsonRpcTransport } from '../../tests/integration/helpers/stdio-jsonrpc-transport.js';
 import { isRunDirectly } from '../lib/run-directly.js';
+import { formatLocalDay } from '../../src/utils/timezone.js';
 // verify-deploy.ts guards main() with isRunDirectly, so importing this is side-effect-free.
 import { INIT_TIMEOUT_MS } from '../verify-deploy.js';
 
@@ -209,7 +210,7 @@ export function buildInboxItem(queue: Queue, mode: PushMode, now: Date): { name:
   const anyFloor = Object.values(queue.floors).some(Boolean);
   const isSingular = n === 1 && !anyFloor;
   const name = `${ITEM_PREFIX}${n}${anyFloor ? '+' : ''} decision${isSingular ? '' : 's'} waiting`;
-  const date = now.toISOString().slice(0, 10);
+  const date = formatLocalDay(now); // local calendar day (OMN-351), not the UTC day
   const counts = Object.entries(queue.perQueue)
     .map(([q, c]) => `${q}: ${c}${queue.floors[q] ? '+' : ''}`)
     .join(' · ');

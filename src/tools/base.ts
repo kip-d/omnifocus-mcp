@@ -25,6 +25,7 @@ import {
   createScriptError,
 } from '../omnifocus/script-result-types.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
+import { formatLocalDay } from '../utils/timezone.js';
 import { classifyErrorWithContext } from '../utils/error-recovery.js';
 import { parseWithNormalization } from './normalization/normalize-input.js';
 
@@ -309,7 +310,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
       };
 
       // Append to daily log file
-      const today = new Date().toISOString().split('T')[0];
+      // OMN-351: local day, so a local-evening entry lands in today's file.
+      const today = formatLocalDay(new Date());
       const logFile = join(logsDir, `failures-${today}.jsonl`);
 
       // Append as JSON Lines format for easy parsing
@@ -351,7 +353,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         applied,
         inputArgs: redactArgs(args),
       };
-      const today = new Date().toISOString().split('T')[0];
+      // OMN-351: local day, so a local-evening entry lands in today's file.
+      const today = formatLocalDay(new Date());
       const logFile = join(logsDir, `normalizations-${today}.jsonl`);
       writeFileSync(logFile, JSON.stringify(logEntry) + '\n', { flag: 'a' });
     } catch (logError) {

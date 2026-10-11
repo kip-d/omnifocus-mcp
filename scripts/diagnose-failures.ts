@@ -12,6 +12,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { isRunDirectly } from './lib/run-directly.js';
 import { parseFailureLog } from '../src/diagnostics/failure-log.js';
+import { formatLocalDay, localDayKey } from '../src/utils/timezone.js';
 import { clusterFailures, isIgnored } from '../src/diagnostics/clustering.js';
 import {
   canonicalizeInputSchema,
@@ -183,8 +184,12 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
       tool: cluster.tool,
       classification,
       suggestedFix,
-      firstSeen: cluster.firstSeen.slice(0, 10), // ISO date portion
-      lastSeen: cluster.lastSeen.slice(0, 10),
+      // Local calendar day, matching the file cutoff below (OMN-351); slicing the
+      // UTC ISO string showed tomorrow's date on evening runs west of UTC.
+      // localDayKey: a bare local "YYYY-MM-DD" passes through as-is (re-parsing it
+      // would read UTC midnight), and an unparseable value keeps its raw text.
+      firstSeen: localDayKey(cluster.firstSeen),
+      lastSeen: localDayKey(cluster.lastSeen),
       count: cluster.count,
     };
     triageRows.push(row);
@@ -215,7 +220,7 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
         classification: 'CAP_GUARD_TRIPPED',
         suggestedFix: 'open issue count >= cap threshold; no issues auto-filed this run',
         firstSeen: '—',
-        lastSeen: now.toISOString().slice(0, 10),
+        lastSeen: formatLocalDay(now),
         count: 0,
       });
     }
@@ -250,7 +255,7 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
         classification: 'FILE_FAILED',
         suggestedFix: `${filerResult.failed.length} cluster(s) failed to file to Linear (createIssue rejected) — file manually; e.g. ${filerResult.failed[0].fingerprint}: ${filerResult.failed[0].error}`,
         firstSeen: '—',
-        lastSeen: now.toISOString().slice(0, 10),
+        lastSeen: formatLocalDay(now),
         count: filerResult.failed.length,
       });
     }
@@ -292,7 +297,8 @@ async function main(): Promise<void> {
   let records: FailureRecord[] = [];
   let files: string[] = [];
   try {
-    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    // OMN-351: files are named by LOCAL day (src/tools/base.ts), so the cutoff is too.
+    const cutoff = formatLocalDay(new Date(Date.now() - days * 86_400_000));
     files = readdirSync(logDir).filter((f) => {
       const m = /failures-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f);
       return m && m[1] >= cutoff;
