@@ -176,7 +176,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       placeholders, read `recurringCount` via `z.infer<typeof RecurringPatternsSchema>`, and bump the
       `recurring_patterns_` cache key (Technique: Remove Dead Code). Verified: read against
       `src/omnifocus/response-schemas/read.ts:548-576`; the verifier reported HOLDS.
-- [ ] 16. [OMN-342] `parse_meeting_notes` (text mode) silently drops `* ` bullets. `isNonActionable` matches `/^\*+\s/`
+- [x] 16. [OMN-342] `parse_meeting_notes` (text mode) silently drops `* ` bullets. `isNonActionable` matches `/^\*+\s/`
       before `isListItem`, which treats `*` as a bullet, so "\* Call Sarah" lands in neither `tasks` nor `unparsed`.
       That breaks the OMN-123 contract that nothing silently vanishes
       (`src/tools/unified/OmniFocusAnalyzeTool.ts:3243,3367-3376`, `isNonActionable`; `:3303`, `isListItem`). Fix:
@@ -278,7 +278,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       `tag.remainingTasks.length` (Technique: Substitute Algorithm). Needs verification: the verifier reported
       UNCERTAIN, so this was demoted from P1. Unverified at runtime: settled by a live `/verify` of `productivity_stats`
       checking that `stats.tagStats` is non-empty.
-- [ ] 26. [OMN-351] Analyze date keys use UTC calendar dates, so local-evening results shift by one day.
+- [x] 26. [OMN-351] Analyze date keys use UTC calendar dates, so local-evening results shift by one day.
       - The `task_velocity` default window is `toISOString().split('T')[0]`, which the script parses as local midnight.
         In US evenings the window slides one day forward, and it is part of the cache key.
       - Due-date bunching keys are cut from `toISOString()`, so a 17:00 PDT due date buckets onto the next day.
@@ -398,7 +398,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       thrown failures, and half the entries have no inputs (`src/tools/base.ts:245,248,615`). Fix: skip the second log
       on this path (Technique: Remove Duplicate). Verified: read; the verifier reported HOLDS.
       `tests/unit/tools/base-failure-routing.test.ts:187-202` counts metrics, not log writes.
-- [ ] 41. [OMN-342] `parse_meeting_notes` date suggestions compute wrong absolute dates:
+- [x] 41. [OMN-342] `parse_meeting_notes` date suggestions compute wrong absolute dates:
       - `getEndOfMonth` runs `setMonth(+1)` before `setDate(0)`, so on the 29th–31st, when the next month is shorter,
         "end of month" and "next month" overflow (Jan 31 gives Feb 28 and Mar 31).
       - Month-name and slash dates always use the current year, even when that date has passed.
