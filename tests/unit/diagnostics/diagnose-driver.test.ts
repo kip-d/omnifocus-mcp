@@ -520,3 +520,41 @@ it('an unparseable cluster timestamp keeps its raw text, never "NaN-NaN-NaN" (OM
       .slice(5, 7),
   ).toEqual(['not-a-date', 'not-a-date']);
 });
+
+// Third review round on #290: a bare "YYYY-MM-DD" timestamp is already a local day.
+// new Date("2026-05-16") parses as UTC midnight, which is the 15th west of UTC, so the
+// row must not re-parse it (localDayKey short-circuits local date strings).
+it('a bare YYYY-MM-DD cluster timestamp is kept as that day, not shifted by UTC parsing (OMN-351)', async () => {
+  const savedTZ = process.env.TZ;
+  process.env.TZ = 'America/Detroit';
+  try {
+    const sink = vi.fn();
+    const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn351-bare-')), 'ledger.json');
+    const base = {
+      tool: 'omnifocus_sd',
+      errorType: 'VALIDATION_ERROR' as const,
+      errorMessage: 'Required field mode is missing',
+      inputArgs: {},
+      schemaDescription: 'test',
+    };
+    await runDiagnosis({
+      records: ['2026-05-16', '2026-05-17', '2026-05-18'].map((timestamp) => ({ ...base, timestamp })),
+      registry: [SCHEMA_DRIFT_ENTRY],
+      ledgerPath,
+      now: new Date('2026-05-18T12:00:00Z'),
+      thresholds: { minOccurrences: 3, minSpanDays: 2 },
+      writeTriageDoc: sink,
+    });
+    const md = sink.mock.calls[0][0] as string;
+    const row = md.split('\n').find((l) => l.includes('| SCHEMA_DRIFT |'));
+    expect(
+      row
+        ?.split('|')
+        .map((c) => c.trim())
+        .slice(5, 7),
+    ).toEqual(['2026-05-16', '2026-05-18']);
+  } finally {
+    if (savedTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTZ;
+  }
+});

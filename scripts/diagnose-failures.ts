@@ -12,7 +12,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { isRunDirectly } from './lib/run-directly.js';
 import { parseFailureLog } from '../src/diagnostics/failure-log.js';
-import { formatLocalDay } from '../src/utils/timezone.js';
+import { formatLocalDay, localDayKey } from '../src/utils/timezone.js';
 import { clusterFailures, isIgnored } from '../src/diagnostics/clustering.js';
 import {
   canonicalizeInputSchema,
@@ -124,16 +124,6 @@ function suggestedFixFromFindings(findings: DriftFinding[]): string {
 // Pure orchestration core (injected deps, no direct fs/network)
 // ---------------------------------------------------------------------------
 
-/**
- * A failure-log timestamp as a local calendar day (OMN-351). An unparseable
- * timestamp keeps its raw text (the pre-OMN-351 slice) so the triage row shows
- * the bad data as-is instead of a fabricated "NaN-NaN-NaN" date.
- */
-function localDayOrRaw(timestamp: string): string {
-  const d = new Date(timestamp);
-  return Number.isNaN(d.getTime()) ? timestamp.slice(0, 10) : formatLocalDay(d);
-}
-
 export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
   const { records, registry, ledgerPath, now, thresholds, writeTriageDoc, agentRunner, linearFiler, createIssues } =
     opts;
@@ -196,8 +186,10 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
       suggestedFix,
       // Local calendar day, matching the file cutoff below (OMN-351); slicing the
       // UTC ISO string showed tomorrow's date on evening runs west of UTC.
-      firstSeen: localDayOrRaw(cluster.firstSeen),
-      lastSeen: localDayOrRaw(cluster.lastSeen),
+      // localDayKey: a bare local "YYYY-MM-DD" passes through as-is (re-parsing it
+      // would read UTC midnight), and an unparseable value keeps its raw text.
+      firstSeen: localDayKey(cluster.firstSeen),
+      lastSeen: localDayKey(cluster.lastSeen),
       count: cluster.count,
     };
     triageRows.push(row);
