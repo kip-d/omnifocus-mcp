@@ -153,6 +153,14 @@ describe('MutationCompiler', () => {
       }
     });
 
+    // OMN-362: the `as UpdateChanges` cast is gone. With neither `changes` nor
+    // `data` (possible only for unparsed input), compile fails loudly instead of
+    // producing an update with undefined changes.
+    it('unparsed update with neither changes nor data throws, never compiles an empty update', () => {
+      const input = { mutation: { operation: 'update' as const, target: 'task' as const, id: 'task-4' } };
+      expect(() => compiler.compile(input as unknown as WriteInput)).toThrow(/changes/);
+    });
+
     it('compiler defends a missing target (unparsed input) → taskId, not projectId', () => {
       // NOT annotated WriteInput: WriteInput is the post-parse type where the
       // schema default already filled target='task'. This deliberately
