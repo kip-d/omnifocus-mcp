@@ -124,6 +124,16 @@ function suggestedFixFromFindings(findings: DriftFinding[]): string {
 // Pure orchestration core (injected deps, no direct fs/network)
 // ---------------------------------------------------------------------------
 
+/**
+ * A failure-log timestamp as a local calendar day (OMN-351). An unparseable
+ * timestamp keeps its raw text (the pre-OMN-351 slice) so the triage row shows
+ * the bad data as-is instead of a fabricated "NaN-NaN-NaN" date.
+ */
+function localDayOrRaw(timestamp: string): string {
+  const d = new Date(timestamp);
+  return Number.isNaN(d.getTime()) ? timestamp.slice(0, 10) : formatLocalDay(d);
+}
+
 export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
   const { records, registry, ledgerPath, now, thresholds, writeTriageDoc, agentRunner, linearFiler, createIssues } =
     opts;
@@ -186,8 +196,8 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
       suggestedFix,
       // Local calendar day, matching the file cutoff below (OMN-351); slicing the
       // UTC ISO string showed tomorrow's date on evening runs west of UTC.
-      firstSeen: formatLocalDay(new Date(cluster.firstSeen)),
-      lastSeen: formatLocalDay(new Date(cluster.lastSeen)),
+      firstSeen: localDayOrRaw(cluster.firstSeen),
+      lastSeen: localDayOrRaw(cluster.lastSeen),
       count: cluster.count,
     };
     triageRows.push(row);

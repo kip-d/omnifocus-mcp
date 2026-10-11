@@ -488,3 +488,35 @@ it('triage rows stamp firstSeen/lastSeen with the local day, including sentinel 
     else process.env.TZ = savedTZ;
   }
 });
+
+// Review finding on #290: formatLocalDay(new Date(garbage)) prints "NaN-NaN-NaN". A cluster
+// with unparseable timestamps still escalates on count (clustering falls back to the count
+// rule), so its row must keep the old raw-slice output instead of a fabricated non-date.
+it('an unparseable cluster timestamp keeps its raw text, never "NaN-NaN-NaN" (OMN-351)', async () => {
+  const sink = vi.fn();
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn351-nan-')), 'ledger.json');
+  const base = {
+    tool: 'omnifocus_sd',
+    errorType: 'VALIDATION_ERROR' as const,
+    errorMessage: 'Required field mode is missing',
+    inputArgs: {},
+    schemaDescription: 'test',
+  };
+  await runDiagnosis({
+    records: [1, 2, 3].map(() => ({ ...base, timestamp: 'not-a-date' })),
+    registry: [SCHEMA_DRIFT_ENTRY],
+    ledgerPath,
+    now: new Date('2026-05-18T12:00:00Z'),
+    thresholds: { minOccurrences: 3, minSpanDays: 2 },
+    writeTriageDoc: sink,
+  });
+  const md = sink.mock.calls[0][0] as string;
+  expect(md).not.toContain('NaN');
+  const row = md.split('\n').find((l) => l.includes('| SCHEMA_DRIFT |'));
+  expect(
+    row
+      ?.split('|')
+      .map((c) => c.trim())
+      .slice(5, 7),
+  ).toEqual(['not-a-date', 'not-a-date']);
+});
