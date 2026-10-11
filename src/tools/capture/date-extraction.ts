@@ -49,7 +49,7 @@ function findDueDate(text: string): string | undefined {
     // ends the capture unless a 4-digit year follows ("due March 3, 2024"), and a
     // period ends it unless it is a month abbreviation's own dot ("Mar. 15").
     const pattern = new RegExp(
-      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
+      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
       'i',
     );
     const match = pattern.exec(textLower);
@@ -89,7 +89,7 @@ function findDeferDate(text: string): string | undefined {
     // ends the capture unless a 4-digit year follows ("due March 3, 2024"), and a
     // period ends it unless it is a month abbreviation's own dot ("Mar. 15").
     const pattern = new RegExp(
-      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
+      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
       'i',
     );
     const match = pattern.exec(textLower);
@@ -302,7 +302,9 @@ function parseSpecificDate(dateStr: string, now: Date, allowSlash: boolean): Dat
       const match = fullMatch || abbrMatch;
       if (match) {
         const day = parseInt(match[1]);
-        return match[2] ? new Date(parseInt(match[2]), i, day) : nextOccurrence(now, i, day);
+        // Only a plausible year counts as one; "March 3, 1099 forms" is a form number.
+        const year = match[2] ? parseInt(match[2]) : NaN;
+        return year >= 1900 && year <= 2199 ? new Date(year, i, day) : nextOccurrence(now, i, day);
       }
     }
   }

@@ -3389,6 +3389,9 @@ TIME-WINDOW SCOPING:
       // Markdown headings are covered by /^#+\s/.
       /^#+\s/,
       /^-+\s*$/,
+      // Markdown horizontal rules ("* * *", "***", "___", "- - -"): three or more of
+      // one marker, optionally spaced. A "* " bullet has text after it, so it never matches.
+      /^([-*_])(?:\s*\1){2,}\s*$/,
     ];
     return nonActionablePatterns.some((pattern) => pattern.test(line));
   }

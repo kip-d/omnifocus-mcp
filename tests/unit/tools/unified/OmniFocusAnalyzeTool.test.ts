@@ -1247,6 +1247,23 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.extracted.unparsed).toHaveLength(0);
     });
 
+    // Third review round on #288: dropping the old /^\*+\s/ guard also dropped the
+    // only filter for asterisk horizontal rules, so "* * *" landed in unparsed[].
+    it('OMN-342: markdown horizontal rules are skipped, while "* " bullets still parse', async () => {
+      const res: any = await tool.execute({
+        analysis: {
+          type: 'parse_meeting_notes',
+          params: { text: '* Call Sarah about budget\n* * *\n***\n___\n- - -\n- Send the agenda' },
+        },
+      });
+
+      expect(res.success).toBe(true);
+      const joined = res.data.extracted.tasks.map((t: any) => t.name).join('\n');
+      expect(joined).toContain('Call Sarah about budget');
+      expect(joined).toContain('Send the agenda');
+      expect(res.data.extracted.unparsed).toHaveLength(0);
+    });
+
     it('OMN-123: preserves mid-sentence objects/proper nouns eaten by the old greedy strip', async () => {
       const res: any = await tool.execute({
         analysis: { type: 'parse_meeting_notes', params: { text: OMN_123_SAMPLE } },

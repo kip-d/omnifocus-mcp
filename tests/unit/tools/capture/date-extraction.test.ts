@@ -71,6 +71,17 @@ describe('extractDates — explicit dates roll to next year when already past (O
     expect(extractDates('Start after Dec. 1').deferDate).toBe('2026-12-01');
   });
 
+  // Third review round on #288.
+  it('a 4-digit number that is not a plausible year is not taken as the year', () => {
+    pinClock(2026, 10, 11);
+    expect(extractDates('Pay contractor by March 3, 1099 forms attached').dueDate).toBe('2027-03-03');
+  });
+
+  it('"May." is treated like the other abbreviations', () => {
+    pinClock(2026, 10, 11);
+    expect(extractDates('Hold off, wait until May. 5').deferDate).toBe('2027-05-05');
+  });
+
   it('a sentence-ending period still ends the capture', () => {
     pinClock(2026, 10, 11);
     expect(extractDates('Call the vendor by Friday. Then file the report.').dueDate).toBe('2026-10-16');
