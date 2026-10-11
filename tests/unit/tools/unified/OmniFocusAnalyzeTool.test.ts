@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import vm from 'node:vm';
 import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
@@ -2329,6 +2330,71 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
+  // OMN-338: the capped task loop fed project ROOT rows and DROPPED tasks to
+  // every detector (deadline_health listed projects as overdue tasks,
+  // clarify_candidates listed project names, WIP counts got +1 per project).
+  describe('pattern_analysis slim scan skips project roots and dropped tasks (OMN-338)', () => {
+    // Only the emitted OmniJS program matters here, so an empty DB suffices.
+    function mockDb() {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+    }
+
+    async function slimProgram(): Promise<string> {
+      mockDb();
+      await tool.execute({ analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } } });
+      const script = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
+      const m = script.match(/evaluateJavascript\(("(?:[^"\\]|\\.)*")\)/);
+      expect(m, 'OmniJS program not found in the bridge wrapper').not.toBeNull();
+      return JSON.parse(m![1]) as string;
+    }
+
+    it('emits both skips inside the task loop, before the row is built', async () => {
+      const program = await slimProgram();
+      const loopStart = program.indexOf('for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++)');
+      const rowBuilt = program.indexOf('const taskData = {');
+      expect(loopStart).toBeGreaterThan(-1);
+      const loopHead = program.slice(loopStart, rowBuilt);
+      expect(loopHead).toContain('if (task.project) continue;');
+      expect(loopHead).toContain('if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;');
+    });
+
+    it('executed against a stub DB, ships only the live non-root task', async () => {
+      const program = await slimProgram();
+      const S = {
+        Blocked: { s: 'Blocked' },
+        Available: { s: 'Available' },
+        Next: { s: 'Next' },
+        DueSoon: { s: 'DueSoon' },
+        Overdue: { s: 'Overdue' },
+        Completed: { s: 'Completed' },
+        Dropped: { s: 'Dropped' },
+      };
+      const proj = { id: { primaryKey: 'p1' }, name: 'Proj' };
+      const mk = (id: string, taskStatus: object, extra: Record<string, unknown> = {}) => ({
+        id: { primaryKey: id },
+        name: id,
+        completed: false,
+        flagged: false,
+        taskStatus,
+        tags: [],
+        containingProject: proj,
+        project: null,
+        note: '',
+        children: [],
+        ...extra,
+      });
+      const sandbox = {
+        Task: { Status: S },
+        Project: { Status: { Active: {}, OnHold: {}, Done: {}, Dropped: {} } },
+        flattenedTasks: [mk('root', S.Available, { project: proj }), mk('dropped', S.Dropped), mk('live', S.Available)],
+        flattenedProjects: [],
+        flattenedTags: [],
+      };
+      const out = JSON.parse(vm.runInNewContext(program, sandbox) as string);
+      expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['live']);
+    });
+  });
+
   describe('pattern_analysis onhold_reactivation (OMN-315)', () => {
     // The detector reads Date.now(); pin the clock so the relative fixtures below stay relative
     // (OMN-325: without this, the fixtures rot as the calendar passes them).
@@ -2387,6 +2453,48 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(finding.count).toBe(1);
       expect(finding.items.map((i: any) => i.id)).toEqual(['poh1']);
       expect(finding.items[0].reason).toContain('defer date passed');
+    });
+
+    // /code-review on #286: the detector's own filter dropped only 'dropped'
+    // tasks, so a COMPLETED task's stale defer date still fired whenever the
+    // scan let completed rows through (include_completed:true). Both terminal
+    // states are excluded here, independent of the scan.
+    it('ignores a completed task whose defer date has passed', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't-done',
+              name: 'Already handled',
+              project: 'On hold B',
+              projectId: 'poh2',
+              deferDate: pastDefer,
+              completed: true,
+              flagged: false,
+              status: 'completed',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [
+            {
+              id: 'poh2',
+              name: 'On hold B',
+              status: 'on hold status',
+              taskCount: 1,
+              availableTaskCount: 0,
+              folder: null,
+            },
+          ],
+          tags: [],
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
+      });
+      expect(res.success).toBe(true);
+      expect(res.data.onhold_reactivation.count).toBe(0);
     });
 
     it('reports an on-hold project with a task due within the window, but not one due far out', async () => {
