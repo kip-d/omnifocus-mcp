@@ -45,8 +45,9 @@ function findDueDate(text: string): string | undefined {
 
   for (const phrase of duePhrases) {
     // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
-    // context. Slash dates are only accepted from these phrase captures.
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,|;)`, 'i');
+    // context. Slash dates are only accepted from these phrase captures. A comma
+    // ends the capture unless a 4-digit year follows ("due March 3, 2024").
+    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,(?!\\s*\\d{4}\\b)|;)`, 'i');
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
@@ -80,8 +81,9 @@ function findDeferDate(text: string): string | undefined {
 
   for (const phrase of deferPhrases) {
     // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
-    // context. Slash dates are only accepted from these phrase captures.
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,|;)`, 'i');
+    // context. Slash dates are only accepted from these phrase captures. A comma
+    // ends the capture unless a 4-digit year follows ("due March 3, 2024").
+    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,(?!\\s*\\d{4}\\b)|;)`, 'i');
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
@@ -262,7 +264,8 @@ function parseSpecificDate(dateStr: string, now: Date, allowSlash: boolean): Dat
       : nextOccurrence(now, parseInt(month) - 1, parseInt(day));
   }
 
-  // Month name format: "October 15", "Oct 15"
+  // Month name format: "October 15", "Oct 15", optionally followed by an
+  // explicit year ("March 3, 2024" / "Mar. 3 2024"), which is honored as written.
   const monthNames = [
     'january',
     'february',
@@ -280,8 +283,9 @@ function parseSpecificDate(dateStr: string, now: Date, allowSlash: boolean): Dat
   const monthAbbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
   for (let i = 0; i < monthNames.length; i++) {
-    const fullPattern = new RegExp(`\\b${monthNames[i]}\\s+(\\d{1,2})\\b`, 'i');
-    const abbrPattern = new RegExp(`\\b${monthAbbr[i]}\\.?\\s+(\\d{1,2})\\b`, 'i');
+    const yearSuffix = '(?:,?\\s+(\\d{4})\\b)?';
+    const fullPattern = new RegExp(`\\b${monthNames[i]}\\s+(\\d{1,2})\\b${yearSuffix}`, 'i');
+    const abbrPattern = new RegExp(`\\b${monthAbbr[i]}\\.?\\s+(\\d{1,2})\\b${yearSuffix}`, 'i');
 
     const fullMatch = fullPattern.exec(dateStr);
     const abbrMatch = abbrPattern.exec(dateStr);
@@ -289,7 +293,8 @@ function parseSpecificDate(dateStr: string, now: Date, allowSlash: boolean): Dat
     if (fullMatch || abbrMatch) {
       const match = fullMatch || abbrMatch;
       if (match) {
-        return nextOccurrence(now, i, parseInt(match[1]));
+        const day = parseInt(match[1]);
+        return match[2] ? new Date(parseInt(match[2]), i, day) : nextOccurrence(now, i, day);
       }
     }
   }

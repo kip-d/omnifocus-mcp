@@ -53,6 +53,14 @@ describe('extractDates — explicit dates roll to next year when already past (O
     pinClock(2026, 9, 29);
     expect(extractDates('Archive files by 3/1/2026').dueDate).toBe('2026-03-01');
   });
+
+  // Review finding on #288: the month-name pattern stopped at the day, so the
+  // explicit year was dropped and the roll-forward pushed "March 3, 2024" to 2027.
+  it('an explicit year after a month name is honored, not rolled', () => {
+    pinClock(2026, 10, 11);
+    expect(extractDates('Survey was due March 3, 2024').dueDate).toBe('2024-03-03');
+    expect(extractDates('Renew by Mar. 3 2027').dueDate).toBe('2027-03-03');
+  });
 });
 
 describe('extractDates — slash dates need a date context (OMN-342)', () => {
