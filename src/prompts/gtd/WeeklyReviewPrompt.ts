@@ -1,5 +1,5 @@
 import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
-import { BasePrompt, PromptArgument } from '../base.js';
+import { BasePrompt, PromptArgument, parsePromptBool, parsePromptInt } from '../base.js';
 
 export class WeeklyReviewPrompt extends BasePrompt {
   name = 'gtd_weekly_review';
@@ -24,9 +24,10 @@ export class WeeklyReviewPrompt extends BasePrompt {
   ];
 
   generateMessages(args: Record<string, unknown>): PromptMessage[] {
-    const reviewDays = (args.review_days as number) || 7;
-    const staleProjectDays = (args.stale_project_days as number) || 30;
-    const includeSomedayMaybe = args.include_someday_maybe !== false;
+    const reviewDays = parsePromptInt(args.review_days, 7, 'review_days', this.name);
+    const staleProjectDays = parsePromptInt(args.stale_project_days, 30, 'stale_project_days', this.name);
+    // OMN-357: the flag arrives as a "true"/"false" string over MCP.
+    const includeSomedayMaybe = parsePromptBool(args.include_someday_maybe, true, 'include_someday_maybe', this.name);
 
     return [
       {
