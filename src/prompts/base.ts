@@ -38,6 +38,21 @@ export function parsePromptBool(raw: unknown, fallback: boolean, argName: string
   throw new PromptArgumentError(`${promptName}: ${argName} must be "true" or "false" (got ${shown})`);
 }
 
+/**
+ * OMN-357: the numeric twin of parsePromptBool. MCP delivers "10", not 10, so
+ * `(args.batch_size as number) || 5` stored a string in a number-typed value
+ * and pasted non-numbers straight into the prompt text. Accepts positive whole
+ * numbers, as a number or a decimal-digit string. Absent or empty means
+ * `fallback`. Anything else is a PromptArgumentError (InvalidParams).
+ */
+export function parsePromptInt(raw: unknown, fallback: number, argName: string, promptName: string): number {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  const value = typeof raw === 'string' && /^\s*\d+\s*$/.test(raw) ? Number(raw) : raw;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1) return value;
+  const shown = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  throw new PromptArgumentError(`${promptName}: ${argName} must be a positive whole number (got ${shown})`);
+}
+
 export abstract class BasePrompt {
   abstract name: string;
   abstract description: string;

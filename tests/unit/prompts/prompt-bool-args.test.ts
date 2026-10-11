@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PromptArgumentError, parsePromptBool } from '../../../src/prompts/base.js';
+import { PromptArgumentError, parsePromptBool, parsePromptInt } from '../../../src/prompts/base.js';
 import type { BasePrompt } from '../../../src/prompts/base.js';
 import { InboxProcessingPrompt } from '../../../src/prompts/gtd/InboxProcessingPrompt.js';
 import { EisenhowerMatrixPrompt } from '../../../src/prompts/gtd/eisenhower-matrix.js';
@@ -70,5 +70,54 @@ describe('string flags reach the prompts (OMN-357)', () => {
     const on = textOf(p, {});
     const off = textOf(p, { include_someday_maybe: 'false' });
     expect(off.length).toBeLessThan(on.length);
+  });
+});
+
+// The same stringification hits the numeric arguments: `(args.batch_size as number) || 5` stored the
+// string "10" in a variable typed number, and a non-numeric value like "abc" went into the prompt text.
+describe('parsePromptInt (OMN-357)', () => {
+  it.each([
+    ['10', 5, 10],
+    [' 14 ', 7, 14],
+    [3, 5, 3],
+    [undefined, 5, 5],
+    ['', 7, 7],
+    [null, 30, 30],
+  ] as const)('%j (default %j) -> %j', (raw, fallback, expected) => {
+    expect(parsePromptInt(raw, fallback, 'n', 'p')).toBe(expected);
+  });
+
+  it.each(['abc', '0', '-3', '2.5', '1e2', 0, -1, 2.5, true])(
+    '%j is a PromptArgumentError (positive whole numbers only)',
+    (raw) => {
+      expect(() => parsePromptInt(raw, 5, 'batch_size', 'inbox_processing')).toThrow(PromptArgumentError);
+    },
+  );
+
+  it('the error names the prompt and the argument', () => {
+    expect(() => parsePromptInt('abc', 5, 'batch_size', 'inbox_processing')).toThrow(
+      /inbox_processing: batch_size must be a positive whole number \(got abc\)/,
+    );
+  });
+});
+
+describe('string numbers reach the prompts (OMN-357)', () => {
+  it('inbox_processing: batch_size "10" sets the batch limit', () => {
+    expect(textOf(new InboxProcessingPrompt(), { batch_size: '10' })).toContain('the first 10 items');
+    expect(textOf(new InboxProcessingPrompt(), { batch_size: '10', quick_mode: 'true' })).toContain('limit 10');
+  });
+
+  it('inbox_processing: a non-numeric batch_size is rejected, not pasted into the prompt', () => {
+    expect(() => textOf(new InboxProcessingPrompt(), { batch_size: 'abc' })).toThrow(PromptArgumentError);
+  });
+
+  it('weekly_review: review_days and stale_project_days strings reach the text', () => {
+    const text = textOf(new WeeklyReviewPrompt(), { review_days: '14', stale_project_days: '60' });
+    expect(text).toContain('in the last 14 days');
+    expect(text).toContain('in over 60 days');
+  });
+
+  it('weekly_review: a non-numeric review_days is rejected', () => {
+    expect(() => textOf(new WeeklyReviewPrompt(), { review_days: 'two weeks' })).toThrow(PromptArgumentError);
   });
 });
