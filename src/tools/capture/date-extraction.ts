@@ -46,8 +46,12 @@ function findDueDate(text: string): string | undefined {
   for (const phrase of duePhrases) {
     // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
     // context. Slash dates are only accepted from these phrase captures. A comma
-    // ends the capture unless a 4-digit year follows ("due March 3, 2024").
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,(?!\\s*\\d{4}\\b)|;)`, 'i');
+    // ends the capture unless a 4-digit year follows ("due March 3, 2024"), and a
+    // period ends it unless it is a month abbreviation's own dot ("Mar. 15").
+    const pattern = new RegExp(
+      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
+      'i',
+    );
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
@@ -82,8 +86,12 @@ function findDeferDate(text: string): string | undefined {
   for (const phrase of deferPhrases) {
     // OMN-342: `/` is admitted so "by 10/15" reaches the parser WITH its date
     // context. Slash dates are only accepted from these phrase captures. A comma
-    // ends the capture unless a 4-digit year follows ("due March 3, 2024").
-    const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,/]+?)(?:\\.|$|,(?!\\s*\\d{4}\\b)|;)`, 'i');
+    // ends the capture unless a 4-digit year follows ("due March 3, 2024"), and a
+    // period ends it unless it is a month abbreviation's own dot ("Mar. 15").
+    const pattern = new RegExp(
+      `\\b${phrase}\\s+([\\w\\s,/.]+?)(?:(?<!\\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec))\\.|$|,(?!\\s*\\d{4}\\b)|;)`,
+      'i',
+    );
     const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();

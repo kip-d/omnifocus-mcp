@@ -61,6 +61,20 @@ describe('extractDates — explicit dates roll to next year when already past (O
     expect(extractDates('Survey was due March 3, 2024').dueDate).toBe('2024-03-03');
     expect(extractDates('Renew by Mar. 3 2027').dueDate).toBe('2027-03-03');
   });
+
+  // Second review round on #288: the phrase capture ended at ANY period, so an
+  // abbreviated month's own dot cut "wait until Mar. 15" to "mar". The due path hid
+  // this behind its whole-text fallback; the defer path has no fallback and dropped it.
+  it('an abbreviated month with a period survives the defer-phrase capture', () => {
+    pinClock(2026, 10, 11);
+    expect(extractDates('Hold the migration, wait until Mar. 15, 2027').deferDate).toBe('2027-03-15');
+    expect(extractDates('Start after Dec. 1').deferDate).toBe('2026-12-01');
+  });
+
+  it('a sentence-ending period still ends the capture', () => {
+    pinClock(2026, 10, 11);
+    expect(extractDates('Call the vendor by Friday. Then file the report.').dueDate).toBe('2026-10-16');
+  });
 });
 
 describe('extractDates — slash dates need a date context (OMN-342)', () => {
