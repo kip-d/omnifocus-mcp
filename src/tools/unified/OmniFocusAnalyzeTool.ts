@@ -3406,9 +3406,14 @@ TIME-WINDOW SCOPING:
       /^(meeting|agenda|action items?|discussion|attendees?|standalone task):/i,
       /^(date|time|location):/i,
       /^meeting\s+notes:/i,
+      // OMN-342: no /^\*+\s/ here. It ran before isListItem and swallowed
+      // "* " bullets, so they reached neither tasks[] nor unparsed[].
+      // Markdown headings are covered by /^#+\s/.
       /^#+\s/,
-      /^\*+\s/,
       /^-+\s*$/,
+      // Markdown horizontal rules ("* * *", "***", "___", "- - -"): three or more of
+      // one marker, optionally spaced. A "* " bullet has text after it, so it never matches.
+      /^([-*_])(?:\s*\1){2,}\s*$/,
     ];
     return nonActionablePatterns.some((pattern) => pattern.test(line));
   }
