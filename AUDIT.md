@@ -137,7 +137,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       `detectKnownErrorShape` and mark those tests failed, and `return` the embedded script's value (Technique:
       Substitute Algorithm). Verified: a tsx/node eval of the wrapper gives `result undefined`, top-level keys
       `['diagnostics']`; the verifier reported HOLDS. `tests/unit/tools/system-v2.test.ts:145-160` mocks around it.
-- [ ] 12. [OMN-338] The `pattern_analysis` scan (`fetchSlimmedData`) passes project root rows and dropped tasks to every
+- [x] 12. [OMN-338] The `pattern_analysis` scan (`fetchSlimmedData`) passes project root rows and dropped tasks to every
       task detector. Its task loop skips only `completed`, although the uncapped pass in the same function skips roots.
       The detectors inherit it:
       - `analyzeDeadlines` counts overdue projects and dropped tasks.
