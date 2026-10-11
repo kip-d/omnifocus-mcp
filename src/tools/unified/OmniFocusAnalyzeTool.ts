@@ -155,6 +155,15 @@ interface SlimTask {
   children: number;
 }
 
+// Neither terminal state: not completed and not dropped. OmniFocus reports a
+// dropped task with completed===false, so the status check is required too.
+// One predicate shared by every detector that needs live tasks, so a change to
+// terminal-state semantics cannot be applied to one detector and missed in
+// another (OMN-338 / OMN-315 bug class).
+function isLiveTask(t: Pick<SlimTask, 'completed' | 'status'>): boolean {
+  return !t.completed && t.status !== 'dropped';
+}
+
 // Canonical project-status vocabulary, mirroring safeGetStatus in
 // scripts/shared/helpers.ts: JXA renders status as 'active status',
 // 'on hold status', etc.; every ProjectData consumer gets THIS normalized
@@ -1875,7 +1884,7 @@ TIME-WINDOW SCOPING:
       // terminal task's stale defer/due date must never signal reactivation.
       // Dropped tasks keep completed===false, so both checks are needed. The
       // scan already skips both when include_completed is false (OMN-338).
-      const projTasks = (tasksByProject.get(project.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
+      const projTasks = (tasksByProject.get(project.id) ?? []).filter(isLiveTask);
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
         const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
@@ -1925,7 +1934,7 @@ TIME-WINDOW SCOPING:
       // Both terminal states excluded: a dropped task has completed===false,
       // so without the status check a dropped task could be picked as the
       // sequential project's "head" blocking task.
-      const incomplete = (tasksByProject.get(p.id) ?? []).filter((t) => !t.completed && t.status !== 'dropped');
+      const incomplete = (tasksByProject.get(p.id) ?? []).filter(isLiveTask);
       if (incomplete.length === 0) continue;
 
       const head = incomplete[0];
