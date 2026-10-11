@@ -28,7 +28,7 @@
     "test:quick": "vitest tests/unit --run",
     "test:llm-simulation": "ENABLE_LLM_SIMULATION_TESTS=true vitest tests/integration/llm-assistant-simulation.test.ts --run",
     "test:real-llm": "ENABLE_REAL_LLM_TESTS=true vitest tests/integration/real-llm-integration.test.ts --run",
-    "test:performance": "vitest tests/performance --run",
+    "test:performance": "vitest tests/performance --run --passWithNoTests",
     "test:mutation": "stryker run",
     "test:mutation:tags": "stryker run --mutate 'src/contracts/ast/tag*.ts'",
     "test:coverage": "vitest tests/unit --coverage --run",

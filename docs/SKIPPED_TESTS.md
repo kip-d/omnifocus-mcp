@@ -4,19 +4,15 @@ This document tracks all skipped tests in the codebase with reasons and resoluti
 
 ## Active Skips
 
-### 1. Performance Benchmarks Suite
+None.
 
-- **File**: `tests/performance/performance-benchmarks.test.ts`
-- **Type**: `describe.skip` (entire suite)
-- **Skipped Since**: v3.0.0 release
-- **Reason**: Tests need updating for v3.0.0 unified API
-- **Required Changes**:
-  - Change `'tasks'` tool calls to `'omnifocus_read'` with `query.type: 'tasks'`
-  - Change `'projects'` tool calls to `'omnifocus_read'` with `query.type: 'projects'`
-  - Change `cleanupTestData()` to `cleanup()`
-  - Review performance thresholds (may need adjustment for unified API overhead)
-- **Priority**: Low (performance tests are supplementary)
-- **Owner**: Unassigned
+Environment-gated skips are by design and are not tracked here. Examples: integration suites use
+`RUN_INTEGRATION_TESTS ? describe : describe.skip`, and `test.skipIf(!isOmniFocusRunning())` skips when OmniFocus isn't
+available.
+
+The Performance Benchmarks suite (`describe.skip` since v3.0.0) was retired in OMN-369 (2026-09-29) instead of being
+migrated. Performance signal now comes from `tests/integration/PERFORMANCE.md` with its suite-timing baseline,
+`npm run benchmark`, and `tests/performance/workflow-analysis-benchmark.ts`.
 
 ---
 
@@ -32,6 +28,6 @@ When resolving a skipped test:
 
 ## Metrics
 
-- **Total Skipped Suites**: 1
+- **Total Skipped Suites**: 0
 - **Total Skipped Individual Tests**: 0
-- **Last Audit**: 2025-12-25
+- **Last Audit**: 2026-09-29
