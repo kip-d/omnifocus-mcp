@@ -428,3 +428,63 @@ it('FIELD_MISSING-only cluster falls back to NEEDS_LLM when no agent is configur
   const driftRow = md.split('\n').find((l) => l.includes('omnifocus_fm') && l.includes('SCHEMA_DRIFT'));
   expect(driftRow, `omnifocus_fm must NOT be classified SCHEMA_DRIFT (FIELD_MISSING carve-out)\n${md}`).toBeUndefined();
 });
+
+// Review finding on #290 (OMN-351): the triage doc's day columns were cut from UTC ISO
+// strings (`.slice(0, 10)`) while the same function's file cutoff moved to the local day.
+// Evening west of UTC, every row showed tomorrow's date. Pin a UTC-behind zone and an
+// evening `now`, then require every day column to be the LOCAL day.
+it('triage rows stamp firstSeen/lastSeen with the local day, including sentinel rows (OMN-351)', async () => {
+  const savedTZ = process.env.TZ;
+  process.env.TZ = 'America/Detroit';
+  try {
+    const sink = vi.fn();
+    const ledgerPath = join(mkdtempSync(join(tmpdir(), 'omn351-day-')), 'ledger.json');
+    const base = {
+      tool: 'omnifocus_sd',
+      errorType: 'VALIDATION_ERROR' as const,
+      errorMessage: 'Required field mode is missing',
+      inputArgs: {},
+      schemaDescription: 'test',
+    };
+    // 02:00Z is 22:00 the previous evening in Detroit (EDT, UTC-4).
+    const records = [
+      { ...base, timestamp: '2026-05-16T02:00:00.000Z' },
+      { ...base, timestamp: '2026-05-17T02:00:00.000Z' },
+      { ...base, timestamp: '2026-05-19T02:00:00.000Z' },
+    ];
+    const filer = vi.fn().mockResolvedValue({
+      created: [],
+      failed: [{ fingerprint: 'x', error: 'boom' }],
+      capGuardTripped: true,
+    });
+
+    await runDiagnosis({
+      records,
+      registry: [SCHEMA_DRIFT_ENTRY],
+      ledgerPath,
+      now: new Date('2026-05-19T03:00:00Z'), // 23:00 on 2026-05-18 local
+      thresholds: { minOccurrences: 3, minSpanDays: 2 },
+      writeTriageDoc: sink,
+      linearFiler: filer,
+      createIssues: true,
+    });
+
+    const md = sink.mock.calls[0][0] as string;
+    const rows = md
+      .slice(0, md.indexOf('## Legend'))
+      .split('\n')
+      .filter((l) => /^\| (CAP_GUARD|FILE_FAILED|[0-9a-f]{6,}) /.test(l) || l.includes('SCHEMA_DRIFT |'));
+    const cells = (cls: string) => {
+      const line = rows.find((l) => l.includes(`| ${cls} |`));
+      expect(line, `no ${cls} row in:\n${md}`).toBeDefined();
+      return line!.split('|').map((c) => c.trim());
+    };
+    // | fingerprint | tool | classification | fix | firstSeen | lastSeen | count |
+    expect(cells('SCHEMA_DRIFT').slice(5, 7)).toEqual(['2026-05-15', '2026-05-18']);
+    expect(cells('CAP_GUARD_TRIPPED')[6]).toBe('2026-05-18');
+    expect(cells('FILE_FAILED')[6]).toBe('2026-05-18');
+  } finally {
+    if (savedTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTZ;
+  }
+});

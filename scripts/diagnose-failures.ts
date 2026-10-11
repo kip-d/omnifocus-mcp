@@ -184,8 +184,10 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
       tool: cluster.tool,
       classification,
       suggestedFix,
-      firstSeen: cluster.firstSeen.slice(0, 10), // ISO date portion
-      lastSeen: cluster.lastSeen.slice(0, 10),
+      // Local calendar day, matching the file cutoff below (OMN-351); slicing the
+      // UTC ISO string showed tomorrow's date on evening runs west of UTC.
+      firstSeen: formatLocalDay(new Date(cluster.firstSeen)),
+      lastSeen: formatLocalDay(new Date(cluster.lastSeen)),
       count: cluster.count,
     };
     triageRows.push(row);
@@ -216,7 +218,7 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
         classification: 'CAP_GUARD_TRIPPED',
         suggestedFix: 'open issue count >= cap threshold; no issues auto-filed this run',
         firstSeen: '—',
-        lastSeen: now.toISOString().slice(0, 10),
+        lastSeen: formatLocalDay(now),
         count: 0,
       });
     }
@@ -251,7 +253,7 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
         classification: 'FILE_FAILED',
         suggestedFix: `${filerResult.failed.length} cluster(s) failed to file to Linear (createIssue rejected) — file manually; e.g. ${filerResult.failed[0].fingerprint}: ${filerResult.failed[0].error}`,
         firstSeen: '—',
-        lastSeen: now.toISOString().slice(0, 10),
+        lastSeen: formatLocalDay(now),
         count: filerResult.failed.length,
       });
     }
