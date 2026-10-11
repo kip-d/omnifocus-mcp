@@ -150,7 +150,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         and skip `Task.Status.Dropped` unless `includeCompleted` is set (Technique: Consolidate Duplicate Conditional
         Fragments). Verified: independent read; the verifier reported HOLDS. Unverified at runtime: a text-assertion
         unit test on the emitted program, plus a live check that no `clarify_candidates` id is a project id.
-- [ ] 13. [OMN-339] `workflow_analysis` counts dropped tasks, and tasks in dropped projects, as overdue, because its
+- [x] 13. [OMN-339] `workflow_analysis` counts dropped tasks, and tasks in dropped projects, as overdue, because its
       test is `dueDate && !completed`. That inflates `overdueTasks`, `overduePercentage`, `timeBuckets` and each
       project's `overdueRate`. It bypasses the `TERMINAL_STATUS_HELPER` that `productivity_stats` and `overdue_analysis`
       use, so the two ops disagree on "overdue" for the same database
@@ -480,8 +480,12 @@ both keep the advertised JSON byte-for-byte as it is today.
         `src/tools/unified/utils/task-sanitizer.ts:77-135`). This is internal duplication, not the advertised
         inputSchema. Co-change: 3aef0a43, 8b8d4e64, 43d5c689, 9e99b316, 1790bac0, b63f309b, c90ff684, 1f2199a3. Fix: use
         `z.infer<typeof …Schema>`, and shrink the sanitizer to date conversion only (Technique: Remove Middle Man).
-        Verified: read and git log; the verifier reported HOLDS.
-- [ ] 52. [OMN-363] Two tests in `OmniFocusWriteTool.test.ts` cannot fail:
+        Verified: read and git log; the verifier reported HOLDS. Status 2026-10-11: the `MutationCompiler` half landed
+        with PR #294 (`7b641d73`): the types are derived from the schema and all four casts are gone. The
+        `task-sanitizer.ts` shrink is deliberately deferred, because removing the allowlist would let schema-valid
+        fields it drops today reach the builders, which is the #17 behavior OMN-343 settles. OMN-364 tracks it, so this
+        item stays open.
+- [x] 52. [OMN-363] Two tests in `OmniFocusWriteTool.test.ts` cannot fail:
       - `:334` "returns error when taskId is missing" asserts only `toBeDefined()` inside a `catch`.
       - `:1942` "rejects invalid date format in create" puts its assertion inside a `try` whose `catch` swallows the
         AssertionError. And `tests/unit/utils/response-format-utilities.test.ts:628` "should detect stalled projects"
