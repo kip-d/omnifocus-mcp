@@ -377,7 +377,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       `src/tools/index.ts:182-185`). Fix: `p.then(cleanup, cleanup)` (Technique: Substitute Algorithm). Verified:
       `node -e` gives `caller handled: tool failed` followed by `UNHANDLED: tool failed`; the verifier reported PARTLY
       HOLDS, and the scope is reworded to match.
-- [ ] 38. [OMN-357] MCP `prompts/get` arguments are strings (SDK `types.js:990`, `z.record(z.string(), z.string())`),
+- [x] 38. [OMN-357] MCP `prompts/get` arguments are strings (SDK `types.js:990`, `z.record(z.string(), z.string())`),
       but seven prompt flags compare against boolean literals:
       - `eisenhower-matrix.ts:27-29`
       - `InboxProcessingPrompt.ts:34-36`
