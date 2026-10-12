@@ -128,7 +128,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       `manage_reviews list_for_review` (`src/tools/unified/OmniFocusWriteTool.ts:1267,1310,1344,1448`; reader
       `OmniFocusAnalyzeTool.ts:3636-3638`). Fix: clear `reviews` inside `CacheManager.invalidateProject`, which every
       project write already calls (Technique: Move Function). Verified: read and grep; the verifier reported HOLDS.
-- [ ] 11. [OMN-337] `system` diagnostics reports `health: 'healthy'` for the failures it exists to catch.
+- [x] 11. [OMN-337] `system` diagnostics reports `health: 'healthy'` for the failures it exists to catch.
       `spawnDiagnostic` resolves any parsed JSON, including its own `{error:true,…}` "no document" and catch payloads,
       and SystemTool marks every non-throwing test `success:true`. The wrapper also embeds the script as
       `(() => { ${script} })()`, so an IIFE-expression script such as `buildListTasksScriptV4`'s yields `undefined`, and
@@ -199,7 +199,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         `s2-batchmax.ts`/`s2-sanit.ts` give `sanitizeTaskUpdates({status:'on_hold',folder:'X',reviewInterval:7}) -> {}`;
         the verifier reported MOSTLY HOLDS (`completed`/`dropped` status is forwarded). `task-sanitizer.test.ts:100-106`
         pins the silent date drop.
-- [ ] 18. [OMN-344] `tag_manage merge` with `targetTag === tagName` removes the tag from every task, deletes it, and
+- [x] 18. [OMN-344] `tag_manage merge` with `targetTag === tagName` removes the tag from every task, deletes it, and
       reports "merged". Source and target resolve to the same tag, `mergeRetag` skips the re-add because `_hasTgt` is
       true, and then `deleteObject(_src)` runs. Neither the schema nor `validateTagManageParams` rejects it
       (`src/contracts/ast/mutation/defs.ts:1233-1275`, `buildMergeTagsProgram`;
@@ -207,7 +207,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       descends from the source, at the tool (Technique: Introduce Assertion). Verified: tsx
       `/tmp/audit-31d52e9e/s2-merge.ts` shows both refs resolving via the same `find`; the verifier reported HOLDS.
       Unverified at runtime: the descendant-cascade variant (settled by a tag-paths integration test).
-- [ ] 19. [OMN-345] An explicit `returnMapping: false` breaks same-batch tempId references. `executeBatchCreates`
+- [x] 19. [OMN-345] An explicit `returnMapping: false` breaks same-batch tempId references. `executeBatchCreates`
       attaches `mapping` only when `returnMapping` is set, and the follow-up phases resolve ids only through that
       mapping. So an update with `id:'t1'` sends the raw tempId, gets "not found", and #5 then reports it as success
       (`src/tools/unified/OmniFocusWriteTool.ts:1581,1670,1735-1737,1909-1911`). Fix: always carry
@@ -393,7 +393,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         (`src/tools/system/SystemTool.ts:32-36,131-134,442,474,580`; `src/cache/CacheManager.ts:21`). Fix: make
         `testScript` `z.enum(['list_tasks'])` in both schemas, and render the TTLs from `CacheManager` config
         (Technique: Replace Magic Literal). Verified: read; the verifier reported HOLDS.
-- [ ] 40. [OMN-359] A thrown non-Zod, non-McpError error writes **two** failure-log entries: `handleExecuteError` logs,
+- [x] 40. [OMN-359] A thrown non-Zod, non-McpError error writes **two** failure-log entries: `handleExecuteError` logs,
       then `handleErrorV2` logs again with `inputArgs: {}`. The weekly diagnose-failures job therefore double-counts
       thrown failures, and half the entries have no inputs (`src/tools/base.ts:245,248,615`). Fix: skip the second log
       on this path (Technique: Remove Duplicate). Verified: read; the verifier reported HOLDS.
@@ -407,7 +407,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         Fix: `new Date(y, m+1, 0)`, roll to next year when the date is in the past, and require date context for slash
         dates (Technique: Substitute Algorithm). Verified: tsx with a pinned clock; the verifier reported HOLDS. These
         are arithmetic bugs, distinct from the tracked relative-date resolution item.
-- [ ] 42. [OMN-345] Atomic batch rollback deletes in reverse **input** order, not reverse creation order, despite the
+- [x] 42. [OMN-345] Atomic batch rollback deletes in reverse **input** order, not reverse creation order, despite the
       docstring "children first". With the default `createSequentially:true`, a child listed before its parent gets its
       parent deleted first. The child then returns "not found", and the response falsely reports `rolledBack:'partial'`
       plus an ORPHANED error (`src/tools/unified/OmniFocusWriteTool.ts:1838-1843,2284-2299`;
@@ -421,7 +421,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       user strings today (`src/omnifocus/OmniAutomation.ts:322-337`, `buildScript`). Fix:
       `script.replace(re, () => replacement)` (Technique: Substitute Algorithm). Verified: the `node -e` probe
       reproduces all four cases; the verifier reported HOLDS.
-- [ ] 44. [OMN-359] An osascript killed by the spawn timeout rejects with "Script execution failed with code null",
+- [x] 44. [OMN-359] An osascript killed by the spawn timeout rejects with "Script execution failed with code null",
       because the `close` handler ignores `signal`. It is then classified INTERNAL_ERROR (via `executeJson`) or
       OMNIFOCUS_ERROR (if thrown), never SCRIPT_TIMEOUT. Callers lose the timeout advice, and diagnose-failures'
       `IGNORE_SET` never filters these (`src/omnifocus/OmniAutomation.ts:185-196`;
