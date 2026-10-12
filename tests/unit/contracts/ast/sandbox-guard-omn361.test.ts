@@ -153,6 +153,13 @@ describe('sandbox guard (OMN-361)', () => {
       ).resolves.toBeDefined();
     });
 
+    it('folder: null (move to the library root) throws: root is outside every sandbox folder', async () => {
+      mockStdoutQueue.push(folder(), inSbx());
+      await expect(
+        dispatchMutation('update/project', { projectId: 'sbx-proj', changes: { folder: null } }),
+      ).rejects.toThrow(/TEST GUARD/);
+    });
+
     it('the sandbox folder itself passes without a bridge lookup', async () => {
       mockStdoutQueue.push(folder(), inSbx());
       await expect(

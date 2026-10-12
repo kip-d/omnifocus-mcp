@@ -565,9 +565,17 @@ export async function validateTaskMoveDestination(changes: TaskUpdateData): Prom
  * OMN-361: a project update can move the project to another folder. The
  * destination resolves flexibly (path, id, or leaf name), so it must resolve
  * to the sandbox folder or a folder inside it; not-found fails closed.
+ * `folder: null` moves the project to the library root, outside every
+ * folder, where folder-scoped cleanup never finds it, so it is refused.
+ * (A task's null/'' destination is the inbox, which cleanup does sweep.)
  */
 export async function validateProjectFolderDestination(changes: ProjectUpdateData): Promise<void> {
   if (!isTestMode()) return;
+  if (changes.folder === null) {
+    throw new Error(
+      `TEST GUARD: Cannot move project to the library root (folder: null): it must stay inside "${SANDBOX_FOLDER_NAME}".`,
+    );
+  }
   if (typeof changes.folder !== 'string' || changes.folder === SANDBOX_FOLDER_NAME) return;
 
   const sandboxId = (await getSandboxFolderId()) || '';
