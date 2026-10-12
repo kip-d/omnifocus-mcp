@@ -64,8 +64,9 @@ export interface HttpShutdownDeps {
 /**
  * OMN-347: HTTP-mode signal handler. Differences from the old handler:
  * - one exit only: repeated signals are no-ops once shutdown has started;
- * - sessions close BEFORE the listener stops, because `httpServer.close`
- *   waits for open connections and an open SSE GET stream held it forever;
+ * - the listener stops accepting connections FIRST, but its close is awaited
+ *   only after sessions close, because `httpServer.close` waits for open
+ *   connections and an open SSE GET stream held it forever;
  * - pending operations (tool calls, osascript, cache warm) are drained, bounded;
  * - every step is bounded, so a hung step can't keep the process alive.
  */
@@ -79,13 +80,24 @@ export function createHttpShutdown(deps: HttpShutdownDeps): (signal: string) => 
     started = true;
     logger.info(`Received ${signal}, shutting down gracefully...`);
 
+    // Stop accepting first: httpServer.close refuses new connections at once,
+    // so no session or tool call can start after the drain snapshot. Only its
+    // completion waits for open connections (the SSE hang), so it is awaited
+    // last, after sessions close. The catch is attached now so an early
+    // rejection is never unhandled.
+    logger.info('Stopping HTTP server (no new connections)...');
+    const stopping = deps.httpServerManager.stop().catch((error: unknown) => {
+      logger.error('Stopping HTTP server failed during shutdown (continuing):', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
     const drained = await drainPendingOperations(deps.pendingOperations, drainTimeoutMs);
 
     logger.info('Closing all active sessions...');
     await settleWithin(deps.sessionManager.closeAllSessions(), closeTimeoutMs, 'Closing sessions');
 
-    logger.info('Stopping HTTP server...');
-    await settleWithin(deps.httpServerManager.stop(), closeTimeoutMs, 'Stopping HTTP server');
+    await settleWithin(stopping, closeTimeoutMs, 'Stopping HTTP server');
 
     logger.info('HTTP server shutdown complete');
     deps.exit(drained ? 0 : 1);

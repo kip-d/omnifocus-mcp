@@ -386,8 +386,9 @@ async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig, s
   startupTimer.mark('ready');
   logger.info(startupTimer.summary('http'));
 
-  // OMN-347: bounded, single-commit shutdown: drain pending ops, close
-  // sessions, then stop the listener (see createHttpShutdown).
+  // OMN-347: bounded, single-commit shutdown: stop accepting connections,
+  // drain pending ops, close sessions, then await the listener's close
+  // (see createHttpShutdown).
   const gracefulShutdown = createHttpShutdown({
     sessionManager,
     httpServerManager,

@@ -26,7 +26,12 @@ function deps(overrides: Partial<Parameters<typeof createHttpShutdown>[0]> = {})
 }
 
 describe('createHttpShutdown (OMN-347)', () => {
-  it('awaits pending operations, then closes sessions, then stops the listener, then exits 0', async () => {
+  // /code-review (2026-10-12): stop() ran last, so the listener kept
+  // accepting new sessions and tool calls for the whole drain window, and
+  // that late work was cut off at exit. httpServer.close stops accepting at
+  // once; only its callback waits for open connections (the SSE hang), so
+  // stop() starts first and is awaited last.
+  it('stops accepting first, then drains pending operations, closes sessions, and exits 0', async () => {
     const { d, order } = deps();
     let release!: () => void;
     const op = new Promise<void>((r) => (release = r)).then(() => void order.push('op-settled'));
@@ -34,11 +39,11 @@ describe('createHttpShutdown (OMN-347)', () => {
 
     const done = createHttpShutdown(d)('SIGTERM');
     await new Promise((r) => setTimeout(r, 10));
-    expect(order).toEqual([]); // still draining
+    expect(order).toEqual(['stop']); // listener closed to new connections while still draining
     release();
     await done;
 
-    expect(order).toEqual(['op-settled', 'closeSessions', 'stop', 'exit:0']);
+    expect(order).toEqual(['stop', 'op-settled', 'closeSessions', 'exit:0']);
   });
 
   it('a pending operation that never settles is bounded: exits 1 after the drain timeout', async () => {
@@ -47,7 +52,7 @@ describe('createHttpShutdown (OMN-347)', () => {
 
     await createHttpShutdown(d)('SIGTERM');
 
-    expect(order).toEqual(['closeSessions', 'stop', 'exit:1']);
+    expect(order).toEqual(['stop', 'closeSessions', 'exit:1']);
   });
 
   it('a hung stop() (open SSE stream) cannot block exit', async () => {
@@ -70,6 +75,30 @@ describe('createHttpShutdown (OMN-347)', () => {
     await createHttpShutdown(d)('SIGTERM');
 
     expect(order).toEqual(['stop', 'exit:0']);
+  });
+
+  it('a stop() that rejects before the drain ends is logged, not an unhandled rejection', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const { d, order } = deps({
+        httpServerManager: {
+          stop: vi.fn(() => Promise.reject(new Error('close failed'))),
+        },
+      });
+      let release!: () => void;
+      d.pendingOperations.add(new Promise<void>((r) => (release = r)));
+
+      const done = createHttpShutdown(d)('SIGTERM');
+      await new Promise((r) => setTimeout(r, 10));
+      release();
+      await done;
+
+      expect(order).toEqual(['closeSessions', 'exit:0']);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 
   it('a second signal during shutdown is a no-op (one exit only)', async () => {
