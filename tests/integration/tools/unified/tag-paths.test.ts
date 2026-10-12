@@ -84,6 +84,11 @@ const T_P2 = runScopedTag(`${MARKER}-p2-${TS}`);
 const T_SRC = runScopedTag(`${MARKER}-mergesrc-${TS}`);
 const T_TGT = runScopedTag(`${MARKER}-mergetgt-${TS}`);
 const T_DEL = runScopedTag(`${MARKER}-del-${TS}`);
+// OMN-344 refusal fixtures: a parent with a nested child (merge-into-descendant)
+// and a lone tag (self-merge).
+const T_MANC = runScopedTag(`${MARKER}-mergeanc-${TS}`);
+const T_MDESC = runScopedTag(`${MARKER}-mergedesc-${TS}`);
+const T_MSELF = runScopedTag(`${MARKER}-mergeself-${TS}`);
 
 // Guard-refusal probe: NO __test- prefix (that is the point). Distinctive
 // enough that the afterAll osascript safety-delete can never hit real data.
@@ -471,6 +476,37 @@ describe('OMN-128 slice 6: live tag mutation paths (AST lowerings, persisted rea
       tags.find((t) => t.name === T_TGT),
       `target tag ${T_TGT} missing after merge`,
     ).toBeTruthy();
+  }, 180000);
+
+  // ── 6b. merge refusals (OMN-344) ─────────────────────────────────────────────
+  it('merge into self is refused before any script runs, and the tag survives', async () => {
+    await createTag(T_MSELF);
+
+    const res = await tagManage({ action: 'merge', tagName: T_MSELF, targetTag: T_MSELF });
+    expect(res.success, `expected self-merge refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(res.error?.code).toBe('VALIDATION_ERROR');
+
+    expect(await probeTagByName(T_MSELF), `self-merge deleted ${T_MSELF}`).not.toBeNull();
+  }, 120000);
+
+  it('merge into a descendant is refused by the script guard; both tags and the nesting survive', async () => {
+    await createTag(T_MANC);
+    await createTag(T_MDESC, T_MANC);
+    // Non-vacuity: the target really is nested under the source.
+    const ancBefore = await probeTagByName(T_MANC);
+    const descBefore = await probeTagByName(T_MDESC);
+    expect(ancBefore, `fixture ${T_MANC} missing`).not.toBeNull();
+    expect(descBefore?.parentId, `fixture ${T_MDESC} not nested under ${T_MANC}`).toBe(ancBefore!.id);
+
+    const res = await tagManage({ action: 'merge', tagName: T_MANC, targetTag: T_MDESC });
+    expect(res.success, `expected descendant-merge refusal, got: ${JSON.stringify(res).slice(0, 300)}`).toBe(false);
+    expect(JSON.stringify(res.error ?? res)).toContain('descendant');
+
+    const ancAfter = await probeTagByName(T_MANC);
+    const descAfter = await probeTagByName(T_MDESC);
+    expect(ancAfter?.id, `refused merge deleted source ${T_MANC}`).toBe(ancBefore!.id);
+    expect(descAfter?.id, `refused merge deleted target ${T_MDESC}`).toBe(descBefore!.id);
+    expect(descAfter?.parentId, 'refused merge changed the nesting').toBe(ancBefore!.id);
   }, 180000);
 
   // ── 7. delete ──────────────────────────────────────────────────────────────
