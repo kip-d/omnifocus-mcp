@@ -13,6 +13,7 @@ import {
 } from './script-result-types.js';
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 import { runSerialized } from './osascript-queue.js';
+import { describeAbnormalExit } from './process-exit.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -162,6 +163,7 @@ export class OmniAutomation {
     const { spawn } = await import('node:child_process');
 
     return new Promise<T>((resolve, reject) => {
+      const startedAt = Date.now();
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
         timeout: this.timeout,
       });
@@ -182,15 +184,17 @@ export class OmniAutomation {
         reject(new OmniAutomationError('Failed to execute script', { script: wrappedScript, stderr: error.message }));
       });
 
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null, signal: string | null) => {
         if (code !== 0) {
-          logger.error('Script execution failed with code:', code);
+          // OMN-359: a timeout kill closes with (null, 'SIGTERM'). Name it.
+          const message = describeAbnormalExit(code, signal, Date.now() - startedAt, this.timeout);
+          logger.error(message);
 
           reject(
-            new OmniAutomationError(`Script execution failed with code ${code}`, {
+            new OmniAutomationError(message, {
               script: wrappedScript,
               stderr,
-              code: code || undefined,
+              code: code ?? undefined,
             }),
           );
           return;
