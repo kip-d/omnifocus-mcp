@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import vm from 'node:vm';
 import { OmniAutomation, OmniAutomationError } from './OmniAutomation.js';
 import { runSerialized } from './osascript-queue.js';
 import { createLogger } from '../utils/logger.js';
@@ -38,7 +39,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
   }
 
   private async executeDiagnostic<T = unknown>(script: string): Promise<T> {
-    const wrappedScript = this.wrapScriptWithDiagnostics(script);
+    const wrappedScript = wrapScriptWithDiagnostics(script);
 
     this.log('Wrapped script created', { wrappedLength: wrappedScript.length });
     this.log('First 500 chars of wrapped script', wrappedScript.substring(0, 500));
@@ -142,92 +143,119 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
       proc.stdin.end();
     });
   }
+}
 
-  private wrapScriptWithDiagnostics(script: string): string {
-    return `(() => {
-      const diagnostics = [];
+/**
+ * OMN-337: callers pass two script shapes. Body scripts use a top-level
+ * `return` (and the wrapper's `app`/`doc`); IIFE-expression scripts such as
+ * buildListTasksScriptV4's output have no `return`, so embedding them as a
+ * function body evaluated to undefined. An expression compiles when wrapped in
+ * parentheses; a body with a top-level `return` does not. Compile-only — the
+ * script is never run here.
+ */
+export function isExpressionScript(script: string): boolean {
+  try {
+    new vm.Script(`(${stripTrailingSemicolons(script)}\n)`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function stripTrailingSemicolons(script: string): string {
+  let out = script.trim();
+  while (out.endsWith(';')) out = out.slice(0, -1).trimEnd();
+  return out;
+}
+
+function embedScript(script: string): string {
+  return isExpressionScript(script) ? `return (${stripTrailingSemicolons(script)}\n);` : script;
+}
+
+export function wrapScriptWithDiagnostics(script: string): string {
+  return `(() => {
+    const diagnostics = [];
+    
+    function logDiagnostic(step, data) {
+      diagnostics.push({
+        step: step,
+        timestamp: new Date().toISOString(),
+        data: data
+      });
+    }
+    
+    try {
+      logDiagnostic('start', { scriptStarted: true });
       
-      function logDiagnostic(step, data) {
-        diagnostics.push({
-          step: step,
-          timestamp: new Date().toISOString(),
-          data: data
-        });
-      }
+      const app = Application('OmniFocus');
+      logDiagnostic('app_created', { 
+        appType: typeof app,
+        hasName: typeof app.name !== 'undefined'
+      });
       
-      try {
-        logDiagnostic('start', { scriptStarted: true });
-        
-        const app = Application('OmniFocus');
-        logDiagnostic('app_created', { 
-          appType: typeof app,
-          hasName: typeof app.name !== 'undefined'
-        });
-        
-        // Use defaultDocument() as a method call instead of property access
-        const doc = app.defaultDocument();
-        logDiagnostic('doc_retrieved', { 
-          docType: typeof doc,
-          docNull: doc === null,
-          docUndefined: doc === undefined,
-          docTruthy: doc ? true : false
-        });
-        
-        // Check if doc is null or undefined
-        if (!doc) {
-          return JSON.stringify({
-            error: true,
-            message: "No OmniFocus document available. Please ensure OmniFocus is running and has a document open.",
-            details: "app.defaultDocument() returned null or undefined",
-            diagnostics: diagnostics
-          });
-        }
-        
-        logDiagnostic('before_script', { docAvailable: true });
-        
-        // Execute the actual script
-        const scriptResult = (() => {
-          ${script}
-        })();
-        
-        logDiagnostic('after_script', { 
-          resultType: typeof scriptResult,
-          resultLength: scriptResult && scriptResult.length ? scriptResult.length : undefined
-        });
-        
-        // Parse the result if it's a string
-        if (typeof scriptResult === 'string') {
-          try {
-            const parsed = JSON.parse(scriptResult);
-            parsed.diagnostics = diagnostics;
-            return JSON.stringify(parsed);
-          } catch (e) {
-            logDiagnostic('parse_error', { error: e.toString() });
-            return scriptResult;
-          }
-        } else {
-          return JSON.stringify({
-            result: scriptResult,
-            diagnostics: diagnostics
-          });
-        }
-      } catch (error) {
-        logDiagnostic('wrapper_error', { 
-          error: error.toString(),
-          stack: error.stack,
-          message: error.message
-        });
-        
-        const errorMessage = error && error.toString ? error.toString() : 'Unknown error occurred';
-        const errorStack = error && error.stack ? error.stack : 'No stack trace available';
-        
+      // Use defaultDocument() as a method call instead of property access
+      const doc = app.defaultDocument();
+      logDiagnostic('doc_retrieved', { 
+        docType: typeof doc,
+        docNull: doc === null,
+        docUndefined: doc === undefined,
+        docTruthy: doc ? true : false
+      });
+      
+      // Check if doc is null or undefined
+      if (!doc) {
         return JSON.stringify({
           error: true,
-          message: errorMessage,
-          stack: errorStack,
+          message: "No OmniFocus document available. Please ensure OmniFocus is running and has a document open.",
+          details: "app.defaultDocument() returned null or undefined",
           diagnostics: diagnostics
         });
       }
-    })()`;
-  }
+      
+      logDiagnostic('before_script', { docAvailable: true });
+      
+      // Execute the actual script
+      const scriptResult = (() => {
+        ${embedScript(script)}
+      })();
+      
+      logDiagnostic('after_script', { 
+        resultType: typeof scriptResult,
+        resultLength: scriptResult && scriptResult.length ? scriptResult.length : undefined
+      });
+      
+      // Parse the result if it's a string
+      if (typeof scriptResult === 'string') {
+        try {
+          const parsed = JSON.parse(scriptResult);
+          parsed.diagnostics = diagnostics;
+          return JSON.stringify(parsed);
+        } catch (e) {
+          logDiagnostic('parse_error', { error: e.toString() });
+          return scriptResult;
+        }
+      } else {
+        return JSON.stringify({
+          result: scriptResult,
+          diagnostics: diagnostics
+        });
+      }
+    } catch (error) {
+      logDiagnostic('wrapper_error', { 
+        error: error.toString(),
+        stack: error.stack,
+        message: error.message
+      });
+      
+      const errorMessage = error && error.toString ? error.toString() : 'Unknown error occurred';
+      const errorStack = error && error.stack ? error.stack : 'No stack trace available';
+      
+      return JSON.stringify({
+        error: true,
+        message: errorMessage,
+        stack: errorStack,
+        diagnostics: diagnostics
+      });
+    }
+  })()`;
 }
