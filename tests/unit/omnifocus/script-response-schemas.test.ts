@@ -1293,7 +1293,7 @@ describe('FOLDER_LIST_SCHEMA', () => {
 
 // ---------------------------------------------------------------------------
 // SlimmedDataSchema
-// Source: fetchSlimmedData inline JXA script → return JSON.stringify({tasks, projects, tags})
+// Source: buildSlimmedDataScript (scripts/analytics/slimmed-data-scan.ts) → return JSON.stringify({tasks, projects, tags})
 // ---------------------------------------------------------------------------
 
 describe('SlimmedDataSchema', () => {
