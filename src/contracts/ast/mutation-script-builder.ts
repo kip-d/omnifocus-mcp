@@ -795,7 +795,8 @@ export async function buildCreateFolderScript(data: FolderCreateData): Promise<G
  */
 export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateData): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
-  // (validateTaskInSandbox + validateTagChanges) BEFORE building; the emitter
+  // (validateTaskInSandbox + validateTaskMoveDestination + validateTagChanges)
+  // BEFORE building; the emitter
   // produces ONE OmniJS program — resolve-first ordering, set-vs-clear lowering,
   // OMN-137 labeled warnings — wrapped in a data-free JXA launcher. The old
   // template-string body (nested-backtick island, runtime `if (changes.x)` forest,
@@ -819,7 +820,8 @@ export async function buildUpdateProjectScript(
   changes: ProjectUpdateData,
 ): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
-  // (validateProjectInSandbox + validateTagChanges) BEFORE building; the emitter
+  // (validateProjectInSandbox + validateProjectFolderDestination +
+  // validateTagChanges) BEFORE building; the emitter
   // produces ONE OmniJS program — STRICT byIdentifier target resolve (the legacy
   // silent name fallback is dead, spec §2.1), live status read-back, flexible
   // folder-move resolution (OMN-127 #2), OMN-137 labeled warnings — wrapped in a
