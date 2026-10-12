@@ -391,10 +391,14 @@ d('Batch Operations Integration (Unified API)', () => {
           {
             operation: 'create',
             target: 'task',
+            // A not-found parentTaskId is the create-time failure the sandbox
+            // guard lets through (OMN-286): the script itself reports "Parent
+            // task not found". A not-found `project` is rejected by the guard
+            // before anything runs, so the batch would never reach rollback.
             data: {
               tempId: 'rb_fail',
               name: runScopedName(`OMN345_RollbackFail_${timestamp}`),
-              project: runScopedName(`OMN345_NoSuchProject_${timestamp}`),
+              parentTaskId: `omn345NoSuchTask${timestamp}`,
             },
           },
         ],
