@@ -225,7 +225,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         the text, and add `.min(1).max(100)` to `operations` in both schemas (Technique: Rename Method, i.e. make the
         text true). Verified: `TZ=America/Detroit npx tsx s2-tz.ts` gives `local hour = 12`; the `safeParse` probes
         accept 0 and 150 operations; the verifier reported HOLDS.
-- [ ] 21. [OMN-347] In HTTP mode, a POST with an unknown or expired `mcp-session-id` creates a new, uninitialized
+- [x] 21. [OMN-347] In HTTP mode, a POST with an unknown or expired `mcp-session-id` creates a new, uninitialized
       session (a full `Server` with all tools registered) instead of returning 404. The SDK then answers 400 "Server not
       initialized", which clients don't treat as a signal to re-initialize, so they never recover after the 30-min idle
       cleanup. Each such POST leaks another session until timeout. GET and DELETE already return 404
@@ -350,7 +350,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       (`src/utils/response-format.ts:710-753`). Fix: truncate first, then summarize, and emit
       `next_offset = offset + returned_count` (Technique: Slide Statements). Verified: a tsx probe with 200 tasks gives
       `preview [t153,t162,t171] inData [false,false,false]`; the verifier reported HOLDS.
-- [ ] 35. [OMN-347] HTTP shutdown and pending-operation tracking diverge from stdio:
+- [x] 35. [OMN-347] HTTP shutdown and pending-operation tracking diverge from stdio:
       - `new SessionManager()` calls `setPendingOperationsTracker` with its own private set, replacing the tracker from
         `index.ts:60`. From then on, osascript and tool promises go into a set nothing drains.
       - HTTP `gracefulShutdown` awaits no pending operations, and has no `exitCommitted` guard or bounded force-exit.
@@ -447,14 +447,14 @@ both keep the advertised JSON byte-for-byte as it is today.
         `/\.(whose|where)\s*\(/` and widen the gate; key the response rules on file plus return shape, or annotate the
         handlers (Technique: Substitute Algorithm). Verified: ESLint `Linter` probe gives
         `template-literal script: 0 messages`; the verifier reported HOLDS.
-- [ ] 47. [OMN-361] The test-mode sandbox guard spawns `osascript` through `execAsync`, bypassing `runSerialized`
+- [x] 47. [OMN-361] The test-mode sandbox guard spawns `osascript` through `execAsync`, bypassing `runSerialized`
       (convention 17). `Promise.all` fans it out, so a guarded 100-id `bulk_delete` can start 100 concurrent osascripts,
       the OMN-320 contention class. It also interpolates ids raw into script text. It runs only when `NODE_ENV=test` and
       `SANDBOX_GUARD_ENABLED=true` (`src/contracts/ast/mutation-script-builder.ts:50-53,79-91,184,243`;
       `src/contracts/ast/mutation/defs.ts:1692,1741,1766`). Fix: route through `runSerialized` and pass ids through
       `JSON.stringify` (Technique: Substitute Algorithm). Verified: read and grep; the verifier reported HOLDS.
       Unverified at runtime: a guarded bulk-delete integration run watching the process count.
-- [ ] 48. [OMN-361] The sandbox guard doesn't check move destinations. `update/task` validates the target, but not
+- [x] 48. [OMN-361] The sandbox guard doesn't check move destinations. `update/task` validates the target, but not
       `changes.project`/`changes.parentTaskId`, and `update/project` doesn't validate `changes.folder`. An integration
       test can move a sandboxed item into live data, where folder-scoped cleanup won't find it
       (`src/contracts/ast/mutation/defs.ts:1659-1672`). Fix: validate destinations fail-closed (Technique: Introduce
