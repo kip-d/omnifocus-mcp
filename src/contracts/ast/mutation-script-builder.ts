@@ -49,6 +49,8 @@ import { validateMutationProgram } from './mutation/validator.js';
 // Stryker disable all
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { runSerialized } from '../../omnifocus/osascript-queue.js';
+import { collectSnippets } from './mutation/snippets.js';
 
 const execAsync = promisify(exec);
 
@@ -86,8 +88,89 @@ async function executeGuardJXA<T>(script: string): Promise<T> {
     })()
   `;
 
-  const { stdout } = await execAsync(`osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`);
+  // OMN-361: through the process-wide osascript FIFO (OMN-321 convention).
+  // Guards fan out via Promise.all (bulk delete, review ops), so a direct
+  // execAsync could start N concurrent osascripts (the OMN-320 contention class).
+  const { stdout } = await runSerialized(
+    () => execAsync(`osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`),
+    'sandbox guard osascript',
+  );
   return JSON.parse(stdout.trim()) as T;
+}
+
+/**
+ * OMN-361: every guard bridge program is built here in TypeScript with its ids
+ * JSON-quoted, and crosses into OmniJS as ONE JSON string literal. Raw
+ * `'${id}'` interpolation inside two nested template literals let a crafted id
+ * (quote, backtick, or `${`) rewrite the check.
+ */
+function bridgeCall(program: string): string {
+  return `return app.evaluateJavascript(${JSON.stringify(program)});`;
+}
+
+const SANDBOX_ANCESTRY_FN = `function insideSandbox(folder, sandboxId) {
+    var f = folder;
+    while (f) {
+      if (f.id.primaryKey === sandboxId) return true;
+      f = f.parent;
+    }
+    return false;
+  }`;
+
+export function buildProjectSandboxCheckScript(projectId: string, sandboxId: string): string {
+  return bridgeCall(`(() => {
+  const projectId = ${JSON.stringify(projectId)};
+  const sandboxId = ${JSON.stringify(sandboxId)};
+  // O(1) lookup using Project.byIdentifier
+  const project = Project.byIdentifier(projectId);
+  if (!project) return JSON.stringify({ inSandbox: false, error: 'not_found' });
+  // Check if project's folder matches sandbox folder
+  const folder = project.parentFolder;
+  if (folder && folder.id.primaryKey === sandboxId) return JSON.stringify({ inSandbox: true });
+  return JSON.stringify({ inSandbox: false });
+})()`);
+}
+
+export function buildTaskSandboxCheckScript(taskId: string, sandboxId: string): string {
+  return bridgeCall(`(() => {
+  const taskId = ${JSON.stringify(taskId)};
+  const sandboxId = ${JSON.stringify(sandboxId)};
+  const testPrefix = ${JSON.stringify(TEST_INBOX_PREFIX)};
+  // O(1) lookup using Task.byIdentifier
+  const task = Task.byIdentifier(taskId);
+  if (!task) return JSON.stringify({ inSandbox: false, error: 'not_found' });
+  // Check if name starts with __TEST__ prefix
+  if (task.name && task.name.startsWith(testPrefix)) return JSON.stringify({ inSandbox: true });
+  // Check if task's project is in sandbox folder
+  const project = task.containingProject;
+  if (project) {
+    const folder = project.parentFolder;
+    if (folder && folder.id.primaryKey === sandboxId) return JSON.stringify({ inSandbox: true });
+  }
+  return JSON.stringify({ inSandbox: false });
+})()`);
+}
+
+/** Destination project for a task move: resolved EXACTLY as the write resolves it (id or name). */
+export function buildProjectRefSandboxCheckScript(projectRef: string, sandboxId: string): string {
+  return bridgeCall(`(() => {
+  ${collectSnippets(['resolveProjectFlexible'])}
+  ${SANDBOX_ANCESTRY_FN}
+  const project = resolveProjectFlexible(${JSON.stringify(projectRef)});
+  if (!project) return JSON.stringify({ inSandbox: false, error: 'not_found' });
+  return JSON.stringify({ inSandbox: insideSandbox(project.parentFolder, ${JSON.stringify(sandboxId)}) });
+})()`);
+}
+
+/** Destination folder for a project move: resolved EXACTLY as the write resolves it (path, id, or leaf name). */
+export function buildFolderSandboxCheckScript(folderRef: string, sandboxId: string): string {
+  return bridgeCall(`(() => {
+  ${collectSnippets(['resolveFolderFlexible'])}
+  ${SANDBOX_ANCESTRY_FN}
+  const folder = resolveFolderFlexible(${JSON.stringify(folderRef)});
+  if (!folder) return JSON.stringify({ inSandbox: false, error: 'not_found' });
+  return JSON.stringify({ inSandbox: insideSandbox(folder, ${JSON.stringify(sandboxId)}) });
+})()`);
 }
 
 // In-flight dedup: guard routes that pre-flight multiple ids concurrently
@@ -177,31 +260,7 @@ async function isProjectInSandbox(projectId: string): Promise<SandboxCheck> {
   const sandboxId = await getSandboxFolderId();
   if (!sandboxId) return 'outside_sandbox';
 
-  // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
-  const script = `
-    const bridgeScript = \`
-      (() => {
-        const projectId = '${projectId}';
-        const sandboxId = '${sandboxId}';
-
-        // O(1) lookup using Project.byIdentifier
-        const project = Project.byIdentifier(projectId);
-        if (!project) {
-          return JSON.stringify({ inSandbox: false, error: 'not_found' });
-        }
-
-        // Check if project's folder matches sandbox folder
-        const folder = project.parentFolder;
-        if (folder && folder.id.primaryKey === sandboxId) {
-          return JSON.stringify({ inSandbox: true });
-        }
-
-        return JSON.stringify({ inSandbox: false });
-      })()
-    \`;
-
-    return app.evaluateJavascript(bridgeScript);
-  `;
+  const script = buildProjectSandboxCheckScript(projectId, sandboxId);
 
   try {
     const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
@@ -236,40 +295,7 @@ async function isTaskInSandbox(taskId: string): Promise<SandboxCheck> {
 
   const sandboxId = await getSandboxFolderId();
 
-  // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
-  const script = `
-    const bridgeScript = \`
-      (() => {
-        const taskId = '${taskId}';
-        const sandboxId = '${sandboxId || ''}';
-        const testPrefix = '${TEST_INBOX_PREFIX}';
-
-        // O(1) lookup using Task.byIdentifier
-        const task = Task.byIdentifier(taskId);
-        if (!task) {
-          return JSON.stringify({ inSandbox: false, error: 'not_found' });
-        }
-
-        // Check if name starts with __TEST__ prefix
-        if (task.name && task.name.startsWith(testPrefix)) {
-          return JSON.stringify({ inSandbox: true });
-        }
-
-        // Check if task's project is in sandbox folder
-        const project = task.containingProject;
-        if (project) {
-          const folder = project.parentFolder;
-          if (folder && folder.id.primaryKey === sandboxId) {
-            return JSON.stringify({ inSandbox: true });
-          }
-        }
-
-        return JSON.stringify({ inSandbox: false });
-      })()
-    \`;
-
-    return app.evaluateJavascript(bridgeScript);
-  `;
+  const script = buildTaskSandboxCheckScript(taskId, sandboxId || '');
 
   try {
     const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
@@ -491,6 +517,76 @@ export async function validateProjectInSandbox(projectId: string, operation: str
   }
 }
 
+/** Shared tri-state bridge check for the destination validators below. */
+async function checkDestination(script: string): Promise<SandboxCheck> {
+  try {
+    const result = await executeGuardJXA<{ inSandbox: boolean; error?: string }>(script);
+    if (result.inSandbox) return 'in_sandbox';
+    return result.error === 'not_found' ? 'not_found' : 'outside_sandbox';
+  } catch {
+    return 'outside_sandbox'; // bridge failure fails CLOSED
+  }
+}
+
+/**
+ * OMN-361: a task update can MOVE the task. Guard the destination too, or an
+ * integration test can move a sandboxed task into a live project, where
+ * folder-scoped cleanup never finds it.
+ * - changes.project resolves flexibly (id or name), so it must resolve INSIDE
+ *   the sandbox: not-found fails closed, like validateTaskCreate's project case.
+ * - changes.parentTaskId resolves strictly by id, so not-found passes through
+ *   (the script's own "Parent task not found" guard writes nothing), as in
+ *   validateTaskCreate's parent case (OMN-286).
+ * null/'' destinations (move to inbox / un-nest) are not checked here.
+ */
+export async function validateTaskMoveDestination(changes: TaskUpdateData): Promise<void> {
+  if (!isTestMode()) return;
+  const sandboxId = (await getSandboxFolderId()) || '';
+
+  if (typeof changes.project === 'string' && changes.project !== '') {
+    const check = await checkDestination(buildProjectRefSandboxCheckScript(changes.project, sandboxId));
+    if (check !== 'in_sandbox') {
+      throw new Error(
+        `TEST GUARD: Cannot move task to project "${changes.project}": it is not inside "${SANDBOX_FOLDER_NAME}".`,
+      );
+    }
+  }
+
+  if (typeof changes.parentTaskId === 'string' && changes.parentTaskId !== '') {
+    if ((await isTaskInSandbox(changes.parentTaskId)) === 'outside_sandbox') {
+      throw new Error(
+        `TEST GUARD: Cannot move task under parent "${changes.parentTaskId}": the parent is not inside the sandbox.`,
+      );
+    }
+  }
+}
+
+/**
+ * OMN-361: a project update can move the project to another folder. The
+ * destination resolves flexibly (path, id, or leaf name), so it must resolve
+ * to the sandbox folder or a folder inside it; not-found fails closed.
+ * `folder: null` moves the project to the library root, outside every
+ * folder, where folder-scoped cleanup never finds it, so it is refused.
+ * (A task's null/'' destination is the inbox, which cleanup does sweep.)
+ */
+export async function validateProjectFolderDestination(changes: ProjectUpdateData): Promise<void> {
+  if (!isTestMode()) return;
+  if (changes.folder === null) {
+    throw new Error(
+      `TEST GUARD: Cannot move project to the library root (folder: null): it must stay inside "${SANDBOX_FOLDER_NAME}".`,
+    );
+  }
+  if (typeof changes.folder !== 'string' || changes.folder === SANDBOX_FOLDER_NAME) return;
+
+  const sandboxId = (await getSandboxFolderId()) || '';
+  const check = await checkDestination(buildFolderSandboxCheckScript(changes.folder, sandboxId));
+  if (check !== 'in_sandbox') {
+    throw new Error(
+      `TEST GUARD: Cannot move project to folder "${changes.folder}": it is not "${SANDBOX_FOLDER_NAME}" or inside it.`,
+    );
+  }
+}
+
 /**
  * Guard batch CREATE operations against the sandbox (test mode only). OMN-119.
  *
@@ -699,7 +795,8 @@ export async function buildCreateFolderScript(data: FolderCreateData): Promise<G
  */
 export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateData): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
-  // (validateTaskInSandbox + validateTagChanges) BEFORE building; the emitter
+  // (validateTaskInSandbox + validateTaskMoveDestination + validateTagChanges)
+  // BEFORE building; the emitter
   // produces ONE OmniJS program — resolve-first ordering, set-vs-clear lowering,
   // OMN-137 labeled warnings — wrapped in a data-free JXA launcher. The old
   // template-string body (nested-backtick island, runtime `if (changes.x)` forest,
@@ -723,7 +820,8 @@ export async function buildUpdateProjectScript(
   changes: ProjectUpdateData,
 ): Promise<GeneratedMutationScript> {
   // Emit from the mutation AST. dispatchMutation runs the build-time sandbox guard
-  // (validateProjectInSandbox + validateTagChanges) BEFORE building; the emitter
+  // (validateProjectInSandbox + validateProjectFolderDestination +
+  // validateTagChanges) BEFORE building; the emitter
   // produces ONE OmniJS program — STRICT byIdentifier target resolve (the legacy
   // silent name fallback is dead, spec §2.1), live status read-back, flexible
   // folder-move resolution (OMN-127 #2), OMN-137 labeled warnings — wrapped in a
