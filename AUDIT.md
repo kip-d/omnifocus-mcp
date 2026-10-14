@@ -114,14 +114,14 @@ both keep the advertised JSON byte-for-byte as it is today.
        Algorithm). Verified: tsx probe `/tmp/audit-31d52e9e/s3/inbox-sort.ts` gives
        `inbox | in-script sort: false | caps in loop: true`; the verifier reported HOLDS. OMN-305 (sort key vs `fields`)
        is a different bug; its fix would not fix this.
-- [ ] 9. [OMN-336] `bulk_delete` of tasks runs only `cache.clear('tasks')`, a category no reader uses. Single delete
+- [x] 9. [OMN-336] `bulk_delete` of tasks runs only `cache.clear('tasks')`, a category no reader uses. Single delete
      invalidates analytics, projects and tags. After a bulk delete, `productivity_stats`, `overdue_analysis` and
      `workflow_analysis` serve pre-delete numbers for up to 1 h, and `projects includeStats` counts stay stale for up to
      5 min (`src/tools/unified/OmniFocusWriteTool.ts:1071`, `handleBulkDeleteTasks`, vs `:976-982`). Fix: one
      `invalidateAfterTaskDelete()` shared by both paths (Technique: Extract Function). Verified: read;
      `tests/unit/tools/unified/OmniFocusWriteTool.test.ts:601` pins only `clear('tasks')`; two slices found this
      independently, and the verifier reported HOLDS.
-- [ ] 10. [OMN-336] No `omnifocus_write` path invalidates the `reviews` cache (3-min TTL). The only
+- [x] 10. [OMN-336] No `omnifocus_write` path invalidates the `reviews` cache (3-min TTL). The only
       `invalidate('reviews')` calls are in the analyze tool's own review writes
       (`OmniFocusAnalyzeTool.ts:3794,3834,3902`), and `CacheManager.refreshForWorkflow` has no callers. Completing,
       dropping or deleting a project, or changing its `reviewInterval`, through `omnifocus_write` leaves it listed by
@@ -245,7 +245,7 @@ both keep the advertised JSON byte-for-byte as it is today.
 
 ### P2 — inconsistent or costly to change
 
-- [ ] 23. [OMN-336] Remaining write→stale-read cache paths, beyond #9 and #10:
+- [x] 23. [OMN-336] Remaining write→stale-read cache paths, beyond #9 and #10:
       - Single-item project update calls only `invalidateProject`, so a status change to done or dropped leaves
         `analytics` stale for 1 h, and tags created by `tags/addTags` leave `tags` stale for 10 min. The batch route
         does invalidate analytics.
