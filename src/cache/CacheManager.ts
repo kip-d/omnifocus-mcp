@@ -237,6 +237,11 @@ export class CacheManager {
    * Task writes DO clear `reviews`: `list_for_review` rows embed per-project
    * `taskCounts`. (1) `folders` clears on project create/delete (folder rows carry
    * `projectCount`) and on any update with `changes.folder` (a move between folders).
+   *
+   * The task `tags` flag is set only by create/update, the writes that can assign a
+   * tag (and so create one). Complete/delete never set it: cached tag rows are read
+   * in `basic` mode, which carries no task counts, so removing a tagged task can't
+   * stale them.
    */
   public invalidateAfterWrite(event: WriteEvent): void {
     switch (event.entity) {
