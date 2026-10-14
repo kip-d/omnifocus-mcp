@@ -154,16 +154,15 @@ cached data **Impact**: Prevents data corruption issues, ensures cache reliabili
 #### ✅ Smart Cache Invalidation (Granular Keys) (COMPLETED - September 30, 2025)
 
 **Problem**: Cache clears everything on any write operation **Solution**: Granular cache keys that only invalidate
-affected data **Impact**: Better cache hit rates, faster subsequent queries **Status**: ✅ COMPLETED **Implementation**:
+affected data **Impact**: Better cache hit rates, faster subsequent queries **Status**: ✅ COMPLETED, then superseded
 
-- ✅ `invalidateProject(projectId)` - Invalidates only project-specific queries
-- ✅ `invalidateTag(tagName)` - Invalidates only tag-specific queries
-- ✅ `invalidateTaskQueries(patterns)` - Selective pattern-based invalidation (today, overdue, upcoming, inbox, all)
-- ✅ `invalidateForTaskChange(context)` - Smart context-aware invalidation based on operation type
-- ✅ `refreshForWorkflow(workflow)` - GTD workflow-aware cache refresh (inbox_processing, weekly_review, daily_planning)
-- ✅ Actively used in ManageTaskTool, ProjectsToolV2, TagsToolV2, BatchCreateTool, FoldersTool
-- ✅ Comprehensive unit tests (20+ test cases validating all invalidation scenarios) **Files**:
-  `src/cache/CacheManager.ts` (lines 193-344), `tests/unit/cache-manager.test.ts` (lines 454-710)
+- Superseded by OMN-336: the per-entity helpers this section originally described (`invalidateProject`, `invalidateTag`,
+  `invalidateTaskQueries`, `invalidateForTaskChange`, `refreshForWorkflow`) were consolidated into one declarative entry
+  point, `CacheManager.invalidateAfterWrite(event)`, routed through by every write handler (task/project/folder/tag,
+  including batch and review-mutation paths). See the category table in that method's doc comment — it is the single
+  source of truth, not this section.
+- ✅ Comprehensive unit tests validating every event → category mapping. **Files**: `src/cache/CacheManager.ts`,
+  `tests/unit/cache-manager.test.ts`
 
 ### 2. Developer Experience
 

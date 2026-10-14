@@ -190,8 +190,9 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(typeof overdueData.stats.summary.overduePercentage).toBe('number');
       // OMN-184: we seeded a 7-days-overdue task and expectOk above proves the
       // create succeeded. A successful create invalidates the analytics cache
-      // (omnifocus_write create → CacheManager.invalidateForTaskChange, which
-      // unconditionally clears the 'analytics' category), so this
+      // (omnifocus_write create → CacheManager.invalidateAfterWrite, which
+      // unconditionally clears the 'analytics' category for every task write),
+      // so this
       // overdue_analysis is a guaranteed cache miss → live OmniJS query against
       // the world that now contains our seed. The old `>= 0` accepted the empty
       // world a silent seed failure would have produced — the vacuous pass;

@@ -149,10 +149,7 @@ import { OmniFocusWriteTool } from '../../../../src/tools/unified/OmniFocusWrite
 
 class StubCache {
   invalidate(): void {}
-  invalidateProject(): void {}
-  invalidateTag(): void {}
-  invalidateTaskQueries(): void {}
-  invalidateForTaskChange(): void {}
+  invalidateAfterWrite(): void {}
   clear(): void {}
 }
 

@@ -375,9 +375,10 @@ describe('CacheManager', () => {
       vi.useFakeTimers();
 
       // Create a new cache - this should set up the interval
-      new CacheManager();
+      const instance = new CacheManager();
 
       // Verify an interval was set up by advancing time and checking if any timers exist
+      expect(instance).toBeInstanceOf(CacheManager);
       expect(vi.getTimerCount()).toBeGreaterThan(0);
 
       vi.useRealTimers();
@@ -444,261 +445,127 @@ describe('CacheManager', () => {
     });
   });
 
-  describe('smart cache invalidation', () => {
-    describe('invalidateProject', () => {
-      it('should invalidate project-specific task queries', () => {
-        cache.set('tasks', 'project:abc123', 'project tasks');
-        cache.set('tasks', 'projectId:abc123', 'project tasks alt');
-        cache.set('tasks', 'project:xyz789', 'other project tasks');
-        cache.set('projects', 'list', 'project list');
-        cache.set('projects', 'abc123', 'project details');
+  describe('invalidateAfterWrite (OMN-336)', () => {
+    function seedAllCategories() {
+      cache.set('tasks', 'list', 'tasks');
+      cache.set('projects', 'list', 'projects');
+      cache.set('folders', 'list', 'folders');
+      cache.set('tags', 'list', 'tags');
+      cache.set('analytics', 'stats', 'analytics');
+      cache.set('reviews', 'due', 'reviews');
+    }
 
-        cache.invalidateProject('abc123');
+    function snapshot() {
+      return {
+        tasks: cache.get('tasks', 'list'),
+        projects: cache.get('projects', 'list'),
+        folders: cache.get('folders', 'list'),
+        tags: cache.get('tags', 'list'),
+        analytics: cache.get('analytics', 'stats'),
+        reviews: cache.get('reviews', 'due'),
+      };
+    }
 
-        expect(cache.get('tasks', 'project:abc123')).toBeNull();
-        expect(cache.get('tasks', 'projectId:abc123')).toBeNull();
-        expect(cache.get('tasks', 'project:xyz789')).toBe('other project tasks'); // Different project preserved
-        expect(cache.get('projects', 'list')).toBeNull(); // Project lists cleared
-        expect(cache.get('projects', 'abc123')).toBeNull(); // Specific project cleared
+    describe.each([
+      { op: 'create' as const },
+      { op: 'update' as const },
+      { op: 'complete' as const },
+      { op: 'delete' as const },
+    ])('task $op', ({ op }) => {
+      it('clears tasks (cache-warmer entries) and analytics, never projects/reviews/folders', () => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'task', op });
+
+        expect(snapshot()).toEqual({
+          tasks: null,
+          projects: 'projects', // D1: cached project rows carry no task-derived fields
+          folders: 'folders',
+          tags: 'tags', // untouched when no tags were assigned/created
+          analytics: null,
+          reviews: 'reviews',
+        });
       });
 
-      it('should preserve non-project related caches', () => {
-        cache.set('tasks', 'today', 'today tasks');
-        cache.set('analytics', 'stats', 'analytics data');
-        cache.set('tags', 'work', 'work tag');
-        cache.set('projects', 'abc123', 'project details');
-
-        cache.invalidateProject('abc123');
-
-        expect(cache.get('tasks', 'today')).toBe('today tasks');
-        expect(cache.get('analytics', 'stats')).toBe('analytics data');
-        expect(cache.get('tags', 'work')).toBe('work tag');
+      it('clears tags only when tags were assigned/created', () => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'task', op, tags: true });
+        expect(cache.get('tags', 'list')).toBeNull();
       });
     });
 
-    describe('invalidateTag', () => {
-      it('should invalidate tag-specific queries', () => {
-        cache.set('tags', 'list', 'all tags');
-        cache.set('tags', 'work', 'work tag');
-        cache.set('tasks', 'tag:work', 'work tasks');
-        cache.set('tasks', 'tags:work', 'work tasks alt');
-        cache.set('tasks', 'tag:personal', 'personal tasks');
+    describe.each([
+      { op: 'create' as const },
+      { op: 'update' as const },
+      { op: 'complete' as const },
+      { op: 'delete' as const },
+    ])('project $op', ({ op }) => {
+      it('always clears projects, reviews, and analytics', () => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'project', op });
 
-        cache.invalidateTag('work');
-
-        expect(cache.get('tags', 'list')).toBeNull(); // All tag lists cleared
-        expect(cache.get('tags', 'work')).toBeNull();
-        expect(cache.get('tasks', 'tag:work')).toBeNull();
-        expect(cache.get('tasks', 'tags:work')).toBeNull();
-        expect(cache.get('tasks', 'tag:personal')).toBe('personal tasks'); // Different tag preserved
-      });
-
-      it('should preserve non-tag related caches', () => {
-        cache.set('tasks', 'today', 'today tasks');
-        cache.set('projects', 'list', 'project list');
-        cache.set('analytics', 'stats', 'analytics data');
-        cache.set('tags', 'work', 'work tag');
-
-        cache.invalidateTag('work');
-
-        expect(cache.get('tasks', 'today')).toBe('today tasks');
-        expect(cache.get('projects', 'list')).toBe('project list');
-        expect(cache.get('analytics', 'stats')).toBe('analytics data');
-      });
-    });
-
-    describe('invalidateTaskQueries', () => {
-      beforeEach(() => {
-        cache.set('tasks', 'tasks_today', 'today tasks');
-        cache.set('tasks', 'todays_agenda', 'agenda');
-        cache.set('tasks', 'tasks_overdue', 'overdue tasks');
-        cache.set('tasks', 'overdue', 'overdue alt');
-        cache.set('tasks', 'tasks_upcoming', 'upcoming tasks');
-        cache.set('tasks', 'upcoming', 'upcoming alt');
-        cache.set('tasks', 'inbox', 'inbox tasks');
-        cache.set('tasks', 'project_null', 'inbox alt');
-        cache.set('tasks', 'all_tasks', 'all tasks');
-      });
-
-      it('should invalidate only today queries', () => {
-        cache.invalidateTaskQueries(['today']);
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'todays_agenda')).toBeNull();
-        expect(cache.get('tasks', 'tasks_overdue')).toBe('overdue tasks');
-        expect(cache.get('tasks', 'tasks_upcoming')).toBe('upcoming tasks');
-        expect(cache.get('tasks', 'inbox')).toBe('inbox tasks');
-      });
-
-      it('should invalidate only overdue queries', () => {
-        cache.invalidateTaskQueries(['overdue']);
-
-        expect(cache.get('tasks', 'tasks_overdue')).toBeNull();
-        expect(cache.get('tasks', 'overdue')).toBeNull();
-        expect(cache.get('tasks', 'tasks_today')).toBe('today tasks');
-        expect(cache.get('tasks', 'tasks_upcoming')).toBe('upcoming tasks');
-        expect(cache.get('tasks', 'inbox')).toBe('inbox tasks');
-      });
-
-      it('should invalidate only upcoming queries', () => {
-        cache.invalidateTaskQueries(['upcoming']);
-
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull();
-        expect(cache.get('tasks', 'upcoming')).toBeNull();
-        expect(cache.get('tasks', 'tasks_today')).toBe('today tasks');
-        expect(cache.get('tasks', 'tasks_overdue')).toBe('overdue tasks');
-        expect(cache.get('tasks', 'inbox')).toBe('inbox tasks');
-      });
-
-      it('should invalidate only inbox queries', () => {
-        cache.invalidateTaskQueries(['inbox']);
-
-        expect(cache.get('tasks', 'inbox')).toBeNull();
-        expect(cache.get('tasks', 'project_null')).toBeNull();
-        expect(cache.get('tasks', 'tasks_today')).toBe('today tasks');
-        expect(cache.get('tasks', 'tasks_overdue')).toBe('overdue tasks');
-        expect(cache.get('tasks', 'tasks_upcoming')).toBe('upcoming tasks');
-      });
-
-      it('should invalidate all task queries when pattern is "all"', () => {
-        cache.invalidateTaskQueries(['all']);
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'tasks_overdue')).toBeNull();
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull();
-        expect(cache.get('tasks', 'inbox')).toBeNull();
-        expect(cache.get('tasks', 'all_tasks')).toBeNull();
-      });
-
-      it('should invalidate multiple patterns at once', () => {
-        cache.invalidateTaskQueries(['today', 'overdue']);
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'tasks_overdue')).toBeNull();
-        expect(cache.get('tasks', 'tasks_upcoming')).toBe('upcoming tasks');
-        expect(cache.get('tasks', 'inbox')).toBe('inbox tasks');
-      });
-    });
-
-    describe('invalidateForTaskChange', () => {
-      beforeEach(() => {
-        cache.set('tasks', 'tasks_today', 'today tasks');
-        cache.set('tasks', 'tasks_overdue', 'overdue tasks');
-        cache.set('tasks', 'tasks_upcoming', 'upcoming tasks');
-        cache.set('tasks', 'inbox', 'inbox tasks');
-        cache.set('tasks', 'project:abc123', 'project tasks');
-        cache.set('tasks', 'tag:work', 'work tasks');
-        cache.set('projects', 'abc123', 'project details');
-        cache.set('tags', 'work', 'work tag');
-        cache.set('analytics', 'stats', 'analytics');
-      });
-
-      it('should invalidate affected queries for task creation', () => {
-        cache.invalidateForTaskChange({
-          operation: 'create',
-          projectId: 'abc123',
-          tags: ['work'],
-          affectsToday: true,
-        });
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull(); // Today affected
-        expect(cache.get('tasks', 'project:abc123')).toBeNull(); // Project affected
-        expect(cache.get('tasks', 'tag:work')).toBeNull(); // Tag affected
-        expect(cache.get('analytics', 'stats')).toBeNull(); // Analytics always invalidated
-        expect(cache.get('tasks', 'tasks_overdue')).toBe('overdue tasks'); // Not affected
-      });
-
-      it('should invalidate inbox for task creation without project', () => {
-        cache.invalidateForTaskChange({
-          operation: 'create',
-          affectsToday: false,
-        });
-
-        expect(cache.get('tasks', 'inbox')).toBeNull(); // Inbox affected
-        expect(cache.get('analytics', 'stats')).toBeNull(); // Analytics always invalidated
-        expect(cache.get('tasks', 'tasks_today')).toBe('today tasks'); // Not affected
-      });
-
-      it('should invalidate upcoming for task updates', () => {
-        cache.invalidateForTaskChange({
-          operation: 'update',
-          projectId: 'abc123',
-          affectsToday: true,
-        });
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull(); // Today affected
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull(); // Upcoming affected by updates
-        expect(cache.get('tasks', 'project:abc123')).toBeNull(); // Project affected
-        expect(cache.get('analytics', 'stats')).toBeNull(); // Analytics always invalidated
-      });
-
-      it('should handle overdue task changes', () => {
-        cache.invalidateForTaskChange({
-          operation: 'update',
-          affectsOverdue: true,
-          tags: ['urgent'],
-        });
-
-        expect(cache.get('tasks', 'tasks_overdue')).toBeNull(); // Overdue affected
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull(); // Upcoming affected by updates
-        expect(cache.get('analytics', 'stats')).toBeNull(); // Analytics always invalidated
-      });
-
-      it('should always invalidate analytics for any task change', () => {
-        cache.invalidateForTaskChange({
-          operation: 'complete',
-        });
-
-        expect(cache.get('analytics', 'stats')).toBeNull();
-      });
-    });
-
-    describe('refreshForWorkflow', () => {
-      beforeEach(() => {
-        cache.set('tasks', 'tasks_today', 'today tasks');
-        cache.set('tasks', 'todays_agenda', 'agenda');
-        cache.set('tasks', 'inbox', 'inbox tasks');
-        cache.set('tasks', 'tasks_upcoming', 'upcoming tasks');
-        cache.set('tasks', 'tasks_overdue', 'overdue tasks');
-        cache.set('projects', 'list', 'project list');
-        cache.set('reviews', 'due', 'reviews due');
-        cache.set('analytics', 'stats', 'analytics');
-      });
-
-      it('should refresh for inbox processing workflow', () => {
-        cache.refreshForWorkflow('inbox_processing');
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'todays_agenda')).toBeNull();
-        expect(cache.get('tasks', 'inbox')).toBeNull();
-        expect(cache.get('projects', 'list')).toBeNull();
-        expect(cache.get('tasks', 'tasks_upcoming')).toBe('upcoming tasks'); // Preserved
-        expect(cache.get('analytics', 'stats')).toBe('analytics'); // Preserved
-      });
-
-      it('should refresh for weekly review workflow', () => {
-        cache.refreshForWorkflow('weekly_review');
-
-        // Weekly review clears all tasks, projects, and reviews
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'inbox')).toBeNull();
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull();
         expect(cache.get('projects', 'list')).toBeNull();
         expect(cache.get('reviews', 'due')).toBeNull();
-        expect(cache.get('analytics', 'stats')).toBe('analytics'); // Preserved
+        expect(cache.get('analytics', 'stats')).toBeNull();
+        expect(cache.get('folders', 'list')).toBe('folders'); // untouched absent changes flags
+        expect(cache.get('tags', 'list')).toBe('tags');
       });
 
-      it('should refresh for daily planning workflow', () => {
-        cache.refreshForWorkflow('daily_planning');
-
-        expect(cache.get('tasks', 'tasks_today')).toBeNull();
-        expect(cache.get('tasks', 'todays_agenda')).toBeNull();
-        expect(cache.get('tasks', 'tasks_upcoming')).toBeNull();
-        expect(cache.get('tasks', 'tasks_overdue')).toBeNull();
-        expect(cache.get('tasks', 'inbox')).toBe('inbox tasks'); // Preserved
-        expect(cache.get('projects', 'list')).toBe('project list'); // Preserved
-        expect(cache.get('analytics', 'stats')).toBe('analytics'); // Preserved
+      it('clears tags only when changes.tags is set', () => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'project', op, changes: { tags: true } });
+        expect(cache.get('tags', 'list')).toBeNull();
       });
+
+      it('clears folders only when changes.folder is set', () => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'project', op, changes: { folder: true } });
+        expect(cache.get('folders', 'list')).toBeNull();
+      });
+    });
+
+    describe('folder create/update/delete', () => {
+      it.each([{ op: 'create' as const }, { op: 'update' as const }, { op: 'delete' as const }])(
+        'clears projects and folders only ($op)',
+        ({ op }) => {
+          seedAllCategories();
+          cache.invalidateAfterWrite({ entity: 'folder', op });
+
+          expect(cache.get('projects', 'list')).toBeNull();
+          expect(cache.get('folders', 'list')).toBeNull();
+          expect(cache.get('reviews', 'due')).toBe('reviews');
+          expect(cache.get('analytics', 'stats')).toBe('analytics');
+          expect(cache.get('tags', 'list')).toBe('tags');
+        },
+      );
+    });
+
+    describe('tag create / move (nest, unnest, reparent)', () => {
+      it.each([{ op: 'create' as const }, { op: 'move' as const }])('clears tags only ($op)', ({ op }) => {
+        seedAllCategories();
+        cache.invalidateAfterWrite({ entity: 'tag', op });
+
+        expect(cache.get('tags', 'list')).toBeNull();
+        expect(cache.get('projects', 'list')).toBe('projects');
+        expect(cache.get('analytics', 'stats')).toBe('analytics');
+        expect(cache.get('reviews', 'due')).toBe('reviews');
+        expect(cache.get('folders', 'list')).toBe('folders');
+      });
+    });
+
+    describe('tag rename/delete/merge', () => {
+      it.each([{ op: 'rename' as const }, { op: 'delete' as const }, { op: 'merge' as const }])(
+        'clears tags, projects, and analytics ($op)',
+        ({ op }) => {
+          seedAllCategories();
+          cache.invalidateAfterWrite({ entity: 'tag', op });
+
+          expect(cache.get('tags', 'list')).toBeNull();
+          expect(cache.get('projects', 'list')).toBeNull();
+          expect(cache.get('analytics', 'stats')).toBeNull();
+          expect(cache.get('reviews', 'due')).toBe('reviews'); // untouched
+          expect(cache.get('folders', 'list')).toBe('folders'); // untouched
+        },
+      );
     });
   });
 });

@@ -19,7 +19,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCache = { get: vi.fn(), set: vi.fn(), invalidate: vi.fn() };
+    mockCache = { get: vi.fn(), set: vi.fn(), invalidate: vi.fn(), invalidateAfterWrite: vi.fn() };
     mockOmni = { buildScript: vi.fn(), executeJson: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
@@ -1844,8 +1844,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
       expect(res.success).toBe(true);
       expect(res.metadata.operation).toBe('mark_reviewed');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('reviews');
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'project', op: 'update' });
     });
 
     // OMN-256: batch mark_reviewed — the plural path, distinct envelope shape.
@@ -1888,8 +1887,7 @@ describe('OmniFocusAnalyzeTool', () => {
         // Parity with the set_schedule batch response: requested-project count.
         expect(res.metadata.projects_updated).toBe(2);
         expect(res.data.batch.results.summary).toEqual({ total_requested: 2, successful_count: 2, failed_count: 0 });
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-        expect(mockCache.invalidate).toHaveBeenCalledWith('reviews');
+        expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'project', op: 'update' });
       });
 
       it('reports an unresolvable id as its own loud failed row (continue-on-error, no silent drop)', async () => {

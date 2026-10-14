@@ -481,13 +481,13 @@ SAFETY:
 
     const { parsedResult, createdTaskId } = parseResult;
 
-    // Smart cache invalidation after successful task creation
-    this.cache.invalidateForTaskChange({
-      operation: 'create',
-      projectId: createArgs.projectId,
-      tags: Array.isArray(createArgs.tags) ? createArgs.tags : undefined,
-      affectsToday: createArgs.dueDate ? this.isDueSoon(createArgs.dueDate) : false,
-      affectsOverdue: false, // New tasks can't be overdue
+    // OMN-336: cached project rows carry no task-derived fields (D1), so a task
+    // create never needs to touch `projects` — only `tasks`/`analytics`, plus
+    // `tags` when tags were assigned.
+    this.cache.invalidateAfterWrite({
+      entity: 'task',
+      op: 'create',
+      tags: Array.isArray(createArgs.tags) && createArgs.tags.length > 0,
     });
 
     this.logger.debug('Returning success response', { parsedResult });
@@ -815,18 +815,12 @@ SAFETY:
    * Invalidate caches affected by a task update.
    */
   private invalidateCacheForTaskUpdate(safeUpdates: Record<string, unknown>): void {
-    const affectedTags: string[] = [];
-    if (isStringArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
-    if (isStringArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
-    if (isStringArray(safeUpdates.removeTags)) affectedTags.push(...safeUpdates.removeTags);
+    const tagsTouched =
+      isStringArray(safeUpdates.tags) || isStringArray(safeUpdates.addTags) || isStringArray(safeUpdates.removeTags);
 
-    this.cache.invalidateForTaskChange({
-      operation: 'update',
-      projectId: typeof safeUpdates.project === 'string' ? safeUpdates.project : undefined,
-      tags: affectedTags.length > 0 ? affectedTags : undefined,
-      affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueSoon(safeUpdates.dueDate) : false,
-      affectsOverdue: false, // Updates don't automatically make things overdue
-    });
+    // OMN-336: a move between projects (safeUpdates.project) does not need a
+    // `projects` clear either — see D1 in invalidateAfterWrite's doc comment.
+    this.cache.invalidateAfterWrite({ entity: 'task', op: 'update', tags: tagsTouched });
   }
 
   /**
@@ -918,11 +912,7 @@ SAFETY:
 
       this.logger.info(`Completed task via AST builder: ${taskId}`);
 
-      this.cache.invalidateForTaskChange({
-        operation: 'complete',
-        affectsToday: true,
-        affectsOverdue: true,
-      });
+      this.cache.invalidateAfterWrite({ entity: 'task', op: 'complete' });
 
       return createSuccessResponseV2('omnifocus_write', { task: result.data }, undefined, {
         ...timer.toMetadata(),
@@ -977,14 +967,10 @@ SAFETY:
         );
       }
 
-      // Conservative cache invalidation — we don't know which project/tags were affected
-      this.cache.invalidateForTaskChange({
-        operation: 'delete',
-        affectsToday: true,
-        affectsOverdue: true,
-      });
-      this.cache.invalidate('projects');
-      this.cache.invalidate('tags');
+      // OMN-336: delete doesn't know which tags the task carried, but per D1 a
+      // task write never needs `projects` (cached rows have no task-derived
+      // fields) — `tasks`/`analytics` via the helper is the full invalidation.
+      this.cache.invalidateAfterWrite({ entity: 'task', op: 'delete' });
 
       this.logger.info(`Deleted task via AST builder: ${taskId}`);
       return createSuccessResponseV2('omnifocus_write', { task: result.data }, undefined, {
@@ -1072,8 +1058,8 @@ SAFETY:
         this.collectBulkDeleteResults(result, results, errors);
       }
 
-      // Invalidate task cache after bulk operation
-      this.cache.clear('tasks');
+      // OMN-336: bulk delete is the same event as a single task delete.
+      this.cache.invalidateAfterWrite({ entity: 'task', op: 'delete' });
     } catch (error) {
       errors.push({ error: String(error) });
     }
@@ -1268,8 +1254,14 @@ SAFETY:
       );
     }
 
-    // Invalidate cache
-    this.cache.invalidate('projects');
+    // OMN-336: project create clears projects + reviews + analytics (new
+    // project may be due for review immediately), plus tags when tags were
+    // provided at create time.
+    this.cache.invalidateAfterWrite({
+      entity: 'project',
+      op: 'create',
+      changes: { tags: Boolean(data.tags && data.tags.length > 0) },
+    });
 
     // OMN-137: best-effort failures inside the create script (status,
     // reviewInterval, tags) surface on the envelope as `warnings` — lifted to
@@ -1311,9 +1303,8 @@ SAFETY:
       );
     }
 
-    // Smart cache invalidation
-    this.cache.invalidateProject(projectId);
-    this.cache.invalidate('analytics');
+    // OMN-336: project complete clears projects + reviews + analytics.
+    this.cache.invalidateAfterWrite({ entity: 'project', op: 'complete' });
 
     return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'complete' }, undefined, {
       ...timer.toMetadata(),
@@ -1345,9 +1336,8 @@ SAFETY:
       );
     }
 
-    // Smart cache invalidation
-    this.cache.invalidateProject(projectId);
-    this.cache.invalidate('analytics');
+    // OMN-336: project delete clears projects + reviews + analytics.
+    this.cache.invalidateAfterWrite({ entity: 'project', op: 'delete' });
 
     return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'delete' }, undefined, {
       ...timer.toMetadata(),
@@ -1400,9 +1390,9 @@ SAFETY:
       );
     }
 
-    // Invalidate cache — folders affect project/folder listings
-    this.cache.invalidate('projects');
-    this.cache.invalidate('folders');
+    // OMN-336: folder create affects project/folder listings (folder rows carry
+    // projectCount; a new folder itself also needs to show up in folder lists).
+    this.cache.invalidateAfterWrite({ entity: 'folder', op: 'create' });
 
     return createSuccessResponseV2(
       'omnifocus_write',
@@ -1449,8 +1439,18 @@ SAFETY:
       );
     }
 
-    // Smart cache invalidation
-    this.cache.invalidateProject(projectId);
+    // OMN-336: any project update clears projects + reviews (D3: a folder or
+    // name change also shows in list_for_review rows) + analytics (status may
+    // have changed; whole-category per D2), plus tags/folders when those
+    // specific fields were part of this update.
+    this.cache.invalidateAfterWrite({
+      entity: 'project',
+      op: 'update',
+      changes: {
+        tags: Boolean(changes.tags || changes.addTags || changes.removeTags),
+        folder: changes.folder !== undefined,
+      },
+    });
 
     const { warnings: _envelopeWarnings, ...projectData } = (result.data ?? {}) as Record<string, unknown>; // eslint-disable-line sonarjs/no-unused-vars
     return createSuccessResponseV2(
@@ -1916,7 +1916,7 @@ SAFETY:
       // OMN-239: creates happened either way — a clean rollback still performed
       // creates+deletes, and a partial rollback leaves orphaned items in the DB.
       // Either way stale read caches must not survive to their TTL.
-      this.invalidateBatchCaches(items, batchResults, resolver);
+      this.invalidateBatchCaches(items, batchResults);
       return {
         success: false,
         // A clean rollback removed everything (0 remain); a partial rollback
@@ -1934,7 +1934,7 @@ SAFETY:
     // Step 6: Smart cache invalidation after successful batch creations
     const createdCount = resolver.getCreatedCount();
     if (createdCount > 0) {
-      this.invalidateBatchCaches(items, batchResults, resolver);
+      this.invalidateBatchCaches(items, batchResults);
     }
 
     // Step 7: Build response
@@ -2081,30 +2081,29 @@ SAFETY:
     }
   }
 
-  private invalidateBatchCaches(
-    items: BatchItem[],
-    batchResults: BatchItemCreationResult[],
-    resolver: TempIdResolver,
-  ): void {
-    this.cache.invalidate('projects');
-
-    const projectIds = new Set<string>();
-    const tags = new Set<string>();
+  private invalidateBatchCaches(items: BatchItem[], batchResults: BatchItemCreationResult[]): void {
+    // OMN-336: one invalidateAfterWrite event per created entity class in the
+    // batch, replacing the old per-project/per-tag targeted deletes (D2:
+    // whole-category). This also fixes the pre-existing gap where
+    // batch-created projects never cleared `reviews`.
+    let hadProject = false;
+    let hadTask = false;
+    let anyTags = false;
 
     for (const item of items) {
-      if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
-        const realId = resolver.getRealId(item.tempId);
-        if (realId) projectIds.add(realId);
-      }
-      if (item.tags) {
-        item.tags.forEach((tag: string) => tags.add(tag));
-      }
+      const created = batchResults.find((r) => r.tempId === item.tempId)?.success;
+      if (!created) continue;
+      if (item.type === 'project') hadProject = true;
+      if (item.type === 'task') hadTask = true;
+      if (item.tags && item.tags.length > 0) anyTags = true;
     }
 
-    projectIds.forEach((id) => this.cache.invalidateProject(id));
-    tags.forEach((tag) => this.cache.invalidateTag(tag));
-    this.cache.invalidateTaskQueries(['today', 'inbox']);
-    this.cache.invalidate('analytics');
+    if (hadProject) {
+      this.cache.invalidateAfterWrite({ entity: 'project', op: 'create', changes: { tags: anyTags } });
+    }
+    if (hadTask) {
+      this.cache.invalidateAfterWrite({ entity: 'task', op: 'create', tags: anyTags });
+    }
   }
 
   /**
@@ -2437,6 +2436,28 @@ SAFETY:
     return null;
   }
 
+  /**
+   * Map a tag_manage script action to the cache event's `op` (OMN-336 D4).
+   * create/rename/delete/merge keep their own op; the three hierarchy-only
+   * actions (nest/unparent/reparent) collapse to 'move' — they clear `tags`
+   * only, same as 'create', so the distinction is cosmetic, not load-bearing.
+   */
+  private tagManageCacheOp(
+    action: 'create' | 'rename' | 'delete' | 'merge' | 'nest' | 'unparent' | 'reparent',
+  ): 'create' | 'rename' | 'delete' | 'merge' | 'move' {
+    switch (action) {
+      case 'create':
+      case 'rename':
+      case 'delete':
+      case 'merge':
+        return action;
+      case 'nest':
+      case 'unparent':
+      case 'reparent':
+        return 'move';
+    }
+  }
+
   private async handleTagManage(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
     const timer = new OperationTimerV2();
 
@@ -2503,14 +2524,10 @@ SAFETY:
     // Unwrap the optional {data: ...} envelope (shared helper, OMN-287)
     const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
-    // Smart cache invalidation for tag changes
-    this.cache.invalidateTag(tagName);
-    if (action === 'rename' && newName) {
-      this.cache.invalidateTag(newName);
-    }
-    if (action === 'merge' && targetTag) {
-      this.cache.invalidateTag(targetTag);
-    }
+    // OMN-336: D4 — rename/delete/merge also clear projects + analytics
+    // (project rows carry tag names; analytics has tag stats). Hierarchy-only
+    // changes (create/nest/unparent/reparent) clear tags alone.
+    this.cache.invalidateAfterWrite({ entity: 'tag', op: this.tagManageCacheOp(action) });
 
     return createSuccessResponseV2(
       'tags',
@@ -2701,20 +2718,6 @@ SAFETY:
       {},
       timer.toMetadata(),
     );
-  }
-
-  /**
-   * Check if a date is due soon (within next 3 days, matching OmniFocus "today" perspective).
-   */
-  private isDueSoon(dueDateStr: string): boolean {
-    try {
-      const dueDate = new Date(dueDateStr);
-      const now = new Date();
-      const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-      return dueDate <= threeDaysFromNow;
-    } catch {
-      return false;
-    }
   }
 
   /**

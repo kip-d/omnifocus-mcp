@@ -4,6 +4,21 @@ import { createHash } from 'crypto';
 
 const logger = createLogger('cache');
 
+/**
+ * OMN-336: one write event shape for every mutation that can stale the cache.
+ * `invalidateAfterWrite` is the single source of truth mapping these to
+ * category clears — see its doc comment for the table.
+ */
+export type WriteEvent =
+  | { entity: 'task'; op: 'create' | 'update' | 'complete' | 'delete'; tags?: boolean }
+  | {
+      entity: 'project';
+      op: 'create' | 'update' | 'complete' | 'delete';
+      changes?: { tags?: boolean; folder?: boolean };
+    }
+  | { entity: 'folder'; op: 'create' | 'update' | 'delete' }
+  | { entity: 'tag'; op: 'create' | 'rename' | 'delete' | 'merge' | 'move' };
+
 export class CacheManager {
   private cache: Map<string, CacheEntry<unknown>> = new Map();
   private stats: CacheStats = {
@@ -193,169 +208,59 @@ export class CacheManager {
   }
 
   /**
-   * GTD-optimized selective cache invalidation
-   * Invalidates specific task query patterns while preserving others
+   * OMN-336: single declarative write→cache invalidation map. Every write handler
+   * (task/project/folder/tag mutation, including batch and review-mutation paths)
+   * routes through this one entry point instead of ad-hoc `invalidate(category)` /
+   * per-id calls scattered across the tool layer — the category table below IS the
+   * authoritative policy; don't special-case invalidation elsewhere.
+   *
+   * Whole-category clears only (decided: targeted per-project/per-tag key deletion
+   * added complexity without a measured win — every affected category is small and
+   * short-TTL, so over-invalidating a whole category can't under-invalidate and costs
+   * one extra cache miss at worst).
+   *
+   * Category policy:
+   * | Event                                   | projects | reviews | analytics | tags | folders |
+   * |------------------------------------------|:--------:|:-------:|:---------:|:----:|:-------:|
+   * | task create/update/complete/delete       |    –     |    –    |     ✓     | tags?|    –    |
+   * | project create/update/complete/delete    |    ✓     |    ✓    |     ✓     | tags?|folder?  |
+   * | folder create/update/delete              |    ✓     |    –    |     –     |  –   |    ✓    |
+   * | tag create / move (nest/unnest/reparent) |    –     |    –    |     –     |  ✓   |    –    |
+   * | tag rename/delete/merge                  |    ✓     |    –    |     ✓     |  ✓   |    –    |
+   *
+   * Task writes never clear `projects`: cached (non-`includeStats`) project rows
+   * carry no task-derived fields — `taskCounts`/`nextTask`/`stats` are gated behind
+   * `includeStats`, and `includeStats` reads bypass the cache entirely (see
+   * OmniFocusReadTool). A cached project row therefore depends only on project
+   * writes, never task writes.
    */
-  public invalidateTaskQueries(patterns: ('today' | 'overdue' | 'upcoming' | 'inbox' | 'all')[] = ['all']): void {
-    let count = 0;
-    for (const [cacheKey] of this.cache) {
-      if (cacheKey.startsWith('tasks:')) {
-        const shouldInvalidate = patterns.some((pattern) => {
-          switch (pattern) {
-            case 'today':
-              return cacheKey.includes('tasks_today') || cacheKey.includes('todays_agenda');
-            case 'overdue':
-              return cacheKey.includes('tasks_overdue') || cacheKey.includes('overdue');
-            case 'upcoming':
-              return cacheKey.includes('tasks_upcoming') || cacheKey.includes('upcoming');
-            case 'inbox':
-              return cacheKey.includes('inbox') || cacheKey.includes('project_null');
-            case 'all':
-              return true; // Invalidate all task queries
-            default:
-              return false;
-          }
-        });
-
-        if (shouldInvalidate) {
-          this.cache.delete(cacheKey);
-          count++;
-        }
-      }
-    }
-
-    this.stats.evictions += count;
-    this.stats.size = this.cache.size;
-    logger.info(`Invalidated ${count} task cache entries for patterns: ${patterns.join(', ')}`);
-  }
-
-  /**
-   * GTD workflow-aware cache refresh
-   * Provides different caching strategies for different GTD contexts
-   */
-  public refreshForWorkflow(workflow: 'inbox_processing' | 'weekly_review' | 'daily_planning'): void {
-    switch (workflow) {
-      case 'inbox_processing':
-        // Clear task and project caches for immediate updates during processing
-        this.invalidateTaskQueries(['today', 'inbox']);
-        this.invalidate('projects'); // Projects might change as tasks are organized
-        break;
-      case 'weekly_review':
-        // Clear everything except analytics for comprehensive review
+  public invalidateAfterWrite(event: WriteEvent): void {
+    switch (event.entity) {
+      case 'task':
         this.invalidate('tasks');
+        this.invalidate('analytics');
+        if (event.tags) this.invalidate('tags');
+        break;
+      case 'project':
         this.invalidate('projects');
         this.invalidate('reviews');
+        this.invalidate('analytics');
+        if (event.changes?.tags) this.invalidate('tags');
+        if (event.changes?.folder) this.invalidate('folders');
         break;
-      case 'daily_planning':
-        // Only clear today's agenda and upcoming tasks
-        this.invalidateTaskQueries(['today', 'upcoming', 'overdue']);
+      case 'folder':
+        this.invalidate('projects');
+        this.invalidate('folders');
+        break;
+      case 'tag':
+        this.invalidate('tags');
+        if (event.op === 'rename' || event.op === 'delete' || event.op === 'merge') {
+          this.invalidate('projects');
+          this.invalidate('analytics');
+        }
         break;
     }
-  }
-
-  /**
-   * Smart invalidation: Invalidate only cache entries affected by a specific project
-   * @param projectId The project ID that was modified
-   */
-  public invalidateProject(projectId: string): void {
-    let count = 0;
-    for (const [cacheKey] of this.cache) {
-      // Invalidate:
-      // - Specific project queries: tasks:project:abc123
-      // - Project list queries that might include this project
-      // - Task queries that filter by this project
-      if (
-        (cacheKey.startsWith('tasks:') && cacheKey.includes(`project:${projectId}`)) ||
-        (cacheKey.startsWith('tasks:') && cacheKey.includes(`projectId:${projectId}`)) ||
-        cacheKey.startsWith('projects:') || // Project lists need refresh
-        cacheKey === `projects:${projectId}` // Specific project cache
-      ) {
-        this.cache.delete(cacheKey);
-        count++;
-      }
-    }
-
-    this.stats.evictions += count;
-    this.stats.size = this.cache.size;
-    logger.debug(`Invalidated ${count} cache entries for project ${projectId}`);
-  }
-
-  /**
-   * Smart invalidation: Invalidate only cache entries affected by a specific tag
-   * @param tagName The tag name that was modified
-   */
-  public invalidateTag(tagName: string): void {
-    let count = 0;
-    for (const [cacheKey] of this.cache) {
-      // Invalidate:
-      // - Tag queries: tags:*
-      // - Task queries filtered by this tag: tasks:tag:work
-      if (
-        cacheKey.startsWith('tags:') ||
-        (cacheKey.startsWith('tasks:') && cacheKey.includes(`tag:${tagName}`)) ||
-        (cacheKey.startsWith('tasks:') && cacheKey.includes(`tags:${tagName}`))
-      ) {
-        this.cache.delete(cacheKey);
-        count++;
-      }
-    }
-
-    this.stats.evictions += count;
-    this.stats.size = this.cache.size;
-    logger.debug(`Invalidated ${count} cache entries for tag ${tagName}`);
-  }
-
-  /**
-   * Smart invalidation: Invalidate based on what changed in a task operation
-   * @param context Information about what changed
-   */
-  public invalidateForTaskChange(context: {
-    operation: 'create' | 'update' | 'complete' | 'delete';
-    projectId?: string;
-    tags?: string[];
-    affectsToday?: boolean;
-    affectsOverdue?: boolean;
-  }): void {
-    const patterns: ('today' | 'overdue' | 'upcoming' | 'inbox' | 'all')[] = [];
-
-    // Determine which query patterns are affected
-    if (context.affectsToday) patterns.push('today');
-    if (context.affectsOverdue) patterns.push('overdue');
-    if (context.operation === 'create' && !context.projectId) {
-      patterns.push('inbox');
-      // Only invalidate 'all' if tags are present, as OmniFocus might auto-move
-      // tasks with tags out of inbox based on user settings
-      if (context.tags && context.tags.length > 0) {
-        patterns.push('all');
-      }
-    }
-
-    // For updates/deletes, we need to be more conservative
-    if (context.operation === 'update' || context.operation === 'delete') {
-      patterns.push('upcoming'); // Might affect upcoming queries
-    }
-
-    // Invalidate affected task queries
-    if (patterns.length > 0) {
-      this.invalidateTaskQueries(patterns);
-    }
-
-    // Invalidate project-specific caches
-    if (context.projectId) {
-      this.invalidateProject(context.projectId);
-    }
-
-    // Invalidate tag-specific caches
-    if (context.tags && context.tags.length > 0) {
-      context.tags.forEach((tag) => this.invalidateTag(tag));
-    }
-
-    // Always invalidate analytics for any task change
-    this.invalidate('analytics');
-
-    logger.debug(
-      `Smart invalidation for ${context.operation}: ${patterns.length} patterns, project: ${context.projectId}, tags: ${context.tags?.length || 0}`,
-    );
+    logger.debug(`invalidateAfterWrite: ${event.entity}/${event.op}`, { event });
   }
 
   /**
