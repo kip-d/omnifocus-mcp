@@ -472,7 +472,7 @@ describe('CacheManager', () => {
       { op: 'complete' as const },
       { op: 'delete' as const },
     ])('task $op', ({ op }) => {
-      it('clears tasks (cache-warmer entries) and analytics, never projects/reviews/folders', () => {
+      it('clears tasks (cache-warmer entries), analytics, and reviews; never projects/folders', () => {
         seedAllCategories();
         cache.invalidateAfterWrite({ entity: 'task', op });
 
@@ -482,7 +482,7 @@ describe('CacheManager', () => {
           folders: 'folders',
           tags: 'tags', // untouched when no tags were assigned/created
           analytics: null,
-          reviews: 'reviews',
+          reviews: null, // list_for_review rows embed per-project taskCounts
         });
       });
 
@@ -506,7 +506,8 @@ describe('CacheManager', () => {
         expect(cache.get('projects', 'list')).toBeNull();
         expect(cache.get('reviews', 'due')).toBeNull();
         expect(cache.get('analytics', 'stats')).toBeNull();
-        expect(cache.get('folders', 'list')).toBe('folders'); // untouched absent changes flags
+        // Folder rows carry projectCount: a created or deleted project changes it.
+        expect(cache.get('folders', 'list')).toBe(op === 'create' || op === 'delete' ? null : 'folders');
         expect(cache.get('tags', 'list')).toBe('tags');
       });
 

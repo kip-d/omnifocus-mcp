@@ -222,8 +222,8 @@ export class CacheManager {
    * Category policy:
    * | Event                                   | projects | reviews | analytics | tags | folders |
    * |------------------------------------------|:--------:|:-------:|:---------:|:----:|:-------:|
-   * | task create/update/complete/delete       |    –     |    –    |     ✓     | tags?|    –    |
-   * | project create/update/complete/delete    |    ✓     |    ✓    |     ✓     | tags?|folder?  |
+   * | task create/update/complete/delete       |    –     |    ✓    |     ✓     | tags?|    –    |
+   * | project create/update/complete/delete    |    ✓     |    ✓    |     ✓     | tags?|  (1)    |
    * | folder create/update/delete              |    ✓     |    –    |     –     |  –   |    ✓    |
    * | tag create / move (nest/unnest/reparent) |    –     |    –    |     –     |  ✓   |    –    |
    * | tag rename/delete/merge                  |    ✓     |    –    |     ✓     |  ✓   |    –    |
@@ -233,12 +233,17 @@ export class CacheManager {
    * `includeStats`, and `includeStats` reads bypass the cache entirely (see
    * OmniFocusReadTool). A cached project row therefore depends only on project
    * writes, never task writes.
+   *
+   * Task writes DO clear `reviews`: `list_for_review` rows embed per-project
+   * `taskCounts`. (1) `folders` clears on project create/delete (folder rows carry
+   * `projectCount`) and on any update with `changes.folder` (a move between folders).
    */
   public invalidateAfterWrite(event: WriteEvent): void {
     switch (event.entity) {
       case 'task':
         this.invalidate('tasks');
         this.invalidate('analytics');
+        this.invalidate('reviews');
         if (event.tags) this.invalidate('tags');
         break;
       case 'project':
@@ -246,7 +251,7 @@ export class CacheManager {
         this.invalidate('reviews');
         this.invalidate('analytics');
         if (event.changes?.tags) this.invalidate('tags');
-        if (event.changes?.folder) this.invalidate('folders');
+        if (event.op === 'create' || event.op === 'delete' || event.changes?.folder) this.invalidate('folders');
         break;
       case 'folder':
         this.invalidate('projects');
