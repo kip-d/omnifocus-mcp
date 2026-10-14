@@ -17,10 +17,7 @@ function createMockCache(): CacheManager {
     get: vi.fn(),
     set: vi.fn(),
     invalidate: vi.fn(),
-    invalidateForTaskChange: vi.fn(),
-    invalidateProject: vi.fn(),
-    invalidateTag: vi.fn(),
-    invalidateTaskQueries: vi.fn(),
+    invalidateAfterWrite: vi.fn(),
     clear: vi.fn(),
   } as unknown as CacheManager;
 }
@@ -75,7 +72,7 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.operation).toBe('create');
     });
 
-    it('calls cache.invalidateForTaskChange after create', async () => {
+    it('calls cache.invalidateAfterWrite after create', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
           ok: true,
@@ -92,12 +89,11 @@ describe('OmniFocusWriteTool task operations', () => {
         },
       });
 
-      expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'create',
-          tags: ['work'],
-        }),
-      );
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'task',
+        op: 'create',
+        tags: true,
+      });
     });
 
     it('OMN-128: lowers repetitionRule in-program — ONE script, rule passed to the builder', async () => {
@@ -347,7 +343,7 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
-    it('calls cache.invalidateForTaskChange with affected tags', async () => {
+    it('calls cache.invalidateAfterWrite with affected tags', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
           ok: true,
@@ -365,11 +361,36 @@ describe('OmniFocusWriteTool task operations', () => {
         },
       });
 
-      expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'update',
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'task',
+        op: 'update',
+        tags: true,
+      });
+    });
+
+    it('OMN-336: move to inbox (project:null) never clears projects — D1', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { task: { id: 'task-move', name: 'Moved' } },
         }),
       );
+
+      await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-move',
+          changes: { project: null },
+        },
+      });
+
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'task',
+        op: 'update',
+        tags: false,
+      });
     });
 
     it('returns no-op when update has no valid changes', async () => {
@@ -500,13 +521,7 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.task.completed).toBe(true);
       // metadata carries completed_id for downstream consumers
       expect(result.metadata.completed_id).toBe('task-done');
-      expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'complete',
-          affectsToday: true,
-          affectsOverdue: true,
-        }),
-      );
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'task', op: 'complete' });
     });
 
     it('handles complete error via isScriptError path', async () => {
@@ -545,16 +560,9 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.task.deleted).toBe(true);
       // metadata carries deleted_id for downstream consumers
       expect(result.metadata.deleted_id).toBe('task-del');
-      expect(mockCache.invalidateForTaskChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'delete',
-          affectsToday: true,
-          affectsOverdue: true,
-        }),
-      );
-      // Delete also invalidates projects and tags
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('tags');
+      // OMN-336 D1: task delete never clears `projects` — cached project rows
+      // carry no task-derived fields.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'task', op: 'delete' });
     });
 
     it('handles delete error via isScriptError path', async () => {
@@ -596,8 +604,9 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result).toBeDefined();
-      // Cache should be cleared for bulk operations
-      expect(mockCache.clear).toHaveBeenCalledWith('tasks');
+      // OMN-336: bulk_delete tasks is the same cache event as a single task
+      // delete — `clear('tasks')` had no reader and is gone.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'task', op: 'delete' });
     });
   });
 
@@ -734,6 +743,9 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.successCount).toBe(1);
       expect(result.data.errorCount).toBe(1);
       expect(result.data.errors).toBeDefined();
+      // OMN-336: bulk_delete projects routes per-id through handleProjectDelete,
+      // which already emits the project 'delete' event — no separate bulk path.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'project', op: 'delete' });
     });
   });
 
@@ -754,7 +766,11 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(true);
       expect(result.data.project).toBeDefined();
       expect(result.data.operation).toBe('create');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'project',
+        op: 'create',
+        changes: { tags: false },
+      });
     });
 
     it('returns error when project name is missing', async () => {
@@ -825,6 +841,7 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.warnings).toEqual(['parent: boom']);
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'folder', op: 'create' });
     });
 
     it('OMN-137: omits the warnings key when the folder script reports none', async () => {
@@ -1365,8 +1382,12 @@ describe('OmniFocusWriteTool task operations', () => {
         },
       });
 
-      expect(mockCache.invalidateTaskQueries).toHaveBeenCalledWith(['today', 'inbox']);
-      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+      // OMN-336: one created task in the batch → a single task 'create' event.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'task',
+        op: 'create',
+        tags: false,
+      });
 
       buildBatchSpy.mockRestore();
       deleteSpy.mockRestore();
@@ -1565,8 +1586,7 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(true);
       expect(result.data.project).toBeDefined();
       expect(result.data.operation).toBe('complete');
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-done');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'project', op: 'complete' });
     });
 
     it('forwards completionDate through handleProjectComplete to buildCompleteScript', async () => {
@@ -1628,8 +1648,7 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.project.projectId).toBe('proj-del');
       expect(result.data.project.deleted).toBe(true);
       expect(result.data.operation).toBe('delete');
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-del');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'project', op: 'delete' });
     });
   });
 
@@ -1647,7 +1666,30 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-upd');
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'project',
+        op: 'update',
+        changes: { tags: false, folder: false },
+      });
+    });
+
+    it('OMN-336: sets changes.tags when the update touches tags, and changes.folder on a folder move', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ project: { id: 'proj-upd2', name: 'Updated' } }));
+
+      await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-upd2',
+          changes: { addTags: ['work'], folder: 'Some Folder' },
+        },
+      });
+
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({
+        entity: 'project',
+        op: 'update',
+        changes: { tags: true, folder: true },
+      });
     });
 
     it('OMN-137: surfaces script warnings in the update project response', async () => {
@@ -1713,9 +1755,8 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.action).toBe('rename');
       expect(result.data.tagName).toBe('OldTag');
       expect(result.data.newName).toBe('NewTag');
-      // Both old and new names should be invalidated
-      expect(mockCache.invalidateTag).toHaveBeenCalledWith('OldTag');
-      expect(mockCache.invalidateTag).toHaveBeenCalledWith('NewTag');
+      // OMN-336 D4: rename also clears projects + analytics (whole-category).
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'tag', op: 'rename' });
     });
 
     it('executes tag merge and invalidates both tag caches', async () => {
@@ -1739,8 +1780,8 @@ describe('OmniFocusWriteTool task operations', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.action).toBe('merge');
-      expect(mockCache.invalidateTag).toHaveBeenCalledWith('SourceTag');
-      expect(mockCache.invalidateTag).toHaveBeenCalledWith('TargetTag');
+      // OMN-336 D4: merge also clears projects + analytics (whole-category).
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'tag', op: 'merge' });
     });
 
     it('maps unnest action to unparent builder', async () => {
@@ -1764,6 +1805,8 @@ describe('OmniFocusWriteTool task operations', () => {
       // Verify the script was executed (buildUnparentTagScript called via unnest→unparent mapping)
       expect(execJsonSpy).toHaveBeenCalled();
       expect(result.success).toBe(true);
+      // OMN-336 D4: hierarchy-only change — tags category only, op 'move'.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'tag', op: 'move' });
     });
 
     it('returns error when newName is missing for rename', async () => {
@@ -1871,7 +1914,8 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(true);
       expect(result.data.action).toBe('create');
       expect(result.data.tagName).toBe('NewTag');
-      expect(mockCache.invalidateTag).toHaveBeenCalledWith('NewTag');
+      // OMN-336 D4: create clears tags only.
+      expect(mockCache.invalidateAfterWrite).toHaveBeenCalledWith({ entity: 'tag', op: 'create' });
     });
   });
 

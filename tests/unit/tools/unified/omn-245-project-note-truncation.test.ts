@@ -20,10 +20,7 @@ function createMockCache(): CacheManager & { get: ReturnType<typeof vi.fn>; set:
     get: vi.fn(),
     set: vi.fn(),
     invalidate: vi.fn(),
-    invalidateForTaskChange: vi.fn(),
-    invalidateProject: vi.fn(),
-    invalidateTag: vi.fn(),
-    invalidateTaskQueries: vi.fn(),
+    invalidateAfterWrite: vi.fn(),
     clear: vi.fn(),
   } as unknown as CacheManager & { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 }
@@ -84,6 +81,40 @@ describe('OMN-245: project list note truncation wiring', () => {
     await runProjectsQuery({ details: true });
     const keyWith = String(mockCache.get.mock.calls.at(-1)?.[1]);
     expect(keyWithout).not.toBe(keyWith);
+  });
+});
+
+describe('OMN-336 D1: includeStats project reads bypass the cache', () => {
+  let tool: OmniFocusReadTool;
+  let mockCache: ReturnType<typeof createMockCache>;
+  let execJsonSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockCache = createMockCache();
+    tool = new OmniFocusReadTool(mockCache);
+    execJsonSpy = vi.fn().mockResolvedValue({
+      success: true,
+      data: { projects: [], metadata: { total_matched: 0 } },
+    });
+    vi.spyOn(tool as unknown as { execJson: unknown }, 'execJson' as never).mockImplementation(execJsonSpy as never);
+  });
+
+  it('includeStats:true never reads from or writes to the projects cache', async () => {
+    await tool.execute({
+      query: { type: 'projects', filters: { status: 'active' }, includeStats: true },
+    });
+
+    expect(mockCache.get).not.toHaveBeenCalled();
+    expect(mockCache.set).not.toHaveBeenCalled();
+  });
+
+  it('includeStats:false (default) still reads/writes the projects cache', async () => {
+    await tool.execute({
+      query: { type: 'projects', filters: { status: 'active' } },
+    });
+
+    expect(mockCache.get).toHaveBeenCalled();
+    expect(mockCache.set).toHaveBeenCalled();
   });
 });
 

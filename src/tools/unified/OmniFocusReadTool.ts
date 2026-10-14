@@ -1018,6 +1018,22 @@ PERFORMANCE:
     );
   }
 
+  /**
+   * OMN-336 D1: includeStats rows embed task-derived data (taskCounts,
+   * nextTask, stats) that only task writes could stale — and task writes
+   * deliberately don't touch the `projects` category (see
+   * CacheManager.invalidateAfterWrite). Bypassing the cache for includeStats
+   * reads keeps the invariant simple: a cached project row depends only on
+   * project writes, never task writes.
+   */
+  private getCachedProjectList(
+    includeStats: boolean,
+    cacheKey: string,
+  ): { projects: unknown[]; totalMatched?: number } | null {
+    if (includeStats) return null;
+    return this.cache.get<{ projects: unknown[]; totalMatched?: number }>('projects', cacheKey);
+  }
+
   private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'projects') throw new Error('handleProjectQuery: wrong type');
     const timer = new OperationTimerV2();
@@ -1074,8 +1090,7 @@ PERFORMANCE:
     const cacheParams = { ...projectFilter, limit, offset, sort, includeStats, noteTruncateLength };
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
 
-    // Check cache
-    const cached = this.cache.get<{ projects: unknown[]; totalMatched?: number }>('projects', cacheKey);
+    const cached = this.getCachedProjectList(includeStats, cacheKey);
     if (cached) {
       const cacheResult = createListResponseV2(
         'projects',
@@ -1132,7 +1147,10 @@ PERFORMANCE:
     };
     const totalMatched = resultData.metadata?.total_matched;
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
-    this.cache.set('projects', cacheKey, { projects, totalMatched });
+    // OMN-336 D1: never cache includeStats rows (see the bypass above).
+    if (!includeStats) {
+      this.cache.set('projects', cacheKey, { projects, totalMatched });
+    }
 
     const listResult = createListResponseV2(
       'projects',

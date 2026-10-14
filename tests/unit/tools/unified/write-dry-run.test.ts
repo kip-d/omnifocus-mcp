@@ -11,10 +11,7 @@ describe('OmniFocusWriteTool dry-run mode', () => {
       get: vi.fn(),
       set: vi.fn(),
       invalidate: vi.fn(),
-      invalidateForTaskChange: vi.fn(),
-      invalidateProject: vi.fn(),
-      invalidateTag: vi.fn(),
-      invalidateTaskQueries: vi.fn(),
+      invalidateAfterWrite: vi.fn(),
       clear: vi.fn(),
     } as unknown as CacheManager;
 

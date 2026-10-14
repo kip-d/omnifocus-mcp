@@ -14,10 +14,7 @@ import * as scriptBuilder from '../../../../src/contracts/ast/mutation-script-bu
 
 class StubCache {
   invalidate(): void {}
-  invalidateProject(): void {}
-  invalidateTag(): void {}
-  invalidateTaskQueries(): void {}
-  invalidateForTaskChange(): void {}
+  invalidateAfterWrite(): void {}
   clear(): void {}
 }
 

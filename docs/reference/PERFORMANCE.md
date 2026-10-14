@@ -26,40 +26,26 @@ The server implements intelligent caching with different TTLs based on data vola
 
 Cache is automatically invalidated on write operations to ensure data consistency.
 
-### GTD Workflow Optimizations
+### Write → Cache Invalidation (OMN-336)
 
-The cache system includes GTD-specific optimizations to handle the rapid changes common in productive workflows:
-
-#### Selective Task Cache Invalidation
-
-Instead of clearing all task caches when one task changes, the system can selectively invalidate specific query
-patterns:
+Every write handler (task/project/folder/tag mutations, including batch and review-mutation paths) routes through one
+declarative entry point, `CacheManager.invalidateAfterWrite(event)`, instead of ad-hoc per-category or per-id calls. The
+event shape names the entity and operation; the category table inside `CacheManager`'s doc comment is the single source
+of truth for which categories clear:
 
 ```javascript
-// Only clear today's agenda and inbox caches, preserve others
-cacheManager.invalidateTaskQueries(['today', 'inbox']);
+// A task update that also assigned a tag
+cacheManager.invalidateAfterWrite({ entity: 'task', op: 'update', tags: true });
 
-// Clear overdue and upcoming but preserve general task lists
-cacheManager.invalidateTaskQueries(['overdue', 'upcoming']);
+// A project update that moved it to a different folder
+cacheManager.invalidateAfterWrite({ entity: 'project', op: 'update', changes: { folder: true } });
+
+// A tag rename (clears tags, projects, and analytics — project rows carry tag names)
+cacheManager.invalidateAfterWrite({ entity: 'tag', op: 'rename' });
 ```
 
-#### Workflow-Aware Cache Management
-
-Different GTD workflows have different caching needs:
-
-```javascript
-// Inbox processing - frequent updates needed
-cacheManager.refreshForWorkflow('inbox_processing');
-
-// Weekly review - comprehensive refresh
-cacheManager.refreshForWorkflow('weekly_review');
-
-// Daily planning - only clear time-sensitive caches
-cacheManager.refreshForWorkflow('daily_planning');
-```
-
-These optimizations ensure that users get fresh data when they need it most while preserving performance benefits for
-stable queries.
+Invalidation is whole-category (never per-id): every affected category is small and short-TTL, so clearing a whole
+category can't under-invalidate and costs at most one extra cache miss.
 
 ## Query Performance Optimization
 

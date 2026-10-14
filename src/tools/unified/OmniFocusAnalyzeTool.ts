@@ -3833,8 +3833,9 @@ TIME-WINDOW SCOPING:
       );
     }
 
-    this.cache.invalidate('projects');
-    this.cache.invalidate('reviews');
+    // OMN-336: mark_reviewed mutates project fields (lastReviewDate,
+    // nextReviewDate) — a project 'update' event.
+    this.cache.invalidateAfterWrite({ entity: 'project', op: 'update' });
 
     const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
@@ -3873,8 +3874,9 @@ TIME-WINDOW SCOPING:
       );
     }
 
-    this.cache.invalidate('projects');
-    this.cache.invalidate('reviews');
+    // OMN-336: batch mark_reviewed — same project 'update' event as the
+    // single-id path.
+    this.cache.invalidateAfterWrite({ entity: 'project', op: 'update' });
 
     const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 
@@ -3941,8 +3943,9 @@ TIME-WINDOW SCOPING:
       );
     }
 
-    this.cache.invalidate('projects');
-    this.cache.invalidate('reviews');
+    // OMN-336: set_schedule mutates reviewInterval/nextReviewDate — a project
+    // 'update' event.
+    this.cache.invalidateAfterWrite({ entity: 'project', op: 'update' });
 
     const parsedResult = unwrapScriptEnvelope<unknown>(result.data);
 

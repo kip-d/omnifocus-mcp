@@ -23,10 +23,7 @@ function createMockCache(): CacheManager & { get: ReturnType<typeof vi.fn>; set:
     get: vi.fn(),
     set: vi.fn(),
     invalidate: vi.fn(),
-    invalidateForTaskChange: vi.fn(),
-    invalidateProject: vi.fn(),
-    invalidateTag: vi.fn(),
-    invalidateTaskQueries: vi.fn(),
+    invalidateAfterWrite: vi.fn(),
     clear: vi.fn(),
   } as unknown as CacheManager & { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 }
