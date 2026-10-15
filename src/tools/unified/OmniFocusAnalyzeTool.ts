@@ -2771,11 +2771,13 @@ TIME-WINDOW SCOPING:
       // every matching pattern entry), not the number of distinct pattern
       // keys — two entries ("every 1 week", "every 2 weeks") are 2 keys but
       // could be e.g. 12 actual tasks.
-      const sumByUnit = (needle: string): number =>
-        patternsResult.patterns.filter((p) => p.pattern.includes(needle)).reduce((total, p) => total + p.count, 0);
-      const weeklyCount = sumByUnit('week');
-      const dailyCount = sumByUnit('day');
-      const monthlyCount = sumByUnit('month');
+      // Match the script's explicit `unit` ('days' | 'weeks' | 'months' | …),
+      // not a substring of the `<unit>_<steps>` pattern key.
+      const sumByUnit = (unit: string): number =>
+        patternsResult.patterns.filter((p) => p.unit === unit).reduce((total, p) => total + p.count, 0);
+      const weeklyCount = sumByUnit('weeks');
+      const dailyCount = sumByUnit('days');
+      const monthlyCount = sumByUnit('months');
       if (weeklyCount > 0) insights.push(`${weeklyCount} tasks repeat weekly`);
       if (dailyCount > 0) insights.push(`${dailyCount} tasks repeat daily`);
       if (monthlyCount > 0) insights.push(`${monthlyCount} tasks repeat monthly`);

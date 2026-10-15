@@ -1112,17 +1112,19 @@ describe('OmniFocusAnalyzeTool', () => {
       // OMN-341: two distinct weekly intervals (2 distinct pattern keys) whose
       // task counts sum to 12 — discriminates "count tasks" (D3, correct) from
       // "count distinct pattern keys" (the old bug: would say "2 weekly").
+      // Values match what get-recurring-patterns emits: `pattern` is the
+      // `<unit>_<steps>` key and `unit` is the plural ('weeks', 'days', …).
       const weeklyPatternA = {
-        pattern: 'every 1 week',
-        unit: 'week',
+        pattern: 'weeks_1',
+        unit: 'weeks',
         steps: 1,
         count: 5,
         percentage: 41.7,
         examples: ['Water plants'],
       };
       const weeklyPatternB = {
-        pattern: 'every 2 weeks',
-        unit: 'week',
+        pattern: 'weeks_2',
+        unit: 'weeks',
         steps: 2,
         count: 7,
         percentage: 58.3,
@@ -1135,7 +1137,7 @@ describe('OmniFocusAnalyzeTool', () => {
           {
             project: 'Work',
             recurringCount: 9,
-            patterns: [{ pattern: 'every 2 weeks', count: 7 }],
+            patterns: [{ pattern: 'weeks_2', count: 7 }],
           },
         ],
         mostCommon: weeklyPatternB,
