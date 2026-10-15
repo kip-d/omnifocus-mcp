@@ -216,6 +216,7 @@ Convert natural language ("tomorrow") to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` befo
 | Due dates   | 5:00 PM      |
 | Defer dates | 8:00 AM      |
 | Completion  | 12:00 PM     |
+| Planned     | 12:00 PM     |
 
 **Never use:** ISO-8601 with Z suffix (`2025-03-15T17:00:00Z`)
 

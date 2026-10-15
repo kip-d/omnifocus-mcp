@@ -94,6 +94,7 @@ The MCP tools reject natural language. Calculate dates based on today's date.
 - **Due dates**: 5:00 PM (end of business)
 - **Defer dates**: 8:00 AM (start of day)
 - **Completion dates**: 12:00 PM (noon)
+- **Planned dates**: 12:00 PM (noon)
 
 ---
 

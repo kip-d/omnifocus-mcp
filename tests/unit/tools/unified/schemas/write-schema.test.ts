@@ -161,6 +161,29 @@ describe('WriteSchema', () => {
     }
   });
 
+  // OMN-346 (D2): the description advertises "up to 100 operations"; the schema
+  // now enforces 1–100 instead of accepting any length.
+  describe('batch operations bound (OMN-346)', () => {
+    const op = { operation: 'complete', target: 'task', id: 't1' };
+    const batch = (n: number) => ({
+      mutation: { operation: 'batch', target: 'task', operations: Array.from({ length: n }, () => op) },
+    });
+
+    it.each([1, 100])('accepts %i operations', (n) => {
+      expect(WriteSchema.safeParse(batch(n)).success).toBe(true);
+    });
+
+    it.each([0, 101])('rejects %i operations', (n) => {
+      expect(WriteSchema.safeParse(batch(n)).success).toBe(false);
+    });
+
+    it('tells the caller to split an oversized batch', () => {
+      const result = WriteSchema.safeParse(batch(101));
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toMatch(/split/i);
+    });
+  });
+
   // Bug: repetitionRule also needs to work in batch update operations
   it('accepts repetitionRule in batch update operations', () => {
     const input = {
