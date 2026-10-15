@@ -5,6 +5,7 @@ import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
+import { RecurringPatternsSchema } from '../../../../src/omnifocus/response-schemas/read.js';
 
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
@@ -1107,21 +1108,72 @@ describe('OmniFocusAnalyzeTool', () => {
     it('handles patterns operation', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmni.buildScript.mockReturnValue('script');
-      // OMN-139: executeJson returns ScriptResult; mock must match RecurringPatternsSchema
-      mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
-          totalRecurring: 5,
-          patterns: [{ pattern: 'weekly', count: 3 }],
-          byProject: [{ project: 'Work', count: 2 }],
-          mostCommon: { pattern: 'weekly', count: 3 },
-          duration: 250,
-        }),
-      );
+
+      // OMN-341: two distinct weekly intervals (2 distinct pattern keys) whose
+      // task counts sum to 12 — discriminates "count tasks" (D3, correct) from
+      // "count distinct pattern keys" (the old bug: would say "2 weekly").
+      const weeklyPatternA = {
+        pattern: 'every 1 week',
+        unit: 'week',
+        steps: 1,
+        count: 5,
+        percentage: 41.7,
+        examples: ['Water plants'],
+      };
+      const weeklyPatternB = {
+        pattern: 'every 2 weeks',
+        unit: 'week',
+        steps: 2,
+        count: 7,
+        percentage: 58.3,
+        examples: ['Team sync'],
+      };
+      const scriptData = {
+        totalRecurring: 12,
+        patterns: [weeklyPatternB, weeklyPatternA],
+        byProject: [
+          {
+            project: 'Work',
+            recurringCount: 9,
+            patterns: [{ pattern: 'every 2 weeks', count: 7 }],
+          },
+        ],
+        mostCommon: weeklyPatternB,
+        duration: 250,
+        debug: { optimizationUsed: 'bridge' },
+      };
+      // Guard: a future edit to this mock can't silently drift from the strict
+      // schema the tool layer validates script output against.
+      expect(() => RecurringPatternsSchema.parse(scriptData)).not.toThrow();
+
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess(scriptData));
 
       const res: any = await tool.execute({
         analysis: { type: 'recurring_tasks', params: { operation: 'patterns' } },
       });
       expect(res.success).toBe(true);
+
+      // D2: `patterns` is the script's real array, verbatim — no placeholder.
+      expect(res.data.patterns).toEqual(scriptData.patterns);
+
+      // D1: the always-empty placeholders are gone entirely.
+      expect(res.data.recurringTasks).toBeUndefined();
+      expect(res.data.summary.byFrequency).toBeUndefined();
+
+      // byProject insight reads `recurringCount`, not the undefined `count`.
+      expect(res.data.insights).toContain('Project "Work" has the most recurring tasks (9)');
+      expect(res.data.insights.some((i: string) => i.includes('undefined'))).toBe(false);
+
+      // D3: frequency insight counts TASKS by unit (5 + 7 = 12), not distinct
+      // pattern keys (which would read "2").
+      expect(res.data.insights).toContain('12 tasks repeat weekly');
+
+      // Cache key is bumped to the v2 patterns namespace.
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'analytics',
+        expect.stringContaining('recurring_patterns_v2_'),
+        expect.anything(),
+      );
     });
   });
 

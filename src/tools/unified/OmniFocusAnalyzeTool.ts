@@ -35,6 +35,7 @@ import {
   MARK_REVIEWED_BATCH_TYPED_SCHEMA,
   SET_SCHEDULE_TYPED_SCHEMA,
 } from '../../omnifocus/script-response-schemas.js';
+import type { RecurringPatternEntry, RecurringByProjectEntry } from '../../omnifocus/response-schemas/read.js';
 import { formatLocalDay, localDateBoundToUTC, localDayKey } from '../../utils/timezone.js';
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
@@ -79,7 +80,12 @@ import type {
   TaskVelocityV3Data,
   WorkflowAnalysisV3Data,
 } from '../../omnifocus/script-response-schemas.js';
-import type { OverdueAnalysisDataV2, RecurringTaskV2 } from '../response-types-v2.js';
+import type {
+  OverdueAnalysisDataV2,
+  RecurringTaskV2,
+  RecurringAnalyzeDataV2,
+  RecurringPatternsDataV2,
+} from '../response-types-v2.js';
 import type { ProjectId } from '../../utils/branded-types.js';
 
 // ---------------------------------------------------------------------------
@@ -2655,7 +2661,7 @@ TIME-WINDOW SCOPING:
       summary: envelope.summary || {},
     };
 
-    const analyzeResponse = createSuccessResponseV2(
+    const analyzeResponse = createSuccessResponseV2<RecurringAnalyzeDataV2>(
       'recurring_tasks',
       {
         recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
@@ -2678,7 +2684,10 @@ TIME-WINDOW SCOPING:
   private async executeRecurringPatterns(timer: OperationTimerV2): Promise<unknown> {
     const patternsOptions = { activeOnly: true, includeCompleted: false, includeDropped: false };
 
-    const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
+    // OMN-341: v2 — the payload shape changed (patterns[] is now real, the
+    // always-empty placeholders are gone), so the key is bumped to avoid
+    // serving a stale-shape cache entry from before the reshape.
+    const patternsCacheKey = `recurring_patterns_v2_${JSON.stringify(patternsOptions)}`;
     const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
     if (cachedPatterns) {
       return cachedPatterns;
@@ -2711,22 +2720,18 @@ TIME-WINDOW SCOPING:
       );
     }
 
-    const patternsResult = patternsScriptResult.data as {
-      totalRecurring: number;
-      patterns: unknown[];
-      byProject: unknown[];
-      mostCommon: Record<string, unknown>;
-    };
+    // OMN-341: no `as` cast — `patternsScriptResult.data` is already typed as
+    // z.infer<typeof RecurringPatternsSchema> via execJson's schema param.
+    const patternsResult = patternsScriptResult.data;
 
     const insights = this.generateRecurringPatternInsights(patternsResult);
 
-    const patternsResponse = createSuccessResponseV2(
+    const patternsResponse = createSuccessResponseV2<RecurringPatternsDataV2>(
       'recurring_tasks',
       {
-        recurringTasks: [] as RecurringTaskV2[],
-        summary: { totalRecurring: patternsResult.totalRecurring, byFrequency: {} as Record<string, number> },
-        patterns: {} as Record<string, RecurringTaskV2[]>,
-        byProject: patternsResult.byProject || [],
+        summary: { totalRecurring: patternsResult.totalRecurring },
+        patterns: patternsResult.patterns,
+        byProject: patternsResult.byProject,
         mostCommon: patternsResult.mostCommon,
         insights,
       },
@@ -2735,7 +2740,7 @@ TIME-WINDOW SCOPING:
         ...timer.toMetadata(),
         operation: 'patterns',
         filters_applied: patternsOptions,
-        patterns_found: patternsResult.patterns?.length || 0,
+        patterns_found: patternsResult.patterns.length,
       },
     );
 
@@ -2745,9 +2750,9 @@ TIME-WINDOW SCOPING:
 
   private generateRecurringPatternInsights(patternsResult: {
     totalRecurring: number;
-    patterns: unknown[];
-    byProject: unknown[];
-    mostCommon: Record<string, unknown>;
+    patterns: RecurringPatternEntry[];
+    byProject: RecurringByProjectEntry[];
+    mostCommon: RecurringPatternEntry | null;
   }): string[] {
     const insights: string[] = [];
     if (patternsResult.totalRecurring === 0) {
@@ -2757,28 +2762,28 @@ TIME-WINDOW SCOPING:
 
     if (patternsResult.mostCommon) {
       insights.push(
-        `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
+        `Most common recurrence pattern: ${patternsResult.mostCommon.pattern} (${patternsResult.mostCommon.count} tasks)`,
       );
     }
-    if (patternsResult.patterns && patternsResult.patterns.length > 0) {
+    if (patternsResult.patterns.length > 0) {
       insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
-      const weeklyCount = patternsResult.patterns.filter(
-        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
-      ).length;
-      const dailyCount = patternsResult.patterns.filter(
-        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
-      ).length;
-      const monthlyCount = patternsResult.patterns.filter(
-        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
-      ).length;
-      if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
-      if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
-      if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
+      // OMN-341 (D3): count TASKS repeating at each cadence (sum `count` over
+      // every matching pattern entry), not the number of distinct pattern
+      // keys — two entries ("every 1 week", "every 2 weeks") are 2 keys but
+      // could be e.g. 12 actual tasks.
+      const sumByUnit = (needle: string): number =>
+        patternsResult.patterns.filter((p) => p.pattern.includes(needle)).reduce((total, p) => total + p.count, 0);
+      const weeklyCount = sumByUnit('week');
+      const dailyCount = sumByUnit('day');
+      const monthlyCount = sumByUnit('month');
+      if (weeklyCount > 0) insights.push(`${weeklyCount} tasks repeat weekly`);
+      if (dailyCount > 0) insights.push(`${dailyCount} tasks repeat daily`);
+      if (monthlyCount > 0) insights.push(`${monthlyCount} tasks repeat monthly`);
     }
-    if (patternsResult.byProject && patternsResult.byProject.length > 0) {
+    if (patternsResult.byProject.length > 0) {
       const projectWithMostRecurring = patternsResult.byProject[0];
       insights.push(
-        `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
+        `Project "${projectWithMostRecurring.project}" has the most recurring tasks (${projectWithMostRecurring.recurringCount})`,
       );
     }
 

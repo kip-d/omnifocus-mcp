@@ -575,6 +575,11 @@ export const RecurringPatternsSchema = z
   })
   .strict();
 
+// OMN-341: inferred types for the tool layer to read the validated script
+// output through, with no `as` casts.
+export type RecurringPatternEntry = z.infer<typeof RecurringPatternEntrySchema>;
+export type RecurringByProjectEntry = z.infer<typeof RecurringByProjectEntrySchema>;
+
 /**
  * Project id-lookup result — emitted by buildProjectByIdScript.
  * Wire shape: {projects, count, mode, targetId}
