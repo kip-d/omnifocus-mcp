@@ -45,27 +45,61 @@ const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectNam
 // Returns `unknown`: the redacted value is only ever serialized to a log sink,
 // never read field-by-field, so a typed return would be a lie (it rebuilds the
 // structure rather than preserving the input type).
-export function redactArgs(value: unknown, depth = 0): unknown {
+//
+// `seen` guards against cycles: it tracks the objects currently on the
+// in-progress recursion path (added on entry, removed on exit), not every
+// object ever visited — two sibling fields that happen to reference the same
+// object are not a cycle and must both redact normally.
+export function redactArgs(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
   if (depth > 6) return value; // Avoid pathological recursion
 
   if (value == null) return value;
-  if (typeof value !== 'object') return value;
 
-  if (Array.isArray(value)) {
-    return value.map((v) => redactArgs(v, depth + 1));
-  }
-
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_KEYS.has(k)) {
-      out[k] = '[REDACTED]';
-    } else if (typeof v === 'object' && v !== null) {
-      out[k] = redactArgs(v, depth + 1);
-    } else {
-      out[k] = v;
+  // Errors don't expose message/stack/name as enumerable own properties, so
+  // the generic object branch below would otherwise redact them to `{}`.
+  // Expand explicitly, then recurse into `cause` (itself possibly an Error).
+  if (value instanceof Error) {
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+    try {
+      const out: Record<string, unknown> = {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+      };
+      const cause = (value as { cause?: unknown }).cause;
+      if (cause !== undefined) {
+        out.cause = redactArgs(cause, depth + 1, seen);
+      }
+      return out;
+    } finally {
+      seen.delete(value);
     }
   }
-  return out;
+
+  if (typeof value !== 'object') return value;
+
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((v) => redactArgs(v, depth + 1, seen));
+    }
+
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.has(k)) {
+        out[k] = '[REDACTED]';
+      } else if (typeof v === 'object' && v !== null) {
+        out[k] = redactArgs(v, depth + 1, seen);
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  } finally {
+    seen.delete(value);
+  }
 }
 
 export function createLogger(context: string, initialContext?: LogContext): Logger {
@@ -113,8 +147,10 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
     const correlationId = logContext?.correlationId || initialContext?.correlationId;
     const correlationPrefix = correlationId ? ` [${correlationId.substring(0, 8)}]` : '';
 
-    // Only include structured args at debug level; redact first
-    const includeArgs = level === 'debug' && args.length > 0;
+    // D1/D2 (OMN-348): debug/warn/error print key-redacted args; info stays
+    // headline-only (high volume, and the privacy default — see createLogger's
+    // `info` below).
+    const includeArgs = (level === 'debug' || level === 'warn' || level === 'error') && args.length > 0;
     const redacted = includeArgs ? ' ' + JSON.stringify(redactArgs(args)) : '';
     return `[${timestamp}] [${level.toUpperCase()}] [${context}]${correlationPrefix} ${message}${redacted}`;
   };
@@ -126,6 +162,11 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
   };
 
   const logger: Logger = {
+    // D2 (OMN-348): info is high-volume and is the privacy default — args are
+    // never printed, even in STRUCTURED_LOGGING mode. A call site whose
+    // payload a human actually needs puts that text in the message itself,
+    // or logs at `warn` instead (see e.g. the permission-instructions site in
+    // index.ts).
     info: (message: string, ..._args: unknown[]) => {
       logWithContext('info', message, []);
     },
@@ -133,7 +174,9 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
       // Enhanced error logging with better context preservation
       const errArg = args && args.length === 1 && args[0] instanceof Error ? (args[0] as Error).message : undefined;
       const finalMessage = errArg ? `${message} ${errArg}` : message;
-      logWithContext('error', finalMessage, useStructuredLogging ? args : []);
+      // D1 (OMN-348): print redacted args by default (not gated on
+      // STRUCTURED_LOGGING) — formatMessage/createStructuredEntry decide how.
+      logWithContext('error', finalMessage, args);
 
       // Log error metrics for telemetry (privacy-safe - no user data)
       if (typeof args[0] === 'object' && args[0] !== null && 'errorType' in args[0]) {
@@ -152,8 +195,9 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
     debug: (message: string, ...args: unknown[]) => {
       logWithContext('debug', message, args);
     },
-    warn: (message: string, ..._args: unknown[]) => {
-      logWithContext('warn', message, []);
+    warn: (message: string, ...args: unknown[]) => {
+      // D1 (OMN-348): print redacted args by default — see `error` above.
+      logWithContext('warn', message, args);
     },
     withCorrelation: (correlationId: string) => {
       return createLogger(context, {

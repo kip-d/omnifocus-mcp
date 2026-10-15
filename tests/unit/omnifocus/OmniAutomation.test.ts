@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-import { OmniAutomation, OmniAutomationError } from '../../../src/omnifocus/OmniAutomation.js';
+import {
+  OmniAutomation,
+  OmniAutomationError,
+  setPendingOperationsTracker,
+} from '../../../src/omnifocus/OmniAutomation.js';
 import {
   SCRIPT_ERROR_CONTEXT,
   type ScriptError,
@@ -706,5 +710,63 @@ describe('OmniAutomation concurrent execute() serialization (OMN-321)', () => {
     procB.stdout.emit('data', JSON.stringify({ ok: true }));
     procB.emit('close', 0);
     await expect(pb).resolves.toEqual({ ok: true });
+  });
+});
+
+/**
+ * OMN-348: the pending-operations bookkeeping in createTrackedExecutionPromise
+ * used to be `promise.finally(() => set.delete(promise))`. `execute()` returns
+ * that SAME `promise` to its caller, who handles its rejection perfectly
+ * normally — but `.finally()` also creates a second, derived promise that
+ * nobody holds a reference to, and THAT derived promise re-rejects with the
+ * same reason. Node fires `unhandledRejection` for it regardless of how the
+ * original, caller-facing promise is handled.
+ */
+describe('OmniAutomation pending-operations tracking does not leak an unhandledRejection (OMN-348)', () => {
+  afterEach(() => {
+    setPendingOperationsTracker(new Set());
+  });
+
+  it('a failed script, properly caught by the caller, still never fires unhandledRejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const pendingOperations = new Set<Promise<unknown>>();
+      setPendingOperationsTracker(pendingOperations);
+
+      const mockProcess = Object.assign(new EventEmitter(), {
+        stdin: { write: vi.fn(), end: vi.fn() },
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+      });
+      vi.mocked(spawn).mockReturnValue(mockProcess as any);
+
+      const instance = new OmniAutomation(100000, 1000);
+      const executePromise = instance.execute('return 1');
+
+      // The caller (here: this test) properly handles the rejection — the
+      // bug this guards against is independent of that and lives in the
+      // untracked derived promise.
+      const caught = executePromise.catch((e: unknown) => e);
+
+      await new Promise((resolve) => setImmediate(resolve));
+      mockProcess.emit('error', new Error('Spawn failed'));
+
+      const error = await caught;
+      expect(error).toBeInstanceOf(Error);
+
+      // Flush microtasks and a macrotask tick so any unhandledRejection the
+      // event loop would schedule has fired before we assert.
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((r) => setImmediate(r));
+
+      expect(pendingOperations.size).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });
