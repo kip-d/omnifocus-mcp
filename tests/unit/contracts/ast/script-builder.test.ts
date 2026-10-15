@@ -776,12 +776,16 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
       );
 
       expect(result.script).toContain('allResults.sort(');
-      // Should reference both fields
-      expect(result.script).toContain('a.dueDate');
-      expect(result.script).toContain('a.name');
+      // OMN-335 D2: the comparator reads the precomputed __sortKey tuple, whose
+      // values are the RAW task accessors (TASK_SORT_VALUE_EXPRS) — one entry per
+      // sort level, in order.
+      expect(result.script).toContain('task.dueDate ? task.dueDate.getTime() : null');
+      expect(result.script).toContain("(task.name || '').toLowerCase()");
+      expect(result.script).toContain('a.__sortKey');
+      expect(result.script).toContain('b.__sortKey');
     });
 
-    it('handles desc direction with negative multiplier', () => {
+    it('encodes desc direction in the per-level dirs array', () => {
       const result = buildFilteredTasksScript(
         {},
         {
@@ -790,10 +794,11 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      expect(result.script).toContain('* -1');
+      expect(result.script).toContain('["desc"]');
+      expect(result.script).toContain("dirs[i] === 'desc' ? -c : c");
     });
 
-    it('handles asc direction with positive multiplier', () => {
+    it('encodes asc direction in the per-level dirs array', () => {
       const result = buildFilteredTasksScript(
         {},
         {
@@ -802,7 +807,7 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      expect(result.script).toContain('* 1');
+      expect(result.script).toContain('["asc"]');
     });
 
     it('generates localeCompare for string fields', () => {
@@ -817,7 +822,7 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
       expect(result.script).toContain('localeCompare');
     });
 
-    it('generates date comparison for date fields', () => {
+    it('generates date comparison for date fields (raw task accessor)', () => {
       const result = buildFilteredTasksScript(
         {},
         {
@@ -826,12 +831,15 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      // Date fields use lexicographic comparison on ISO strings
-      expect(result.script).toContain('a.dueDate');
-      expect(result.script).toContain('b.dueDate');
+      // OMN-335 D2: dates sort as epoch millis read off the raw task, captured
+      // into __sortKey at push time — not `a.dueDate`/`b.dueDate` off the
+      // projected row (the OMN-305 trap this fixes).
+      expect(result.script).toContain('task.dueDate ? task.dueDate.getTime() : null');
+      expect(result.script).not.toMatch(/\ba\.dueDate\b/);
+      expect(result.script).not.toMatch(/\bb\.dueDate\b/);
     });
 
-    it('generates boolean comparison for boolean fields', () => {
+    it('generates boolean comparison for boolean fields (raw task accessor)', () => {
       const result = buildFilteredTasksScript(
         {},
         {
@@ -840,11 +848,10 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      expect(result.script).toContain('a.flagged');
-      expect(result.script).toContain('b.flagged');
+      expect(result.script).toContain('task.flagged ? 1 : 0');
     });
 
-    it('generates numeric comparison for numeric fields', () => {
+    it('generates numeric comparison for numeric fields (raw task accessor)', () => {
       const result = buildFilteredTasksScript(
         {},
         {
@@ -853,8 +860,26 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      expect(result.script).toContain('a.estimatedMinutes');
-      expect(result.script).toContain('b.estimatedMinutes');
+      expect(result.script).toContain('task.estimatedMinutes != null ? task.estimatedMinutes : null');
+    });
+
+    // OMN-335 D2 / OMN-305 (tasks side): the sort key must work even when the
+    // caller's `fields` omits it from the projected row.
+    it('sort key is captured independent of the requested fields (OMN-305 fix)', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          fields: ['name'], // dueDate NOT requested in the projected row
+          limit: 10,
+        },
+      );
+
+      // __sortKey is populated straight from `task`, so it doesn't depend on
+      // whether 'dueDate' is in the field projection.
+      expect(result.script).toContain('__row.__sortKey = [task.dueDate ? task.dueDate.getTime() : null]');
+      // The response never carries the scratch key.
+      expect(result.script).toContain('delete r.__sortKey');
     });
   });
 
@@ -944,9 +969,10 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
         },
       );
 
-      // Null checks should be present
-      expect(result.script).toContain('av == null');
-      expect(result.script).toContain('bv == null');
+      // Null checks should be present (nulls-last, regardless of direction —
+      // OMN-335 D2 mirrors the projects comparator's entries.sort shape)
+      expect(result.script).toContain('x == null');
+      expect(result.script).toContain('y == null');
       expect(result.script).toContain('return 1'); // null -> end
       expect(result.script).toContain('return -1'); // non-null -> before null
     });

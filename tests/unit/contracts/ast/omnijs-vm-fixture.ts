@@ -51,12 +51,20 @@ export interface StubTask {
   taskStatus: unknown;
   inInbox: boolean;
   tags: unknown[];
-  dueDate: null;
-  deferDate: null;
+  dueDate: Date | null;
+  deferDate: Date | null;
   containingProject: null;
   note: string | null;
   /** non-null marks the row as a project root (OMN-153: `task.project !== null`). */
   project: null | { name: string };
+  // OMN-335: optional sortable-field values, widened here (not per-file — see
+  // the file banner) so sort-before-cap tests can exercise the raw-value
+  // comparator (TASK_SORT_VALUE_EXPRS) without a separate stub shape.
+  plannedDate?: Date | null;
+  completionDate?: Date | null;
+  added?: Date | null;
+  modified?: Date | null;
+  estimatedMinutes?: number | null;
 }
 
 export function stubTask(name: string, overrides: Partial<StubTask> = {}): StubTask {
