@@ -167,7 +167,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       totals uncapped in the script, cap only the task arrays, and surface `tasks_detailed`/`detail_capped` (Technique:
       Separate Query from Modifier). Verified: read; the verifier reported HOLDS. Unverified at runtime: a unit test
       with 150 mocked overdue rows asserting that the bucket counts sum to `totalOverdue`.
-- [ ] 15. [OMN-341] `recurring_tasks {operation:'patterns'}` discards the script's computed `patterns[]` and ships
+- [x] 15. [OMN-341] `recurring_tasks {operation:'patterns'}` discards the script's computed `patterns[]` and ships
       placeholders (`patterns: {}`, `recurringTasks: []`, `byFrequency: {}`). Its project insight reads `.count`, but
       the script emits `recurringCount`, so it renders "Project X has the most recurring tasks (undefined)". The unit
       mock (`OmniFocusAnalyzeTool.test.ts:1035`) uses a shape the strict schema rejects, so it pins the bug
@@ -216,7 +216,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       test with `returnMapping:false`, a create `t1` and an update `t1`. Status 2026-09-28: since item #5 (PR #282) the
       miss is reported as a failed row naming `t1`, no longer as success. The mapping itself is still not carried, so
       this item stays open.
-- [ ] 20. [OMN-346] The `omnifocus_write` description states three things the code does not do:
+- [x] 20. [OMN-346] The `omnifocus_write` description states three things the code does not do:
       - "planned=8am", but `localToUTC` uses 12:00.
       - "Batch supports up to 100 operations", but `operations` has no min or max; 0, 101 and 500 all parse.
       - The bulk-delete dry-run note says invalid ids "fail silently", but execution reports a per-item "Task not
