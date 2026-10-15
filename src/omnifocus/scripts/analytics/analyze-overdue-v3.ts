@@ -115,6 +115,9 @@ export const ANALYZE_OVERDUE_V3 = `
           // maxTasks overdue tasks.
           let totalOverdueCount = 0;
           const urgencyCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+          // Sum of daysOverdue per bucket over the same full population, so a
+          // bucket's average is total / count, never the capped sample's mean.
+          const urgencyDaysTotals = { critical: 0, high: 0, medium: 0, low: 0 };
           let totalDaysOverdueAll = 0;
           let blockedOverdueCount = 0;
           let oldestDueTime = Infinity;
@@ -169,7 +172,9 @@ export const ANALYZE_OVERDUE_V3 = `
               const isBlocked = activeStatus === Task.Status.Blocked;
               totalOverdueCount++;
               totalDaysOverdueAll += daysOverdue;
-              urgencyCounts[urgencyBucketKey(daysOverdue)]++;
+              const urgencyKey = urgencyBucketKey(daysOverdue);
+              urgencyCounts[urgencyKey]++;
+              urgencyDaysTotals[urgencyKey] += daysOverdue;
               if (isBlocked) blockedOverdueCount++;
               if (dueDateTime < oldestDueTime) {
                 oldestDueTime = dueDateTime;
@@ -384,6 +389,7 @@ export const ANALYZE_OVERDUE_V3 = `
             // maxTasks-capped detail sample. Consumers must read counts from
             // here, never from groupedByUrgency[key].length.
             urgencyCounts: urgencyCounts,
+            urgencyDaysTotals: urgencyDaysTotals,
             projectBottlenecks: projectList.slice(0, 5),
             tasksAnalyzed: cappedOverdueTasks.length
           });
@@ -415,6 +421,7 @@ export const ANALYZE_OVERDUE_V3 = `
           insights: analysis.insights,
           groupedByUrgency: analysis.groupedByUrgency,
           urgencyCounts: analysis.urgencyCounts,
+          urgencyDaysTotals: analysis.urgencyDaysTotals,
           projectBottlenecks: analysis.projectBottlenecks,
           metadata: {
             generated_at: new Date().toISOString(),

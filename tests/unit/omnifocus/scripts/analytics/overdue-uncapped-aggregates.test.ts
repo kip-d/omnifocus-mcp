@@ -31,6 +31,7 @@ interface ScriptResult {
     summary: { totalOverdue: number };
     groupedByUrgency: Record<string, Array<{ id: string; daysOverdue: number }>>;
     urgencyCounts: { critical: number; high: number; medium: number; low: number };
+    urgencyDaysTotals: { critical: number; high: number; medium: number; low: number };
     projectBottlenecks: Array<{ name: string; overdueCount: number }>;
     metadata: { tasksAnalyzed: number };
   };
@@ -64,6 +65,17 @@ describe('OMN-340 — overdue_analysis urgency/project aggregates are uncapped',
     expect(urgencyCounts.critical + urgencyCounts.high + urgencyCounts.medium + urgencyCounts.low).toBe(
       parsed.data.summary.totalOverdue,
     );
+  });
+
+  // /code-review (2026-10-15): the per-bucket average must come from the
+  // whole population too, not the capped detail sample.
+  it('per-bucket daysOverdue totals cover the full population', () => {
+    const { urgencyDaysTotals } = runScript(tasks).data;
+    expect(urgencyDaysTotals.low).toBe(1 + 2);
+    expect(urgencyDaysTotals.medium).toBe(3 + 4 + 5 + 6 + 7);
+    expect(urgencyDaysTotals.high).toBe(((8 + 30) * 23) / 2);
+    // days 31..150, with day 141 (DB index 140) replaced by the 500-day task
+    expect(urgencyDaysTotals.critical).toBe(((31 + 150) * 120) / 2 - 141 + 500);
   });
 
   it('per-project overdue totals are exact over the full population, not the capped sample', () => {

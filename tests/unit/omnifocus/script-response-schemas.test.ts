@@ -2382,6 +2382,7 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
       // OMN-340: uncapped per-bucket totals — independent of groupedByUrgency's
       // (capped-detail) array lengths, so a schema test must cover it on its own.
       urgencyCounts: { critical: 0, high: 1, medium: 0, low: 0 },
+      urgencyDaysTotals: { critical: 0, high: 10, medium: 0, low: 0 },
       projectBottlenecks: [
         { name: 'Work', overdueCount: 1, blockedCount: 0, avgDaysOverdue: '11.0', blockageRate: '0.0' },
       ],
@@ -2421,6 +2422,7 @@ describe('OVERDUE_ANALYSIS_V3_SCHEMA', () => {
         insights: ['No overdue tasks found - excellent!'],
         groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
         urgencyCounts: { critical: 0, high: 0, medium: 0, low: 0 },
+        urgencyDaysTotals: { critical: 0, high: 0, medium: 0, low: 0 },
         projectBottlenecks: [],
       },
     });

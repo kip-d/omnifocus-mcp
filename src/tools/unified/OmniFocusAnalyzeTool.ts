@@ -1040,7 +1040,7 @@ TIME-WINDOW SCOPING:
       const scriptData: OverdueAnalysisV3Data =
         'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueAnalysisV3Data);
 
-      const { summary, groupedByUrgency, urgencyCounts, projectBottlenecks, insights } = scriptData;
+      const { summary, groupedByUrgency, urgencyCounts, urgencyDaysTotals, projectBottlenecks, insights } = scriptData;
 
       // OMN-187: the v3 script returns overdue tasks split across urgency buckets
       // (not a flat array). Flatten them back into one list, most-overdue first,
@@ -1094,11 +1094,11 @@ TIME-WINDOW SCOPING:
         groupedAnalysis: Object.fromEntries(
           urgencyKeys.map((key) => {
             const tasks = groupedByUrgency[key];
-            const averageDaysOverdue =
-              tasks.length > 0 ? tasks.reduce((sum, t) => sum + t.daysOverdue, 0) / tasks.length : 0;
-            // OMN-340: count comes from the uncapped urgencyCounts, NOT
-            // tasks.length (tasks is the maxTasks-capped detail sample).
-            return [key, { count: urgencyCounts[key], averageDaysOverdue, tasks }];
+            // OMN-340: count AND average come from the uncapped per-bucket
+            // aggregates, NOT the maxTasks-capped detail sample in `tasks`.
+            const count = urgencyCounts[key];
+            const averageDaysOverdue = count > 0 ? urgencyDaysTotals[key] / count : 0;
+            return [key, { count, averageDaysOverdue, tasks }];
           }),
         ),
       };

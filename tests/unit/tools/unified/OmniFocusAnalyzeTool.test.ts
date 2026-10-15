@@ -699,6 +699,9 @@ describe('OmniFocusAnalyzeTool', () => {
             // lengths (1 each) — proves the handler reads bucket counts from
             // here, never from groupedByUrgency[key].length.
             urgencyCounts: { critical: 3, high: 7, medium: 0, low: 0 },
+            // Totals over the whole population: averages 100 and 10, unlike the
+            // capped sample arrays above (45 and the newer task's days).
+            urgencyDaysTotals: { critical: 300, high: 70, medium: 0, low: 0 },
             projectBottlenecks: [
               { name: 'Work', overdueCount: 2, blockedCount: 0, avgDaysOverdue: '26.5', blockageRate: '0.0' },
             ],
@@ -737,6 +740,9 @@ describe('OmniFocusAnalyzeTool', () => {
       // NOT groupedByUrgency[key].length (OMN-340).
       expect(res.data.groupedAnalysis.critical.count).toBe(3);
       expect(res.data.groupedAnalysis.high.count).toBe(7);
+      // averageDaysOverdue also comes from the uncapped totals (/code-review).
+      expect(res.data.groupedAnalysis.critical.averageDaysOverdue).toBe(100);
+      expect(res.data.groupedAnalysis.high.averageDaysOverdue).toBe(10);
       // coverage: total = true overdue count, returned = detail rows actually
       // carried, capped false (2 ≤ cap 100).
       expect(res.data.stats.coverage).toEqual({ total: 2, returned: 2, capped: false, cap: 100 });
@@ -795,6 +801,7 @@ describe('OmniFocusAnalyzeTool', () => {
             // uncapped: the true full-population bucket totals (150 overdue, only
             // 1 of which made it into the capped detail above).
             urgencyCounts: { critical: 1, high: 149, medium: 0, low: 0 },
+            urgencyDaysTotals: { critical: 0, high: 0, medium: 0, low: 0 },
             projectBottlenecks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',
@@ -848,6 +855,7 @@ describe('OmniFocusAnalyzeTool', () => {
             insights: ['No overdue tasks found - excellent!'],
             groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
             urgencyCounts: { critical: 0, high: 0, medium: 0, low: 0 },
+            urgencyDaysTotals: { critical: 0, high: 0, medium: 0, low: 0 },
             projectBottlenecks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',

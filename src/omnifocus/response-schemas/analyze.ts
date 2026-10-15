@@ -240,6 +240,16 @@ export const OverdueAnalysisDataSchema = z
         low: z.number(),
       })
       .strict(),
+    // Uncapped per-bucket sum of daysOverdue: the bucket average is
+    // urgencyDaysTotals[k] / urgencyCounts[k], over the whole population.
+    urgencyDaysTotals: z
+      .object({
+        critical: z.number(),
+        high: z.number(),
+        medium: z.number(),
+        low: z.number(),
+      })
+      .strict(),
     projectBottlenecks: z.array(ProjectBottleneckRowSchema),
     metadata: z
       .object({
