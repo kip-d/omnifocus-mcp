@@ -630,6 +630,22 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.error?.code).toBe('ANALYSIS_ERROR');
     });
 
+    it('OMN-340: cache key carries overdue_v3_ (bumped from v2 — old capped-honest-unaware payloads must not be served)', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: false,
+        error: 'Failed to analyze overdue tasks',
+        details: 'OmniFocus error',
+      });
+
+      await tool.execute({ analysis: { type: 'overdue_analysis' } });
+
+      expect(mockCache.get.mock.calls[0][0]).toBe('analytics');
+      expect(mockCache.get.mock.calls[0][1]).toContain('overdue_v3_');
+      expect(mockCache.get.mock.calls[0][1]).not.toContain('overdue_v2_');
+    });
+
     it('maps the real v3 envelope shape into the response (OMN-187)', async () => {
       // OMN-187: the v3 script emits summary.{blockedPercentage, avgDaysOverdue,
       // overduePercentage, mostOverdue} + groupedByUrgency + projectBottlenecks +
@@ -679,6 +695,10 @@ describe('OmniFocusAnalyzeTool', () => {
             },
             insights: ['2 overdue tasks found'],
             groupedByUrgency: { critical: [oldest], high: [newer], medium: [], low: [] },
+            // OMN-340: deliberately DIFFERENT from groupedByUrgency's array
+            // lengths (1 each) — proves the handler reads bucket counts from
+            // here, never from groupedByUrgency[key].length.
+            urgencyCounts: { critical: 3, high: 7, medium: 0, low: 0 },
             projectBottlenecks: [
               { name: 'Work', overdueCount: 2, blockedCount: 0, avgDaysOverdue: '26.5', blockageRate: '0.0' },
             ],
@@ -713,9 +733,13 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.stats.patterns.length).toBe(1);
       expect(res.data.stats.patterns[0].value).toBe('Work');
       expect(res.data.stats.patterns[0].count).toBe(2);
-      // groupedAnalysis: urgency buckets with counts.
-      expect(res.data.groupedAnalysis.critical.count).toBe(1);
-      expect(res.data.groupedAnalysis.high.count).toBe(1);
+      // groupedAnalysis: counts come from the script's uncapped urgencyCounts,
+      // NOT groupedByUrgency[key].length (OMN-340).
+      expect(res.data.groupedAnalysis.critical.count).toBe(3);
+      expect(res.data.groupedAnalysis.high.count).toBe(7);
+      // coverage: total = true overdue count, returned = detail rows actually
+      // carried, capped false (2 ≤ cap 100).
+      expect(res.data.stats.coverage).toEqual({ total: 2, returned: 2, capped: false, cap: 100 });
     });
 
     it('surfaces summary.mostOverdue from the script, not just the capped detail-array head (OMN-253)', async () => {
@@ -768,6 +792,9 @@ describe('OmniFocusAnalyzeTool', () => {
             insights: [],
             // globalMax is NOT in the capped detail buckets — it's beyond maxTasks.
             groupedByUrgency: { critical: [], high: [cappedHead], medium: [], low: [] },
+            // uncapped: the true full-population bucket totals (150 overdue, only
+            // 1 of which made it into the capped detail above).
+            urgencyCounts: { critical: 1, high: 149, medium: 0, low: 0 },
             projectBottlenecks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',
@@ -791,6 +818,10 @@ describe('OmniFocusAnalyzeTool', () => {
       // ...but summary.mostOverdue is still the true full-population max.
       expect(res.data.stats.summary.mostOverdue?.id).toBe('the-global-max');
       expect(res.data.stats.summary.mostOverdue?.daysOverdue).toBe(400);
+      // groupedAnalysis counts the uncapped population, not the 1-row detail sample.
+      expect(res.data.groupedAnalysis.high.count).toBe(149);
+      // coverage flags the cap: 150 total, only 1 detail row returned.
+      expect(res.data.stats.coverage).toEqual({ total: 150, returned: 1, capped: true, cap: 100 });
     });
 
     it('coalesces a null oldestOverdueDate to an empty string (OMN-187, no overdue tasks)', async () => {
@@ -816,6 +847,7 @@ describe('OmniFocusAnalyzeTool', () => {
             },
             insights: ['No overdue tasks found - excellent!'],
             groupedByUrgency: { critical: [], high: [], medium: [], low: [] },
+            urgencyCounts: { critical: 0, high: 0, medium: 0, low: 0 },
             projectBottlenecks: [],
             metadata: {
               generated_at: '2026-06-16T10:00:00.000Z',

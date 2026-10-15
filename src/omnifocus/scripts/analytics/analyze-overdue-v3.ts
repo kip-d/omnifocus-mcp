@@ -91,14 +91,30 @@ export const ANALYZE_OVERDUE_V3 = `
             };
           }
 
-          let tasksProcessed = 0;
+          // OMN-340: ONE threshold function drives both the uncapped urgency
+          // COUNTS (every overdue task — honest totals) and the capped detail
+          // bucketing built after the sort+slice below (same thresholds applied
+          // to the sorted-then-sliced sample). A single definition rules out
+          // the two ever drifting apart (critical >30 / high >7 / medium >2 /
+          // low days).
+          function urgencyBucketKey(daysOverdue) {
+            if (daysOverdue > 30) return 'critical';
+            if (daysOverdue > 7) return 'high';
+            if (daysOverdue > 2) return 'medium';
+            return 'low';
+          }
+
           let totalActive = 0;
-          // OMN-187: full-population overdue aggregates. The maxTasks cap below limits
-          // only the per-task DETAIL arrays (overdueTasks/bottlenecks = payload size);
-          // these counters reflect EVERY overdue task, so totalOverdue, avgDaysOverdue,
-          // blockedCount, overduePercentage, and oldestOverdueDate stay correct even
-          // when there are more than maxTasks overdue tasks.
+          // OMN-187/OMN-340: full-population overdue aggregates. The maxTasks cap
+          // further below limits only the DETAIL arrays returned to the caller
+          // (overdueTasks sample / groupedByUrgency task lists = payload size);
+          // these counters — including urgencyCounts and projectBottlenecks —
+          // reflect EVERY overdue task, so totalOverdue, avgDaysOverdue,
+          // blockedCount, overduePercentage, oldestOverdueDate, urgencyCounts, and
+          // projectBottlenecks stay correct even when there are more than
+          // maxTasks overdue tasks.
           let totalOverdueCount = 0;
+          const urgencyCounts = { critical: 0, high: 0, medium: 0, low: 0 };
           let totalDaysOverdueAll = 0;
           let blockedOverdueCount = 0;
           let oldestDueTime = Infinity;
@@ -153,6 +169,7 @@ export const ANALYZE_OVERDUE_V3 = `
               const isBlocked = activeStatus === Task.Status.Blocked;
               totalOverdueCount++;
               totalDaysOverdueAll += daysOverdue;
+              urgencyCounts[urgencyBucketKey(daysOverdue)]++;
               if (isBlocked) blockedOverdueCount++;
               if (dueDateTime < oldestDueTime) {
                 oldestDueTime = dueDateTime;
@@ -180,11 +197,11 @@ export const ANALYZE_OVERDUE_V3 = `
                 }
               }
 
-              // Per-task DETAIL recording is capped for payload size — the summary
-              // aggregates above are already complete.
-              if (tasksProcessed >= maxTasks) return;
-              tasksProcessed++;
-
+              // OMN-340: record EVERY overdue task (uncapped) — projectBottlenecks
+              // below must total the WHOLE population, not just a maxTasks-capped
+              // sample, and the detail array must hold the N MOST overdue (sort
+              // over the full set), not the first N encountered in DB order. The
+              // maxTasks cap is applied once, after the sort, just below the loop.
               // Next action / tags / project: reuse the cached activeStatus
               // (OMN-187 — no re-read).
               const overdueTask = buildOverdueRecord(task, daysOverdue, dueDate, activeStatus, isBlocked);
@@ -244,8 +261,13 @@ export const ANALYZE_OVERDUE_V3 = `
             }
           });
 
-          // Sort overdue tasks by days overdue
+          // Sort overdue tasks by days overdue — SORT BEFORE SLICE (OMN-340/D1a):
+          // the detail arrays must hold the N MOST overdue, not the first N
+          // encountered in DB order. overdueTasks holds the FULL (uncapped)
+          // population at this point; cappedOverdueTasks below is the only place
+          // maxTasks is applied to the detail.
           overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
+          const cappedOverdueTasks = overdueTasks.slice(0, maxTasks);
 
           // OMN-253: build the full-population mostOverdue record from the
           // ranked candidates tracked above, via the SAME builder the per-task
@@ -328,25 +350,21 @@ export const ANALYZE_OVERDUE_V3 = `
             }
           }
 
-          // Group tasks by how overdue they are
+          // Group the CAPPED detail (the N most overdue, already sorted above)
+          // by urgency, via the SAME threshold function that built the uncapped
+          // urgencyCounts during the loop (critical > 30 days, high 8-30, medium
+          // 3-7, low 1-2) — one definition, no drift between the counts and the
+          // detail rows' bucket placement.
           const groupedByUrgency = {
-            critical: [], // > 30 days
-            high: [],     // 8-30 days
-            medium: [],   // 3-7 days
-            low: []       // 1-2 days
+            critical: [],
+            high: [],
+            medium: [],
+            low: []
           };
 
-          for (let i = 0; i < overdueTasks.length; i++) {
-            const task = overdueTasks[i];
-            if (task.daysOverdue > 30) {
-              groupedByUrgency.critical.push(task);
-            } else if (task.daysOverdue > 7) {
-              groupedByUrgency.high.push(task);
-            } else if (task.daysOverdue > 2) {
-              groupedByUrgency.medium.push(task);
-            } else {
-              groupedByUrgency.low.push(task);
-            }
+          for (let i = 0; i < cappedOverdueTasks.length; i++) {
+            const task = cappedOverdueTasks[i];
+            groupedByUrgency[urgencyBucketKey(task.daysOverdue)].push(task);
           }
 
           return JSON.stringify({
@@ -361,8 +379,13 @@ export const ANALYZE_OVERDUE_V3 = `
             mostOverdue: mostOverdueRecord,
             insights: insights,
             groupedByUrgency: groupedByUrgency,
+            // OMN-340: urgencyCounts are the UNCAPPED per-bucket totals (every
+            // overdue task); groupedByUrgency's arrays above hold only the
+            // maxTasks-capped detail sample. Consumers must read counts from
+            // here, never from groupedByUrgency[key].length.
+            urgencyCounts: urgencyCounts,
             projectBottlenecks: projectList.slice(0, 5),
-            tasksAnalyzed: tasksProcessed
+            tasksAnalyzed: cappedOverdueTasks.length
           });
         })()
       \`;
@@ -391,6 +414,7 @@ export const ANALYZE_OVERDUE_V3 = `
           },
           insights: analysis.insights,
           groupedByUrgency: analysis.groupedByUrgency,
+          urgencyCounts: analysis.urgencyCounts,
           projectBottlenecks: analysis.projectBottlenecks,
           metadata: {
             generated_at: new Date().toISOString(),

@@ -37,6 +37,7 @@ import {
 } from '../../omnifocus/script-response-schemas.js';
 import type { RecurringPatternEntry, RecurringByProjectEntry } from '../../omnifocus/response-schemas/read.js';
 import { formatLocalDay, localDateBoundToUTC, localDayKey } from '../../utils/timezone.js';
+import { buildCoverage } from './coverage.js';
 // Script imports (irreducible computation)
 import { PRODUCTIVITY_STATS_SCRIPT_V3 as PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
 import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
@@ -358,7 +359,9 @@ export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, unknown
 ANALYSIS TYPES:
 - productivity_stats: completion counts and rates (incl. completionPercent, the all-time completion rate)
 - task_velocity: Completion trends over time
-- overdue_analysis: Bottleneck identification
+- overdue_analysis: Bottleneck identification. Bucket counts, project totals, and
+  insights cover the WHOLE overdue population; the returned task-detail arrays hold
+  only the 100 most overdue (coverage.capped flags when the true total exceeds that).
 - pattern_analysis: Database-wide patterns (tags, projects, stale items, missing next actions).
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
@@ -997,7 +1000,11 @@ TIME-WINDOW SCOPING:
       const groupBy = 'project';
       const limit = 100;
 
-      const cacheKey = `overdue_v2_${includeRecentlyCompleted}_${groupBy}_${limit}`;
+      // OMN-340: v2 → v3 — bucket counts and project totals are now read from
+      // the uncapped aggregates (not the capped detail sample), and the
+      // response carries a new `coverage` field. Old cached v2 payloads lack
+      // both, so the key must change to stop them being served as if honest.
+      const cacheKey = `overdue_v3_${includeRecentlyCompleted}_${groupBy}_${limit}`;
 
       const cached = this.cache.get<OverdueAnalysisDataV2>('analytics', cacheKey);
       if (cached) {
@@ -1033,11 +1040,14 @@ TIME-WINDOW SCOPING:
       const scriptData: OverdueAnalysisV3Data =
         'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueAnalysisV3Data);
 
-      const { summary, groupedByUrgency, projectBottlenecks, insights } = scriptData;
+      const { summary, groupedByUrgency, urgencyCounts, projectBottlenecks, insights } = scriptData;
 
       // OMN-187: the v3 script returns overdue tasks split across urgency buckets
       // (not a flat array). Flatten them back into one list, most-overdue first,
-      // so the response carries real per-task rows.
+      // so the response carries real per-task rows. OMN-340: these buckets are
+      // the maxTasks-capped detail SAMPLE (the N most overdue, sorted before
+      // slicing) — bucket/overall COUNTS come from the script's uncapped
+      // urgencyCounts/summary.totalOverdue, never from this array's length.
       const urgencyKeys = ['critical', 'high', 'medium', 'low'] as const;
       const allOverdue = urgencyKeys
         .flatMap((key) => groupedByUrgency[key])
@@ -1066,6 +1076,9 @@ TIME-WINDOW SCOPING:
             daysOverdue: task.daysOverdue,
           })),
           // projectBottlenecks → flat pattern rows (blockageRate is a toFixed string).
+          // OMN-340: overdueCount is now the project's FULL-population overdue
+          // total (the script computes it in the uncapped aggregate pass), not
+          // just however many of that project's tasks survived the detail cap.
           patterns: projectBottlenecks.map((b) => ({
             type: 'project',
             value: b.name,
@@ -1073,13 +1086,19 @@ TIME-WINDOW SCOPING:
             percentage: parseFloat(b.blockageRate) || 0,
           })),
           insights: { topRecommendations: insights },
+          // OMN-340 (D4a): total = true overdue count; returned = detail rows
+          // actually carried in overdueTasks/groupedAnalysis above; cap = the
+          // script's hardcoded maxTasks (D3 — not caller-settable).
+          coverage: buildCoverage(summary.totalOverdue, allOverdue.length, limit),
         },
         groupedAnalysis: Object.fromEntries(
           urgencyKeys.map((key) => {
             const tasks = groupedByUrgency[key];
             const averageDaysOverdue =
               tasks.length > 0 ? tasks.reduce((sum, t) => sum + t.daysOverdue, 0) / tasks.length : 0;
-            return [key, { count: tasks.length, averageDaysOverdue, tasks }];
+            // OMN-340: count comes from the uncapped urgencyCounts, NOT
+            // tasks.length (tasks is the maxTasks-capped detail sample).
+            return [key, { count: urgencyCounts[key], averageDaysOverdue, tasks }];
           }),
         ),
       };
