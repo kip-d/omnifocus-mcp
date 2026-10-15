@@ -295,9 +295,15 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // Note truncation: shared policy — see resolveNoteTruncateLength.
   const noteTruncateLength = resolveNoteTruncateLength(compiled.details);
 
-  // Only pass user-specified sort to the script builder (not mode default sorts).
-  // Mode default sorts operate on small, already-filtered sets and stay as post-hoc.
-  const userSort = compiled.sort;
+  // OMN-335 P2: an explicit caller sort wins; otherwise fall back to the mode's
+  // default sort (MODE_DEFINITIONS.defaultSort — overdue/upcoming: dueDate asc,
+  // today: modified desc) so the POPULATION is sorted in-script before the cap,
+  // not the capped page after it (buildUnsortedScript's `flattenedTasks` DB-order
+  // slice). This relies on the D2 fix: the comparator reads raw task values, so
+  // the sort works even though scriptFields may omit the sort key.
+  // The inbox route has no `sort` option yet (buildInboxScript — OMN-335 slice 2),
+  // so it stays on the post-hoc sortTasks() below regardless of userSort/defaultSort.
+  const userSort = compiled.sort ?? (!inboxRoute ? getDefaultSort(mode) : undefined);
 
   const script = buildListTasksScriptV4({
     filter,
@@ -602,9 +608,12 @@ PERFORMANCE:
     }
 
     // Sort: skip post-hoc sort when sort was already applied in-script.
-    // User-specified sorts are embedded in OmniJS (sort-before-limit fix).
-    // Mode default sorts (e.g., overdue -> dueDate asc) stay as post-hoc
-    // since they operate on small, already-filtered result sets.
+    // OMN-335 P2: user-specified sorts AND mode default sorts (e.g., overdue ->
+    // dueDate asc) are now both embedded in OmniJS via buildTaskQuery's userSort
+    // (sort-before-cap fix) whenever sortedInScript is true — this branch is a
+    // harmless safety net, not the primary path, for every route except inbox
+    // (buildInboxScript has no `sort` option yet — OMN-335 slice 2 — so the
+    // inbox route always falls through here).
     const sortOptions = sortedInScript ? undefined : compiled.sort || getDefaultSort(mode as TaskQueryMode);
     if (sortOptions) {
       tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);

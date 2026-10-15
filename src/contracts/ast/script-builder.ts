@@ -60,6 +60,27 @@ export interface SortSpec {
   direction: 'asc' | 'desc';
 }
 
+/**
+ * OMN-335 D2 (absorbs the tasks side of OMN-305): OmniJS expressions producing
+ * a comparable sort value from the RAW `task` object — mirrors
+ * PROJECT_SORT_VALUE_EXPRS (OMN-311) below. `generateSortComparator` used to
+ * read `a.<field>`/`b.<field>` off the PROJECTED row, so a sort key the
+ * caller's `fields` omitted from the projection compared `undefined` against
+ * `undefined` for every row — a silent no-op. Reading straight off `task`
+ * instead means the sort works regardless of what `fields` requested.
+ */
+const TASK_SORT_VALUE_EXPRS: Record<SortableField, string> = {
+  dueDate: 'task.dueDate ? task.dueDate.getTime() : null',
+  deferDate: 'task.deferDate ? task.deferDate.getTime() : null',
+  plannedDate: 'task.plannedDate ? task.plannedDate.getTime() : null',
+  completionDate: 'task.completionDate ? task.completionDate.getTime() : null',
+  added: 'task.added ? task.added.getTime() : null',
+  modified: 'task.modified ? task.modified.getTime() : null',
+  name: "(task.name || '').toLowerCase()",
+  flagged: 'task.flagged ? 1 : 0',
+  estimatedMinutes: 'task.estimatedMinutes != null ? task.estimatedMinutes : null',
+};
+
 export interface ScriptOptions {
   /** Maximum tasks to return */
   limit?: number;
@@ -479,6 +500,11 @@ function generateMatchesFilterBlock(ctx: ScriptBuildContext): string {
 /** Build script for sort-before-limit path: collect all -> sort -> slice */
 function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
   const sortComparator = generateSortComparator(sort);
+  // OMN-335 D2: the sort key for each row is captured from the RAW task at
+  // push time (not the projected row), so it is correct regardless of what
+  // `fields` requested. `__sortKey` is a private tuple of the generated rows
+  // — it never reaches the response (stripped below, after the slice).
+  const sortKeyExpr = `[${sort.map((s) => TASK_SORT_VALUE_EXPRS[s.field]).join(', ')}]`;
   const warningsBlock = generateWarningsBlock(ctx);
   const warningsMetadata = generateWarningsMetadata(ctx.hasProjectPreamble);
   const matchesFilterBlock = generateMatchesFilterBlock(ctx);
@@ -497,9 +523,11 @@ function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;
 
-    allResults.push({
+    const __row = {
       ${ctx.fieldProjection}
-    });
+    };
+    __row.__sortKey = ${sortKeyExpr};
+    allResults.push(__row);
   });
 
   // Sort all matched results in-script before applying limit
@@ -507,6 +535,9 @@ function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
 
   // Slice for pagination
   const sliced = allResults.slice(${ctx.offset}, ${ctx.offset} + ${ctx.limit});
+
+  // __sortKey is a scratch field for the comparator only — never part of the response.
+  sliced.forEach(r => { delete r.__sortKey; });
 
   ${warningsBlock}
 
@@ -707,66 +738,31 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
 /**
  * Generate an OmniJS sort comparator function from sort specifications.
  *
- * Handles multiple sort levels, null-safety (nulls pushed to end),
- * and string/date/number/boolean field types.
- *
- * Modeled on the sort logic of the recurring-tasks builder
- * (omnifocus/scripts/recurring/analyze-recurring-tasks-ast.ts).
+ * OMN-335 D2: operates on each row's precomputed `__sortKey` tuple (raw task
+ * values — see TASK_SORT_VALUE_EXPRS), not the projected row, so the sort
+ * works regardless of what `fields` requested (the OMN-305 trap). Mirrors the
+ * projects comparator (OMN-311, `entries.sort` in buildFilteredProjectsScript):
+ * null (missing date/value) always sorts last, in either direction; strings
+ * compare with localeCompare (TASK_SORT_VALUE_EXPRS lowercases `name` first),
+ * everything else with `<`/`>`. A single generic comparator replaces the old
+ * per-field-type branches (date/bool/num/string) — the raw values are already
+ * shaped into directly-comparable primitives (epoch millis, 0/1, lowercased
+ * string), so no per-type dispatch is needed here.
  */
 function generateSortComparator(sort: SortSpec[]): string {
-  const comparisons = sort.map((s) => {
-    const dir = s.direction === 'desc' ? -1 : 1;
-    // Date fields need Date comparison; others use string/number comparison
-    // Field classifications match SortableField union (Zod SortFieldEnum in read-schema.ts).
-    // Computed fields (effectivePlannedDate, daysOverdue, available, inInbox) are excluded
-    // since they aren't exposed for user-specified sorting.
-    const isDateField = ['dueDate', 'deferDate', 'plannedDate', 'completionDate', 'added', 'modified'].includes(
-      s.field,
-    );
-    const isBoolField = ['flagged'].includes(s.field);
-    const isNumField = ['estimatedMinutes'].includes(s.field);
-
-    if (isDateField) {
-      // Date fields are ISO strings in the projected results; compare as strings (lexicographic ISO works)
-      return `
-      (() => {
-        const av = a.${s.field}, bv = b.${s.field};
-        if (av == null && bv == null) return 0;
-        if (av == null) return 1;
-        if (bv == null) return -1;
-        return (av < bv ? -1 : av > bv ? 1 : 0) * ${dir};
-      })()`;
-    } else if (isBoolField) {
-      return `
-      (() => {
-        const av = a.${s.field} ? 1 : 0, bv = b.${s.field} ? 1 : 0;
-        return (av - bv) * ${dir};
-      })()`;
-    } else if (isNumField) {
-      return `
-      (() => {
-        const av = a.${s.field}, bv = b.${s.field};
-        if (av == null && bv == null) return 0;
-        if (av == null) return 1;
-        if (bv == null) return -1;
-        return (av - bv) * ${dir};
-      })()`;
-    } else {
-      // String comparison (name, project, etc.)
-      return `
-      (() => {
-        const av = a.${s.field}, bv = b.${s.field};
-        if (av == null && bv == null) return 0;
-        if (av == null) return 1;
-        if (bv == null) return -1;
-        return (String(av).localeCompare(String(bv))) * ${dir};
-      })()`;
-    }
-  });
-
+  const dirsJson = JSON.stringify(sort.map((s) => s.direction));
   return `(a, b) => {
-    let c;
-    ${comparisons.map((comp) => `c = ${comp};\n    if (c !== 0) return c;`).join('\n    ')}
+    const av = a.__sortKey, bv = b.__sortKey;
+    const dirs = ${dirsJson};
+    for (let i = 0; i < dirs.length; i++) {
+      const x = av[i], y = bv[i];
+      if (x === y) continue;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      const c = typeof x === 'string' ? x.localeCompare(y) : (x < y ? -1 : 1);
+      if (c === 0) continue;
+      return dirs[i] === 'desc' ? -c : c;
+    }
     return 0;
   }`;
 }

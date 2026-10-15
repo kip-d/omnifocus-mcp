@@ -2241,6 +2241,106 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // OMN-335 P2: mode default sorts (MODE_DEFINITIONS.defaultSort) now reach the
+  // script via buildTaskQuery's userSort fallback, so the POPULATION is sorted
+  // in-script before the limit cap — not the capped page after it (the old
+  // post-hoc sortTasks() path). Non-inbox routes only; the inbox route has no
+  // `sort` option yet (buildInboxScript — slice 2) and keeps its existing
+  // post-hoc behavior (covered above).
+  describe('OMN-335 P2: mode default sorts reach the script (sort-before-cap)', () => {
+    it.each(['overdue', 'upcoming', 'today'])(
+      'mode %s emits a sort before the slice and reports sort_applied: true',
+      async (mode) => {
+        execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+        const result = (await tool.execute({ query: { type: 'tasks', mode } })) as any;
+
+        expect(result.success).toBe(true);
+        const script = execJsonSpy.mock.calls[0][0] as string;
+        // buildSortedScript's shape (sort-before-slice), not buildUnsortedScript's.
+        expect(script).toContain('allResults.sort(');
+        expect(script).toContain('sorted_in_script: true');
+        expect(result.metadata.sort_applied).toBe(true);
+      },
+    );
+
+    it('mode:available (no default sort) still uses the unsorted fast path', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'available' } })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).not.toContain('allResults.sort(');
+      expect(result.metadata.sort_applied).toBe(false);
+    });
+
+    it('an explicit caller sort still wins over the mode default', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'overdue', sort: [{ field: 'name', direction: 'asc' }] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      // The caller's sort key reaches __sortKey, not the mode default (dueDate).
+      expect(script).toContain("(task.name || '').toLowerCase()");
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
+    it('mode:overdue, limit:5 over 30 shuffled overdue tasks returns the 5 earliest dues, in order (vm-executed)', async () => {
+      execJsonSpy.mockResolvedValueOnce({ success: true, data: { tasks: [] } } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'tasks', mode: 'overdue', limit: 5 } });
+      const script = execJsonSpy.mock.calls[0][0] as string;
+
+      // 30 overdue tasks (all due before "now"), each due a distinct number of
+      // days ago, generated in shuffled (non-sorted) DB order.
+      const now = Date.now();
+      const daysAgo = Array.from({ length: 30 }, (_, i) => i + 1);
+      const shuffled = [...daysAgo];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = (i * 2654435761) % (i + 1); // deterministic pseudo-shuffle
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const Task = { Status: { Dropped: 'Dropped', Active: 'Active' } };
+      const tasks = shuffled.map((d, idx) => ({
+        id: { primaryKey: `t${idx}` },
+        name: `Task ${idx}`,
+        flagged: false,
+        completed: false,
+        taskStatus: Task.Status.Active,
+        inInbox: false,
+        tags: [],
+        dueDate: new Date(now - d * 86400000),
+        deferDate: null,
+        estimatedMinutes: null,
+        containingProject: null,
+        project: null,
+        note: null,
+      }));
+
+      const vmModule = await import('node:vm');
+      const sandbox: Record<string, unknown> = { flattenedTasks: tasks, inbox: tasks, Task, JSON, Date };
+      const context = vmModule.createContext(sandbox);
+      sandbox.Application = () => ({
+        evaluateJavascript: (src: string) => vmModule.runInContext(src, context),
+      });
+      const vmResult = JSON.parse(vmModule.runInContext(script, context) as string);
+
+      const expectedIds = tasks
+        .slice()
+        .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+        .slice(0, 5)
+        .map((t) => t.id.primaryKey);
+
+      expect(vmResult.tasks.map((t: any) => t.id)).toEqual(expectedIds);
+      expect(vmResult.metadata.sorted_in_script).toBe(true);
+      expect(vmResult.metadata.total_matched).toBe(30);
+    });
+  });
+
   // OMN-331: countOnly runs before the id-lookup fast path, and OR branches never reach
   // it — both went through generateProjectFilterCode, which ignored `id`.
   describe('project id filters reach the generated predicate (OMN-331)', () => {

@@ -169,22 +169,30 @@ describe('Parity: ProjectFieldEnum ↔ generateProjectFieldProjection (OMN-47 au
 });
 
 // =============================================================================
-// SortFieldEnum ↔ generateSortComparator (OMN-47 audit)
+// SortFieldEnum ↔ TASK_SORT_VALUE_EXPRS (OMN-47 audit; OMN-335 D2 update)
 // =============================================================================
 //
-// Every sortable field declared in the schema must be referenced in the sort
-// comparator. The comparator hardcodes type-classification arrays (date / bool
-// / number); a SortFieldEnum member missing from all of them falls through to
-// the generic-string branch, which silently produces wrong ordering for date
-// or numeric fields.
-
-describe('Parity: SortFieldEnum ↔ generateSortComparator (OMN-47 audit)', () => {
+// Every sortable field declared in the schema must produce a RAW task
+// accessor in the generated __sortKey tuple. OMN-335 D2 replaced the old
+// projected-row comparator (`a.${field}`, which silently no-op'd whenever
+// `fields` omitted the sort key — the OMN-305 trap) with a single generic
+// comparator reading a precomputed `__sortKey` tuple built from
+// TASK_SORT_VALUE_EXPRS[field]. A SortFieldEnum member missing from that
+// Record is now a compile-time error (Record<SortableField, string>), but
+// this test still pins that the field's RAW `task.<field>` accessor actually
+// reaches the generated script — not just that the TS type-checks.
+describe('Parity: SortFieldEnum ↔ TASK_SORT_VALUE_EXPRS (OMN-47 audit)', () => {
   for (const field of SortFieldEnum.options) {
-    it(`sort comparator references "${field}"`, () => {
-      const result = buildFilteredTasksScript({}, { fields: ['id', 'name'], sort: [{ field, direction: 'asc' }] });
-      // Comparator emits `a.${field}` and `b.${field}` to read the sort key.
-      const accessorPattern = new RegExp(`a\\.${field}\\b`);
+    it(`sort key reads the raw task property for "${field}"`, () => {
+      // fields: ['id'] deliberately omits the sort key from the projected row —
+      // the __sortKey capture must not depend on it (OMN-305 fix).
+      const result = buildFilteredTasksScript({}, { fields: ['id'], sort: [{ field, direction: 'asc' }] });
+      const accessorPattern = new RegExp(`\\btask\\.${field}\\b`);
       expect(result.script).toMatch(accessorPattern);
+      // The comparator itself must not read the projected row directly —
+      // the OMN-305 bug shape this fixes.
+      expect(result.script).not.toMatch(new RegExp(`\\ba\\.${field}\\b`));
+      expect(result.script).not.toMatch(new RegExp(`\\bb\\.${field}\\b`));
     });
   }
 });
