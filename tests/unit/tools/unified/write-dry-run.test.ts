@@ -148,6 +148,15 @@ describe('OmniFocusWriteTool dry-run mode', () => {
       expect(response.data.wouldAffect.items).toHaveLength(3);
     });
 
+    it('says unknown IDs are reported at execution, not silently skipped (OMN-346)', async () => {
+      const result = await tool.execute({
+        mutation: { operation: 'bulk_delete', target: 'task', ids: ['id1'], dryRun: true },
+      });
+      const note = (result as { data: { validation: { note: string } } }).data.validation.note;
+      expect(note).not.toMatch(/silently at execution/i);
+      expect(note).toMatch(/reported per item/i);
+    });
+
     it('should warn for large bulk deletes', async () => {
       const ids = Array.from({ length: 25 }, (_, i) => `id${i + 1}`);
 

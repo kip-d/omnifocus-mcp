@@ -350,7 +350,13 @@ const MutationSchema = z.discriminatedUnion('operation', [
   strictObj({
     operation: z.literal('batch'),
     target: z.enum(['task', 'project']).optional(),
-    operations: z.array(BatchOperationSchema),
+    // OMN-346 (D2): the advertised contract is 1–100 operations (inputSchema
+    // minItems/maxItems match). Large batches risk the script-size and timeout
+    // limits, so an oversized one is rejected with a split hint, not run.
+    operations: z
+      .array(BatchOperationSchema)
+      .min(1, 'A batch needs at least 1 operation')
+      .max(100, 'A batch allows at most 100 operations; split larger work into batches of 100 or fewer'),
     createSequentially: coerceBoolean().optional().default(true),
     atomicOperation: coerceBoolean().optional().default(false),
     returnMapping: coerceBoolean().optional().default(true),

@@ -1936,6 +1936,18 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(mutation.oneOf).toBeUndefined();
     });
 
+    it('advertises the 1–100 batch bound (OMN-346, matches the Zod schema)', () => {
+      const schema = tool.inputSchema as any;
+      const operations = schema.properties.mutation.properties.operations;
+      expect(operations.minItems).toBe(1);
+      expect(operations.maxItems).toBe(100);
+    });
+
+    it('states the real date-only planned default, 12pm (OMN-346 D1)', () => {
+      expect(tool.description).toContain('planned=12pm');
+      expect(tool.description).not.toContain('planned=8am');
+    });
+
     it('should advertise all 7 operation types', () => {
       const schema = tool.inputSchema as any;
       const opEnum = schema.properties.mutation.properties.operation.enum;

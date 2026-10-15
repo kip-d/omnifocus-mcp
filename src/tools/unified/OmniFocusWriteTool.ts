@@ -202,7 +202,7 @@ TAG MANAGEMENT (tag_manage operation):
 - reparent: Move tag to different parent (tagName + parentTag required)
 
 DATE FORMATS:
-- Date only: "YYYY-MM-DD" (defaults: due=5pm, defer=8am, planned=8am)
+- Date only: "YYYY-MM-DD" (defaults: due=5pm, defer=8am, planned=12pm)
 - Date+time: "YYYY-MM-DD HH:mm" (local time)
 - Clear date: null or clearDueDate/clearDeferDate/clearPlannedDate: true
 
@@ -280,7 +280,7 @@ SAFETY:
             data: { type: 'object', properties: createDataProperties },
             changes: { type: 'object', properties: updateChangesProperties },
             id: { type: 'string' },
-            target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
+            target_id: { type: 'string', description: 'Alias for id on delete (pairs with target)' },
             minimalResponse: { type: 'boolean' },
 
             // complete
@@ -293,6 +293,8 @@ SAFETY:
             // batch
             operations: {
               type: 'array',
+              minItems: 1,
+              maxItems: 100,
               items: {
                 type: 'object',
                 properties: {
@@ -2689,7 +2691,7 @@ SAFETY:
         validation: {
           passed: true,
           warnings: warnings.length > 0 ? warnings : undefined,
-          note: 'ID existence not verified in dry-run. Invalid IDs will fail silently at execution.',
+          note: 'ID existence not verified in dry-run. At execution, unknown IDs are reported per item in the response (not silently skipped).',
         },
       },
       undefined,
