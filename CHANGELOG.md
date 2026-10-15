@@ -61,6 +61,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   version-bumped (`velocity_v2_*` → `velocity_v3_*`) because that cache stores the reshaped response object, so stale
   entries would otherwise serve the old shape until TTL expiry after deploy.
 
+- **BREAKING (analyze response): `recurring_tasks` `patterns` op ships what the script actually computed** (OMN-341) —
+  same class as OMN-289. **`patterns`** changes type from an always-empty `{}` to the script's real
+  `{pattern, unit, steps, count, percentage, examples}[]`, sorted by count desc — the key name is unchanged (it was
+  always empty, so there is no prior _content_ a client could depend on, only the type). **Removed:** `recurringTasks`
+  (always `[]` on this op — the `analyze` op already returns the real task list) and `summary.byFrequency` (always `{}`;
+  derivable from `patterns[]`, so a separate map would just be one more field to keep honest). Two insight bugs fixed
+  alongside the reshape: the top-project insight read `byProject[0].count`, which the strict schema doesn't have (the
+  script emits `recurringCount`) — it rendered `(undefined)`; and the "N weekly/daily/monthly patterns found" lines
+  counted _distinct pattern keys_ ("every 1 week" + "every 2 weeks" = 2), not tasks — they now read "N tasks repeat
+  weekly" and sum `count` across matching entries. The read is now typed via `z.infer<typeof RecurringPatternsSchema>`
+  with no `as` casts, and `RecurringTasksDataV2` is split into `RecurringAnalyzeDataV2` / `RecurringPatternsDataV2` so
+  the placeholders can't be reintroduced to satisfy a type the two operations no longer share. Cache key bumped
+  (`recurring_patterns_*` → `recurring_patterns_v2_*`) for the same reason as OMN-289's `velocity_v3_*`.
+
 - **BREAKING (analyze response): `workflow_analysis` is demoted to an evidence bundle** (OMN-291) — it screens and
   counts; it no longer scores, ranks, or recommends. Per OMN-258's contract the server produces evidence and the caller
   judges, and that now explicitly includes numeric weight-composites, not just prose. **Removed:** `insights[]` and

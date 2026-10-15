@@ -3,6 +3,8 @@
  * These interfaces define the data structures returned by V2 tools
  */
 
+import type { RecurringPatternEntry, RecurringByProjectEntry } from '../omnifocus/response-schemas/read.js';
+
 // Task-related types
 // NOTE: kept (not removed per the OMN-94 Cat A work order) because TaskOperationDataV2
 // (a live/kept interface below) still references it as `task?: TaskV2 | {...}`.
@@ -113,11 +115,25 @@ export interface RecurringTaskV2 {
   completionRate?: number;
 }
 
-export interface RecurringTasksDataV2 {
+// OMN-341: split what was one shared shape for both recurring_tasks operations
+// (`analyze` and `patterns`) into two, so the `patterns` op's always-empty
+// placeholders (`recurringTasks: []`, `summary.byFrequency: {}`) can't be
+// reintroduced just to satisfy a type both operations shared.
+export interface RecurringAnalyzeDataV2 {
   recurringTasks: RecurringTaskV2[];
-  patterns?: Record<string, RecurringTaskV2[]>;
   summary?: {
     totalRecurring: number;
     byFrequency?: Record<string, number>;
   };
+}
+
+// Import type only — see src/omnifocus/response-schemas/read.ts for the
+// script-wire shape (`RecurringPatternEntry` / `RecurringByProjectEntry`
+// inferred from the strict `RecurringPatternsSchema`).
+export interface RecurringPatternsDataV2 {
+  summary: { totalRecurring: number };
+  patterns: RecurringPatternEntry[];
+  byProject: RecurringByProjectEntry[];
+  mostCommon: RecurringPatternEntry | null;
+  insights: string[];
 }
