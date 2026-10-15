@@ -1441,6 +1441,23 @@ describe('WriteSchema', () => {
         expect(result.success).toBe(false);
       });
 
+      // /code-review (2026-10-15): `in` also matched Object.prototype keys, so
+      // these slipped past the refine and failed later with a generic error.
+      it.each(['constructor', 'toString', '__proto__'])(
+        'rejects the prototype key "%s" with the unit-list message',
+        (unit) => {
+          const result = WriteSchema.safeParse({
+            mutation: {
+              operation: 'create',
+              target: 'project',
+              data: { name: 'P', reviewInterval: { steps: 1, unit } },
+            },
+          });
+          expect(result.success).toBe(false);
+          expect(JSON.stringify(result.error?.issues)).toMatch(/week/);
+        },
+      );
+
       it('rejects "fortnight"', () => {
         const result = WriteSchema.safeParse({
           mutation: {

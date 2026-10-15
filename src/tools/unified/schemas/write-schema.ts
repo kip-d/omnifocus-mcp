@@ -95,7 +95,9 @@ const REVIEW_UNIT_MSG = `unit must be one of: ${VALID_REVIEW_UNITS.join(', ')} (
 const ReviewIntervalObjectSchema = z
   .object({
     steps: z.union([z.number(), z.string().transform((v) => parseInt(v, 10))]).pipe(z.number().min(1)),
-    unit: z.string().refine((v) => v.toLowerCase() in UNIT_TO_DAYS, { message: REVIEW_UNIT_MSG }),
+    // An own-key check, not `in`: `in` also matches Object.prototype keys
+    // (`constructor`, `__proto__`), which then failed later with a generic error.
+    unit: z.string().refine((v) => VALID_REVIEW_UNITS.includes(v.toLowerCase()), { message: REVIEW_UNIT_MSG }),
   })
   // OMN-99: .strict() rejects unknown keys (e.g. a typo'd `bogu`) instead of
   // silently stripping them — same data-loss class as OMN-76/97/98. Must chain
