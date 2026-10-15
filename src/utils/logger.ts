@@ -41,6 +41,27 @@ export function generateCorrelationId(): string {
 // Keys whose values should be redacted in logs
 const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectName', 'tagName', 'title', 'script']);
 
+// Copy `source`'s enumerable own entries into `out`, applying key redaction
+// and recursing into nested objects. Keys already present in `out` are kept.
+function redactInto(
+  out: Record<string, unknown>,
+  source: object,
+  depth: number,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
+  for (const [k, v] of Object.entries(source)) {
+    if (Object.prototype.hasOwnProperty.call(out, k)) continue;
+    if (SENSITIVE_KEYS.has(k)) {
+      out[k] = '[REDACTED]';
+    } else if (typeof v === 'object' && v !== null) {
+      out[k] = redactArgs(v, depth + 1, seen);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 // Best‑effort deep redaction that preserves structure for debugging.
 // Returns `unknown`: the redacted value is only ever serialized to a log sink,
 // never read field-by-field, so a typed return would be a lie (it rebuilds the
@@ -51,7 +72,10 @@ const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectNam
 // object ever visited — two sibling fields that happen to reference the same
 // object are not a cycle and must both redact normally.
 export function redactArgs(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
-  if (depth > 6) return value; // Avoid pathological recursion
+  // Past the depth limit, emit a placeholder rather than the raw value: warn
+  // and error print args by default (OMN-348), so an unredacted deep value
+  // would reach the log.
+  if (depth > 6) return value !== null && typeof value === 'object' ? '[Depth limit]' : value;
 
   if (value == null) return value;
 
@@ -67,6 +91,10 @@ export function redactArgs(value: unknown, depth = 0, seen: WeakSet<object> = ne
         message: value.message,
         stack: value.stack,
       };
+      // Subclasses (e.g. OmniAutomationError's `details`: stderr, exit code)
+      // carry their useful context on enumerable own properties; keep them,
+      // with the same key redaction as any other object.
+      redactInto(out, value, depth, seen);
       const cause = (value as { cause?: unknown }).cause;
       if (cause !== undefined) {
         out.cause = redactArgs(cause, depth + 1, seen);
@@ -86,17 +114,7 @@ export function redactArgs(value: unknown, depth = 0, seen: WeakSet<object> = ne
       return value.map((v) => redactArgs(v, depth + 1, seen));
     }
 
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (SENSITIVE_KEYS.has(k)) {
-        out[k] = '[REDACTED]';
-      } else if (typeof v === 'object' && v !== null) {
-        out[k] = redactArgs(v, depth + 1, seen);
-      } else {
-        out[k] = v;
-      }
-    }
-    return out;
+    return redactInto({}, value, depth, seen);
   } finally {
     seen.delete(value);
   }

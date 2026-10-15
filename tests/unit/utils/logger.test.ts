@@ -34,6 +34,25 @@ describe('logger', () => {
     expect(out.stack).toContain('boom');
   });
 
+  // /code-review (2026-10-15): subclasses like OmniAutomationError carry their
+  // useful detail (stderr, exit code) on enumerable own properties.
+  it('keeps an Error subclass’s enumerable own properties, redacted', () => {
+    const err = Object.assign(new Error('script failed'), {
+      details: { stderr: 'execution error -1743', code: 1, script: 'secret body' },
+    });
+    const out = redactArgs(err) as { message: string; details: { stderr: string; code: number; script: string } };
+    expect(out.message).toBe('script failed');
+    expect(out.details.stderr).toBe('execution error -1743');
+    expect(out.details.code).toBe(1);
+    expect(out.details.script).toBe('[REDACTED]');
+  });
+
+  it('never prints a value past the depth limit unredacted', () => {
+    let deep: any = { note: 'deep secret' };
+    for (let i = 0; i < 9; i++) deep = { child: deep };
+    expect(JSON.stringify(redactArgs(deep))).not.toContain('deep secret');
+  });
+
   it('recurses into Error.cause', () => {
     const cause = new Error('root cause');
     const err = new Error('wrapper', { cause });
