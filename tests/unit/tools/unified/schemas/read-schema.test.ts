@@ -748,4 +748,32 @@ describe('ReadSchema', () => {
       }
     });
   });
+
+  describe('OMN-307: filters.search is not a filter key', () => {
+    // `search` is a tasks *mode* ("view selector"), never a filter key. The AST
+    // builder used to honor `filter.search` as a legacy alias for `filter.text`,
+    // but the schema has never exposed a door for it — an unreachable lowering
+    // path. The alias is deleted; `text` is the single spelling. These tests pin
+    // the contract so the alias cannot be reintroduced on one layer only.
+    it('rejects filters.search on a tasks query', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { search: 'meeting notes' } },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts mode:"search" — the view selector is unaffected', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', mode: 'search', filters: { text: { contains: 'meeting notes' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('filters.text remains the supported spelling for name/note search', () => {
+      const result = ReadSchema.safeParse({
+        query: { type: 'tasks', filters: { text: { contains: 'obsidian://open' } } },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });
