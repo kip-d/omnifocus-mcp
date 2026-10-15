@@ -13,6 +13,19 @@ import { isPlainObject } from '../../normalization/normalize-input.js';
 type SameKeys<A, B> =
   Exclude<keyof A, keyof B> extends never ? (Exclude<keyof B, keyof A> extends never ? true : never) : never;
 
+// Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
+// Siblings — keep in step: ITEM_DATE_REGEX (analyze-schema.ts) mirrors this; the
+// read-filter validator LOCAL_DATE_RE (utils/timezone.ts, OMN-332) is stricter.
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
+const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
+
+// OMN-343 (F8): repetitionRule.endDate is spliced raw into an RRULE UNTIL
+// (mutation/repetition.ts: `rule.endDate.replace(/-/g, '')`), which only
+// strips dashes — a time component would survive into the UNTIL value as a
+// stray space/colon and produce a malformed RRULE. Date-only, no HH:mm.
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_ONLY_FORMAT_MSG = 'Date format: YYYY-MM-DD (date only — RRULE UNTIL has no time component)';
+
 // Repetition rule schema — derived from RepetitionRule contract via `satisfies`.
 // Constrains output type only (input is `unknown` to allow MCP bridge string coercion).
 // If the contract changes a field type, `satisfies` errors here.
@@ -43,7 +56,7 @@ const RepetitionRuleSchema = z
       .optional(),
     weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
     setPositions: z.array(z.number().min(-366).max(366)).optional(),
-    endDate: z.string().optional(),
+    endDate: z.string().regex(DATE_ONLY_REGEX, DATE_ONLY_FORMAT_MSG).optional(),
     // OmniFocus 4.7+ repetition method control
     method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
     scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
@@ -71,10 +84,18 @@ const UNIT_TO_DAYS: Record<string, number> = {
   year: 365,
 };
 
+// OMN-343 (F10, D3): closed, case-insensitive enum of UNIT_TO_DAYS keys. An
+// unknown unit (e.g. 'quarter', 'fortnight') previously fell through `?? 1`
+// to a silent DAILY interval — success response, wrong schedule, no signal.
+// Validate against the lowercased key set and reject loudly; the error lists
+// every accepted form so the caller can self-correct.
+const VALID_REVIEW_UNITS = Object.keys(UNIT_TO_DAYS);
+const REVIEW_UNIT_MSG = `unit must be one of: ${VALID_REVIEW_UNITS.join(', ')} (case-insensitive)`;
+
 const ReviewIntervalObjectSchema = z
   .object({
     steps: z.union([z.number(), z.string().transform((v) => parseInt(v, 10))]).pipe(z.number().min(1)),
-    unit: z.string(),
+    unit: z.string().refine((v) => v.toLowerCase() in UNIT_TO_DAYS, { message: REVIEW_UNIT_MSG }),
   })
   // OMN-99: .strict() rejects unknown keys (e.g. a typo'd `bogu`) instead of
   // silently stripping them — same data-loss class as OMN-76/97/98. Must chain
@@ -83,19 +104,13 @@ const ReviewIntervalObjectSchema = z
   // write mutation tree.
   .strict()
   .transform((obj) => {
-    const multiplier = UNIT_TO_DAYS[obj.unit.toLowerCase()] ?? 1;
+    const multiplier = UNIT_TO_DAYS[obj.unit.toLowerCase()];
     return obj.steps * multiplier;
   });
 
 const ReviewIntervalSchema = z
   .union([z.number(), z.string().transform((v) => parseInt(v, 10)), ReviewIntervalObjectSchema])
   .pipe(z.number().min(1));
-
-// Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
-// Siblings — keep in step: ITEM_DATE_REGEX (analyze-schema.ts) mirrors this; the
-// read-filter validator LOCAL_DATE_RE (utils/timezone.ts, OMN-332) is stricter.
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
-const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 
 // ── OMN-97: strict everywhere + actionable redirects ─────────────────
 // `.strict()` does NOT propagate through discriminatedUnion/union (prior art
@@ -208,9 +223,15 @@ export const UpdateChangesSchema = z
       tags: z.array(z.string()).optional(),
       addTags: z.array(z.string()).optional(),
       removeTags: z.array(z.string()).optional(),
-      dueDate: z.union([z.string(), z.null()]).optional(),
-      deferDate: z.union([z.string(), z.null()]).optional(),
-      plannedDate: z.union([z.string(), z.null()]).optional(),
+      // OMN-343 (F1/F2): DATE_REGEX parity with create. Previously a bare
+      // z.string() let NL input ("next friday") through Zod; sanitizeDateField
+      // caught the downstream localToUTC throw and silently dropped the field
+      // (task update: success, change ignored) while handleProjectUpdateDirect's
+      // bare localToUTC call threw (project update: error) — the same input
+      // disagreed by target. null still validates (clears the field).
+      dueDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
+      deferDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
+      plannedDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
       clearDueDate: coerceBoolean().optional(),
       clearDeferDate: coerceBoolean().optional(),
       clearPlannedDate: coerceBoolean().optional(),

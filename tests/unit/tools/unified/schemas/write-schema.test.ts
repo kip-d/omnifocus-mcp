@@ -1242,4 +1242,285 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // ─── OMN-343 slice 1: reject instead of silently drop (F1/F2, F8, F10) ──
+  describe('OMN-343 slice 1 — date/endDate/unit rejection', () => {
+    // F1/F2: update dueDate/deferDate/plannedDate get the same DATE_REGEX as create.
+    describe('update date fields reject non-conforming strings', () => {
+      it.each(['dueDate', 'deferDate', 'plannedDate'] as const)('rejects NL %s on a top-level task update', (field) => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { [field]: 'next friday' },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it.each(['dueDate', 'deferDate', 'plannedDate'] as const)(
+        'rejects NL %s on a project update (previously disagreed with task: F1 vs F2)',
+        (field) => {
+          const result = WriteSchema.safeParse({
+            mutation: {
+              operation: 'update',
+              target: 'project',
+              id: 'project-1',
+              changes: { [field]: 'next friday' },
+            },
+          });
+          expect(result.success).toBe(false);
+        },
+      );
+
+      it('rejects NL dueDate inside a batch update item', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'batch',
+            operations: [
+              {
+                operation: 'update',
+                target: 'task',
+                id: 'task-1',
+                changes: { dueDate: 'next friday' },
+              },
+            ],
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects NL dueDate via the `data` alias (OMN-75) on update', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            data: { dueDate: 'next friday' },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('accepts a null date (clears the field) on update', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { dueDate: null, deferDate: null, plannedDate: null },
+          },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('accepts YYYY-MM-DD on update', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { dueDate: '2026-01-05' },
+          },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('accepts YYYY-MM-DD HH:mm on update', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { dueDate: '2026-01-05 14:30' },
+          },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('rejects ISO-8601 with Z suffix on update (matches create behavior)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { dueDate: '2026-01-05T14:30:00Z' },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+    });
+
+    // F8: repetitionRule.endDate (RRULE UNTIL splice) is date-only.
+    describe('repetitionRule.endDate rejects non-date-only strings', () => {
+      it('rejects a non-date endDate on create (top level)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: {
+              name: 'T',
+              repetitionRule: { frequency: 'daily', endDate: 'not-a-date' },
+            },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects an endDate with a time component (RRULE UNTIL has no time)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: {
+              name: 'T',
+              repetitionRule: { frequency: 'daily', endDate: '2026-12-31 14:30' },
+            },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects a non-date endDate inside a batch create item', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'batch',
+            operations: [
+              {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'T',
+                  repetitionRule: { frequency: 'daily', endDate: 'not-a-date' },
+                },
+              },
+            ],
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('accepts a valid date-only endDate', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: {
+              name: 'T',
+              repetitionRule: { frequency: 'daily', endDate: '2026-12-31' },
+            },
+          },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('rejects a non-date endDate on update (repetitionRule is nullable there)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 'task-1',
+            changes: { repetitionRule: { frequency: 'daily', endDate: 'bogus' } },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+    });
+
+    // F10/D3: reviewInterval.unit is a closed, case-insensitive enum.
+    describe('reviewInterval.unit rejects anything outside the closed enum', () => {
+      it('rejects "quarter" (previously silently fell back to a daily interval)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'project',
+            data: { name: 'P', reviewInterval: { steps: 1, unit: 'quarter' } },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects "fortnight"', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'project',
+            data: { name: 'P', reviewInterval: { steps: 1, unit: 'fortnight' } },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects an invalid unit on project update changes', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'update',
+            target: 'project',
+            id: 'project-1',
+            changes: { reviewInterval: { steps: 1, unit: 'quarter' } },
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects an invalid unit inside a batch create item', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'batch',
+            operations: [
+              {
+                operation: 'create',
+                target: 'project',
+                data: { name: 'P', reviewInterval: { steps: 1, unit: 'fortnight' } },
+              },
+            ],
+          },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it.each(['days', 'day', 'weeks', 'week', 'months', 'month', 'years', 'year'])(
+        'accepts valid unit form %s',
+        (unit) => {
+          const result = WriteSchema.safeParse({
+            mutation: {
+              operation: 'create',
+              target: 'project',
+              data: { name: 'P', reviewInterval: { steps: 1, unit } },
+            },
+          });
+          expect(result.success).toBe(true);
+        },
+      );
+
+      it('accepts a capitalized unit (case-insensitive)', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'project',
+            data: { name: 'P', reviewInterval: { steps: 1, unit: 'Weeks' } },
+          },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('error message lists the valid units', () => {
+        const result = WriteSchema.safeParse({
+          mutation: {
+            operation: 'create',
+            target: 'project',
+            data: { name: 'P', reviewInterval: { steps: 1, unit: 'quarter' } },
+          },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          const message = JSON.stringify(result.error.issues);
+          for (const unit of ['days', 'day', 'weeks', 'week', 'months', 'month', 'years', 'year']) {
+            expect(message).toContain(unit);
+          }
+        }
+      });
+    });
+  });
 });
