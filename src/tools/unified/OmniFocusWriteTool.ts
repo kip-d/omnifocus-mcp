@@ -241,7 +241,7 @@ SAFETY:
       name: { type: 'string' },
       note: { type: 'string' },
       project: { type: 'string', description: 'name or ID; omit/null = inbox' },
-      parentTaskId: { type: 'string', description: 'create as subtask of this ID' },
+      parentTaskId: { type: 'string', description: 'subtask of this task ID' },
       tags: { type: 'array', items: { type: 'string' }, description: 'no contexts in OF3+ — use tags' },
       dueDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       deferDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
@@ -252,7 +252,9 @@ SAFETY:
       folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
       sequential: { type: 'boolean', description: 'projects + task action groups' },
       status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
-      reviewInterval: { description: 'project-only: days or {steps,unit}' },
+      // OMN-343 (F10/D3): unit is now a closed, case-insensitive enum —
+      // mirror it here so clients see the exact accepted set.
+      reviewInterval: { description: 'project-only: days or {steps,unit:day|week|month|year(s)}' },
     };
     const updateChangesProperties: Record<string, unknown> = {
       ...createDataProperties,

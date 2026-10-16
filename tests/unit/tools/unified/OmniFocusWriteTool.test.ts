@@ -1984,6 +1984,17 @@ describe('OmniFocusWriteTool task operations', () => {
         expect(mutationProps[flag]).toEqual({ type: 'boolean' });
       }
     });
+
+    // OMN-343 (F10/D3): reviewInterval.unit is now a closed enum server-side —
+    // the advertised description must list the same accepted unit forms so
+    // clients don't learn the set only by trial and error.
+    it('advertises the closed reviewInterval unit set', () => {
+      const schema = tool.inputSchema as any;
+      const description = schema.properties.mutation.properties.data.properties.reviewInterval.description as string;
+      for (const unit of ['day', 'week', 'month', 'year']) {
+        expect(description).toContain(unit);
+      }
+    });
   });
 
   // ─── ERROR CASES ────────────────────────────────────────────────────
