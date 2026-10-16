@@ -193,6 +193,14 @@ const ProjectBottleneckRowSchema = z
  * summary.overduePercentage: OMN-187 — totalOverdue/totalActive*100, round1(n) → number.
  * summary.totalActive: OMN-187 — non-completed, non-dropped task count (the overduePercentage denominator).
  * groupedByUrgency: fixed keys (critical/high/medium/low) all always emitted → NOT z.record.
+ *   OMN-340: these arrays hold only the maxTasks-capped detail sample (the N MOST
+ *   overdue, sorted before slicing) — bucket COUNTS live in urgencyCounts below,
+ *   computed over the full uncapped population, never groupedByUrgency[key].length.
+ * urgencyCounts: OMN-340 — uncapped per-bucket totals (critical/high/medium/low),
+ *   tracked during the same full-population pass as totalOverdue/projectBottlenecks.
+ * projectBottlenecks: OMN-340 — overdueCount/blockedCount/avgDaysOverdue/blockageRate
+ *   are now computed over the FULL overdue population per project, not just the
+ *   maxTasks-capped sample (top 5 by overdueCount, already sorted-then-sliced).
  * metadata.note is present in the outer emitter.
  * blockedTasks: OMN-194 — dropped (was emitted but never consumed by the tool).
  */
@@ -220,6 +228,26 @@ export const OverdueAnalysisDataSchema = z
         high: z.array(OverdueTaskRowSchema),
         medium: z.array(OverdueTaskRowSchema),
         low: z.array(OverdueTaskRowSchema),
+      })
+      .strict(),
+    // OMN-340: uncapped bucket counts — the tool reads `count` from here, never
+    // from groupedByUrgency[key].length (which is capped-detail-sample size).
+    urgencyCounts: z
+      .object({
+        critical: z.number(),
+        high: z.number(),
+        medium: z.number(),
+        low: z.number(),
+      })
+      .strict(),
+    // Uncapped per-bucket sum of daysOverdue: the bucket average is
+    // urgencyDaysTotals[k] / urgencyCounts[k], over the whole population.
+    urgencyDaysTotals: z
+      .object({
+        critical: z.number(),
+        high: z.number(),
+        medium: z.number(),
+        low: z.number(),
       })
       .strict(),
     projectBottlenecks: z.array(ProjectBottleneckRowSchema),

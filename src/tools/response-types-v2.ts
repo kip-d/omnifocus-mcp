@@ -4,6 +4,7 @@
  */
 
 import type { RecurringPatternEntry, RecurringByProjectEntry } from '../omnifocus/response-schemas/read.js';
+import type { Coverage } from './unified/coverage.js';
 
 // Task-related types
 // NOTE: kept (not removed per the OMN-94 Cat A work order) because TaskOperationDataV2
@@ -50,6 +51,10 @@ export interface OverdueAnalysisDataV2 {
         isNext: boolean;
       } | null;
     };
+    // OMN-340: this array is the N MOST overdue (sorted before slicing), capped
+    // to the script's maxTasks — NOT the full overdue population. Use
+    // `summary.totalOverdue` (and `coverage` below) for the true count; this
+    // array is a detail SAMPLE, never a complete listing past the cap.
     overdueTasks: Array<{
       id: string;
       name: string;
@@ -69,10 +74,17 @@ export interface OverdueAnalysisDataV2 {
     // OMN-187: typed concretely (not Record<string, unknown>) so the compiler
     // catches a key/shape drift — the exact silent-default class this fix closes.
     insights: { topRecommendations: string[] };
+    // OMN-340 (D4a): the shared coverage disclosure for the detail sample above —
+    // `coverage.total` is the true overdue count, `coverage.returned` is how many
+    // detail rows this response actually carries, `coverage.capped` is true when
+    // `total` exceeds `coverage.cap`.
+    coverage: Coverage;
   };
   groupedAnalysis: Record<
     string,
     {
+      // OMN-340: read from the script's uncapped urgencyCounts, NOT
+      // tasks.length (tasks is the capped detail sample below).
       count: number;
       averageDaysOverdue?: number;
       tasks?: unknown[];
