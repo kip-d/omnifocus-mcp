@@ -82,4 +82,46 @@ describe('tools/index registerTools', () => {
     const result = await callHandler({ params: { name: 'system', arguments: { operation: 'version' } } });
     expect(result.content[0].type).toBe('text');
   });
+
+  /**
+   * OMN-348: executionPromise.finally(() => pendingOperations.delete(...))
+   * created a derived promise nobody held onto. A thrown tool error rejects
+   * executionPromise — here, a Zod validation failure inside the `system`
+   * tool's own execute() (BaseTool.handleExecuteError throws McpError for a
+   * ZodError; see src/tools/base.ts) — and that discarded derived promise
+   * re-rejected unobserved, a separate unhandledRejection from whatever the
+   * MCP SDK/caller did with the (properly handled) call result. Note this is
+   * NOT the unknown-tool-name path: that one throws before executionPromise
+   * is even created (see the lookup `if (!tool)` above), so it never reaches
+   * the tracked promise this guards.
+   */
+  it('a thrown tool error, properly caught by the caller, never fires unhandledRejection (OMN-348)', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const server = new FakeServer() as any;
+      const cache = new CacheManager();
+      const pendingOperations = new Set<Promise<unknown>>();
+
+      registerTools(server, cache, pendingOperations);
+
+      const callHandler = server.handlers.get(CallToolRequestSchema) as RequestHandler;
+      await expect(
+        callHandler({ params: { name: 'system', arguments: { operation: 'not-a-real-operation' } } }),
+      ).rejects.toBeInstanceOf(McpError);
+
+      // Flush microtasks and a macrotask tick so any unhandledRejection the
+      // event loop would schedule has fired before we assert.
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((r) => setImmediate(r));
+
+      expect(pendingOperations.size).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

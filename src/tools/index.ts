@@ -3,6 +3,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
 import { createLogger, createCorrelatedLogger, redactArgs, generateCorrelationId } from '../utils/logger.js';
+import { trackPendingOperation } from '../utils/pending-operations.js';
 
 // v3.0.0 Unified Builder API - 3 tools + system diagnostics
 import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
@@ -173,16 +174,14 @@ export function registerTools(
       }
     })();
 
-    // Track tool execution to prevent premature server exit
+    // Track tool execution to prevent premature server exit. A thrown tool
+    // error (Zod validation → McpError, or any other error wrapped above)
+    // rejects executionPromise — trackPendingOperation clears the entry on
+    // either outcome without a bare `.finally()`'s unobserved, re-rejecting
+    // derived promise (OMN-348).
     if (pendingOperations) {
-      pendingOperations.add(executionPromise);
+      trackPendingOperation(pendingOperations, executionPromise);
       correlatedLogger.debug(`Added tool execution to pending operations (size: ${pendingOperations.size})`);
-
-      // Remove from pending operations when done (success or failure)
-      executionPromise.finally(() => {
-        pendingOperations.delete(executionPromise);
-        correlatedLogger.debug(`Removed tool execution from pending operations (size: ${pendingOperations.size})`);
-      });
     }
 
     return executionPromise;

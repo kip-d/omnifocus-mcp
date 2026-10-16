@@ -10,6 +10,7 @@ import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
 import { getVersionInfo } from './utils/version.js';
 import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
+import { trackPendingOperation } from './utils/pending-operations.js';
 import { parseCLIArgs, validateCLIConfig, CLIConfig } from './utils/cli.js';
 import { SessionManager } from './session-manager.js';
 import { HttpServerManager } from './http-server.js';
@@ -78,7 +79,10 @@ export async function runServer() {
     if (!result.hasPermission) {
       logger.warn('OmniFocus permissions not granted. Tools will provide instructions when used.');
       if (result.instructions) {
-        logger.info('Permission instructions:', result.instructions);
+        // D2 (OMN-348): this text IS the point — a human needs to read it to
+        // grant permission — so it goes in the message itself rather than as
+        // an `info`-level arg, which never prints (see logger.ts).
+        logger.warn(`Permission instructions: ${result.instructions}`);
       }
     } else {
       logger.info('OmniFocus permissions verified');
@@ -154,12 +158,12 @@ export async function runServer() {
     // exit. Both cases present as identical stdin EOFs; exiting early for
     // real clients would need an explicit signal (e.g. an env var set by the
     // redeploy script) — not added until the delay is observed to matter.
-    pendingOperations.add(warmPromise);
+    // warmPromise's own body catches everything, so this never rejects today —
+    // but it shares the "add to set, remove on settle" pattern with the two
+    // genuinely hazardous sites (OmniAutomation.ts, tools/index.ts), so it
+    // uses the same helper rather than a bespoke `.finally()` (OMN-348).
+    trackPendingOperation(pendingOperations, warmPromise);
     logger.debug(`Added cache warm to pending operations (size: ${pendingOperations.size})`);
-    void warmPromise.finally(() => {
-      pendingOperations.delete(warmPromise);
-      logger.debug(`Removed cache warm from pending operations (size: ${pendingOperations.size})`);
-    });
   }
   // warmEnd now marks warm LAUNCH, not completion — the STARTUP COMPLETE line's
   // `warm` segment measures launch cost (~0ms); warm duration is logged

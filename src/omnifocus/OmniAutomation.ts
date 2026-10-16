@@ -14,6 +14,7 @@ import {
 import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 import { runSerialized } from './osascript-queue.js';
 import { describeAbnormalExit } from './process-exit.js';
+import { trackPendingOperation } from '../utils/pending-operations.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -144,16 +145,14 @@ export class OmniAutomation {
     // starts once this script actually runs, not while it waits for a sibling.
     const promise = runSerialized(() => this.spawnScript<T>(wrappedScript));
 
-    // Track this promise to prevent premature server exit
+    // Track this promise to prevent premature server exit. This script can
+    // (and routinely does) reject — trackPendingOperation's `.then(remove,
+    // remove)` clears the entry on either outcome without creating a derived
+    // promise that re-rejects unobserved (OMN-348; a bare `.finally()` here
+    // fired `unhandledRejection` for every failed script, separately from
+    // whatever the caller of `execute()` did with this same promise).
     if (globalPendingOperations) {
-      globalPendingOperations.add(promise);
-
-      // Remove from set when completed (success or failure)
-      promise.finally(() => {
-        if (globalPendingOperations) {
-          globalPendingOperations.delete(promise);
-        }
-      });
+      trackPendingOperation(globalPendingOperations, promise);
     }
 
     return promise;
