@@ -233,7 +233,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       body `isInitializeRequest`; return 404 for an unknown id (Technique: Consolidate Conditional Expression).
       Verified: read, plus SDK `webStandardStreamableHttp.js:578`; the verifier reported HOLDS. Unverified at runtime: a
       unit test driving `handleRequest` with an unknown id that asserts 404 and `getSessionCount()===0`.
-- [ ] 22. [OMN-348] The logger drops the context arguments its callers pass. `info`/`warn` discard `...args`, and
+- [x] 22. [OMN-348] The logger drops the context arguments its callers pass. `info`/`warn` discard `...args`, and
       `error` keeps only an `Error`'s `.message` unless `STRUCTURED_LOGGING=true`. So
       `uncaughtException`/`unhandledRejection` log only their headline, with no stack or reason, and about 50
       `logger.*('…', {…})` sites lose their payload (`src/utils/logger.ts:129-157`, `createLogger`;
@@ -370,7 +370,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         `127.0.0.1`, enable DNS-rebinding protection, return a count rather than ids, and use `crypto.timingSafeEqual`.
         Needs a decision (Technique: Introduce Parameter Object for the security options). Verified: read, plus SDK
         `webStandardStreamableHttp.js:70`; the verifier reported HOLDS.
-- [ ] 37. [OMN-348] `.finally()` derived promises are never handled, so rejections surface as spurious "Unhandled
+- [x] 37. [OMN-348] `.finally()` derived promises are never handled, so rejections surface as spurious "Unhandled
       promise rejection" logs, with no reason attached (see #22). At the OmniAutomation layer this fires for every
       rejected script promise. At the tool layer it fires for thrown errors (Zod VALIDATION_ERROR and McpError);
       returned error envelopes don't trigger it (`src/omnifocus/OmniAutomation.ts:151-155`;
