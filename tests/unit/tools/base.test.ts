@@ -891,5 +891,34 @@ describe('BaseTool', () => {
             .join(', ')}`,
       ).toBeLessThan(MAX_TOTAL_CHARS);
     });
+
+    // OMN-376: the per-turn cost budget. Every turn, an MCP client loads each
+    // tool's inputSchema AND its description, so this measures both, across
+    // all tools. (It replaces a write-only "inputSchema < 4000" test: a round
+    // number with no measured basis that counted ~15% of the real surface,
+    // and pushed us to trim clarifying words to satisfy it.)
+    //
+    // RATCHET, not target: the ceiling is the measured baseline plus ~15%.
+    // If this fails, either cut real weight, or raise the ceiling on purpose
+    // and say why in the commit message. Update the baseline when you do.
+    const ADVERTISED_SURFACE_BASELINE = 25_948; // chars, measured 2026-10-15 at efd5c4c5
+    const ADVERTISED_SURFACE_CEILING = 30_000; // ≈ baseline + 15%
+
+    it('total advertised surface (inputSchema + description, all tools) stays under its ceiling', () => {
+      const rows = allTools().map((tool) => {
+        const schema = JSON.stringify(tool.inputSchema).length;
+        const description = tool.description.length;
+        return { name: tool.name, schema, description, total: schema + description };
+      });
+      const total = rows.reduce((sum, r) => sum + r.total, 0);
+
+      expect(
+        total,
+        `Advertised surface is ${total} chars (≈${Math.round(total / 4)} tokens per turn; ` +
+          `ceiling ${ADVERTISED_SURFACE_CEILING}, baseline ${ADVERTISED_SURFACE_BASELINE}). Per tool: ` +
+          rows.map((r) => `${r.name} schema=${r.schema} description=${r.description}`).join('; ') +
+          '. Cut real weight, or raise ADVERTISED_SURFACE_CEILING deliberately and say why in the commit.',
+      ).toBeLessThan(ADVERTISED_SURFACE_CEILING);
+    });
   });
 });

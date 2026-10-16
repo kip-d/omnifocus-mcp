@@ -1984,11 +1984,6 @@ describe('OmniFocusWriteTool task operations', () => {
         expect(mutationProps[flag]).toEqual({ type: 'boolean' });
       }
     });
-
-    it('should be under 4KB minified', () => {
-      const size = JSON.stringify(tool.inputSchema).length;
-      expect(size).toBeLessThan(4000);
-    });
   });
 
   // ─── ERROR CASES ────────────────────────────────────────────────────
