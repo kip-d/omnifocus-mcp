@@ -247,10 +247,10 @@ SAFETY:
       deferDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       plannedDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       flagged: { type: 'boolean', description: 'no priority levels — use flagged' },
-      estimatedMinutes: { type: 'number', description: 'minutes (not estimate)' },
+      estimatedMinutes: { type: 'number', description: 'minutes (not "estimate")' },
       repetitionRule: { type: 'object' },
-      folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root' },
-      sequential: { type: 'boolean', description: 'projects + action groups' },
+      folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
+      sequential: { type: 'boolean', description: 'projects + task action groups' },
       status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
       // OMN-343 (F10/D3): unit is now a closed, case-insensitive enum —
       // mirror it here so clients see the exact accepted set.
