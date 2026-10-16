@@ -231,9 +231,10 @@ SAFETY:
     // OMN-97: advertise the supported fields of `data`/`changes` so MCP clients
     // get field-level guidance and misplace fewer keys. Mirrors CreateDataSchema /
     // UpdateChangesSchema in write-schema.ts — keep in sync (dual-schema rule).
-    // BUDGET: a unit test enforces JSON.stringify(inputSchema).length < 4000 (token cost).
-    // Currently ~3941 bytes — only ~60 bytes of headroom. Trim an existing field
-    // description before adding a field or lengthening a description, or the guard fails.
+    // BUDGET (OMN-376): this schema counts toward the all-tools advertised-surface
+    // ceiling in tests/unit/tools/base.test.ts (inputSchema + description, every
+    // tool). Keep descriptions clear; don't trim meaning to save bytes. If the
+    // ceiling is hit, cut real weight anywhere or raise it deliberately.
     // (Plain `type: string` for enum-bearing fields like `status` to avoid
     // advertising an enum the inputSchema↔Zod parity test would police.)
     const createDataProperties: Record<string, unknown> = {
@@ -280,7 +281,7 @@ SAFETY:
             data: { type: 'object', properties: createDataProperties },
             changes: { type: 'object', properties: updateChangesProperties },
             id: { type: 'string' },
-            target_id: { type: 'string', description: 'Alias for id on delete (pairs with target)' },
+            target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
             minimalResponse: { type: 'boolean' },
 
             // complete

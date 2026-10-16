@@ -849,6 +849,10 @@ describe('BaseTool', () => {
     // Root cause: z.lazy() recursive AND/OR/NOT expanded 5 levels deep × 6 discriminatedUnion
     // branches produced ~834K tokens in the MCP tools/list response, breaking Claude Code.
     //
+    // Two kinds of guard live here. The 100KB/200KB limits below catch a schema
+    // BLOW-UP (expansion bugs); they are not a cost budget. The cost budget is the
+    // advertised-surface ceiling at the end of this block.
+    //
     // These limits are generous (10× current sizes). If a test fails here, a schema
     // change has likely introduced recursive expansion or branch duplication.
     const MAX_PER_TOOL_CHARS = 100_000; // 100KB per tool (current largest: write ~10KB)
@@ -890,6 +894,35 @@ describe('BaseTool', () => {
             .map(([name, size]) => `${name}=${size}`)
             .join(', ')}`,
       ).toBeLessThan(MAX_TOTAL_CHARS);
+    });
+
+    // OMN-376: the per-turn cost budget. Every turn, an MCP client loads each
+    // tool's inputSchema AND its description, so this measures both, across
+    // all tools. (It replaces a write-only "inputSchema < 4000" test: a round
+    // number with no measured basis that counted ~15% of the real surface,
+    // and pushed us to trim clarifying words to satisfy it.)
+    //
+    // RATCHET, not target: the ceiling is the measured baseline plus ~15%.
+    // If this fails, either cut real weight, or raise the ceiling on purpose
+    // and say why in the commit message. Update the baseline when you do.
+    const ADVERTISED_SURFACE_BASELINE = 25_958; // chars, measured with this change (OMN-376), 2026-10-16
+    const ADVERTISED_SURFACE_CEILING = 30_000; // ≈ baseline + 15%
+
+    it('total advertised surface (inputSchema + description, all tools) stays under its ceiling', () => {
+      const rows = allTools().map((tool) => {
+        const schema = JSON.stringify(tool.inputSchema).length;
+        const description = tool.description.length;
+        return { name: tool.name, schema, description, total: schema + description };
+      });
+      const total = rows.reduce((sum, r) => sum + r.total, 0);
+
+      expect(
+        total,
+        `Advertised surface is ${total} chars (≈${Math.round(total / 4)} tokens per turn; ` +
+          `ceiling ${ADVERTISED_SURFACE_CEILING}, baseline ${ADVERTISED_SURFACE_BASELINE}). Per tool: ` +
+          rows.map((r) => `${r.name} schema=${r.schema} description=${r.description}`).join('; ') +
+          '. Cut real weight, or raise ADVERTISED_SURFACE_CEILING deliberately and say why in the commit.',
+      ).toBeLessThan(ADVERTISED_SURFACE_CEILING);
     });
   });
 });
