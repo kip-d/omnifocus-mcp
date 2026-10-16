@@ -849,6 +849,10 @@ describe('BaseTool', () => {
     // Root cause: z.lazy() recursive AND/OR/NOT expanded 5 levels deep × 6 discriminatedUnion
     // branches produced ~834K tokens in the MCP tools/list response, breaking Claude Code.
     //
+    // Two kinds of guard live here. The 100KB/200KB limits below catch a schema
+    // BLOW-UP (expansion bugs); they are not a cost budget. The cost budget is the
+    // advertised-surface ceiling at the end of this block.
+    //
     // These limits are generous (10× current sizes). If a test fails here, a schema
     // change has likely introduced recursive expansion or branch duplication.
     const MAX_PER_TOOL_CHARS = 100_000; // 100KB per tool (current largest: write ~10KB)
@@ -901,7 +905,7 @@ describe('BaseTool', () => {
     // RATCHET, not target: the ceiling is the measured baseline plus ~15%.
     // If this fails, either cut real weight, or raise the ceiling on purpose
     // and say why in the commit message. Update the baseline when you do.
-    const ADVERTISED_SURFACE_BASELINE = 25_948; // chars, measured 2026-10-15 at efd5c4c5
+    const ADVERTISED_SURFACE_BASELINE = 25_958; // chars, measured with this change (OMN-376), 2026-10-16
     const ADVERTISED_SURFACE_CEILING = 30_000; // ≈ baseline + 15%
 
     it('total advertised surface (inputSchema + description, all tools) stays under its ceiling', () => {
