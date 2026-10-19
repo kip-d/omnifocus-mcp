@@ -165,8 +165,10 @@ those rather than assuming they are already in context.
 // and filters: { status: "dropped" } finds it.
 { mutation: { operation: "update", target: "task", id: "...", changes: { status: "dropped" } } }
 
-// Reopen a dropped or completed task
+// Reopen a dropped or completed task (a dropped repeating task resumes repeating)
 { mutation: { operation: "update", target: "task", id: "...", changes: { status: "active" } } }
+// Completing a REPEATING task: the completed occurrence gets a new id ("<id>.0"); the
+// original id becomes the next occurrence — the response warning names both
 // Tasks have no on_hold (rejected) — defer the task, or put its project on hold
 
 // Bulk delete (confirm with user first!)

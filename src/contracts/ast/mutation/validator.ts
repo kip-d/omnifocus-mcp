@@ -353,6 +353,7 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
   if (stmt.type === 'mergeRetag') assertNotReserved(stmt.bind, 'mergeRetag bind');
+  if (stmt.type === 'callMethod' && stmt.bind !== undefined) assertNotReserved(stmt.bind, 'callMethod bind');
   if (stmt.type === 'constructTagPath') {
     assertNotReserved(stmt.bind, 'constructTagPath bind');
     assertNotReserved(stmt.createdBind, 'constructTagPath createdBind');

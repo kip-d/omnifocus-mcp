@@ -236,6 +236,11 @@ export interface CallMethodNode {
   args: Expr[];
   bestEffort?: boolean;
   label?: string;
+  // OMN-377: bind the call's return value (e.g. markComplete's completed task —
+  // a new-id copy for a repeating task). Plain: `const <bind> = …`. Best-effort:
+  // `let <bind> = null;` before the try, so it stays in scope and is null when
+  // the call threw. Reserved-name rule applies (validator rule 10).
+  bind?: string;
 }
 
 /** Typed tag-move destination (slice 6): root (moveTags([t], tags.ending) —
@@ -493,6 +498,7 @@ export const callMethod = (
   args: Expr[],
   bestEffort = false,
   label?: string,
+  bindVar?: string,
 ): CallMethodNode => ({
   type: 'callMethod',
   target,
@@ -500,6 +506,7 @@ export const callMethod = (
   args,
   ...(bestEffort ? { bestEffort } : {}),
   ...(label ? { label } : {}),
+  ...(bindVar ? { bind: bindVar } : {}),
 });
 export const moveTag = (tag: Expr, position: TagMovePosition, errorPrefix: string): MoveTagNode => ({
   type: 'moveTag',

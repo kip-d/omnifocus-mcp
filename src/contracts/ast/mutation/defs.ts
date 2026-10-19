@@ -760,7 +760,18 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
   // task needs the series notice (below).
   let warnings: Expr = ref('_warnings');
   if (changes.status === 'completed') {
-    statements.push(callMethod(ref('task'), 'markComplete', [newExpr('Date', [])], true, 'status'));
+    // markComplete RETURNS the completed task. On a repeating task that is a
+    // new-id copy ('<id>.0') and `task` itself advances to the next occurrence
+    // — so the live `completed` read below is false for it (verified live
+    // 2026-10-19). Bind the result and name both ids in a notice, so the
+    // envelope never reads as a contradiction. A failed call leaves the bind
+    // null → only its own 'status' warning.
+    statements.push(callMethod(ref('task'), 'markComplete', [newExpr('Date', [])], true, 'status', 'completedTask'));
+    warnings = raw(
+      'completedTask && completedTask.id.primaryKey !== task.id.primaryKey ? _warnings.concat([' +
+        `${JSON.stringify(REPEATING_COMPLETE_NOTICE_PREFIX)} + completedTask.id.primaryKey + "; " + ` +
+        `task.id.primaryKey + ${JSON.stringify(REPEATING_COMPLETE_NOTICE_SUFFIX)}]) : _warnings`,
+    );
   } else if (changes.status === 'dropped') {
     // drop(true) ends the series: a repeating task spawns no next occurrence
     // (verified live 2026-10-16). Capture "repeating" AFTER any repetitionRule
@@ -797,8 +808,11 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
   return { statements, context: 'update_task', snippetDeps };
 }
 
-/** OMN-377: informational warning on dropping a repeating task — builder-
- *  internal constant text (no user data), safe inside the raw() envelope. */
+/** OMN-377: informational warnings for repeating tasks (complete → new-id copy;
+ *  drop → series ends) — builder-internal constant text (no user data), safe
+ *  inside the raw() envelope. */
+const REPEATING_COMPLETE_NOTICE_PREFIX = 'status: completed this occurrence of a repeating task as ';
+const REPEATING_COMPLETE_NOTICE_SUFFIX = ' now holds the next occurrence';
 const REPEATING_DROP_NOTICE =
   'status: dropped a repeating task — all future occurrences are dropped too (the series ends)';
 

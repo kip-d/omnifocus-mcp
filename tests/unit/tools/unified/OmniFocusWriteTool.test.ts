@@ -483,6 +483,40 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.task.changes).toEqual({ status: 'dropped' });
     });
 
+    // Gate finding 3: the minimal response carries the same live status
+    // read-back as the full one.
+    it('OMN-377: minimalResponse update carries live completed/dropDate', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            taskId: 'task-dm',
+            name: 'Moot',
+            flagged: false,
+            completed: false,
+            dropDate: '2026-10-19T14:46:34.039Z',
+            updated: true,
+            warnings: [],
+          },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-dm',
+          changes: { status: 'dropped' },
+          minimalResponse: true,
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.completed).toBe(false);
+      expect(result.dropDate).toBe('2026-10-19T14:46:34.039Z');
+    });
+
     it('OMN-137: omits the warnings key when update task script reports none (full response)', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
@@ -2023,6 +2057,17 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(hint).toMatch(/task/);
       expect(hint).toMatch(/dropped/);
       expect(hint).toMatch(/on_hold/);
+    });
+
+    // Gate finding 2: `data` is ALSO accepted on update as an alias for
+    // `changes` (OMN-75), and shares create's properties — its status hint
+    // must not tell an update-via-data caller that tasks can't be dropped.
+    it('data.status hint covers the update alias, not bare "project-only"', () => {
+      const schema = tool.inputSchema as any;
+      const hint = schema.properties.mutation.properties.data.properties.status.description as string;
+      expect(hint).toMatch(/create/);
+      expect(hint).toMatch(/update/);
+      expect(hint).toMatch(/dropped/);
     });
 
     it('steers moot tasks to drop, not complete, next to the complete operation', () => {

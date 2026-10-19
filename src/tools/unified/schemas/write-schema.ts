@@ -404,7 +404,10 @@ const MutationSchema = z.discriminatedUnion('operation', [
   }),
 ]);
 
-// OMN-377: shared by the single-update and batch-item checks below.
+// OMN-377: one predicate + message for the single-update and batch-item checks
+// below, so the two routes can't drift apart.
+const isTaskOnHold = (target: string, changes: { status?: string } | undefined): boolean =>
+  target === 'task' && changes?.status === 'on_hold';
 const TASK_ON_HOLD_MESSAGE =
   'status "on_hold" is project-only — tasks accept completed, dropped, or active (reopen). ' +
   'To postpone a task set deferDate; to pause it with its project, put the project on_hold.';
@@ -447,24 +450,16 @@ export const WriteSchema = z
     // OMN-377: tasks have no on-hold state (OmniFocus models it on the
     // project). The sanitizer used to strip it, returning success with
     // "No valid updates provided" — reject it here on every task-update route.
-    if (m.operation === 'update' && m.target === 'task') {
+    const onHold = (path: Array<string | number>) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: TASK_ON_HOLD_MESSAGE });
+    if (m.operation === 'update') {
       const key = m.changes !== undefined ? 'changes' : 'data';
-      if ((m.changes ?? m.data)?.status === 'on_hold') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['mutation', key, 'status'],
-          message: TASK_ON_HOLD_MESSAGE,
-        });
-      }
+      if (isTaskOnHold(m.target, m.changes ?? m.data)) onHold(['mutation', key, 'status']);
     }
     if (m.operation === 'batch') {
       m.operations.forEach((op, i) => {
-        if (op.operation === 'update' && op.target === 'task' && op.changes.status === 'on_hold') {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['mutation', 'operations', i, 'changes', 'status'],
-            message: TASK_ON_HOLD_MESSAGE,
-          });
+        if (op.operation === 'update' && isTaskOnHold(op.target, op.changes)) {
+          onHold(['mutation', 'operations', i, 'changes', 'status']);
         }
       });
     }

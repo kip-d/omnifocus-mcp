@@ -67,6 +67,19 @@ import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../u
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
 import { flattenBatchResults, liftWarnings, returnedFailureMessage } from './batch-response-flatten.js';
 
+/**
+ * OMN-377: the update script's live status read-back (completed/dropDate), so a
+ * drop/reopen is confirmed by the envelope rather than by the input echo.
+ * Shared by the full and minimalResponse task-update responses.
+ */
+function liveStatusReadback(result: unknown): { completed?: boolean; dropDate?: string | null } {
+  const { completed, dropDate } = (result ?? {}) as { completed?: boolean; dropDate?: string | null };
+  return {
+    ...(completed !== undefined ? { completed } : {}),
+    ...(dropDate !== undefined ? { dropDate } : {}),
+  };
+}
+
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
 
@@ -126,7 +139,7 @@ OPERATIONS:
 - create: New task/project with data
 - create_folder: New folder (name required, optional parentFolder for nesting)
 - update: Modify existing (provide id + changes; "data" accepted as an alias for "changes"; target defaults to "task" if omitted)
-- complete: Mark done (provide id; target defaults to "task" if omitted). No longer relevant? Don't complete it — drop it: update with changes.status:"dropped" (repeating tasks: ends the series). status:"active" reopens.
+- complete: Mark done (provide id; target defaults to "task" if omitted). No longer relevant? Don't complete it — drop it: update with changes.status:"dropped" (repeating tasks: ends the series). status:"active" reopens (a dropped repeating task resumes repeating).
 - delete: Remove permanently (provide id, or its alias target_id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs
@@ -251,7 +264,10 @@ SAFETY:
       repetitionRule: { type: 'object' },
       folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
       sequential: { type: 'boolean', description: 'projects + task action groups' },
-      status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
+      status: {
+        type: 'string',
+        description: 'create: project-only; update (data = changes alias): tasks completed|dropped|active',
+      },
       // OMN-343 (F10/D3): unit is now a closed, case-insensitive enum —
       // mirror it here so clients see the exact accepted set.
       reviewInterval: { description: 'project-only: days or {steps,unit:day|week|month|year(s)}' },
@@ -783,6 +799,7 @@ SAFETY:
         operation: 'update_task',
         task_id: taskId, // Keep for backwards compatibility
         fields_updated: Object.keys(safeUpdates),
+        ...liveStatusReadback(parsedUpdateResult),
         ...liftWarnings(parsedUpdateResult),
       };
     }
@@ -845,14 +862,10 @@ SAFETY:
   ): unknown {
     const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task ||
       parsedUpdateResult || { id: taskId, name: 'Unknown' };
-    // OMN-377: surface the script's live status read-back (completed/dropDate),
-    // so a drop/reopen is confirmed by the envelope rather than by the echo.
-    const { completed, dropDate } = taskData as { completed?: boolean; dropDate?: string | null };
     const transformedResult = {
       id: (taskData as { id?: string }).id || taskId,
       name: (taskData as { name?: string }).name || 'Unknown',
-      ...(completed !== undefined ? { completed } : {}),
-      ...(dropDate !== undefined ? { dropDate } : {}),
+      ...liveStatusReadback(taskData),
       updated: true,
       changes: Object.keys(safeUpdates).reduce(
         (acc, key) => {
