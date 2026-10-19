@@ -453,8 +453,10 @@ export const WriteSchema = z
     const onHold = (path: Array<string | number>) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: TASK_ON_HOLD_MESSAGE });
     if (m.operation === 'update') {
-      const key = m.changes !== undefined ? 'changes' : 'data';
-      if (isTaskOnHold(m.target, m.changes ?? m.data)) onHold(['mutation', key, 'status']);
+      // Check both aliases, not just the one `changes ?? data` picks — keeps
+      // this rejection independent of the compiler's precedence.
+      if (isTaskOnHold(m.target, m.changes)) onHold(['mutation', 'changes', 'status']);
+      if (isTaskOnHold(m.target, m.data)) onHold(['mutation', 'data', 'status']);
     }
     if (m.operation === 'batch') {
       m.operations.forEach((op, i) => {

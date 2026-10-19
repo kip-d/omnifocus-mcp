@@ -871,6 +871,17 @@ describe('WriteSchema', () => {
       ).toBeTruthy();
     });
 
+    // Gate round 2 finding 5: both aliases are checked, not just the one
+    // that wins `changes ?? data` precedence.
+    it('rejects on_hold in either alias when both changes and data are sent', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', id: 'x', changes: { flagged: true }, data: { status: 'on_hold' } },
+      });
+      const issue = onHoldIssue(result);
+      expect(issue).toBeTruthy();
+      expect(issue && issue.path).toEqual(['mutation', 'data', 'status']);
+    });
+
     it('rejects on_hold on a task update inside a batch, pointing at the item', () => {
       const result = WriteSchema.safeParse({
         mutation: {

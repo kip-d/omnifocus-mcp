@@ -788,8 +788,10 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
     // markIncomplete() acts only on a completed task, and `active = true`
     // (ActiveObject) undrops a dropped one — clearing dropDate, verified live
     // 2026-10-16 — so no build-time branching on current state is needed.
-    statements.push(callMethod(ref('task'), 'markIncomplete', [], true, 'status'));
-    statements.push(setProp(ref('task'), 'active', json(true), 'direct', true, 'status'));
+    // Two independent best-effort steps — distinct labels so a half-applied
+    // reopen says which half failed (the live read-back shows the result).
+    statements.push(callMethod(ref('task'), 'markIncomplete', [], true, 'status (reopen: markIncomplete)'));
+    statements.push(setProp(ref('task'), 'active', json(true), 'direct', true, 'status (reopen: undrop)'));
   }
 
   statements.push(

@@ -279,10 +279,12 @@ describe('buildUpdateTaskProgram — golden emission', () => {
   // OMN-377: 'active' reopens. Both calls are no-ops on a task not in that
   // terminal state (markIncomplete only acts on a completed task; active=true
   // on an active one changes nothing), so no build-time branching is needed.
-  it('status active emits markIncomplete() then active = true, best-effort labeled status', () => {
+  it('status active emits markIncomplete() then active = true, each best-effort with its own label', () => {
     const omnijs = emit({ status: 'active' });
     expect(omnijs).toContain('try { task.markIncomplete(); }');
     expect(omnijs).toContain('try { task.active = true; }');
+    expect(omnijs).toContain('_warnings.push("status (reopen: markIncomplete)"');
+    expect(omnijs).toContain('_warnings.push("status (reopen: undrop)"');
     expect(omnijs.indexOf('task.markIncomplete()')).toBeLessThan(omnijs.indexOf('task.active = true'));
     expect(omnijs).not.toContain('task.drop(');
     expect(omnijs).not.toContain('task.markComplete(');
@@ -599,6 +601,22 @@ describe('emitted update-task program executes (vm)', () => {
     expect(parsed.dropDate).toBeNull();
     expect(parsed.completed).toBe(false);
     expect(parsed.warnings).toEqual([]);
+  });
+
+  // Gate round 2 finding 1: the two reopen calls are independent best-effort
+  // steps — a half-applied reopen must say WHICH half failed; the live
+  // read-back shows the resulting state.
+  it('vm: a failed markIncomplete during reopen is attributed; the undrop half still reads back', () => {
+    const { task } = makeRecordingTask({ completed: true, dropDate: new Date('2026-10-01T12:00:00Z') });
+    task.markIncomplete = () => {
+      throw new Error('boom');
+    };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.warnings).toEqual(['status (reopen: markIncomplete): boom']);
+    expect(parsed.completed).toBe(true);
+    expect(parsed.dropDate).toBeNull();
   });
 
   it('vm: active on a completed task reopens it', () => {
