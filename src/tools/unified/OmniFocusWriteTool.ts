@@ -126,7 +126,7 @@ OPERATIONS:
 - create: New task/project with data
 - create_folder: New folder (name required, optional parentFolder for nesting)
 - update: Modify existing (provide id + changes; "data" accepted as an alias for "changes"; target defaults to "task" if omitted)
-- complete: Mark done (provide id; target defaults to "task" if omitted)
+- complete: Mark done (provide id; target defaults to "task" if omitted). No longer relevant? Don't complete it — drop it: update with changes.status:"dropped" (repeating tasks: ends the series). status:"active" reopens.
 - delete: Remove permanently (provide id, or its alias target_id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs
@@ -258,6 +258,12 @@ SAFETY:
     };
     const updateChangesProperties: Record<string, unknown> = {
       ...createDataProperties,
+      // OMN-377: tasks drop/reopen on update — advertising "project-only" here
+      // made agents complete moot tasks. (Create's hint above stays project-only.)
+      status: {
+        type: 'string',
+        description: 'task: completed|dropped|active (reopen); project: active|on_hold|completed|dropped',
+      },
       addTags: { type: 'array', items: { type: 'string' } },
       removeTags: { type: 'array', items: { type: 'string' } },
       clearDueDate: { type: 'boolean' },
@@ -839,9 +845,14 @@ SAFETY:
   ): unknown {
     const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task ||
       parsedUpdateResult || { id: taskId, name: 'Unknown' };
+    // OMN-377: surface the script's live status read-back (completed/dropDate),
+    // so a drop/reopen is confirmed by the envelope rather than by the echo.
+    const { completed, dropDate } = taskData as { completed?: boolean; dropDate?: string | null };
     const transformedResult = {
       id: (taskData as { id?: string }).id || taskId,
       name: (taskData as { name?: string }).name || 'Unknown',
+      ...(completed !== undefined ? { completed } : {}),
+      ...(dropDate !== undefined ? { dropDate } : {}),
       updated: true,
       changes: Object.keys(safeUpdates).reduce(
         (acc, key) => {

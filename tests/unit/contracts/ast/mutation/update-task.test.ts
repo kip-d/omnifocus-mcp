@@ -266,6 +266,18 @@ describe('buildUpdateTaskProgram — golden emission', () => {
     expect(omnijs).toContain('_warnings.push("status"');
   });
 
+  // OMN-377: 'active' reopens. Both calls are no-ops on a task not in that
+  // terminal state (markIncomplete only acts on a completed task; active=true
+  // on an active one changes nothing), so no build-time branching is needed.
+  it('status active emits markIncomplete() then active = true, best-effort labeled status', () => {
+    const omnijs = emit({ status: 'active' });
+    expect(omnijs).toContain('try { task.markIncomplete(); }');
+    expect(omnijs).toContain('try { task.active = true; }');
+    expect(omnijs.indexOf('task.markIncomplete()')).toBeLessThan(omnijs.indexOf('task.active = true'));
+    expect(omnijs).not.toContain('task.drop(');
+    expect(omnijs).not.toContain('task.markComplete(');
+  });
+
   // Envelope: live read-backs, never input echoes (spec §2.4).
   it('envelope reads back primaryKey/name/flagged and carries warnings', () => {
     const omnijs = emit({ name: 'x' });
@@ -274,6 +286,17 @@ describe('buildUpdateTaskProgram — golden emission', () => {
     expect(omnijs).toContain('flagged: task.flagged');
     expect(omnijs).toContain('updated: true');
     expect(omnijs).toContain('warnings: _warnings');
+  });
+
+  // OMN-377: the status outcome is read back live on EVERY update (not only
+  // when status changed — conditional field presence caused OMN-207's
+  // read-after-write gaps), in omnifocus_read's field names.
+  it('envelope reads back completed and dropDate live', () => {
+    for (const changes of [{ name: 'x' }, { status: 'dropped' as const }]) {
+      const omnijs = emit(changes);
+      expect(omnijs).toContain('completed: task.completed');
+      expect(omnijs).toContain('dropDate: task.dropDate ? task.dropDate.toISOString() : null');
+    }
   });
 
   // sequential is LIVE (spec §3 — action groups; the shared schema + sanitizer
@@ -309,11 +332,27 @@ describe('emitted update-task program executes (vm)', () => {
     'repetitionRule',
   ] as const;
 
-  /** A task stub whose setters RECORD — readable id/name/flagged, loud sets. */
-  function makeRecordingTask(): { task: Record<string, unknown>; sets: string[]; calls: string[] } {
+  /** A task stub whose setters RECORD — readable id/name/flagged, loud sets.
+   *  OMN-377: status state is modeled on the live OmniJS behavior verified
+   *  2026-10-16 — drop() sets dropDate and clears `active`; `active = true`
+   *  clears dropDate; markIncomplete() clears `completed`. */
+  function makeRecordingTask(initial: Record<string, unknown> = {}): {
+    task: Record<string, unknown>;
+    sets: string[];
+    calls: string[];
+  } {
     const sets: string[] = [];
     const calls: string[] = [];
-    const values: Record<string, unknown> = { name: 'Old name', flagged: false };
+    const values: Record<string, unknown> = {
+      name: 'Old name',
+      flagged: false,
+      repetitionRule: null,
+      ...initial,
+    };
+    const status = {
+      completed: (initial.completed as boolean | undefined) ?? false,
+      dropDate: (initial.dropDate as Date | null | undefined) ?? null,
+    };
     const task: Record<string, unknown> = {
       id: { primaryKey: 'fake-task-id' },
       clearTags: () => {
@@ -327,11 +366,26 @@ describe('emitted update-task program executes (vm)', () => {
       },
       markComplete: () => {
         calls.push('markComplete');
+        status.completed = true;
+      },
+      markIncomplete: () => {
+        calls.push('markIncomplete');
+        status.completed = false;
       },
       drop: () => {
         calls.push('drop');
+        status.dropDate = new Date('2026-10-16T14:46:34.039Z');
       },
     };
+    Object.defineProperty(task, 'completed', { get: () => status.completed });
+    Object.defineProperty(task, 'dropDate', { get: () => status.dropDate });
+    Object.defineProperty(task, 'active', {
+      get: () => status.dropDate === null,
+      set: (v: unknown) => {
+        sets.push('active');
+        if (v === true) status.dropDate = null;
+      },
+    });
     for (const prop of MUTATING_PROPS) {
       Object.defineProperty(task, prop, {
         get: () => values[prop],
@@ -393,9 +447,74 @@ describe('emitted update-task program executes (vm)', () => {
       taskId: 'fake-task-id',
       name: 'New name', // read back from the stub, not echoed
       flagged: false,
+      completed: false,
+      dropDate: null,
       updated: true,
       warnings: [],
     });
+  });
+
+  // OMN-377: status outcomes read back live, through the response schema.
+  it('vm: dropped on a non-repeating task reads back dropDate, no repeat warning', () => {
+    const { task, calls } = makeRecordingTask();
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(calls).toEqual(['drop']);
+    expect(parsed.completed).toBe(false);
+    expect(parsed.dropDate).toBe('2026-10-16T14:46:34.039Z');
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('vm: dropped on a repeating task warns that the whole series was dropped', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.dropDate).toBe('2026-10-16T14:46:34.039Z');
+    expect(parsed.warnings).toHaveLength(1);
+    expect(parsed.warnings[0]).toMatch(/repeating/i);
+    expect(parsed.warnings[0]).toMatch(/all future occurrences/i);
+  });
+
+  it('vm: a repeating task whose rule is cleared in the same update gets no repeat warning', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    const program = emitProgram(
+      buildUpdateTaskProgram({ taskId: 't1', changes: { repetitionRule: null, status: 'dropped' } }),
+    );
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('vm: a failed drop on a repeating task reports the failure, not the series notice', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    task.drop = () => {
+      throw new Error('boom');
+    };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.dropDate).toBeNull();
+    expect(parsed.warnings).toEqual(['status: boom']);
+  });
+
+  it('vm: active on a dropped task undrops it and reads back dropDate null', () => {
+    const { task, calls, sets } = makeRecordingTask({ dropDate: new Date('2026-10-01T12:00:00Z') });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(calls).toEqual(['markIncomplete']);
+    expect(sets).toEqual(['active']);
+    expect(parsed.dropDate).toBeNull();
+    expect(parsed.completed).toBe(false);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('vm: active on a completed task reopens it', () => {
+    const { task } = makeRecordingTask({ completed: true });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.completed).toBe(false);
+    expect(parsed.dropDate).toBeNull();
   });
 
   it('vm: a throwing moveTasks records a labeled move warning but the update still succeeds', () => {

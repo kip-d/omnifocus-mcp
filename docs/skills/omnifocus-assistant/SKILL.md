@@ -124,6 +124,9 @@ Ask when user request is ambiguous:
 - Fetch all tasks then filter client-side (use server filters, sort, and logical operators)
 - Create compound tasks (break them up)
 - Complete or delete tasks without confirmation
+- **Complete a task that no longer matters.** "Completed" claims the work was done — it inflates velocity and completion
+  stats and falsifies the GTD record. A moot, superseded, or abandoned task gets **dropped** (`update` with
+  `changes: { status: "dropped" }`). Complete only what was actually finished; delete only mistakes and duplicates.
 - Over-engineer simple captures
 - Guess project/folder names — verify with `omnifocus_read` first
 
@@ -155,6 +158,16 @@ those rather than assuming they are already in context.
 
 // Complete with backdated date
 { mutation: { operation: "complete", target: "task", id: "...", completionDate: "{past date}" } }
+
+// Drop a task that no longer matters (NOT complete — completing fakes progress).
+// On a repeating task this drops the whole series; the response warns when it does.
+// Verify: the response's task.dropDate is set; omnifocus_read hides it by default
+// and filters: { status: "dropped" } finds it.
+{ mutation: { operation: "update", target: "task", id: "...", changes: { status: "dropped" } } }
+
+// Reopen a dropped or completed task
+{ mutation: { operation: "update", target: "task", id: "...", changes: { status: "active" } } }
+// Tasks have no on_hold (rejected) — defer the task, or put its project on hold
 
 // Bulk delete (confirm with user first!)
 { mutation: { operation: "bulk_delete", target: "task", ids: ["id1", "id2", "id3"] } }

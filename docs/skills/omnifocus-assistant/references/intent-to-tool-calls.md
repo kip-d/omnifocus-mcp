@@ -21,6 +21,8 @@ Step 1 (the information / action / insight split) stays in `SKILL.md`; this is t
 | "Add task..."                                | Create                 | `omnifocus_write` operation: `"create"`                                                  |
 | "Complete/finish..."                         | Mark done              | `omnifocus_write` operation: `"complete"`                                                |
 | "Delete/remove..."                           | Delete                 | `omnifocus_write` operation: `"delete"`                                                  |
+| "Never mind / no longer needed / moot..."    | Drop (not complete)    | `omnifocus_write` operation: `"update"`, changes: `{ status: "dropped" }`                |
+| "Reopen / undrop..."                         | Reopen                 | `omnifocus_write` operation: `"update"`, changes: `{ status: "active" }`                 |
 | "Move task to..."                            | Update                 | `omnifocus_write` operation: `"update"`                                                  |
 | "Search for..."                              | Text search            | `omnifocus_read` mode: `"search"`, filters: `{ text: { contains: "..." } }`              |
 | "Export my tasks"                            | Use the OmniFocus app  | Not an MCP capability — see `references/advanced-queries.md`                             |

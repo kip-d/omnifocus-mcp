@@ -227,7 +227,7 @@ export interface MoveProjectNode {
 
 /** Calls a method on a target expression with typed args (slice 4).
  *  Only methods in CALL_METHOD_ALLOWLIST are permitted — see validator.ts.
- *  Used for task status mutations: markComplete, drop.
+ *  Used for task status mutations: markComplete, markIncomplete, drop.
  */
 export interface CallMethodNode {
   type: 'callMethod';

@@ -343,10 +343,25 @@ describe('TaskWriteResultSchema', () => {
       taskId: 'abc123',
       name: 'Buy milk',
       flagged: false,
+      completed: false,
+      dropDate: '2026-10-16T14:46:34.039Z',
       updated: true,
       warnings: [],
     });
     expect(result.success).toBe(true);
+  });
+
+  // OMN-377: completed/dropDate are the live status read-back and the emitter
+  // always sends them — an envelope without them is a lowering regression.
+  it('(b) rejects an update-task envelope missing the completed/dropDate read-back', () => {
+    const result = TaskWriteResultSchema.safeParse({
+      taskId: 'abc123',
+      name: 'Buy milk',
+      flagged: false,
+      updated: true,
+      warnings: [],
+    });
+    expect(result.success).toBe(false);
   });
 
   it('(b) rejects payload missing both created and updated discriminators', () => {

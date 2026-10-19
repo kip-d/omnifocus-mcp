@@ -206,7 +206,7 @@ export interface TaskUpdateData {
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean;
   repetitionRule?: RepetitionRule | null; // Set/update (object) or clear (null)
-  status?: 'completed' | 'dropped';
+  status?: 'completed' | 'dropped' | 'active'; // OMN-377: 'active' reopens (undrop / markIncomplete)
 }
 
 /**

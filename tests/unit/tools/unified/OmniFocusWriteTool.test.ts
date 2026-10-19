@@ -454,6 +454,35 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.data.warnings).toEqual(['status: boom']);
     });
 
+    // OMN-377: the full update response reports the LIVE status outcome
+    // (script read-back), not just the echoed input.
+    it('OMN-377: full update task response carries live completed/dropDate', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: {
+            taskId: 'task-drop',
+            name: 'Moot',
+            flagged: false,
+            completed: false,
+            dropDate: '2026-10-16T14:46:34.039Z',
+            updated: true,
+            warnings: [],
+          },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'update', target: 'task', id: 'task-drop', changes: { status: 'dropped' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.task.completed).toBe(false);
+      expect(result.data.task.dropDate).toBe('2026-10-16T14:46:34.039Z');
+      expect(result.data.task.changes).toEqual({ status: 'dropped' });
+    });
+
     it('OMN-137: omits the warnings key when update task script reports none (full response)', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
@@ -1983,6 +2012,23 @@ describe('OmniFocusWriteTool task operations', () => {
       for (const flag of booleanFlags) {
         expect(mutationProps[flag]).toEqual({ type: 'boolean' });
       }
+    });
+
+    // OMN-377: task drop worked but `status` was advertised as project-only,
+    // so client agents completed moot tasks instead of dropping them.
+    it('advertises task status values on update, not "project-only"', () => {
+      const schema = tool.inputSchema as any;
+      const hint = schema.properties.mutation.properties.changes.properties.status.description as string;
+      expect(hint).not.toMatch(/project-only/);
+      expect(hint).toMatch(/task/);
+      expect(hint).toMatch(/dropped/);
+      expect(hint).toMatch(/on_hold/);
+    });
+
+    it('steers moot tasks to drop, not complete, next to the complete operation', () => {
+      const completeLine = tool.description.split('\n').find((l) => l.startsWith('- complete:'));
+      expect(completeLine).toBeDefined();
+      expect(completeLine).toMatch(/status:\s*"dropped"/);
     });
 
     // OMN-343 (F10/D3): reviewInterval.unit is now a closed enum server-side —

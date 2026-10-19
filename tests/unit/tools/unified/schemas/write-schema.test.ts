@@ -841,6 +841,76 @@ describe('WriteSchema', () => {
     });
   });
 
+  // OMN-377: tasks have no on-hold state. Previously the sanitizer stripped
+  // status:"on_hold" from a task update and the call returned success with
+  // "No valid updates provided" — a silent no-op. Reject it at the boundary
+  // on every route a task update can take (single, defaulted target, `data`
+  // alias, batch item).
+  describe('task status vocabulary (OMN-377)', () => {
+    const onHoldIssue = (result: ReturnType<typeof WriteSchema.safeParse>) =>
+      !result.success && result.error.issues.find((i) => /on_hold/.test(i.message));
+
+    it('rejects status:"on_hold" on a single task update, with guidance', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 'x', changes: { status: 'on_hold' } },
+      });
+      expect(result.success).toBe(false);
+      const issue = onHoldIssue(result);
+      expect(issue).toBeTruthy();
+      expect(issue && issue.message).toMatch(/deferDate/);
+    });
+
+    it('rejects on_hold when target defaults to task and on the `data` alias', () => {
+      expect(
+        onHoldIssue(
+          WriteSchema.safeParse({ mutation: { operation: 'update', id: 'x', changes: { status: 'on_hold' } } }),
+        ),
+      ).toBeTruthy();
+      expect(
+        onHoldIssue(WriteSchema.safeParse({ mutation: { operation: 'update', id: 'x', data: { status: 'on_hold' } } })),
+      ).toBeTruthy();
+    });
+
+    it('rejects on_hold on a task update inside a batch, pointing at the item', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          operations: [
+            { operation: 'update', target: 'task', id: 'a', changes: { flagged: true } },
+            { operation: 'update', target: 'task', id: 'b', changes: { status: 'on_hold' } },
+          ],
+        },
+      });
+      const issue = onHoldIssue(result);
+      expect(issue).toBeTruthy();
+      expect(issue && issue.path).toEqual(['mutation', 'operations', 1, 'changes', 'status']);
+    });
+
+    it('still accepts on_hold on projects, single and batch', () => {
+      expect(
+        WriteSchema.safeParse({
+          mutation: { operation: 'update', target: 'project', id: 'p', changes: { status: 'on_hold' } },
+        }).success,
+      ).toBe(true);
+      expect(
+        WriteSchema.safeParse({
+          mutation: {
+            operation: 'batch',
+            operations: [{ operation: 'update', target: 'project', id: 'p', changes: { status: 'on_hold' } }],
+          },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('accepts completed, dropped and active (reopen) on tasks', () => {
+      for (const status of ['completed', 'dropped', 'active']) {
+        expect(WriteSchema.safeParse({ mutation: { operation: 'update', id: 'x', changes: { status } } }).success).toBe(
+          true,
+        );
+      }
+    });
+  });
+
   // OMN-85: NL completionDate ("tomorrow", "in 3 days", etc.) used to bypass
   // the schema and surface downstream as an uncategorized INTERNAL_ERROR —
   // unlike NL dueDate/deferDate on create/update, which already returned a
