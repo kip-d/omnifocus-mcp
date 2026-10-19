@@ -440,6 +440,63 @@ describe('flattenBatchResults', () => {
     expect('warnings' in flat[1]).toBe(false);
   });
 
+  // OMN-377 (gate round 3): the live status read-back must survive the batch
+  // flatten — a batch drop/reopen otherwise shows only `changes: ['status']`,
+  // the same echo-not-confirmation the single path was fixed to avoid.
+  it('OMN-377: update rows carry live completed/dropDate (envelope and minimal shapes); absent stays absent', () => {
+    const nestedResults = {
+      created: [],
+      updated: [
+        {
+          success: true,
+          data: {
+            task: {
+              id: 'u-drop',
+              name: 'Moot',
+              completed: false,
+              dropDate: '2026-10-19T14:46:34.039Z',
+              updated: true,
+              changes: { status: 'dropped' },
+            },
+          },
+          metadata: {},
+        },
+        {
+          success: true,
+          id: 'u-min',
+          operation: 'update_task',
+          task_id: 'u-min',
+          fields_updated: ['status'],
+          completed: false,
+          dropDate: null,
+        },
+        {
+          success: true,
+          data: { projectId: 'p1', name: 'Project row' },
+          metadata: {},
+        },
+      ],
+      completed: [
+        {
+          success: true,
+          data: { task: { taskId: 'c1', name: 'Done', completed: true, completionDate: null } },
+          metadata: {},
+        },
+      ],
+      deleted: [],
+      errors: [],
+    };
+
+    const flat = flattenBatchResults(nestedResults) as Array<FlatBatchResult & Record<string, unknown>>;
+
+    expect(flat[0]).toMatchObject({ id: 'u-drop', completed: false, dropDate: '2026-10-19T14:46:34.039Z' });
+    expect(flat[1]).toMatchObject({ id: 'u-min', completed: false, dropDate: null });
+    expect('completed' in flat[2]).toBe(false);
+    expect('dropDate' in flat[2]).toBe(false);
+    // complete rows are out of scope (OMN-377 follow-up) — unchanged shape.
+    expect('completed' in flat[3]).toBe(false);
+  });
+
   it('should handle minimalResponse update results (no nested data.task envelope)', () => {
     // When minimalResponse is true, handleTaskUpdate returns a flat object
     // instead of createSuccessResponseV2 envelope

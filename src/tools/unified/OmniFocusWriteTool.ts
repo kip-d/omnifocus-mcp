@@ -65,20 +65,12 @@ import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import { flattenBatchResults, liftWarnings, returnedFailureMessage } from './batch-response-flatten.js';
-
-/**
- * OMN-377: the update script's live status read-back (completed/dropDate), so a
- * drop/reopen is confirmed by the envelope rather than by the input echo.
- * Shared by the full and minimalResponse task-update responses.
- */
-function liveStatusReadback(result: unknown): { completed?: boolean; dropDate?: string | null } {
-  const { completed, dropDate } = (result ?? {}) as { completed?: boolean; dropDate?: string | null };
-  return {
-    ...(completed !== undefined ? { completed } : {}),
-    ...(dropDate !== undefined ? { dropDate } : {}),
-  };
-}
+import {
+  flattenBatchResults,
+  liftWarnings,
+  liveStatusReadback,
+  returnedFailureMessage,
+} from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
