@@ -196,8 +196,15 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ status: 'dropped' })).toEqual({ status: 'dropped' });
   });
 
+  // OMN-377: 'active' reopens a dropped or completed task.
+  it('passes through active status (reopen)', () => {
+    expect(sanitizeTaskUpdates({ status: 'active' })).toEqual({ status: 'active' });
+  });
+
+  // on_hold is rejected at the schema boundary (WriteSchema superRefine);
+  // the sanitizer stays a defensive filter behind it.
   it('ignores invalid status values', () => {
-    expect(sanitizeTaskUpdates({ status: 'active' })).toEqual({});
+    expect(sanitizeTaskUpdates({ status: 'on_hold' })).toEqual({});
   });
 
   // --- Edge cases ---

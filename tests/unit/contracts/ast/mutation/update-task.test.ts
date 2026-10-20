@@ -18,9 +18,15 @@ vi.mock('child_process', () => ({
 // surface of src/contracts/ast/mutation/index.ts.
 import {
   buildUpdateTaskProgram,
+  callMethod,
   dispatchMutation,
-  validateMutationProgram,
   emitProgram,
+  guard,
+  json,
+  ref,
+  resolveTask,
+  return_,
+  validateMutationProgram,
 } from '../../../../../src/contracts/ast/mutation/index.js';
 import type { TaskUpdateData } from '../../../../../src/contracts/mutations.js';
 import { TaskWriteResultSchema } from '../../../../../src/omnifocus/script-response-schemas.js';
@@ -254,9 +260,13 @@ describe('buildUpdateTaskProgram — golden emission', () => {
   });
 
   // Status — applied LAST (legacy order), best-effort labeled 'status'.
-  it('status completed emits task.markComplete(new Date()) best-effort labeled status', () => {
+  // OMN-377 (gate finding 1): markComplete's RETURN is the completed task —
+  // for a repeating task a new-id copy, while `task` advances. The lowering
+  // binds it (callMethod.bind) so the envelope can name the copy.
+  it("status completed binds markComplete(new Date())'s result, best-effort labeled status", () => {
     const omnijs = emit({ status: 'completed' });
-    expect(omnijs).toContain('try { task.markComplete(new Date()); }');
+    expect(omnijs).toContain('let completedTask = null;');
+    expect(omnijs).toContain('try { completedTask = task.markComplete(new Date()); }');
     expect(omnijs).toContain('_warnings.push("status"');
   });
 
@@ -264,6 +274,20 @@ describe('buildUpdateTaskProgram — golden emission', () => {
     const omnijs = emit({ status: 'dropped' });
     expect(omnijs).toContain('try { task.drop(true, new Date()); }');
     expect(omnijs).toContain('_warnings.push("status"');
+  });
+
+  // OMN-377: 'active' reopens. Both calls are no-ops on a task not in that
+  // terminal state (markIncomplete only acts on a completed task; active=true
+  // on an active one changes nothing), so no build-time branching is needed.
+  it('status active emits markIncomplete() then active = true, each best-effort with its own label', () => {
+    const omnijs = emit({ status: 'active' });
+    expect(omnijs).toContain('try { task.markIncomplete(); }');
+    expect(omnijs).toContain('try { task.active = true; }');
+    expect(omnijs).toContain('_warnings.push("status (reopen: markIncomplete)"');
+    expect(omnijs).toContain('_warnings.push("status (reopen: undrop)"');
+    expect(omnijs.indexOf('task.markIncomplete()')).toBeLessThan(omnijs.indexOf('task.active = true'));
+    expect(omnijs).not.toContain('task.drop(');
+    expect(omnijs).not.toContain('task.markComplete(');
   });
 
   // Envelope: live read-backs, never input echoes (spec §2.4).
@@ -276,10 +300,63 @@ describe('buildUpdateTaskProgram — golden emission', () => {
     expect(omnijs).toContain('warnings: _warnings');
   });
 
+  // OMN-377: the status outcome is read back live on EVERY update (not only
+  // when status changed — conditional field presence caused OMN-207's
+  // read-after-write gaps), in omnifocus_read's field names.
+  it('envelope reads back completed and dropDate live', () => {
+    for (const changes of [{ name: 'x' }, { status: 'dropped' as const }]) {
+      const omnijs = emit(changes);
+      expect(omnijs).toContain('completed: task.completed');
+      expect(omnijs).toContain('dropDate: task.dropDate ? task.dropDate.toISOString() : null');
+    }
+  });
+
   // sequential is LIVE (spec §3 — action groups; the shared schema + sanitizer
   // forward it; only the TS type was missing it).
   it('sequential lowers to a setProp', () => {
     expect(emit({ sequential: true })).toContain('task.sequential = true;');
+  });
+
+  // OMN-377: callMethod.bind substrate. Non-best-effort binds a const; a
+  // best-effort bind is declared before the try so it stays in scope (null
+  // when the call threw); the bind name is under the reserved-name rule.
+  it('callMethod.bind emits const (plain) or let+try assignment (best-effort)', () => {
+    const plain = emitProgram({
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', { error: json(true) }),
+        callMethod(ref('task'), 'markComplete', [], false, undefined, 'done'),
+        return_({ ok: json(true) }),
+      ],
+      context: 'update_task',
+      snippetDeps: [],
+    });
+    expect(plain).toContain('const done = task.markComplete();');
+    const best = emitProgram({
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', { error: json(true) }),
+        callMethod(ref('task'), 'markComplete', [], true, 'status', 'done'),
+        return_({ ok: json(true) }),
+      ],
+      context: 'update_task',
+      snippetDeps: [],
+    });
+    expect(best).toContain('let done = null;\ntry { done = task.markComplete(); } catch (e) { _warnings.push("status"');
+  });
+
+  it('validator rejects a reserved identifier as a callMethod bind', () => {
+    const program = {
+      statements: [
+        resolveTask('task', 't1'),
+        guard('task === null', { error: json(true) }),
+        callMethod(ref('task'), 'markComplete', [], true, 'status', '_warnings'),
+        return_({ ok: json(true) }),
+      ],
+      context: 'update_task',
+      snippetDeps: [],
+    };
+    expect(() => validateMutationProgram(program)).toThrow(/reserved/i);
   });
 
   // Rule-7 sensitivity at the lowering's shape: stripping the target guard from
@@ -309,11 +386,27 @@ describe('emitted update-task program executes (vm)', () => {
     'repetitionRule',
   ] as const;
 
-  /** A task stub whose setters RECORD — readable id/name/flagged, loud sets. */
-  function makeRecordingTask(): { task: Record<string, unknown>; sets: string[]; calls: string[] } {
+  /** A task stub whose setters RECORD — readable id/name/flagged, loud sets.
+   *  OMN-377: status state is modeled on the live OmniJS behavior verified
+   *  2026-10-16 — drop() sets dropDate and clears `active`; `active = true`
+   *  clears dropDate; markIncomplete() clears `completed`. */
+  function makeRecordingTask(initial: Record<string, unknown> = {}): {
+    task: Record<string, unknown>;
+    sets: string[];
+    calls: string[];
+  } {
     const sets: string[] = [];
     const calls: string[] = [];
-    const values: Record<string, unknown> = { name: 'Old name', flagged: false };
+    const values: Record<string, unknown> = {
+      name: 'Old name',
+      flagged: false,
+      repetitionRule: null,
+      ...initial,
+    };
+    const status = {
+      completed: (initial.completed as boolean | undefined) ?? false,
+      dropDate: (initial.dropDate as Date | null | undefined) ?? null,
+    };
     const task: Record<string, unknown> = {
       id: { primaryKey: 'fake-task-id' },
       clearTags: () => {
@@ -325,13 +418,34 @@ describe('emitted update-task program executes (vm)', () => {
       removeTag: () => {
         calls.push('removeTag');
       },
+      // Live behavior (verified 2026-10-19): on a repeating task markComplete
+      // completes and RETURNS a new-id copy ('<id>.0'); the original stays
+      // incomplete (it advances to the next occurrence). Otherwise it
+      // completes in place and returns the task itself.
       markComplete: () => {
         calls.push('markComplete');
+        if (values.repetitionRule) return { id: { primaryKey: 'fake-task-id.0' }, completed: true };
+        status.completed = true;
+        return task;
+      },
+      markIncomplete: () => {
+        calls.push('markIncomplete');
+        status.completed = false;
       },
       drop: () => {
         calls.push('drop');
+        status.dropDate = new Date('2026-10-16T14:46:34.039Z');
       },
     };
+    Object.defineProperty(task, 'completed', { get: () => status.completed });
+    Object.defineProperty(task, 'dropDate', { get: () => status.dropDate });
+    Object.defineProperty(task, 'active', {
+      get: () => status.dropDate === null,
+      set: (v: unknown) => {
+        sets.push('active');
+        if (v === true) status.dropDate = null;
+      },
+    });
     for (const prop of MUTATING_PROPS) {
       Object.defineProperty(task, prop, {
         get: () => values[prop],
@@ -393,9 +507,124 @@ describe('emitted update-task program executes (vm)', () => {
       taskId: 'fake-task-id',
       name: 'New name', // read back from the stub, not echoed
       flagged: false,
+      completed: false,
+      dropDate: null,
       updated: true,
       warnings: [],
     });
+  });
+
+  // OMN-377: status outcomes read back live, through the response schema.
+  it('vm: dropped on a non-repeating task reads back dropDate, no repeat warning', () => {
+    const { task, calls } = makeRecordingTask();
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(calls).toEqual(['drop']);
+    expect(parsed.completed).toBe(false);
+    expect(parsed.dropDate).toBe('2026-10-16T14:46:34.039Z');
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('vm: dropped on a repeating task warns that the whole series was dropped', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.dropDate).toBe('2026-10-16T14:46:34.039Z');
+    expect(parsed.warnings).toHaveLength(1);
+    expect(parsed.warnings[0]).toMatch(/repeating/i);
+    expect(parsed.warnings[0]).toMatch(/all future occurrences/i);
+  });
+
+  it('vm: a repeating task whose rule is cleared in the same update gets no repeat warning', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    const program = emitProgram(
+      buildUpdateTaskProgram({ taskId: 't1', changes: { repetitionRule: null, status: 'dropped' } }),
+    );
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('vm: a failed drop on a repeating task reports the failure, not the series notice', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    task.drop = () => {
+      throw new Error('boom');
+    };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'dropped' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.dropDate).toBeNull();
+    expect(parsed.warnings).toEqual(['status: boom']);
+  });
+
+  it('vm: completed on a non-repeating task reads back completed:true, no occurrence notice', () => {
+    const { task, calls } = makeRecordingTask();
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'completed' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(calls).toEqual(['markComplete']);
+    expect(parsed.completed).toBe(true);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  // Gate finding 1: the live read of `task` says completed:false here (it is
+  // now the next occurrence) — the notice names the completed copy's id so
+  // the caller isn't left reading a contradiction.
+  it('vm: completed on a repeating task names the completed copy and the advanced id', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'completed' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.completed).toBe(false);
+    expect(parsed.warnings).toHaveLength(1);
+    expect(parsed.warnings[0]).toContain('fake-task-id.0');
+    expect(parsed.warnings[0]).toMatch(/fake-task-id now holds the next occurrence/);
+  });
+
+  it('vm: a failed markComplete reports only its own failure', () => {
+    const { task } = makeRecordingTask({ repetitionRule: { ruleString: 'FREQ=DAILY' } });
+    task.markComplete = () => {
+      throw new Error('boom');
+    };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'completed' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.warnings).toEqual(['status: boom']);
+  });
+
+  it('vm: active on a dropped task undrops it and reads back dropDate null', () => {
+    const { task, calls, sets } = makeRecordingTask({ dropDate: new Date('2026-10-01T12:00:00Z') });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(calls).toEqual(['markIncomplete']);
+    expect(sets).toEqual(['active']);
+    expect(parsed.dropDate).toBeNull();
+    expect(parsed.completed).toBe(false);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  // Gate round 2 finding 1: the two reopen calls are independent best-effort
+  // steps — a half-applied reopen must say WHICH half failed; the live
+  // read-back shows the resulting state.
+  it('vm: a failed markIncomplete during reopen is attributed; the undrop half still reads back', () => {
+    const { task } = makeRecordingTask({ completed: true, dropDate: new Date('2026-10-01T12:00:00Z') });
+    task.markIncomplete = () => {
+      throw new Error('boom');
+    };
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expectMatchesSchema(TaskWriteResultSchema, parsed);
+    expect(parsed.warnings).toEqual(['status (reopen: markIncomplete): boom']);
+    expect(parsed.completed).toBe(true);
+    expect(parsed.dropDate).toBeNull();
+  });
+
+  it('vm: active on a completed task reopens it', () => {
+    const { task } = makeRecordingTask({ completed: true });
+    const program = emitProgram(buildUpdateTaskProgram({ taskId: 't1', changes: { status: 'active' } }));
+    const parsed = JSON.parse(vm.runInNewContext(program, { Task: { byIdentifier: () => task } }) as string);
+    expect(parsed.completed).toBe(false);
+    expect(parsed.dropDate).toBeNull();
   });
 
   it('vm: a throwing moveTasks records a labeled move warning but the update still succeeds', () => {

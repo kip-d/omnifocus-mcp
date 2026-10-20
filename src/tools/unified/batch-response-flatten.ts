@@ -19,6 +19,23 @@ export interface FlatBatchResult {
   error?: string;
   /** OMN-137: best-effort failures from the create script (tags, repetitionRule, …). Present only when non-empty. */
   warnings?: string[];
+  /** OMN-377: live status read-back on task update rows. Present only when the item result carried it. */
+  completed?: boolean;
+  dropDate?: string | null;
+}
+
+/**
+ * OMN-377: the task-update script's live status read-back (completed/dropDate),
+ * so a drop/reopen is confirmed by the response rather than by the input echo.
+ * Spreadable; a key the source doesn't carry stays omitted. Shared by
+ * OmniFocusWriteTool (full + minimalResponse update) and the batch flatten below.
+ */
+export function liveStatusReadback(source: unknown): { completed?: boolean; dropDate?: string | null } {
+  const { completed, dropDate } = (source ?? {}) as { completed?: unknown; dropDate?: unknown };
+  return {
+    ...(typeof completed === 'boolean' ? { completed } : {}),
+    ...(typeof dropDate === 'string' || dropDate === null ? { dropDate } : {}),
+  };
 }
 
 /**
@@ -185,6 +202,7 @@ function extractOperationResult(
     };
     if (operation === 'update') {
       entry.changes = result.fields_updated as string[];
+      Object.assign(entry, liveStatusReadback(result));
     }
     if (!entry.success) {
       entry.error = errorMessageOf(result.error) ?? UNKNOWN_ERROR;
@@ -218,6 +236,9 @@ function extractOperationResult(
 
   if (operation === 'update' && task?.changes) {
     entry.changes = Object.keys(task.changes as Record<string, unknown>);
+  }
+  if (operation === 'update' && task) {
+    Object.assign(entry, liveStatusReadback(task));
   }
 
   // OMN-137: envelope-level warnings (data.warnings) survive the flatten (non-empty only).

@@ -756,10 +756,42 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
     );
   }
 
+  // OMN-377: envelope warnings are the plain array unless a dropped repeating
+  // task needs the series notice (below).
+  let warnings: Expr = ref('_warnings');
   if (changes.status === 'completed') {
-    statements.push(callMethod(ref('task'), 'markComplete', [newExpr('Date', [])], true, 'status'));
+    // markComplete RETURNS the completed task. On a repeating task that is a
+    // new-id copy ('<id>.0') and `task` itself advances to the next occurrence
+    // — so the live `completed` read below is false for it (verified live
+    // 2026-10-19). Bind the result and name both ids in a notice, so the
+    // envelope never reads as a contradiction. A failed call leaves the bind
+    // null → only its own 'status' warning.
+    statements.push(callMethod(ref('task'), 'markComplete', [newExpr('Date', [])], true, 'status', 'completedTask'));
+    warnings = raw(
+      'completedTask && completedTask.id.primaryKey !== task.id.primaryKey ? _warnings.concat([' +
+        `${JSON.stringify(REPEATING_COMPLETE_NOTICE_PREFIX)} + completedTask.id.primaryKey + "; " + ` +
+        `task.id.primaryKey + ${JSON.stringify(REPEATING_COMPLETE_NOTICE_SUFFIX)}]) : _warnings`,
+    );
   } else if (changes.status === 'dropped') {
+    // drop(true) ends the series: a repeating task spawns no next occurrence
+    // (verified live 2026-10-16). Capture "repeating" AFTER any repetitionRule
+    // change above, so clearing the rule in the same update suppresses the
+    // notice; gate it on the live dropDate so a failed drop reports only its
+    // own 'status' warning.
+    statements.push(bind('wasRepeating', raw('task.repetitionRule !== null')));
     statements.push(callMethod(ref('task'), 'drop', [json(true), newExpr('Date', [])], true, 'status'));
+    warnings = raw(
+      `wasRepeating && task.dropDate ? _warnings.concat([${JSON.stringify(REPEATING_DROP_NOTICE)}]) : _warnings`,
+    );
+  } else if (changes.status === 'active') {
+    // Reopen. Each call is a no-op unless the task is in that terminal state:
+    // markIncomplete() acts only on a completed task, and `active = true`
+    // (ActiveObject) undrops a dropped one — clearing dropDate, verified live
+    // 2026-10-16 — so no build-time branching on current state is needed.
+    // Two independent best-effort steps — distinct labels so a half-applied
+    // reopen says which half failed (the live read-back shows the result).
+    statements.push(callMethod(ref('task'), 'markIncomplete', [], true, 'status (reopen: markIncomplete)'));
+    statements.push(setProp(ref('task'), 'active', json(true), 'direct', true, 'status (reopen: undrop)'));
   }
 
   statements.push(
@@ -767,13 +799,24 @@ export function buildUpdateTaskProgram(input: UpdateTaskInput): Program {
       taskId: member(ref('task'), 'id.primaryKey'),
       name: member(ref('task'), 'name'),
       flagged: member(ref('task'), 'flagged'),
+      // OMN-377: live status outcome, in omnifocus_read's field names.
+      completed: member(ref('task'), 'completed'),
+      dropDate: raw('task.dropDate ? task.dropDate.toISOString() : null'),
       updated: json(true),
-      warnings: ref('_warnings'),
+      warnings,
     }),
   );
 
   return { statements, context: 'update_task', snippetDeps };
 }
+
+/** OMN-377: informational warnings for repeating tasks (complete → new-id copy;
+ *  drop → series ends) — builder-internal constant text (no user data), safe
+ *  inside the raw() envelope. */
+const REPEATING_COMPLETE_NOTICE_PREFIX = 'status: completed this occurrence of a repeating task as ';
+const REPEATING_COMPLETE_NOTICE_SUFFIX = ' now holds the next occurrence';
+const REPEATING_DROP_NOTICE =
+  'status: dropped a repeating task — all future occurrences are dropped too (the series ends)';
 
 // Update-side status map: unlike create's STATUS_ENUM (which deliberately skips
 // 'active' — a fresh project already IS active), update supports setting a

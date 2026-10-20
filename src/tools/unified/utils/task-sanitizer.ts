@@ -126,8 +126,9 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
     logger.debug('Passing through repetitionRule:', updates.repetitionRule);
   }
 
-  // Status field
-  if (updates.status === 'completed' || updates.status === 'dropped') {
+  // Status field — OMN-377: 'active' reopens a dropped/completed task.
+  // 'on_hold' never reaches here (WriteSchema rejects it for tasks).
+  if (updates.status === 'completed' || updates.status === 'dropped' || updates.status === 'active') {
     sanitized.status = updates.status;
   }
 

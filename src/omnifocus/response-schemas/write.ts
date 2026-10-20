@@ -172,7 +172,8 @@ export const SET_SCHEDULE_TYPED_SCHEMA = reviewSuccessSchema({
  *    {taskId, name, note, flagged, dueDate, deferDate, plannedDate, estimatedMinutes, tags,
  *     project, inInbox, warnings, created:true}
  *  - buildUpdateTaskProgram envelope:
- *    {taskId, name, flagged, updated:true, warnings} — exactly 5 keys, do NOT add note/dates/tags.
+ *    {taskId, name, flagged, completed, dropDate, updated:true, warnings} — exactly 7 keys,
+ *    do NOT add note/dates/tags. completed/dropDate (OMN-377) are the live status read-back.
  *
  * OMN-158 rider 3: two strict variants (create/update) replacing single object + .refine().
  * .strict() before any .refine() — no .refine() survives.
@@ -200,6 +201,8 @@ const TaskUpdateResult = z
     taskId: z.string(),
     name: z.string(),
     flagged: z.boolean(),
+    completed: z.boolean(),
+    dropDate: isoDateOrNull,
     updated: z.literal(true),
     warnings: warningsArray,
   })

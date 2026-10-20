@@ -238,8 +238,8 @@ export const UpdateChangesSchema = z
       clearDeferDate: coerceBoolean().optional(),
       clearPlannedDate: coerceBoolean().optional(),
       flagged: coerceBoolean().optional(),
-      // Note: tasks only support 'completed'/'dropped'; projects support all 4.
-      // Task-specific narrowing happens in sanitizer + script builder.
+      // Tasks: completed | dropped | active (reopen); projects: all 4.
+      // OMN-377: on_hold on a task is rejected by the WriteSchema superRefine.
       status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
       project: z.union([z.string(), z.null()]).optional(),
       folder: z
@@ -404,6 +404,14 @@ const MutationSchema = z.discriminatedUnion('operation', [
   }),
 ]);
 
+// OMN-377: one predicate + message for the single-update and batch-item checks
+// below, so the two routes can't drift apart.
+const isTaskOnHold = (target: string, changes: { status?: string } | undefined): boolean =>
+  target === 'task' && changes?.status === 'on_hold';
+const TASK_ON_HOLD_MESSAGE =
+  'status "on_hold" is project-only — tasks accept completed, dropped, or active (reopen). ' +
+  'To postpone a task set deferDate; to pause it with its project, put the project on_hold.';
+
 // Main write schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const WriteSchema = z
@@ -437,6 +445,24 @@ export const WriteSchema = z
         code: z.ZodIssueCode.custom,
         path: ['mutation', 'changes'],
         message: "update requires 'changes' (or its alias 'data')",
+      });
+    }
+    // OMN-377: tasks have no on-hold state (OmniFocus models it on the
+    // project). The sanitizer used to strip it, returning success with
+    // "No valid updates provided" — reject it here on every task-update route.
+    const onHold = (path: Array<string | number>) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: TASK_ON_HOLD_MESSAGE });
+    if (m.operation === 'update') {
+      // Check both aliases, not just the one `changes ?? data` picks — keeps
+      // this rejection independent of the compiler's precedence.
+      if (isTaskOnHold(m.target, m.changes)) onHold(['mutation', 'changes', 'status']);
+      if (isTaskOnHold(m.target, m.data)) onHold(['mutation', 'data', 'status']);
+    }
+    if (m.operation === 'batch') {
+      m.operations.forEach((op, i) => {
+        if (op.operation === 'update' && isTaskOnHold(op.target, op.changes)) {
+          onHold(['mutation', 'operations', i, 'changes', 'status']);
+        }
       });
     }
   });

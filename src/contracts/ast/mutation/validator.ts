@@ -145,7 +145,7 @@ function assertNotReserved(name: string, where: string): void {
  *     A `moveTag` node's `position` must be a typed TagMovePosition with kind ∈
  *     {root, underTag}; underTag requires a non-empty string `var`.
  * 12. A `callMethod` node's `method` must be in CALL_METHOD_ALLOWLIST. The
- *     allowlist is deliberately minimal (markComplete, drop) — extend per slice.
+ *     allowlist is deliberately minimal (markComplete, markIncomplete, drop) — extend per slice.
  * 13. An `assignTags` node's `mode`, when present, must be in {replace, add, remove}.
  *     An unknown mode would silently fall through to the 'add' branch at emission time
  *     (TypeScript type-safety only, not a JS runtime guarantee) — the validator enforces
@@ -353,6 +353,7 @@ function validateReservedBinds(stmt: Stmt): void {
   if (stmt.type === 'resolveTag') assertNotReserved(stmt.bind, 'resolveTag bind');
   if (stmt.type === 'assignTags') assertNotReserved(stmt.bind, 'assignTags bind');
   if (stmt.type === 'mergeRetag') assertNotReserved(stmt.bind, 'mergeRetag bind');
+  if (stmt.type === 'callMethod' && stmt.bind !== undefined) assertNotReserved(stmt.bind, 'callMethod bind');
   if (stmt.type === 'constructTagPath') {
     assertNotReserved(stmt.bind, 'constructTagPath bind');
     assertNotReserved(stmt.createdBind, 'constructTagPath createdBind');
@@ -369,7 +370,7 @@ const TAG_MOVE_POSITION_KINDS = new Set(['root', 'underTag']);
  * Deliberately minimal — extend per slice as new lowerings land.
  * Exported so callers (batch program builder, tool layer) can reference it.
  */
-export const CALL_METHOD_ALLOWLIST: readonly string[] = ['markComplete', 'drop'];
+export const CALL_METHOD_ALLOWLIST: readonly string[] = ['markComplete', 'markIncomplete', 'drop'];
 
 // Rule 11 for moveTask: typed TaskMovePosition with kind in the expected set;
 // var-requiring kinds must carry a non-empty string var / taskVar.

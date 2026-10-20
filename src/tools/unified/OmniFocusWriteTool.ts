@@ -65,7 +65,12 @@ import type { TaskOperationDataV2 } from '../response-types-v2.js';
 import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
-import { flattenBatchResults, liftWarnings, returnedFailureMessage } from './batch-response-flatten.js';
+import {
+  flattenBatchResults,
+  liftWarnings,
+  liveStatusReadback,
+  returnedFailureMessage,
+} from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -126,7 +131,7 @@ OPERATIONS:
 - create: New task/project with data
 - create_folder: New folder (name required, optional parentFolder for nesting)
 - update: Modify existing (provide id + changes; "data" accepted as an alias for "changes"; target defaults to "task" if omitted)
-- complete: Mark done (provide id; target defaults to "task" if omitted)
+- complete: Mark done (provide id; target defaults to "task" if omitted). No longer relevant? Don't complete it — drop it: update with changes.status:"dropped" (repeating tasks: ends the series). status:"active" reopens (a dropped repeating task resumes repeating).
 - delete: Remove permanently (provide id, or its alias target_id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs
@@ -251,13 +256,22 @@ SAFETY:
       repetitionRule: { type: 'object' },
       folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
       sequential: { type: 'boolean', description: 'projects + task action groups' },
-      status: { type: 'string', description: 'project-only: active|on_hold|completed|dropped' },
+      status: {
+        type: 'string',
+        description: 'create: project-only; update (data = changes alias): tasks completed|dropped|active',
+      },
       // OMN-343 (F10/D3): unit is now a closed, case-insensitive enum —
       // mirror it here so clients see the exact accepted set.
       reviewInterval: { description: 'project-only: days or {steps,unit:day|week|month|year(s)}' },
     };
     const updateChangesProperties: Record<string, unknown> = {
       ...createDataProperties,
+      // OMN-377: tasks drop/reopen on update — advertising "project-only" here
+      // made agents complete moot tasks. (Create's hint above stays project-only.)
+      status: {
+        type: 'string',
+        description: 'task: completed|dropped|active (reopen); project: active|on_hold|completed|dropped',
+      },
       addTags: { type: 'array', items: { type: 'string' } },
       removeTags: { type: 'array', items: { type: 'string' } },
       clearDueDate: { type: 'boolean' },
@@ -777,6 +791,7 @@ SAFETY:
         operation: 'update_task',
         task_id: taskId, // Keep for backwards compatibility
         fields_updated: Object.keys(safeUpdates),
+        ...liveStatusReadback(parsedUpdateResult),
         ...liftWarnings(parsedUpdateResult),
       };
     }
@@ -842,6 +857,7 @@ SAFETY:
     const transformedResult = {
       id: (taskData as { id?: string }).id || taskId,
       name: (taskData as { name?: string }).name || 'Unknown',
+      ...liveStatusReadback(taskData),
       updated: true,
       changes: Object.keys(safeUpdates).reduce(
         (acc, key) => {

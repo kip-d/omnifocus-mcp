@@ -317,7 +317,14 @@ export function emitStmt(node: Stmt): string {
     }
     case 'callMethod': {
       const call = `${emitExpr(node.target)}.${node.method}(${node.args.map(emitExpr).join(', ')});`;
-      return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
+      if (node.bind === undefined) {
+        return node.bestEffort ? `try { ${call} } ${bestEffortCatch(node.label ?? node.method)}` : call;
+      }
+      // OMN-377: bound result. Best-effort declares the binding outside the try
+      // so later statements (and the envelope) can read it; null on failure.
+      return node.bestEffort
+        ? `let ${node.bind} = null;\ntry { ${node.bind} = ${call} } ${bestEffortCatch(node.label ?? node.method)}`
+        : `const ${node.bind} = ${call}`;
     }
     case 'moveTag': {
       const pos = emitTagMovePosition(node.position);
