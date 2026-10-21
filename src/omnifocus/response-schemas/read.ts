@@ -510,19 +510,43 @@ const SlimProjectSchema = z
 const SlimTagSchema = z.object({ id: z.string(), name: z.string(), taskCount: z.number() }).strict();
 
 /**
+ * Scan-budget disclosure — emitted alongside tasks/projects/tags by
+ * buildSlimmedDataScript's OmniJS bridge scan (OMN-340 slice 3). `scannedTotal`
+ * is every raw row the walk visited (always the full flattenedTasks length,
+ * since the walk no longer stops early); `admittedTotal` is the true
+ * admissible population (not completed, not dropped, not a project root)
+ * independent of the `cap`; `cap` is the maxTasks budget applied to the
+ * BUILT `tasks` array. The tool derives `coverage` (src/tools/unified/coverage.ts)
+ * from this plus `tasks.length` (rows actually analyzed).
+ */
+const SlimScanMetaSchema = z
+  .object({
+    scannedTotal: z.number(),
+    admittedTotal: z.number(),
+    cap: z.number(),
+  })
+  .strict();
+
+/**
  * Slimmed-data bulk read — emitted by the OmniJS bridge scan in buildSlimmedDataScript
  * (src/omnifocus/scripts/analytics/slimmed-data-scan.ts; OMN-269), executed by
  * OmniFocusAnalyzeTool.fetchSlimmedData.
  *
  * Wire shape verified against the scan's return statement:
- *   return JSON.stringify({ tasks: tasks, projects: projects, tags: tags })
- * where tasks/projects/tags are arrays built inside one evaluateJavascript scan.
+ *   return JSON.stringify({ tasks, projects, tags, scanMeta })
+ * where tasks/projects/tags are arrays built inside one evaluateJavascript scan,
+ * and scanMeta is the OMN-340 slice-3 budget-disclosure block. scanMeta is
+ * optional here only so pre-OMN-340 test fixtures that mock this shape
+ * directly (bypassing the real scan) don't all need updating; the real
+ * emitter always sets it, and OmniFocusAnalyzeTool.fetchSlimmedData falls
+ * back to a scanMeta derived from the parsed tasks array when it's absent.
  */
 export const SlimmedDataSchema = z
   .object({
     tasks: z.array(SlimTaskSchema),
     projects: z.array(SlimProjectSchema),
     tags: z.array(SlimTagSchema),
+    scanMeta: SlimScanMetaSchema.optional(),
   })
   .strict();
 

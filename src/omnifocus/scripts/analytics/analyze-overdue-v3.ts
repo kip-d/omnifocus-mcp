@@ -55,7 +55,6 @@ export const ANALYZE_OVERDUE_V3 = `
           const now = new Date(nowTime);
           const overdueTasks = [];
           const projectBottlenecks = {};
-          const tagBottlenecks = {};
 
           // Shared shape-builder: the per-task loop below and the post-loop
           // mostOverdue step (OMN-253) both need id/name/dueDate/daysOverdue/
@@ -221,29 +220,20 @@ export const ANALYZE_OVERDUE_V3 = `
                     projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
-                      blockedCount: 0,
-                      tasks: []
+                      blockedCount: 0
                     };
                   }
                   projectBottlenecks[overdueTask.project].blockedCount++;
                   projectBottlenecks[overdueTask.project].count++;
                   projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
-
-                // Track tag bottlenecks
-                for (let i = 0; i < overdueTask.tags.length; i++) {
-                  const tag = overdueTask.tags[i];
-                  if (!tagBottlenecks[tag]) {
-                    tagBottlenecks[tag] = {
-                      count: 0,
-                      blockedCount: 0,
-                      tasks: []
-                    };
-                  }
-                  tagBottlenecks[tag].blockedCount++;
-                  tagBottlenecks[tag].tasks.push(overdueTask.name);
-                }
+                // OMN-340 (slice 3): a per-tag bottleneck accumulator and
+                // each project bottleneck's per-task name list were built
+                // here but never read by anything downstream (projectList
+                // below reads only count/blockedCount/totalDaysOverdue; no
+                // response field or schema ever carried either structure).
+                // Removed rather than wired up — see PR for this slice. (No
+                // backticks in this comment: it sits inside a template literal.)
               } else {
                 // Track non-blocked overdue in projects
                 if (overdueTask.project !== 'Inbox') {
@@ -251,13 +241,11 @@ export const ANALYZE_OVERDUE_V3 = `
                     projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
-                      blockedCount: 0,
-                      tasks: []
+                      blockedCount: 0
                     };
                   }
                   projectBottlenecks[overdueTask.project].count++;
                   projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
               }
 

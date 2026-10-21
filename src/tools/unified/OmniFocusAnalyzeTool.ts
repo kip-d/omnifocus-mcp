@@ -163,15 +163,17 @@ interface SlimTask {
   children: number;
 }
 
-// Neither terminal state: not completed and not dropped. OmniFocus reports a
-// dropped task with completed===false, so the status check is required too.
-// One predicate shared by every detector that needs live tasks, so a change to
-// terminal-state semantics cannot be applied to one detector and missed in
-// another (OMN-338 / OMN-315 bug class).
-function isLiveTask(t: Pick<SlimTask, 'completed' | 'status'>): boolean {
-  return !t.completed && t.status !== 'dropped';
-}
-
+// OMN-340 (slice 3): isLiveTask (not completed, not dropped) used to be
+// re-applied per detector as a defense-in-depth guard against the scan
+// admitting terminal rows. That created the exact bug class it was meant to
+// prevent — a terminal-state change applied to one detector and missed in
+// another (OMN-338/OMN-315) — because there were THREE places to keep in
+// sync: the scan, detectOnholdReactivation, detectSequentialBlockedFar. The
+// scan (fetchSlimmedData's OmniJS admission loop, above) is now the SOLE
+// terminal-state guard: it never admits a completed (unless
+// include_completed, which pattern_analysis hardcodes false), dropped, or
+// project-root row into slimData.tasks, so every detector's input is already
+// live. Do not re-add a per-detector filter — fix admission in the scan.
 // Canonical project-status vocabulary, mirroring safeGetStatus in
 // scripts/shared/helpers.ts: JXA renders status as 'active status',
 // 'on hold status', etc.; every ProjectData consumer gets THIS normalized
@@ -1367,10 +1369,23 @@ TIME-WINDOW SCOPING:
       const duration = Date.now() - startTime;
 
       return createAnalyticsResponseV2('analyze_patterns', findings, 'pattern_analysis', summary.key_insights || [], {
+        // tasks_analyzed = rows actually analyzed (slimData.tasks is the
+        // built, budget-capped detail array every detector reads) — true
+        // both capped and uncapped, since it's the array's own length.
         tasks_analyzed: slimData.tasks.length,
         projects_analyzed: slimData.projects.length,
         patterns_checked: patterns.filter((p) => !unrecognized.includes(p)),
         ...(unrecognized.length > 0 ? { unrecognized_insights: unrecognized, known_insights: KNOWN_PATTERNS } : {}),
+        // OMN-340 (slice 3, D4a): the shared coverage shape plus pattern's
+        // own scanned_total extra (raw rows walked, per spec §2). total =
+        // the true admissible population (every non-terminal, non-root
+        // task), independent of the 3000 budget; returned = tasks_analyzed
+        // above; capped is honest even though the post-budget pass never
+        // builds the extra rows — it only counts them.
+        coverage: {
+          ...buildCoverage(slimData.scanMeta.admittedTotal, slimData.tasks.length, slimData.scanMeta.cap),
+          scanned_total: slimData.scanMeta.scannedTotal,
+        },
         query_time_ms: duration,
         from_cache: false,
       });
@@ -1457,15 +1472,18 @@ TIME-WINDOW SCOPING:
   // indistinguishable from an empty database, so every detector downstream
   // reported zero-count "healthy" findings fabricated from data that was never
   // read. The caller maps null to an EXECUTION_ERROR envelope.
-  private async fetchSlimmedData(
-    options: Record<string, unknown>,
-  ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
+  private async fetchSlimmedData(options: Record<string, unknown>): Promise<{
+    tasks: SlimTask[];
+    projects: ProjectData[];
+    tags: TagData[];
+    scanMeta: { scannedTotal: number; admittedTotal: number; cap: number };
+  } | null> {
     // Number.isFinite (not ||) so an explicit max_tasks of 0 means 0, not 3000
     const parsedMaxTasks = Number(options.max_tasks);
     const maxTasks = Number.isFinite(parsedMaxTasks) ? parsedMaxTasks : 3000;
     const includeCompleted = options.include_completed === true;
 
-    // Scan + count semantics (OMN-269/338): see buildSlimmedDataScript.
+    // Scan + count semantics (OMN-269/338/340): see buildSlimmedDataScript.
     const taskScript = buildSlimmedDataScript({ maxTasks, includeCompleted });
 
     const scriptResult = await this.execJson(taskScript, SlimmedDataSchema);
@@ -1489,6 +1507,7 @@ TIME-WINDOW SCOPING:
       tasks: SlimTask[];
       projects: ProjectData[];
       tags: TagData[];
+      scanMeta?: { scannedTotal: number; admittedTotal: number; cap: number };
     };
 
     // Normalize status ONCE at the boundary so every detector inherits the
@@ -1498,6 +1517,15 @@ TIME-WINDOW SCOPING:
     return {
       ...parsed,
       projects: parsed.projects.map((p) => ({ ...p, status: normalizeProjectStatus(p.status) })),
+      // OMN-340 (slice 3): scanMeta is always set by the real emitter. The
+      // fallback below covers only test fixtures that mock this shape
+      // directly (pre-OMN-340), treating the mocked tasks as the whole,
+      // uncapped, already-admitted population.
+      scanMeta: parsed.scanMeta ?? {
+        scannedTotal: parsed.tasks.length,
+        admittedTotal: parsed.tasks.length,
+        cap: maxTasks,
+      },
     };
   }
 
@@ -1723,11 +1751,10 @@ TIME-WINDOW SCOPING:
     for (const project of projects) {
       if (project.status !== 'onHold') continue;
 
-      // Both terminal states excluded here, whatever the scan admitted: a
-      // terminal task's stale defer/due date must never signal reactivation.
-      // Dropped tasks keep completed===false, so both checks are needed. The
-      // scan already skips both when include_completed is false (OMN-338).
-      const projTasks = (tasksByProject.get(project.id) ?? []).filter(isLiveTask);
+      // OMN-340 (slice 3): the scan is the sole terminal-state guard (see
+      // isLiveTask's retirement comment above) — tasksByProject is built from
+      // slimData.tasks, which never contains a completed/dropped/root row.
+      const projTasks = tasksByProject.get(project.id) ?? [];
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
         const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
@@ -1774,10 +1801,11 @@ TIME-WINDOW SCOPING:
 
     for (const p of projects) {
       if (p.status !== 'active' || p.sequential !== true) continue;
-      // Both terminal states excluded: a dropped task has completed===false,
-      // so without the status check a dropped task could be picked as the
-      // sequential project's "head" blocking task.
-      const incomplete = (tasksByProject.get(p.id) ?? []).filter(isLiveTask);
+      // OMN-340 (slice 3): the scan is the sole terminal-state guard (see
+      // isLiveTask's retirement comment above) — tasksByProject is built from
+      // slimData.tasks, which never contains a dropped/completed/root row, so
+      // incomplete[0] is already the true live head.
+      const incomplete = tasksByProject.get(p.id) ?? [];
       if (incomplete.length === 0) continue;
 
       const head = incomplete[0];

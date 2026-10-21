@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import vm from 'node:vm';
 import { OmniFocusAnalyzeTool } from '../../../../src/tools/unified/OmniFocusAnalyzeTool.js';
 import { WriteSchema } from '../../../../src/tools/unified/schemas/write-schema.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
@@ -2604,68 +2603,85 @@ describe('OmniFocusAnalyzeTool', () => {
     });
   });
 
-  // OMN-338: the capped task loop fed project ROOT rows and DROPPED tasks to
-  // every detector (deadline_health listed projects as overdue tasks,
-  // clarify_candidates listed project names, WIP counts got +1 per project).
-  describe('pattern_analysis slim scan skips project roots and dropped tasks (OMN-338)', () => {
-    // Only the emitted OmniJS program matters here, so an empty DB suffices.
-    function mockDb() {
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
-    }
-
-    async function slimProgram(): Promise<string> {
-      mockDb();
-      await tool.execute({ analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } } });
-      const script = mockOmni.executeJson.mock.calls.at(-1)[0] as string;
-      const m = script.match(/evaluateJavascript\(("(?:[^"\\]|\\.)*")\)/);
-      expect(m, 'OmniJS program not found in the bridge wrapper').not.toBeNull();
-      return JSON.parse(m![1]) as string;
-    }
-
-    it('emits both skips inside the task loop, before the row is built', async () => {
-      const program = await slimProgram();
-      const loopStart = program.indexOf('for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++)');
-      const rowBuilt = program.indexOf('const taskData = {');
-      expect(loopStart).toBeGreaterThan(-1);
-      const loopHead = program.slice(loopStart, rowBuilt);
-      expect(loopHead).toContain('if (task.project) continue;');
-      expect(loopHead).toContain('if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;');
-    });
-
-    it('executed against a stub DB, ships only the live non-root task', async () => {
-      const program = await slimProgram();
-      const S = {
-        Blocked: { s: 'Blocked' },
-        Available: { s: 'Available' },
-        Next: { s: 'Next' },
-        DueSoon: { s: 'DueSoon' },
-        Overdue: { s: 'Overdue' },
-        Completed: { s: 'Completed' },
-        Dropped: { s: 'Dropped' },
-      };
-      const proj = { id: { primaryKey: 'p1' }, name: 'Proj' };
-      const mk = (id: string, taskStatus: object, extra: Record<string, unknown> = {}) => ({
-        id: { primaryKey: id },
-        name: id,
+  // OMN-340 (slice 3): the scan budget now counts ADMITTED rows (not raw rows
+  // walked), and discloses coverage the way overdue_analysis (slice 1, #302)
+  // and list_for_review (slice 2, #307) do. The scan-level mechanics (admission
+  // order, budget-counts-admitted-rows, scanMeta correctness, the terminal-state
+  // sole-guard pin) are unit-tested directly against buildSlimmedDataScript in
+  // tests/unit/omnifocus/scripts/analytics/slimmed-data-scan.test.ts (OMN-384,
+  // #310, extracted the scan out of this tool). These tests pin only the
+  // TOOL-layer wiring: executePatternAnalysis must read scanMeta into
+  // `coverage` and tasks.length into tasks_analyzed, not recompute or drop them.
+  describe('pattern_analysis scan budget counts admitted rows; coverage (OMN-340 slice 3)', () => {
+    it('tool metadata: coverage is honest and tasks_analyzed means rows actually analyzed, when capped', async () => {
+      // Bypass the real scan (mock its already-parsed output directly, as the
+      // other pattern_analysis tool tests do) to pin the TOOL-layer wiring:
+      // executePatternAnalysis must read scanMeta.{admittedTotal,cap} and
+      // tasks.length into `coverage`, not recompute or drop them.
+      const tasks = Array.from({ length: 3000 }, (_, i) => ({
+        id: `t${i}`,
+        name: `Task ${i}`,
         completed: false,
         flagged: false,
-        taskStatus,
+        status: 'available',
         tags: [],
-        containingProject: proj,
-        project: null,
-        note: '',
-        children: [],
-        ...extra,
+        estimatedMinutes: null,
+        children: 0,
+      }));
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks,
+          projects: [],
+          tags: [],
+          scanMeta: { scannedTotal: 4200, admittedTotal: 3400, cap: 3000 },
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
       });
-      const sandbox = {
-        Task: { Status: S },
-        Project: { Status: { Active: {}, OnHold: {}, Done: {}, Dropped: {} } },
-        flattenedTasks: [mk('root', S.Available, { project: proj }), mk('dropped', S.Dropped), mk('live', S.Available)],
-        flattenedProjects: [],
-        flattenedTags: [],
-      };
-      const out = JSON.parse(vm.runInNewContext(program, sandbox) as string);
-      expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['live']);
+      expect(res.success).toBe(true);
+      // tasks_analyzed = rows actually analyzed (the built, capped array).
+      expect(res.metadata.tasks_analyzed).toBe(3000);
+      expect(res.metadata.coverage).toEqual({
+        total: 3400,
+        returned: 3000,
+        capped: true,
+        cap: 3000,
+        scanned_total: 4200,
+      });
+      // The generic analytics summary must also carry the honest count
+      // (OMN-340 slice-3 follow-up: this used to be stuck at 0 for every
+      // pattern_analysis response, since `data` here is a findings record,
+      // not the {stats|velocity} shape createAnalyticsResponseV2 recognizes).
+      expect(res.summary.total_items_analyzed).toBe(3000);
+    });
+
+    it('tool metadata: coverage.capped is false when the admissible population is under the cap', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [
+            {
+              id: 't1',
+              name: 'Only one',
+              completed: false,
+              flagged: false,
+              status: 'available',
+              tags: [],
+              estimatedMinutes: null,
+              children: 0,
+            },
+          ],
+          projects: [],
+          tags: [],
+          scanMeta: { scannedTotal: 1, admittedTotal: 1, cap: 3000 },
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+      expect(res.metadata.coverage).toEqual({ total: 1, returned: 1, capped: false, cap: 3000, scanned_total: 1 });
+      expect(res.metadata.tasks_analyzed).toBe(1);
+      expect(res.summary.total_items_analyzed).toBe(1);
     });
   });
 
@@ -2727,48 +2743,6 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(finding.count).toBe(1);
       expect(finding.items.map((i: any) => i.id)).toEqual(['poh1']);
       expect(finding.items[0].reason).toContain('defer date passed');
-    });
-
-    // /code-review on #286: the detector's own filter dropped only 'dropped'
-    // tasks, so a COMPLETED task's stale defer date still fired whenever the
-    // scan let completed rows through (include_completed:true). Both terminal
-    // states are excluded here, independent of the scan.
-    it('ignores a completed task whose defer date has passed', async () => {
-      mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
-          tasks: [
-            {
-              id: 't-done',
-              name: 'Already handled',
-              project: 'On hold B',
-              projectId: 'poh2',
-              deferDate: pastDefer,
-              completed: true,
-              flagged: false,
-              status: 'completed',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-          ],
-          projects: [
-            {
-              id: 'poh2',
-              name: 'On hold B',
-              status: 'on hold status',
-              taskCount: 1,
-              availableTaskCount: 0,
-              folder: null,
-            },
-          ],
-          tags: [],
-        }),
-      );
-      const res: any = await tool.execute({
-        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
-      });
-      expect(res.success).toBe(true);
-      expect(res.data.onhold_reactivation.count).toBe(0);
     });
 
     it('reports an on-hold project with a task due within the window, but not one due far out', async () => {
@@ -2948,44 +2922,6 @@ describe('OmniFocusAnalyzeTool', () => {
       const finding = res.data.onhold_reactivation;
       expect(finding.count).toBe(1);
       expect(finding.items[0].reason).toContain('defer date passed');
-    });
-
-    it('does not fire on a dropped task with a past defer date or a near-term due date — dropped has completed:false', async () => {
-      mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
-          tasks: [
-            {
-              id: 't10',
-              name: 'Abandoned, past defer',
-              project: 'On hold G',
-              projectId: 'poh10',
-              deferDate: pastDefer,
-              dueDate: soonDue,
-              completed: false,
-              flagged: false,
-              status: 'dropped',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-          ],
-          projects: [
-            {
-              id: 'poh10',
-              name: 'On hold G',
-              status: 'on hold status',
-              taskCount: 1,
-              availableTaskCount: 0,
-              folder: null,
-            },
-          ],
-          tags: [],
-        }),
-      );
-      const res: any = await tool.execute({
-        analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
-      });
-      expect(res.data.onhold_reactivation.count).toBe(0);
     });
   });
 
@@ -3231,109 +3167,6 @@ describe('OmniFocusAnalyzeTool', () => {
               status: 'active status',
               taskCount: 1,
               availableTaskCount: 0,
-              folder: null,
-              sequential: true,
-            },
-          ],
-          tags: [],
-        }),
-      );
-      const res: any = await tool.execute({
-        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
-      });
-      expect(res.data.sequential_blocked_far.count).toBe(0);
-    });
-
-    it('skips a completed task at the front of the array — the first INCOMPLETE task is what counts', async () => {
-      mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
-          tasks: [
-            {
-              id: 't8a',
-              name: 'Already done',
-              project: 'Seq G',
-              projectId: 'pseq6',
-              completed: true,
-              flagged: false,
-              status: 'completed',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-            {
-              id: 't8b',
-              name: 'True head',
-              project: 'Seq G',
-              projectId: 'pseq6',
-              deferDate: farDefer,
-              completed: false,
-              flagged: false,
-              status: 'blocked',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-          ],
-          projects: [
-            {
-              id: 'pseq6',
-              name: 'Seq G',
-              status: 'active status',
-              taskCount: 2,
-              availableTaskCount: 0,
-              folder: null,
-              sequential: true,
-            },
-          ],
-          tags: [],
-        }),
-      );
-      const res: any = await tool.execute({
-        analysis: { type: 'pattern_analysis', params: { insights: ['sequential_blocked_far'] } },
-      });
-      const finding = res.data.sequential_blocked_far;
-      expect(finding.count).toBe(1);
-      expect(finding.items[0].blockingTaskName).toBe('True head');
-      expect(finding.items[0].tasksBehind).toBe(0);
-    });
-
-    it('skips a dropped task at the front of the array — dropped has completed:false but is not the head', async () => {
-      mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
-          tasks: [
-            {
-              id: 't8c',
-              name: 'Abandoned',
-              project: 'Seq H',
-              projectId: 'pseq7',
-              deferDate: farDefer,
-              completed: false,
-              flagged: false,
-              status: 'dropped',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-            {
-              id: 't8d',
-              name: 'True head 2',
-              project: 'Seq H',
-              projectId: 'pseq7',
-              completed: false,
-              flagged: false,
-              status: 'available',
-              tags: [],
-              estimatedMinutes: null,
-              children: 0,
-            },
-          ],
-          projects: [
-            {
-              id: 'pseq7',
-              name: 'Seq H',
-              status: 'active status',
-              taskCount: 2,
-              availableTaskCount: 1,
               folder: null,
               sequential: true,
             },

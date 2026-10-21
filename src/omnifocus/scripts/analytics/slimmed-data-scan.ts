@@ -29,6 +29,12 @@
  *   exceed JXA's on projects with nested groups. Exact JXA parity was
  *   attempted and rejected: the closest reproduction (direct children
  *   actionable-or-with-actionable-descendant) still mismatched 2/219.
+ *
+ * OMN-340 (slice 3): the maxTasks budget applies to ADMITTED rows (not
+ * completed, not dropped, not a project root — unless includeCompleted),
+ * never to raw rows walked. The returned scanMeta block ({scannedTotal,
+ * admittedTotal, cap}) lets the caller build an honest coverage disclosure
+ * even when the admissible population exceeds the budget.
  */
 import { ACTIONABLE_STATUSES_ARRAY_LITERAL, PROJECT_STATUS_STRING_SNIPPET } from '../../../contracts/ast/types.js';
 
@@ -70,9 +76,33 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
       const maxTasks = ${String(maxTasks)};
       const includeCompleted = ${String(includeCompleted)};
 
-      for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
+      // OMN-340 (slice 3): the budget applies to ADMITTED rows, not raw rows
+      // walked. Before this, completed/dropped/root rows burned a slot in the
+      // Math.min(allTasks.length, maxTasks) walk, so the scan could exhaust
+      // its budget on terminal rows before reaching a single live task. The
+      // walk below always covers every raw row (scannedTotal === allTasks.length)
+      // so admittedTotal is the TRUE admissible population ("count the
+      // population, cap only the detail" — OMN-335/340 principle); once
+      // tasks.length reaches maxTasks, admitted rows past the budget are
+      // still counted (admittedTotal++) but NOT built into a full row, so the
+      // post-budget pass stays cheap (no per-field try/catch, no date/tag
+      // reads) however large the raw DB is beyond the old 3000-row walk.
+      //
+      // Admission checks are ordered cheapest-first: completed is a stored
+      // boolean (cheapest), .project is a reference compare, .taskStatus is
+      // read last because OmniFocus may compute it (blocked/available chain)
+      // rather than store it — most non-admitted rows in a real GTD database
+      // are completed, so ordering this way skips the costliest check for
+      // the majority of rows. (No backticks in this comment block: it sits
+      // inside a TS template literal.)
+      let scannedTotal = 0;
+      let admittedTotal = 0;
+      for (let i = 0; i < allTasks.length; i++) {
+        scannedTotal++;
         const task = allTasks[i];
         try {
+          const completed = task.completed;
+          if (!includeCompleted && completed) continue;
           // OMN-338: skip project ROOT rows (non-null .project), as the
           // uncapped pass below does. Otherwise every detector sees each
           // project as a task: deadline_health overdue, clarify_candidates
@@ -81,11 +111,18 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
           // drops the row, as before). Do NOT swap in the fail-open shared
           // IS_PROJECT_ROOT_ROW_SNIPPET here (OMN-290 splice-site lesson).
           if (task.project) continue;
-          const completed = task.completed;
-          if (!includeCompleted && completed) continue;
           // Dropped tasks keep completed===false, so the completed filter
-          // alone let them through to every detector.
+          // alone let them through to every detector. Checked last: reading
+          // taskStatus is the costliest of these three checks.
           if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;
+
+          // Admitted: not completed (unless include_completed), not a
+          // project root, not dropped (unless include_completed).
+          admittedTotal++;
+          // OMN-340: the 3000 budget is consumed by ADMITTED rows only. Once
+          // filled, keep counting admittedTotal (coverage.total must be the
+          // true admissible population) but stop building full rows.
+          if (tasks.length >= maxTasks) continue;
 
           const taskData = {
             id: task.id.primaryKey,
@@ -191,7 +228,17 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
         } catch(e) {}
       });
 
-      return JSON.stringify({ tasks: tasks, projects: projects, tags: tags });
+      return JSON.stringify({
+        tasks: tasks,
+        projects: projects,
+        tags: tags,
+        // OMN-340 (slice 3): scanMeta.admittedTotal is the true admissible
+        // population (every non-root, non-terminal task), independent of the
+        // maxTasks budget; scannedTotal is every raw row walked (always
+        // allTasks.length, since the walk no longer stops early). The tool
+        // builds the shared coverage disclosure from these.
+        scanMeta: { scannedTotal: scannedTotal, admittedTotal: admittedTotal, cap: maxTasks }
+      });
     })()`;
 
   // Minimal JXA wrapper (OMNIJS-FIRST-PATTERN). The program is injected via
