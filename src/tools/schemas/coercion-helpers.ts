@@ -26,19 +26,38 @@ export const coerceBoolean = () =>
     return val;
   }, z.boolean());
 
+// OMN-365: only a plain decimal integer/float string converts — optional
+// leading `-`, digits, optional `.digits`. Deliberately excludes every form
+// `Number(val)` would otherwise accept: hex ("0x10"), exponent ("1e3"),
+// "Infinity"/"-Infinity", "NaN", a leading "+", and whitespace-only strings
+// (tested against the TRIMMED value, below).
+const DECIMAL_NUMBER_RE = /^-?\d+(\.\d+)?$/;
+
 /**
  * Coerce number values from MCP bridge
  *
- * Converts numeric strings only. null, blank strings and booleans pass through
- * unchanged so the inner schema rejects them (OMN-329: `z.coerce.number()`
- * turned null/"" into 0 and true into 1). Pass the bounded schema as `inner`,
- * e.g. `coerceNumber(z.number().min(1).max(500))`.
+ * Converts numeric strings only, and only ones that look like a plain decimal
+ * number (OMN-365: `Number(val)` silently accepted "0x10" → 16, "1e3" → 1000,
+ * "Infinity" → Infinity, which then passed a bare `min()`-only bound like
+ * `offset: coerceNumber(z.number().min(0))`). Anything else — hex, exponent,
+ * Infinity/NaN spellings, non-numeric strings, null, blank strings, booleans —
+ * passes through UNCHANGED so the inner schema rejects it (OMN-329: the old
+ * `z.coerce.number()` turned null/"" into 0 and true into 1; this helper must
+ * not reintroduce that class of silent acceptance for different inputs).
+ *
+ * The default inner schema is `.finite()` so a bare `coerceNumber()` call
+ * can't accept Infinity/-Infinity even as a NATIVE (non-string) JS number —
+ * the regex above only governs the STRING path. A passed-in `inner` is used
+ * as-is (not auto-widened), so every call site chains its own `.finite()` for
+ * the same native-number guarantee — see read-schema.ts's limit/offset/
+ * daysAhead.
  */
-export const coerceNumber = (inner: z.ZodNumber = z.number()) =>
+export const coerceNumber = (inner: z.ZodNumber = z.number().finite()) =>
   z.preprocess((val) => {
-    if (typeof val !== 'string' || val.trim() === '') return val;
-    const num = Number(val);
-    return Number.isNaN(num) ? val : num;
+    if (typeof val !== 'string') return val;
+    const trimmed = val.trim();
+    if (!DECIMAL_NUMBER_RE.test(trimmed)) return val;
+    return Number(trimmed);
   }, inner);
 
 /**

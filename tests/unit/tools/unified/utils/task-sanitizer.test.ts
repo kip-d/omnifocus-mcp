@@ -9,6 +9,18 @@ vi.mock('../../../../../src/utils/timezone.js', () => ({
 
 const mockedLocalToUTC = vi.mocked(localToUTC);
 
+// OMN-343 (slice 2) + OMN-362/364/365: sanitizeTaskUpdates no longer coerces
+// or filters malformed types — UpdateChangesSchema (the real call path's
+// input) already guarantees every field's type, and WriteSchema's superRefine
+// already rejects target-mismatched fields and task on_hold before
+// `compiled.changes` is built. These tests pin the function's behavior for
+// LEGAL, already-typed input (what the builders must keep receiving
+// unchanged) plus the date-conversion / clear-flag merging that is still this
+// function's job. They do NOT test malformed-input handling (string "true"
+// for a boolean, non-numeric estimatedMinutes, non-string tags, …) — those
+// inputs can no longer reach this function via the schema-validated call
+// path, and the function no longer defends against them (see the file-level
+// comment in task-sanitizer.ts).
 describe('sanitizeTaskUpdates', () => {
   // --- String fields ---
 
@@ -20,34 +32,14 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ note: 'A note' })).toEqual({ note: 'A note' });
   });
 
-  it('ignores non-string name', () => {
-    expect(sanitizeTaskUpdates({ name: 123 })).toEqual({});
-  });
-
-  it('ignores non-string note', () => {
-    expect(sanitizeTaskUpdates({ note: true })).toEqual({});
-  });
-
-  // --- Boolean fields (with MCP bridge coercion) ---
+  // --- Boolean fields ---
 
   it('passes through boolean flagged', () => {
     expect(sanitizeTaskUpdates({ flagged: true })).toEqual({ flagged: true });
   });
 
-  it('coerces string "true" flagged to boolean true', () => {
-    expect(sanitizeTaskUpdates({ flagged: 'true' })).toEqual({ flagged: true });
-  });
-
-  it('coerces string "false" flagged to boolean false', () => {
-    expect(sanitizeTaskUpdates({ flagged: 'false' })).toEqual({ flagged: false });
-  });
-
   it('passes through boolean sequential', () => {
     expect(sanitizeTaskUpdates({ sequential: false })).toEqual({ sequential: false });
-  });
-
-  it('coerces string sequential to boolean', () => {
-    expect(sanitizeTaskUpdates({ sequential: 'true' })).toEqual({ sequential: true });
   });
 
   // --- Date fields with clear flags ---
@@ -79,11 +71,6 @@ describe('sanitizeTaskUpdates', () => {
     expect(result.plannedDate).toBe('UTC:2026-03-01:planned');
   });
 
-  it('converts completionDate string via localToUTC with "completion" context', () => {
-    const result = sanitizeTaskUpdates({ completionDate: '2026-03-01' });
-    expect(result.completionDate).toBe('UTC:2026-03-01:completion');
-  });
-
   it('allows explicit null plannedDate to clear it', () => {
     expect(sanitizeTaskUpdates({ plannedDate: null })).toEqual({ plannedDate: null });
   });
@@ -92,18 +79,22 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ clearDueDate: true, dueDate: '2026-03-01' })).toEqual({ dueDate: null });
   });
 
-  it('ignores non-string dueDate', () => {
-    const result = sanitizeTaskUpdates({ dueDate: 12345 });
-    expect(result).toEqual({});
-  });
-
-  it('handles localToUTC throwing for invalid date', () => {
+  // OMN-343 (slice 1, flipped for slice 2 again): the NL-string case this test
+  // originally pinned ("not-a-date") was rejected upstream at the schema
+  // boundary in slice 1 (DATE_REGEX). Slice 2 closed the REMAINING gap too:
+  // write-schema.ts's `isCalendarValidDate` refine now rejects every
+  // calendar-invalid value (month 13, hour 25, "2026-02-30", …) in addition to
+  // format — so there is no longer any schema-validated string `localToUTC`
+  // can fail to parse. sanitizeDateField therefore RETHROWS instead of
+  // catching and dropping (no silent data loss anywhere on this path). This
+  // test exercises that path directly (bypassing the schema, as a unit test
+  // of this function necessarily does, since the schema would reject
+  // "2026-02-30" before this function ever saw it) and pins the rethrow.
+  it('rethrows (does not silently drop) when localToUTC fails on an already schema-validated date', () => {
     mockedLocalToUTC.mockImplementationOnce(() => {
       throw new Error('Invalid date');
     });
-    const result = sanitizeTaskUpdates({ dueDate: 'not-a-date' });
-    // Should not include dueDate if conversion fails
-    expect(result.dueDate).toBeUndefined();
+    expect(() => sanitizeTaskUpdates({ dueDate: '2026-02-30' })).toThrow('Invalid date');
   });
 
   // --- Numeric fields ---
@@ -112,31 +103,20 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ clearEstimatedMinutes: true })).toEqual({ estimatedMinutes: null });
   });
 
-  it('coerces string estimatedMinutes to number', () => {
-    expect(sanitizeTaskUpdates({ estimatedMinutes: '30' })).toEqual({ estimatedMinutes: 30 });
-  });
-
   it('passes through numeric estimatedMinutes', () => {
     expect(sanitizeTaskUpdates({ estimatedMinutes: 45 })).toEqual({ estimatedMinutes: 45 });
   });
 
-  it('ignores non-numeric string estimatedMinutes', () => {
-    const result = sanitizeTaskUpdates({ estimatedMinutes: 'abc' });
-    expect(result.estimatedMinutes).toBeUndefined();
+  it('clearEstimatedMinutes wins over a simultaneous estimatedMinutes value', () => {
+    expect(sanitizeTaskUpdates({ clearEstimatedMinutes: true, estimatedMinutes: 45 })).toEqual({
+      estimatedMinutes: null,
+    });
   });
 
-  // --- Project field mapping ---
+  // --- Project field ---
 
-  it('maps projectId to project', () => {
-    expect(sanitizeTaskUpdates({ projectId: 'abc123' })).toEqual({ project: 'abc123' });
-  });
-
-  it('maps project field through', () => {
+  it('passes through project field', () => {
     expect(sanitizeTaskUpdates({ project: 'abc123' })).toEqual({ project: 'abc123' });
-  });
-
-  it('prefers projectId over project when both present', () => {
-    expect(sanitizeTaskUpdates({ projectId: 'from-id', project: 'from-project' })).toEqual({ project: 'from-id' });
   });
 
   it('passes through null project (move to inbox)', () => {
@@ -145,20 +125,16 @@ describe('sanitizeTaskUpdates', () => {
 
   // --- Tags ---
 
-  it('filters non-string tags', () => {
-    expect(sanitizeTaskUpdates({ tags: ['valid', 123, null] })).toEqual({ tags: ['valid'] });
-  });
-
   it('passes through valid tags array', () => {
     expect(sanitizeTaskUpdates({ tags: ['work', 'home'] })).toEqual({ tags: ['work', 'home'] });
   });
 
-  it('filters non-string addTags', () => {
-    expect(sanitizeTaskUpdates({ addTags: ['valid', 123] })).toEqual({ addTags: ['valid'] });
+  it('passes through addTags array', () => {
+    expect(sanitizeTaskUpdates({ addTags: ['valid'] })).toEqual({ addTags: ['valid'] });
   });
 
-  it('filters non-string removeTags', () => {
-    expect(sanitizeTaskUpdates({ removeTags: ['valid', null] })).toEqual({ removeTags: ['valid'] });
+  it('passes through removeTags array', () => {
+    expect(sanitizeTaskUpdates({ removeTags: ['valid'] })).toEqual({ removeTags: ['valid'] });
   });
 
   // --- parentTaskId ---
@@ -178,10 +154,6 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ repetitionRule: rule })).toEqual({ repetitionRule: rule });
   });
 
-  it('ignores non-object repetitionRule', () => {
-    expect(sanitizeTaskUpdates({ repetitionRule: 'weekly' })).toEqual({});
-  });
-
   it('passes through repetitionRule: null to clear rule', () => {
     expect(sanitizeTaskUpdates({ repetitionRule: null })).toEqual({ repetitionRule: null });
   });
@@ -199,12 +171,6 @@ describe('sanitizeTaskUpdates', () => {
   // OMN-377: 'active' reopens a dropped or completed task.
   it('passes through active status (reopen)', () => {
     expect(sanitizeTaskUpdates({ status: 'active' })).toEqual({ status: 'active' });
-  });
-
-  // on_hold is rejected at the schema boundary (WriteSchema superRefine);
-  // the sanitizer stays a defensive filter behind it.
-  it('ignores invalid status values', () => {
-    expect(sanitizeTaskUpdates({ status: 'on_hold' })).toEqual({});
   });
 
   // --- Edge cases ---

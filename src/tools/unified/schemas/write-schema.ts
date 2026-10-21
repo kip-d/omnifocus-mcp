@@ -26,6 +26,93 @@ const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_ONLY_FORMAT_MSG = 'Date format: YYYY-MM-DD (date only — RRULE UNTIL has no time component)';
 
+// OMN-343 (slice 2, residual F1/F2/F8): DATE_REGEX/DATE_ONLY_REGEX only check
+// FORMAT — they accept calendar-invalid values like "2026-13-01" (month 13),
+// "2026-10-21 25:00" (hour 25), and "2026-02-30" (day-of-month overflow).
+// Downstream, `localToUTC`'s `new Date(...)` either throws (month/hour/minute
+// out of JS's parseable range) or silently ROLLS OVER ("2026-02-30" becomes
+// 2026-03-02). On a task update, sanitizeDateField's catch then DROPPED the
+// field (silent no-op success) while handleProjectUpdateDirect's bare
+// localToUTC call threw — the exact F1/F2 target disagreement slice 1 closed
+// for non-conforming FORMATS survives for conforming-but-invalid ones. Fixed
+// at the schema, not the sanitizer, so every route (single, batch, create,
+// update, complete, repetitionRule.endDate) rejects identically before any
+// script runs.
+const DAYS_IN_MONTH_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+/** True if `year` is a leap year (Gregorian rule), without going through `Date`. */
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+const DAYS_IN_MONTH_TABLE = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+// OMN-343 (slice 2, gate finding B): the previous implementation computed this
+// via `new Date(Date.UTC(year, month, 0)).getUTCDate()` — `Date.UTC` maps a
+// 2-digit-range year (0-99) to 1900+year per the ECMAScript spec, so year 0
+// silently read back as 1900 (not leap) instead of staying year 0 (leap, by
+// `% 400 === 0`). Pure arithmetic sidesteps the Date year-remap behavior
+// entirely so this is correct for every year, not just those outside 0-99.
+/** Last day of `month` (1-12) in `year`, leap-year aware. */
+function daysInMonth(year: number, month: number): number {
+  if (month === 2 && isLeapYear(year)) return 29;
+  return DAYS_IN_MONTH_TABLE[month - 1];
+}
+
+/**
+ * True if `value` (already known to match DATE_REGEX or DATE_ONLY_REGEX — the
+ * `.regex()` check runs first in the schemas below) is also a real calendar
+ * date/time: month 1-12, day 1..daysInMonth(year, month), and — when a time
+ * component is present — hour 0-23, minute/second 0-59.
+ */
+function isCalendarValidDate(value: string): boolean {
+  const m = DAYS_IN_MONTH_RE.exec(value);
+  if (!m) return false; // defensive — the .regex() check already guarantees this matches
+  // `exec`'s static array type doesn't model that the time-component groups
+  // are OPTIONAL (unmatched groups are `undefined` at runtime even though
+  // TS's RegExpExecArray types every element as `string`) — cast narrows to
+  // the true runtime shape so the undefined-checks below aren't flagged as
+  // statically-always-true.
+  const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = m as unknown as [
+    string,
+    string,
+    string,
+    string,
+    string | undefined,
+    string | undefined,
+    string | undefined,
+  ];
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > daysInMonth(year, month)) return false;
+  if (hourStr !== undefined) {
+    if (Number(hourStr) > 23) return false;
+    if (Number(minuteStr) > 59) return false;
+    if (secondStr !== undefined && Number(secondStr) > 59) return false;
+  }
+  return true;
+}
+
+const calendarInvalidMessage = (formatMsg: string) => (value: string) => ({
+  message: `Invalid calendar date: "${value}". ${formatMsg}`,
+});
+
+/** Shared date-or-datetime string schema (DATE_REGEX + calendar-validity). One
+ * definition so every date field (create/update dueDate/deferDate/plannedDate,
+ * complete's completionDate, single and batch) rejects the same inputs the
+ * same way. */
+const dateTimeStringSchema = () =>
+  z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).refine(isCalendarValidDate, calendarInvalidMessage(DATE_FORMAT_MSG));
+
+/** Shared date-only string schema (DATE_ONLY_REGEX + calendar-validity) — repetitionRule.endDate. */
+const dateOnlyStringSchema = () =>
+  z
+    .string()
+    .regex(DATE_ONLY_REGEX, DATE_ONLY_FORMAT_MSG)
+    .refine(isCalendarValidDate, calendarInvalidMessage(DATE_ONLY_FORMAT_MSG));
+
 // Repetition rule schema — derived from RepetitionRule contract via `satisfies`.
 // Constrains output type only (input is `unknown` to allow MCP bridge string coercion).
 // If the contract changes a field type, `satisfies` errors here.
@@ -56,7 +143,7 @@ const RepetitionRuleSchema = z
       .optional(),
     weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
     setPositions: z.array(z.number().min(-366).max(366)).optional(),
-    endDate: z.string().regex(DATE_ONLY_REGEX, DATE_ONLY_FORMAT_MSG).optional(),
+    endDate: dateOnlyStringSchema().optional(),
     // OmniFocus 4.7+ repetition method control
     method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
     scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
@@ -110,9 +197,35 @@ const ReviewIntervalObjectSchema = z
     return obj.steps * multiplier;
   });
 
-const ReviewIntervalSchema = z
-  .union([z.number(), z.string().transform((v) => parseInt(v, 10)), ReviewIntervalObjectSchema])
+const ReviewIntervalNumericSchema = z
+  .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
   .pipe(z.number().min(1));
+
+// OMN-343 (slice 2, live-found gap from slice 1): a plain z.union([number,
+// string, object]) collapses ALL branch failures into a single top-level
+// `invalid_union` issue with a generic "Invalid input" message — the nested
+// REVIEW_UNIT_MSG (e.g. for `{steps:1, unit:'quarter'}`) is buried inside
+// `unionErrors` and never reaches the client (base.ts's VALIDATION_ERROR text
+// only reads the TOP-LEVEL issue's `.message`). Dispatch on the input SHAPE
+// instead of unioning: an object goes through ReviewIntervalObjectSchema
+// directly, so ITS issues (unit enum, strict, steps) surface at their own
+// path with their own message, not wrapped in a union. Number/string go
+// through the numeric branch the same way. `ctx.addIssue` re-homes each
+// sub-schema issue under the current path (zod concatenates), so e.g.
+// `changes.reviewInterval` + the object schema's `unit` issue path →
+// `changes.reviewInterval.unit`.
+const ReviewIntervalSchema = z.unknown().transform((val, ctx) => {
+  if (isPlainObject(val)) {
+    const result = ReviewIntervalObjectSchema.safeParse(val);
+    if (result.success) return result.data;
+    for (const issue of result.error.issues) ctx.addIssue(issue);
+    return z.NEVER;
+  }
+  const result = ReviewIntervalNumericSchema.safeParse(val);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) ctx.addIssue(issue);
+  return z.NEVER;
+});
 
 // ── OMN-97: strict everywhere + actionable redirects ─────────────────
 // `.strict()` does NOT propagate through discriminatedUnion/union (prior art
@@ -190,9 +303,9 @@ export const CreateDataSchema = z
       project: z.union([z.string(), z.null()]).optional(),
       parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
       tags: z.array(z.string()).optional(),
-      dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-      deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-      plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+      dueDate: dateTimeStringSchema().optional(),
+      deferDate: dateTimeStringSchema().optional(),
+      plannedDate: dateTimeStringSchema().optional(),
       flagged: coerceBoolean().optional(),
       estimatedMinutes: z
         .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
@@ -231,9 +344,9 @@ export const UpdateChangesSchema = z
       // (task update: success, change ignored) while handleProjectUpdateDirect's
       // bare localToUTC call threw (project update: error) — the same input
       // disagreed by target. null still validates (clears the field).
-      dueDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
-      deferDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
-      plannedDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
+      dueDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
+      deferDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
+      plannedDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
       clearDueDate: coerceBoolean().optional(),
       clearDeferDate: coerceBoolean().optional(),
       clearPlannedDate: coerceBoolean().optional(),
@@ -296,7 +409,7 @@ const BatchOperationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']),
     id: z.string(),
-    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    completionDate: dateTimeStringSchema().optional(),
   }),
   strictObj({
     operation: z.literal('delete'),
@@ -355,7 +468,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     // (and the batch-complete sibling at L187) — without it NL input
     // ("tomorrow") slipped through Zod and surfaced as uncategorized
     // INTERNAL_ERROR downstream instead of a clean VALIDATION_ERROR.
-    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    completionDate: dateTimeStringSchema().optional(),
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Delete operation
@@ -412,6 +525,96 @@ const TASK_ON_HOLD_MESSAGE =
   'status "on_hold" is project-only — tasks accept completed, dropped, or active (reopen). ' +
   'To postpone a task set deferDate; to pause it with its project, put the project on_hold.';
 
+// ── OMN-343 (slice 2, D1(b)): target-mismatch field table ────────────────────
+// A field settable on one target but not the other previously validated for
+// BOTH (one CreateDataSchema/UpdateChangesSchema serves task and project) and
+// was then silently dropped by the handler that doesn't read it (spec F3-F7).
+// These sets are verified against the actual consuming code, not just the
+// TaskCreateData/ProjectCreateData/TaskUpdateData/ProjectUpdateData contract
+// interfaces: every lowering in src/contracts/ast/mutation/defs.ts carries a
+// compile-time exhaustiveness guard (`_exhaustive: Record<keyof T, true>`)
+// enumerating exactly the fields it consumes — that guard is the ground
+// truth these lists were read off, not the schema's own comments (which had
+// drifted: `sequential`/`status` were commented "Project-specific" above
+// `folder` in CreateDataSchema despite being legal on tasks too).
+//
+// Fields NOT listed either way (name, note, tags, addTags, removeTags,
+// dueDate/deferDate/plannedDate + their clear flags, flagged, sequential) are
+// genuinely common to both targets — confirmed by both exhaustiveness guards
+// consuming them. `status` is also common on UPDATE (task: completed|dropped
+// |active; project: all four, on_hold handled above) so it is deliberately
+// absent from the UPDATE tables; CREATE has no task-side status support at
+// all (TaskCreateData has no `status` field — handleTaskCreate never reads
+// compiled.data.status), so CREATE's PROJECT_ONLY table includes it.
+// Exported (not just module-local) so tests/unit/tools/unified/schemas/
+// write-schema-target-mismatch-contract-sync.test.ts can assert, at compile
+// time, that these tuples' element unions equal keyof TaskCreateData/
+// ProjectCreateData/TaskUpdateData/ProjectUpdateData set-differences — the
+// sync guard these lists had none of before (see the comment above).
+export const CREATE_TASK_ONLY_FIELDS = ['parentTaskId', 'estimatedMinutes', 'repetitionRule', 'project'] as const;
+export const CREATE_PROJECT_ONLY_FIELDS = ['folder', 'status', 'reviewInterval'] as const;
+export const UPDATE_TASK_ONLY_FIELDS = [
+  'parentTaskId',
+  'estimatedMinutes',
+  'clearEstimatedMinutes',
+  'repetitionRule',
+  'project',
+] as const;
+export const UPDATE_PROJECT_ONLY_FIELDS = ['folder', 'reviewInterval'] as const;
+
+// One message per field: names the field AND the owning target, with brief
+// steering toward the right alternative (mirrors TASK_ON_HOLD_MESSAGE's style).
+const TARGET_MISMATCH_MESSAGES: Record<string, string> = {
+  parentTaskId:
+    '"parentTaskId" is task-only — projects cannot be nested under a task. Omit it, or use "folder" to place the project.',
+  estimatedMinutes:
+    '"estimatedMinutes" is task-only — projects have no time estimate. Set it on the project\'s tasks instead.',
+  clearEstimatedMinutes: '"clearEstimatedMinutes" is task-only — projects have no time estimate to clear.',
+  repetitionRule:
+    '"repetitionRule" is task-only — projects do not repeat. Set repetitionRule on the project\'s tasks instead.',
+  project:
+    '"project" is task-only — a project cannot be filed inside another project. Use "folder" to organize projects into folders.',
+  folder:
+    '"folder" is project-only — tasks don\'t have a folder. Set the task\'s "project" to file it, or "parentTaskId" for a subtask.',
+  status:
+    '"status" is project-only on create — tasks have no status at creation. Create the task, then update it with changes.status (completed|dropped|active).',
+  reviewInterval:
+    '"reviewInterval" is project-only — tasks don\'t have reviews. Set reviewInterval on the project instead.',
+};
+
+function targetMismatchMessage(field: string, target: 'task' | 'project'): string {
+  return (
+    TARGET_MISMATCH_MESSAGES[field] ?? `"${field}" is not supported on ${target === 'project' ? 'projects' : 'tasks'}.`
+  );
+}
+
+/**
+ * Add a VALIDATION_ERROR issue for every field present in `obj` that the
+ * given `target` doesn't support, per the create/update field tables above.
+ * Shared by the single-item, `data`-alias, and batch-item checks below so
+ * the three routes can't drift apart (same discipline as isTaskOnHold).
+ */
+function addTargetMismatchIssues(
+  ctx: z.RefinementCtx,
+  basePath: Array<string | number>,
+  target: 'task' | 'project',
+  obj: Record<string, unknown> | undefined,
+  taskOnlyFields: readonly string[],
+  projectOnlyFields: readonly string[],
+): void {
+  if (!obj) return;
+  const forbidden = target === 'project' ? taskOnlyFields : projectOnlyFields;
+  for (const field of forbidden) {
+    if (obj[field] !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [...basePath, field],
+        message: targetMismatchMessage(field, target),
+      });
+    }
+  }
+}
+
 // Main write schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const WriteSchema = z
@@ -462,6 +665,63 @@ export const WriteSchema = z
       m.operations.forEach((op, i) => {
         if (op.operation === 'update' && isTaskOnHold(op.target, op.changes)) {
           onHold(['mutation', 'operations', i, 'changes', 'status']);
+        }
+      });
+    }
+
+    // OMN-343 (slice 2): target-mismatched fields (F3-F7) — a field settable
+    // on one target but not the other must reject, not silently vanish. Fires
+    // for single create, single update (both the `changes` and `data`
+    // aliases), and per batch item (create and update sub-ops).
+    if (m.operation === 'create') {
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'data'],
+        m.target,
+        m.data as Record<string, unknown> | undefined,
+        CREATE_TASK_ONLY_FIELDS,
+        CREATE_PROJECT_ONLY_FIELDS,
+      );
+    }
+    if (m.operation === 'update') {
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'changes'],
+        m.target,
+        m.changes as Record<string, unknown> | undefined,
+        UPDATE_TASK_ONLY_FIELDS,
+        UPDATE_PROJECT_ONLY_FIELDS,
+      );
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'data'],
+        m.target,
+        m.data as Record<string, unknown> | undefined,
+        UPDATE_TASK_ONLY_FIELDS,
+        UPDATE_PROJECT_ONLY_FIELDS,
+      );
+    }
+    if (m.operation === 'batch') {
+      m.operations.forEach((op, i) => {
+        if (op.operation === 'create') {
+          addTargetMismatchIssues(
+            ctx,
+            ['mutation', 'operations', i, 'data'],
+            op.target,
+            op.data as Record<string, unknown> | undefined,
+            CREATE_TASK_ONLY_FIELDS,
+            CREATE_PROJECT_ONLY_FIELDS,
+          );
+        }
+        if (op.operation === 'update') {
+          addTargetMismatchIssues(
+            ctx,
+            ['mutation', 'operations', i, 'changes'],
+            op.target,
+            op.changes as Record<string, unknown> | undefined,
+            UPDATE_TASK_ONLY_FIELDS,
+            UPDATE_PROJECT_ONLY_FIELDS,
+          );
         }
       });
     }

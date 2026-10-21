@@ -343,6 +343,51 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
+    // OMN-343 (slice 2): the client-visible text is base.ts's
+    // `Invalid parameters: ${path}: ${message}` — NOT the raw Zod issue tree a
+    // schema-level test inspects. These assert on exactly what an MCP caller
+    // sees through tool.execute(), the validation entry point, per the gate's
+    // note that the slice-1 test (which only walked the issue tree) missed
+    // the union-collapse gap because it never looked at this string.
+    it('surfaces the target-mismatch message (field + target) in the McpError text', async () => {
+      await expect(
+        tool.execute({
+          mutation: { operation: 'create', target: 'task', data: { name: 'Errand', folder: 'Errands' } },
+        }),
+      ).rejects.toThrow(/mutation\.data\.folder: "folder" is project-only — tasks don't have a folder/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the reviewInterval unit-enum message (not a generic union error) in the McpError text', async () => {
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'update',
+            target: 'project',
+            id: 'proj-1',
+            changes: { reviewInterval: { steps: 1, unit: 'quarter' } },
+          },
+        }),
+      ).rejects.toThrow(
+        /mutation\.changes\.reviewInterval\.unit: unit must be one of: days, day, weeks, week, months, month, years, year \(case-insensitive\)/,
+      );
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    // OMN-343 (slice 2, gate follow-up): "2026-02-30" matches DATE_REGEX
+    // (format only) but isn't a real calendar date. Asserts the client-visible
+    // McpError text through tool.execute(), not a schema-level safeParse check.
+    it('surfaces the calendar-validity message for a day-of-month overflow in the McpError text', async () => {
+      await expect(
+        tool.execute({
+          mutation: { operation: 'update', target: 'task', id: 'task-1', changes: { dueDate: '2026-02-30' } },
+        }),
+      ).rejects.toThrow(
+        /mutation\.changes\.dueDate: Invalid calendar date: "2026-02-30"\. Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm/,
+      );
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
     it('calls cache.invalidateAfterWrite with affected tags', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
@@ -2033,9 +2078,13 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(mutationProps.changes.properties.addTags).toBeDefined();
       expect(mutationProps.changes.properties.clearDueDate).toBeDefined();
 
-      // repetitionRule stays shallow — advertised as a loose object, NOT the
+      // repetitionRule stays shallow — advertised as a loose object (plus a
+      // short task-only steering description, OMN-343 slice 2), NOT the
       // deeply-expanded recursive shape (the size blowup this test guards).
-      expect(mutationProps.data.properties.repetitionRule).toEqual({ type: 'object' });
+      expect(mutationProps.data.properties.repetitionRule).toEqual({
+        type: 'object',
+        description: 'task-only: see REPETITION RULES below',
+      });
     });
 
     it('should advertise batch control flags as boolean, not string', () => {

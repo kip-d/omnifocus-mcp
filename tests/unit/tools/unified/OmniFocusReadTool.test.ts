@@ -383,6 +383,20 @@ describe('OmniFocusReadTool', () => {
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
+    // OMN-365: `limit:'0x10'` used to silently coerce to 16 via bare
+    // `Number(val)`. coerceNumber's decimal-only-string regex now leaves a hex
+    // string unconverted, so z.number() rejects the STRING "0x10" outright.
+    // Asserts the client-visible McpError text through tool.execute() — the
+    // validation entry point — not a schema-level safeParse check.
+    it('OMN-365: limit:"0x10" rejects with InvalidParams instead of silently coercing to 16', async () => {
+      await expect(
+        tool.execute({
+          query: { type: 'tasks', limit: '0x10' },
+        } as any),
+      ).rejects.toThrow(/Invalid parameters: query\.limit: Expected number, received string/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
     // OMN-142: a projects name filter must compile to a name-only predicate.
     // The old path routed name → search → ProjectFilter.text, which also
     // matched project NOTE content.

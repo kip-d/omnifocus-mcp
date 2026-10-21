@@ -286,8 +286,12 @@ const BaseQuerySchema = z.object({
   filters: coerceObject(FilterSchema).optional(),
   sort: z.array(SortSchema).optional(),
   // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings
-  limit: coerceNumber(z.number().min(1).max(500)).optional(),
-  offset: coerceNumber(z.number().min(0)).optional(),
+  // OMN-365: `.finite()` on each inner schema — a passed-in `inner` is used
+  // as-is by coerceNumber, not auto-widened, so a native (non-string) JSON
+  // Infinity must be rejected here explicitly, not just via the regex that
+  // only governs the string-coercion path.
+  limit: coerceNumber(z.number().min(1).max(500).finite()).optional(),
+  offset: coerceNumber(z.number().min(0).finite()).optional(),
 });
 
 // Task queries: fields use TaskFieldEnum, have mode/countOnly/daysAhead/fastSearch/details
@@ -315,7 +319,7 @@ const TaskQuerySchema = BaseQuerySchema.merge(
     mode: TaskModeEnum.optional(),
     details: z.boolean().optional(),
     fastSearch: z.boolean().optional(),
-    daysAhead: coerceNumber(z.number().min(1).max(30)).optional(),
+    daysAhead: coerceNumber(z.number().min(1).max(30).finite()).optional(),
     countOnly: z.boolean().optional(),
     // OMN-153: query-level param (like countOnly/fastSearch) — NOT a filters:{} key.
     // Default false (exclude project-root rows). Set true only when inspecting project roots.
