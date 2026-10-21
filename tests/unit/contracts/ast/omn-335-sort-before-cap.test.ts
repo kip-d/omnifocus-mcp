@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { stubTask, runListScript } from './omnijs-vm-fixture.js';
-import { buildFilteredTasksScript } from '../../../../src/contracts/ast/script-builder.js';
+import { buildFilteredTasksScript, buildInboxScript } from '../../../../src/contracts/ast/script-builder.js';
 
 describe('OMN-335 D2: sort comparator reads raw task values (vm-executed)', () => {
   it('sorts by dueDate even when dueDate is NOT in the requested fields (OMN-305 fix)', () => {
@@ -94,5 +94,65 @@ describe('OMN-335 D2: sort comparator reads raw task values (vm-executed)', () =
     // t9 (Jan 1) < t8 (Jan 2) < t7 (Jan 3) are the 3 earliest.
     expect(result.tasks.map((t) => t.name)).toEqual(['t9', 't8', 't7']);
     expect(result.total_matched).toBe(10);
+  });
+});
+
+/**
+ * OMN-335 slice 2 (D1): the inbox route's sort-before-slice, vm-executed
+ * against a stub of inbox tasks via the shared omnijs-vm-fixture. Mirrors the
+ * D2 suite above, but through buildInboxScript (the `inbox` collection), not
+ * buildFilteredTasksScript (`flattenedTasks`).
+ */
+describe('OMN-335 P1 (slice 2): inbox sorts the population before slicing (vm-executed)', () => {
+  it('{project:null, sort:added desc, limit:3} returns the 3 newest inbox tasks, with fields omitting `added`', () => {
+    const tasks = Array.from({ length: 10 }, (_, i) =>
+      stubTask(`t${i}`, { inInbox: true, added: new Date(Date.UTC(2026, 0, i + 1)) }),
+    );
+
+    // fields:['name'] deliberately omits 'added' — the raw-task sort key
+    // (TASK_SORT_VALUE_EXPRS) must still work (the OMN-305 fix applies to the
+    // inbox route too).
+    const { script } = buildInboxScript(
+      {},
+      { sort: [{ field: 'added', direction: 'desc' }], limit: 3, fields: ['name'] },
+    );
+
+    const result = runListScript(script, tasks);
+
+    expect(result.tasks).toHaveLength(3);
+    // t9 (Jan 10) > t8 (Jan 9) > t7 (Jan 8) are the 3 newest.
+    expect(result.tasks.map((t) => t.name)).toEqual(['t9', 't8', 't7']);
+    expect(result.total_matched).toBe(10);
+    expect(result.tasks[0]).not.toHaveProperty('added');
+    expect(result.tasks[0]).not.toHaveProperty('__sortKey');
+  });
+
+  it('offset + sort on inbox returns the right window', () => {
+    const tasks = Array.from({ length: 10 }, (_, i) =>
+      stubTask(`t${i}`, { inInbox: true, added: new Date(Date.UTC(2026, 0, i + 1)) }),
+    );
+
+    const { script } = buildInboxScript({}, { sort: [{ field: 'added', direction: 'asc' }], offset: 3, limit: 3 });
+
+    const result = runListScript(script, tasks);
+
+    // Ascending by added: t0 (Jan 1) .. t9 (Jan 10). offset 3 skips t0,t1,t2;
+    // limit 3 takes the next 3: t3, t4, t5.
+    expect(result.tasks.map((t) => t.name)).toEqual(['t3', 't4', 't5']);
+    expect(result.total_matched).toBe(10);
+    expect((result as unknown as { offset_applied?: number }).offset_applied).toBe(3);
+  });
+
+  it('does not route through flattenedTasks — non-inbox tasks never leak into the inbox result', () => {
+    const tasks = [
+      stubTask('inbox_a', { inInbox: true, added: new Date('2026-01-01T00:00:00.000Z') }),
+      stubTask('not_inbox', { inInbox: false, added: new Date('2026-06-01T00:00:00.000Z') }),
+    ];
+
+    const { script } = buildInboxScript({}, { sort: [{ field: 'added', direction: 'desc' }] });
+    const result = runListScript(script, tasks);
+
+    expect(result.tasks.map((t) => t.name)).toEqual(['inbox_a']);
+    expect(result.total_matched).toBe(1);
   });
 });

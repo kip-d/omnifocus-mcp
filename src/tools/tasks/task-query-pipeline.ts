@@ -189,6 +189,26 @@ export function getDefaultSort(mode: TaskQueryMode | undefined): SortOption[] | 
   return MODE_DEFINITIONS[mode]?.defaultSort;
 }
 
+/**
+ * OMN-366: true when `mode` adds no augmentation/default-sort constraint of
+ * its own — i.e. it has no MODE_DEFINITIONS entry. Replaces the hardcoded
+ * `mode === 'all' || mode === 'search'` check that used to live in
+ * OmniFocusReadTool.buildTaskQuery, which silently drifted every time a new
+ * unconstrained pseudo-mode (or a newly-augmenting mode) was added without
+ * updating that list by hand.
+ *
+ * `'inbox'` is deliberately excluded even though it also has no
+ * MODE_DEFINITIONS entry: buildTaskQuery's "inbox replaces only unconstrained
+ * modes" rule (OMN-330) must not re-admit inbox itself, or an explicit
+ * mode:'inbox' request would be treated as if it had no mode at all.
+ * `undefined` (no mode requested) is unconstrained by definition.
+ */
+export function isUnconstrainedMode(mode: TaskQueryMode | undefined): boolean {
+  if (mode === undefined) return true;
+  if (mode === 'inbox') return false;
+  return !(mode in MODE_DEFINITIONS);
+}
+
 // =============================================================================
 // TASK PARSING
 // =============================================================================

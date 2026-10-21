@@ -48,6 +48,7 @@ import { stripNormalizedBrand } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
   getDefaultSort,
+  isUnconstrainedMode,
   parseTasks,
   sortTasks,
   projectFields,
@@ -248,7 +249,10 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // (project:null → inInbox) dropped the mode's constraint. Routing is a separate
   // concern, decided by the shared isInboxRoute.
   const requested = compiled.mode ?? 'all';
-  const unconstrained = requested === 'all' || requested === 'search';
+  // OMN-366: was a hardcoded ['all','search'] list — isUnconstrainedMode derives
+  // the same answer from MODE_DEFINITIONS, so a mode added there (or a new
+  // unconstrained pseudo-mode) can't silently drift out of sync with this check.
+  const unconstrained = isUnconstrainedMode(requested);
   const mode = (unconstrained && compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
   const inboxRoute = isInboxRoute(mode, compiled.filters);
 
@@ -295,15 +299,15 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // Note truncation: shared policy — see resolveNoteTruncateLength.
   const noteTruncateLength = resolveNoteTruncateLength(compiled.details);
 
-  // OMN-335 P2: an explicit caller sort wins; otherwise fall back to the mode's
-  // default sort (MODE_DEFINITIONS.defaultSort — overdue/upcoming: dueDate asc,
-  // today: modified desc) so the POPULATION is sorted in-script before the cap,
-  // not the capped page after it (buildUnsortedScript's `flattenedTasks` DB-order
-  // slice). This relies on the D2 fix: the comparator reads raw task values, so
-  // the sort works even though scriptFields may omit the sort key.
-  // The inbox route has no `sort` option yet (buildInboxScript — OMN-335 slice 2),
-  // so it stays on the post-hoc sortTasks() below regardless of userSort/defaultSort.
-  const userSort = compiled.sort ?? (!inboxRoute ? getDefaultSort(mode) : undefined);
+  // OMN-335 P2 (slice 1) + P1 (slice 2): an explicit caller sort wins; otherwise
+  // fall back to the mode's default sort (MODE_DEFINITIONS.defaultSort —
+  // overdue/upcoming: dueDate asc, today: modified desc) so the POPULATION is
+  // sorted in-script before the cap, not the capped page after it. This relies
+  // on the D2 fix: the comparator reads raw task values, so the sort works even
+  // though scriptFields may omit the sort key. buildInboxScript now has a `sort`
+  // option too (slice 2, D1), so this applies uniformly on every route —
+  // including inbox — with no more route-specific carve-out.
+  const userSort = compiled.sort ?? getDefaultSort(mode);
 
   const script = buildListTasksScriptV4({
     filter,
@@ -315,9 +319,9 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
     noteTruncateLength,
   });
 
-  // Inbox path doesn't pass sort to buildInboxScript, so sort is never applied in-script.
-  // Mark sortedInScript false so the post-hoc sort handles it instead.
-  return { script, filter, mode, scriptFields, limit, sortedInScript: !inboxRoute && !!userSort, fieldsMode };
+  // sortedInScript is true whenever a sort (user-specified or mode-default) was
+  // embedded in-script — true on every route, including inbox (slice 2).
+  return { script, filter, mode, scriptFields, limit, sortedInScript: !!userSort, fieldsMode };
 }
 
 // OMN-88: date fields parseProjects converts string → Date. Mirrors the
@@ -608,12 +612,11 @@ PERFORMANCE:
     }
 
     // Sort: skip post-hoc sort when sort was already applied in-script.
-    // OMN-335 P2: user-specified sorts AND mode default sorts (e.g., overdue ->
-    // dueDate asc) are now both embedded in OmniJS via buildTaskQuery's userSort
-    // (sort-before-cap fix) whenever sortedInScript is true — this branch is a
-    // harmless safety net, not the primary path, for every route except inbox
-    // (buildInboxScript has no `sort` option yet — OMN-335 slice 2 — so the
-    // inbox route always falls through here).
+    // OMN-335 (slices 1-2): user-specified sorts AND mode default sorts (e.g.,
+    // overdue -> dueDate asc) are embedded in OmniJS via buildTaskQuery's
+    // userSort (sort-before-cap fix) whenever sortedInScript is true — on every
+    // route, including inbox. This branch is now a harmless safety net, not the
+    // primary path, for all of them.
     const sortOptions = sortedInScript ? undefined : compiled.sort || getDefaultSort(mode as TaskQueryMode);
     if (sortOptions) {
       tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);
@@ -740,8 +743,11 @@ PERFORMANCE:
     // unconstrained mode met an inInbox filter (buildTaskQuery, OMN-330). 'inbox' is
     // not in MODE_DEFINITIONS, so augmentFilterForMode adds nothing — this guard is
     // what scopes an explicit mode:'inbox' count (no project:null) to the inbox.
+    // OMN-367: reuses the single shared inbox-route predicate (isInboxRoute,
+    // list-tasks-ast.ts) instead of a hand-rolled `mode === 'inbox' && !countFilter.inInbox`
+    // check, so count and row paths can't drift on what "the inbox route" means.
     const countFilter = { ...filter };
-    if (mode === 'inbox' && !countFilter.inInbox) {
+    if (isInboxRoute(mode, countFilter)) {
       countFilter.inInbox = true;
     }
     // OMN-192: includeProjectRoot already rides on `filter` (compiled.filters →

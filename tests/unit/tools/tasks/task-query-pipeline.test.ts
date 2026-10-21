@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   augmentFilterForMode,
   getDefaultSort,
+  isUnconstrainedMode,
   parseTasks,
   sortTasks,
   projectFields,
@@ -269,6 +270,46 @@ describe('augmentFilterForMode', () => {
       const result = augmentFilterForMode('nonexistent_mode' as TaskQueryMode, filter);
       expect(result).toEqual(filter);
     });
+  });
+});
+
+// =============================================================================
+// isUnconstrainedMode (OMN-366)
+// =============================================================================
+
+describe('isUnconstrainedMode', () => {
+  // Every TaskQueryMode without a MODE_DEFINITIONS entry is unconstrained,
+  // EXCEPT 'inbox' (routing, not augmentation, constrains it — OMN-330's "inbox
+  // replaces only unconstrained modes" rule must not re-admit inbox itself).
+  const modesWithNoDefinition: TaskQueryMode[] = ['all', 'search', 'forecast_past'];
+  const modesWithADefinition: TaskQueryMode[] = [
+    'overdue',
+    'today',
+    'upcoming',
+    'available',
+    'blocked',
+    'flagged',
+    'smart_suggest',
+  ];
+
+  for (const mode of modesWithNoDefinition) {
+    it(`mode "${mode}" (no MODE_DEFINITIONS entry) is unconstrained`, () => {
+      expect(isUnconstrainedMode(mode)).toBe(true);
+    });
+  }
+
+  for (const mode of modesWithADefinition) {
+    it(`mode "${mode}" (has a MODE_DEFINITIONS entry) is NOT unconstrained`, () => {
+      expect(isUnconstrainedMode(mode)).toBe(false);
+    });
+  }
+
+  it("'inbox' is NOT unconstrained, despite having no MODE_DEFINITIONS entry", () => {
+    expect(isUnconstrainedMode('inbox')).toBe(false);
+  });
+
+  it('undefined (no mode requested) is unconstrained', () => {
+    expect(isUnconstrainedMode(undefined)).toBe(true);
   });
 });
 
