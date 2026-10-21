@@ -751,24 +751,31 @@ PERFORMANCE:
    * never caps, so `total_matched === tasks.length` here).
    *
    * Score ALL of phase 1 in TS via scoreForSmartSuggest (weights/reasons
-   * byte-identical to before), which both selects and orders the top
-   * `limit` ids. Tie-break: score desc, then phase-1 array order (a stable
-   * sort — see scoreForSmartSuggest's doc comment).
+   * byte-identical to before), requesting the top `offset + limit` ids —
+   * then slice off the first `offset` of that ranked list. `offset` gets its
+   * natural meaning on a ranked list this way: rank window
+   * [offset, offset+limit) in score order, not "skip N DB-order rows before
+   * scoring" (which would be meaningless — there's no DB order to skip
+   * before scoring). Tie-break: score desc, then phase-1 array order (a
+   * stable sort — see scoreForSmartSuggest's doc comment).
    *
-   * Phase 2 (judge's raw material): fetch full rows for exactly those ids
-   * via buildTasksByIdsQueryScript (Task.byIdentifier per id — no
-   * flattenedTasks scan) with the caller's requested/default fields, the
-   * same projection an ordinary query would use. Reattach screen_reasons and
-   * restore the phase-1 score order (phase 2 doesn't preserve order on its
-   * own). An id that no longer resolves (completed/deleted between phases)
-   * is dropped — never silently backfilled to the limit — and reported via
-   * metadata.vanished_count plus a key_insight.
+   * Phase 2 (judge's raw material): fetch full rows for exactly the ids in
+   * that rank window via buildTasksByIdsQueryScript (Task.byIdentifier per
+   * id — no flattenedTasks scan) with the caller's requested/default
+   * fields, the same projection an ordinary query would use. Reattach
+   * screen_reasons and restore the phase-1 score order (phase 2 doesn't
+   * preserve order on its own). An id that no longer resolves
+   * (completed/deleted between phases) is dropped — never silently
+   * backfilled to the limit — and reported via metadata.vanished_count plus
+   * a key_insight.
    *
    * total_count semantics (OMN-335 §4/D4, count honesty): the actionable
    * population screened in phase 1 — the same "population the cap was taken
    * from" meaning every other mode's total_count already carries — NOT the
    * size of the returned shortlist. `truncated` follows the same
-   * applyCountHonesty rule as every other mode (offset + returned < population).
+   * applyCountHonesty rule as every other mode (offset + returned < population),
+   * and now means what it says: an offset beyond the ranked candidate count
+   * returns an empty page with total_count still the population.
    */
   private async executeSmartSuggest(compiled: CompiledQuery): Promise<unknown> {
     if (compiled.type !== 'tasks') throw new Error('executeSmartSuggest: wrong type');
@@ -815,8 +822,9 @@ PERFORMANCE:
       fields_mode: fieldsMode,
     };
 
-    // --- Score the WHOLE population in TS; select + order the top `limit` ---
-    const selected = scoreForSmartSuggest(screenRows, limit);
+    // --- Score the WHOLE population in TS; take the ranked window [offset, offset+limit) ---
+    const rankedWindow = scoreForSmartSuggest(screenRows, offset + limit);
+    const selected = rankedWindow.slice(offset);
     if (selected.length === 0) {
       return createTaskResponseV2('tasks', [], baseMetadata, { population, offset, summary: !isNarrowLookup });
     }

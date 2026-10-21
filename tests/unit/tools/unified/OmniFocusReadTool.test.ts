@@ -2137,6 +2137,94 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.total_count).toBe(1);
       expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip when nothing scored
     });
+
+    it('offset pages through the ranked shortlist: consecutive windows are disjoint, consecutive, and in score order', async () => {
+      // 6 candidates with strictly distinct scores (more days overdue → higher
+      // score): t5 is the best scorer, t0 the worst. Rank order (best first):
+      // t5, t4, t3, t2, t1, t0.
+      const makeRow = (i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (i + 1));
+        return { id: `t${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      const population = Array.from({ length: 6 }, (_, i) => makeRow(i));
+
+      // --- offset 0, limit 3 → ranks [0,3) ---
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: population, metadata: { total_matched: 6 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't5', name: 'T5' },
+            { id: 't4', name: 'T4' },
+            { id: 't3', name: 'T3' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const page1 = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 3, offset: 0 },
+      })) as any;
+
+      expect(page1.success).toBe(true);
+      expect(page1.data.tasks.map((t: any) => t.id)).toEqual(['t5', 't4', 't3']);
+      expect(page1.metadata.offset).toBe(0);
+
+      // --- offset 3, limit 3 → ranks [3,6) (the next page) ---
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: population, metadata: { total_matched: 6 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't2', name: 'T2' },
+            { id: 't1', name: 'T1' },
+            { id: 't0', name: 'T0' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const page2 = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 3, offset: 3 },
+      })) as any;
+
+      expect(page2.success).toBe(true);
+      expect(page2.data.tasks.map((t: any) => t.id)).toEqual(['t2', 't1', 't0']);
+      expect(page2.metadata.offset).toBe(3);
+
+      // Disjoint, consecutive rank windows — no overlap, no gap.
+      const page1Ids = page1.data.tasks.map((t: any) => t.id);
+      const page2Ids = page2.data.tasks.map((t: any) => t.id);
+      expect(page1Ids.filter((id: string) => page2Ids.includes(id))).toHaveLength(0);
+    });
+
+    it('offset beyond the candidate count returns an empty page; total_count stays the whole population; no phase-2 call', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'a', flagged: true },
+            { id: 'b', flagged: true },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10, offset: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(0);
+      expect(result.metadata.total_count).toBe(2);
+      expect(result.metadata.offset).toBe(10);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip — nothing to fetch
+    });
   });
 
   describe('OMN-154: projects envelope reports population', () => {
