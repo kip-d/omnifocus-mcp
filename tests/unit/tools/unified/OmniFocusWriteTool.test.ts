@@ -374,6 +374,20 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
+    // OMN-343 (slice 2, gate follow-up): "2026-02-30" matches DATE_REGEX
+    // (format only) but isn't a real calendar date. Asserts the client-visible
+    // McpError text through tool.execute(), not a schema-level safeParse check.
+    it('surfaces the calendar-validity message for a day-of-month overflow in the McpError text', async () => {
+      await expect(
+        tool.execute({
+          mutation: { operation: 'update', target: 'task', id: 'task-1', changes: { dueDate: '2026-02-30' } },
+        }),
+      ).rejects.toThrow(
+        /mutation\.changes\.dueDate: Invalid calendar date: "2026-02-30"\. Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm/,
+      );
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
     it('calls cache.invalidateAfterWrite with affected tags', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({

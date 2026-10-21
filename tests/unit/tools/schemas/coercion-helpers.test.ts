@@ -62,11 +62,48 @@ describe('coerceNumber', () => {
     },
   );
 
+  // OMN-365: bare `Number(val)` silently accepted hex, exponent notation, and
+  // the Infinity/NaN spellings — "0x10" → 16 passed straight through a
+  // bare `min()` bound like the old `offset: coerceNumber(z.number().min(0))`.
+  // Only a plain decimal integer/float string may convert now; anything else
+  // passes through unchanged so the inner schema rejects it.
+  it.each(['0x10', '0X1F', '1e3', '1E3', 'Infinity', '-Infinity', 'NaN', '+5', '5n', '.5', '5.'].map((v) => [v]))(
+    'rejects %j (not a plain decimal string) instead of silently converting it',
+    (input) => {
+      expect(coerceNumber().safeParse(input).success).toBe(false);
+    },
+  );
+
+  it.each([
+    ['16', 16],
+    [' 16 ', 16],
+    ['1.5', 1.5],
+    ['-3', -3],
+    ['-3.25', -3.25],
+  ])('accepts the plain decimal string %j as %j', (input, expected) => {
+    expect(coerceNumber().parse(input)).toBe(expected);
+  });
+
   it('applies the bounds of the inner schema', () => {
     const limit = coerceNumber(z.number().min(1).max(500));
     expect(limit.parse('500')).toBe(500);
     expect(limit.safeParse('0').success).toBe(false);
     expect(limit.safeParse(501).success).toBe(false);
+  });
+
+  // OMN-365: the default inner schema is `.finite()`, so a NATIVE (non-string)
+  // JS Infinity — which the string-only regex guard never sees — is still
+  // rejected rather than silently passing a bare `min()`-only bound.
+  it('rejects native (non-string) Infinity via the default .finite() inner schema', () => {
+    expect(coerceNumber().safeParse(Infinity).success).toBe(false);
+    expect(coerceNumber().safeParse(-Infinity).success).toBe(false);
+  });
+
+  it('a passed-in inner schema without .finite() does NOT reject native Infinity (document the opt-in)', () => {
+    // Documents why every real call site (read-schema.ts limit/offset/daysAhead)
+    // chains its own .finite() — a passed-in inner is used as-is, not auto-widened.
+    const withoutFinite = coerceNumber(z.number().min(0));
+    expect(withoutFinite.safeParse(Infinity).success).toBe(true);
   });
 });
 

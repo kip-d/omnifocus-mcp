@@ -79,24 +79,22 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ clearDueDate: true, dueDate: '2026-03-01' })).toEqual({ dueDate: null });
   });
 
-  // OMN-343 (slice 1, flipped for slice 2): the NL-string case this test used
-  // to pin ("not-a-date") is now rejected UPSTREAM at the schema boundary —
-  // UpdateChangesSchema's DATE_REGEX (write-schema.ts) never lets a
-  // non-conforming format reach this function at all, so the real call path
-  // no longer hits sanitizeDateField's catch block for that case. The
-  // try/catch here stays as defense-in-depth for a narrower residual: a
-  // regex-conforming but CALENDAR-invalid date (e.g. "2026-02-30") that
-  // `localToUTC`'s `new Date(...)` parsing still rejects. This test exercises
-  // that residual path directly (bypassing the schema, as a unit test of
-  // this function necessarily does) and pins the still-silent drop — a
-  // narrower, documented gap, not the broad one OMN-343 closed.
-  it('drops a calendar-invalid date when localToUTC throws (residual defense-in-depth, not a schema-reachable case)', () => {
+  // OMN-343 (slice 1, flipped for slice 2 again): the NL-string case this test
+  // originally pinned ("not-a-date") was rejected upstream at the schema
+  // boundary in slice 1 (DATE_REGEX). Slice 2 closed the REMAINING gap too:
+  // write-schema.ts's `isCalendarValidDate` refine now rejects every
+  // calendar-invalid value (month 13, hour 25, "2026-02-30", …) in addition to
+  // format — so there is no longer any schema-validated string `localToUTC`
+  // can fail to parse. sanitizeDateField therefore RETHROWS instead of
+  // catching and dropping (no silent data loss anywhere on this path). This
+  // test exercises that path directly (bypassing the schema, as a unit test
+  // of this function necessarily does, since the schema would reject
+  // "2026-02-30" before this function ever saw it) and pins the rethrow.
+  it('rethrows (does not silently drop) when localToUTC fails on an already schema-validated date', () => {
     mockedLocalToUTC.mockImplementationOnce(() => {
       throw new Error('Invalid date');
     });
-    const result = sanitizeTaskUpdates({ dueDate: '2026-02-30' });
-    // Should not include dueDate if conversion fails
-    expect(result.dueDate).toBeUndefined();
+    expect(() => sanitizeTaskUpdates({ dueDate: '2026-02-30' })).toThrow('Invalid date');
   });
 
   // --- Numeric fields ---

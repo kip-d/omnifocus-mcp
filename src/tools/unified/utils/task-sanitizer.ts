@@ -4,7 +4,7 @@
  * Task update sanitization shared by OmniFocusWriteTool and any future consumers.
  * Originally extracted from the legacy ManageTaskTool.sanitizeUpdates().
  *
- * OMN-343 (slice 2) + OMN-362/364/365: this used to be the ONLY gate between
+ * OMN-343 (slice 2) + OMN-362/364: this used to be the ONLY gate between
  * an arbitrary update payload and the mutation builder — it filtered out
  * malformed types (non-string name, non-numeric estimatedMinutes, a
  * target-mismatched field, …) by silently DROPPING them, which is exactly the
@@ -22,9 +22,10 @@
  * - merging a clear-flag into its value (clearDueDate → dueDate: null)
  * - forwarding the rest verbatim
  *
- * No private coerceBoolean/coerceNumber (OMN-364) and no hex/exponent-string
- * numeric parsing (OMN-365's surface on this file) — trust the Zod-validated
- * input. A caller invoking this function directly with malformed types (as
+ * No private coerceBoolean/coerceNumber here (OMN-364; the shared
+ * coerceNumber's decimal-only-string fix is OMN-365, in
+ * src/tools/schemas/coercion-helpers.ts, not this file) — trust the
+ * Zod-validated input. A caller invoking this function directly with malformed types (as
  * only the unit tests now do, since production callers always pass
  * schema-validated `compiled.changes`) gets those values forwarded as-is,
  * not silently stripped.
@@ -41,13 +42,15 @@ const logger = createLogger('task-sanitizer');
  * Handles: clear-flag → null, string → localToUTC conversion, explicit null passthrough.
  * Explicit null is always allowed (harmless for fields that also have a clear flag).
  *
- * The try/catch around localToUTC stays as defense-in-depth: UpdateChangesSchema's
- * DATE_REGEX (OMN-343 slice 1) rejects non-conforming FORMATS upstream, but a
- * regex-conforming, calendar-invalid date (e.g. "2026-02-30") can still fail
- * `new Date(...)` parsing inside localToUTC. A thrown conversion here is
- * logged and the field is dropped rather than propagating a half-built
- * update — unlike the slice-1 fix, this residual case is a narrow calendar-
- * validity gap, not the broad NL-string silent-drop OMN-343 was about.
+ * OMN-343 (slice 2): UpdateChangesSchema's DATE_REGEX + calendar-validity
+ * refine (write-schema.ts's `isCalendarValidDate`) now reject every
+ * non-conforming FORMAT and every calendar-invalid value (month 13, hour 25,
+ * "2026-02-30", …) before `updates` is ever built — there is no longer a
+ * schema-validated string this function's `localToUTC` call can fail to
+ * parse. A throw here means the schema let something through it shouldn't
+ * have (a genuine bug, e.g. a schema/conversion drift), not a legitimate
+ * user input to silently drop — so it RETHROWS instead of catching and
+ * dropping the field. No silent data loss anywhere on this path.
  */
 function sanitizeDateField(
   updates: Record<string, unknown>,
@@ -64,13 +67,9 @@ function sanitizeDateField(
     logger.debug(`Processing ${fieldName}:`, { value, type: typeof value });
 
     if (typeof value === 'string') {
-      try {
-        const utcDate = localToUTC(value, dateType);
-        logger.debug(`${fieldName} converted to UTC:`, { original: value, converted: utcDate });
-        sanitized[fieldName] = utcDate;
-      } catch (error) {
-        logger.warn(`Invalid ${fieldName} format: ${value}`, error);
-      }
+      const utcDate = localToUTC(value, dateType);
+      logger.debug(`${fieldName} converted to UTC:`, { original: value, converted: utcDate });
+      sanitized[fieldName] = utcDate;
     } else if (value === null) {
       // Allow explicit null to clear the date
       sanitized[fieldName] = null;

@@ -26,6 +26,79 @@ const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_ONLY_FORMAT_MSG = 'Date format: YYYY-MM-DD (date only — RRULE UNTIL has no time component)';
 
+// OMN-343 (slice 2, residual F1/F2/F8): DATE_REGEX/DATE_ONLY_REGEX only check
+// FORMAT — they accept calendar-invalid values like "2026-13-01" (month 13),
+// "2026-10-21 25:00" (hour 25), and "2026-02-30" (day-of-month overflow).
+// Downstream, `localToUTC`'s `new Date(...)` either throws (month/hour/minute
+// out of JS's parseable range) or silently ROLLS OVER ("2026-02-30" becomes
+// 2026-03-02). On a task update, sanitizeDateField's catch then DROPPED the
+// field (silent no-op success) while handleProjectUpdateDirect's bare
+// localToUTC call threw — the exact F1/F2 target disagreement slice 1 closed
+// for non-conforming FORMATS survives for conforming-but-invalid ones. Fixed
+// at the schema, not the sanitizer, so every route (single, batch, create,
+// update, complete, repetitionRule.endDate) rejects identically before any
+// script runs.
+const DAYS_IN_MONTH_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+/** Last day of `month` (1-12) in `year`, leap-year aware (standard UTC day-0-of-next-month trick). */
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * True if `value` (already known to match DATE_REGEX or DATE_ONLY_REGEX — the
+ * `.regex()` check runs first in the schemas below) is also a real calendar
+ * date/time: month 1-12, day 1..daysInMonth(year, month), and — when a time
+ * component is present — hour 0-23, minute/second 0-59.
+ */
+function isCalendarValidDate(value: string): boolean {
+  const m = DAYS_IN_MONTH_RE.exec(value);
+  if (!m) return false; // defensive — the .regex() check already guarantees this matches
+  // `exec`'s static array type doesn't model that the time-component groups
+  // are OPTIONAL (unmatched groups are `undefined` at runtime even though
+  // TS's RegExpExecArray types every element as `string`) — cast narrows to
+  // the true runtime shape so the undefined-checks below aren't flagged as
+  // statically-always-true.
+  const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = m as unknown as [
+    string,
+    string,
+    string,
+    string,
+    string | undefined,
+    string | undefined,
+    string | undefined,
+  ];
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > daysInMonth(year, month)) return false;
+  if (hourStr !== undefined) {
+    if (Number(hourStr) > 23) return false;
+    if (Number(minuteStr) > 59) return false;
+    if (secondStr !== undefined && Number(secondStr) > 59) return false;
+  }
+  return true;
+}
+
+const calendarInvalidMessage = (formatMsg: string) => (value: string) => ({
+  message: `Invalid calendar date: "${value}". ${formatMsg}`,
+});
+
+/** Shared date-or-datetime string schema (DATE_REGEX + calendar-validity). One
+ * definition so every date field (create/update dueDate/deferDate/plannedDate,
+ * complete's completionDate, single and batch) rejects the same inputs the
+ * same way. */
+const dateTimeStringSchema = () =>
+  z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).refine(isCalendarValidDate, calendarInvalidMessage(DATE_FORMAT_MSG));
+
+/** Shared date-only string schema (DATE_ONLY_REGEX + calendar-validity) — repetitionRule.endDate. */
+const dateOnlyStringSchema = () =>
+  z
+    .string()
+    .regex(DATE_ONLY_REGEX, DATE_ONLY_FORMAT_MSG)
+    .refine(isCalendarValidDate, calendarInvalidMessage(DATE_ONLY_FORMAT_MSG));
+
 // Repetition rule schema — derived from RepetitionRule contract via `satisfies`.
 // Constrains output type only (input is `unknown` to allow MCP bridge string coercion).
 // If the contract changes a field type, `satisfies` errors here.
@@ -56,7 +129,7 @@ const RepetitionRuleSchema = z
       .optional(),
     weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
     setPositions: z.array(z.number().min(-366).max(366)).optional(),
-    endDate: z.string().regex(DATE_ONLY_REGEX, DATE_ONLY_FORMAT_MSG).optional(),
+    endDate: dateOnlyStringSchema().optional(),
     // OmniFocus 4.7+ repetition method control
     method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
     scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
@@ -216,9 +289,9 @@ export const CreateDataSchema = z
       project: z.union([z.string(), z.null()]).optional(),
       parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
       tags: z.array(z.string()).optional(),
-      dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-      deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
-      plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+      dueDate: dateTimeStringSchema().optional(),
+      deferDate: dateTimeStringSchema().optional(),
+      plannedDate: dateTimeStringSchema().optional(),
       flagged: coerceBoolean().optional(),
       estimatedMinutes: z
         .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
@@ -257,9 +330,9 @@ export const UpdateChangesSchema = z
       // (task update: success, change ignored) while handleProjectUpdateDirect's
       // bare localToUTC call threw (project update: error) — the same input
       // disagreed by target. null still validates (clears the field).
-      dueDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
-      deferDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
-      plannedDate: z.union([z.string().regex(DATE_REGEX, DATE_FORMAT_MSG), z.null()]).optional(),
+      dueDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
+      deferDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
+      plannedDate: z.union([dateTimeStringSchema(), z.null()]).optional(),
       clearDueDate: coerceBoolean().optional(),
       clearDeferDate: coerceBoolean().optional(),
       clearPlannedDate: coerceBoolean().optional(),
@@ -322,7 +395,7 @@ const BatchOperationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']),
     id: z.string(),
-    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    completionDate: dateTimeStringSchema().optional(),
   }),
   strictObj({
     operation: z.literal('delete'),
@@ -381,7 +454,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     // (and the batch-complete sibling at L187) — without it NL input
     // ("tomorrow") slipped through Zod and surfaced as uncategorized
     // INTERNAL_ERROR downstream instead of a clean VALIDATION_ERROR.
-    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+    completionDate: dateTimeStringSchema().optional(),
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Delete operation
