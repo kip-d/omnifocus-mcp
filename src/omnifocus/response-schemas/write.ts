@@ -31,10 +31,17 @@ const ReviewListProjectSchema = z
 
 /**
  * Review-list metadata — emitted by projects-for-review.ts.
- * Source: metadata: {total_found, filter_applied (passthrough echo), generated_at, search_criteria (passthrough echo)}.
- * The metadata literal always emits all four keys on the success branch.
+ * Source: metadata: {total_found, filter_applied (passthrough echo), generated_at, search_criteria
+ * (passthrough echo), capped, cap, review_summary}. The metadata literal always emits all seven
+ * keys on the success branch.
  * filter_applied echoes the raw filter param → z.unknown() (always-present echo, NOT optional).
  * search_criteria echoes derived criteria → z.unknown() (always-present echo, NOT optional).
+ * OMN-340 (slice 2): total_found is now the TRUE pre-cap count of every project matching the
+ * review filter (previously the post-cap `projects.length`). capped/cap disclose whether the
+ * returned `projects` array (sorted by nextReviewDate, then sliced) omits any of them.
+ * review_summary counts the WHOLE matched population (not just the capped `projects` returned
+ * alongside it) using the same overdue/due_today/due_soon/no_schedule classification
+ * OmniFocusAnalyzeTool.reviewsListForReview applies per row.
  */
 const ReviewListMetadataSchema = z
   .object({
@@ -45,6 +52,17 @@ const ReviewListMetadataSchema = z
     filter_applied: z.record(z.unknown()),
     generated_at: isoDate,
     search_criteria: z.record(z.unknown()),
+    capped: z.boolean(),
+    cap: z.number(),
+    review_summary: z
+      .object({
+        total_projects: z.number(),
+        overdue: z.number(),
+        due_today: z.number(),
+        due_soon: z.number(),
+        no_schedule: z.number(),
+      })
+      .strict(),
   })
   .strict();
 

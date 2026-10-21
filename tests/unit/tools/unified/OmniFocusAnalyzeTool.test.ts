@@ -1928,6 +1928,94 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.metadata.from_cache).toBe(true);
     });
 
+    it('OMN-340: cache key carries a v2 token (bumped — old post-cap total_found/review_summary payloads must not be served)', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ success: true, projects: [] }));
+
+      await tool.execute({
+        analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+      });
+
+      expect(mockCache.get.mock.calls[0][0]).toBe('reviews');
+      const cacheKey = mockCache.get.mock.calls[0][1];
+      expect(JSON.parse(cacheKey).v).toBe(2);
+    });
+
+    it('OMN-340: review_summary and coverage count the WHOLE matched population, not just the capped rows returned', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      // The script matched 150 projects total but only returns the 100
+      // nearest-due (here slimmed to 2 rows for the mock) — review_summary
+      // and metadata.total_found/capped/cap cover the full 150, computed by
+      // the script over the uncapped population (OMN-340 slice 2).
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          success: true,
+          projects: [
+            { id: 'p1', name: 'Nearest due' },
+            { id: 'p2', name: 'Next nearest' },
+          ],
+          metadata: {
+            total_found: 150,
+            filter_applied: {},
+            generated_at: '2026-06-12T10:00:00.000Z',
+            search_criteria: {},
+            capped: true,
+            cap: 100,
+            review_summary: { total_projects: 150, overdue: 20, due_today: 3, due_soon: 12, no_schedule: 60 },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.projects.length).toBe(2);
+      // review_summary is the script's FULL-population counts, not
+      // recomputed from the 2 capped rows actually returned.
+      expect(res.metadata.review_summary).toEqual({
+        total_projects: 150,
+        overdue: 20,
+        due_today: 3,
+        due_soon: 12,
+        no_schedule: 60,
+      });
+      // coverage: total = the true matched count, returned = detail rows
+      // actually carried, capped true (150 > cap 100).
+      expect(res.metadata.coverage).toEqual({ total: 150, returned: 2, capped: true, cap: 100 });
+      // total_found itself must also be the true pre-cap count.
+      expect(res.metadata.total_found).toBe(150);
+    });
+
+    it('OMN-340: coverage.capped is false when the true total does not exceed the cap', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          success: true,
+          projects: [{ id: 'p1', name: 'Only one' }],
+          metadata: {
+            total_found: 1,
+            filter_applied: {},
+            generated_at: '2026-06-12T10:00:00.000Z',
+            search_criteria: {},
+            capped: false,
+            cap: 100,
+            review_summary: { total_projects: 1, overdue: 0, due_today: 0, due_soon: 0, no_schedule: 1 },
+          },
+        }),
+      );
+
+      const res: any = await tool.execute({
+        analysis: { type: 'manage_reviews', params: { operation: 'list_for_review' } },
+      });
+
+      expect(res.metadata.coverage).toEqual({ total: 1, returned: 1, capped: false, cap: 100 });
+    });
+
     it('marks project as reviewed and invalidates caches', async () => {
       mockOmni.buildScript.mockReturnValue('script');
       mockOmni.executeJson.mockResolvedValue({ ok: true, id: 'p1' });
