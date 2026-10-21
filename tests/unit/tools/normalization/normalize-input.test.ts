@@ -48,6 +48,28 @@ describe('parseWithNormalization — invariants', () => {
     expect(r.success).toBe(false);
     expect(r.applied).toEqual([]);
   });
+
+  // OMN-343 (slice 2, matrix row 2): a target-mismatched field (write-schema.ts's
+  // superRefine) is a well-formed envelope with a wrong FIELD, not a shape the
+  // leniencies repair (wrapper-lift/stringified-wrapper/field-alias/data-hoist
+  // all target envelope SHAPE problems). None of them touch field presence, so
+  // normalization must be a no-op here and the caller must see the original,
+  // steering superRefine message — not a bare Zod path, and not silently
+  // swallowed or rewritten by a normalization retry.
+  it('a target-mismatched field is not "fixed" by normalization — the original steering error survives', () => {
+    const args = {
+      mutation: { operation: 'create', target: 'task', data: { name: 'Buy milk', folder: 'Errands' } },
+    };
+    const original = WriteSchema.safeParse(args);
+    expect(original.success).toBe(false);
+
+    const r = parseWithNormalization(WriteSchema, args, 'omnifocus_write');
+    expect(r.success).toBe(false);
+    expect(r.applied).toEqual([]); // no leniency fired — nothing here is an envelope-shape problem
+    expect(r.error).toBeInstanceOf(z.ZodError);
+    const messages = r.error!.issues.map((i) => i.message);
+    expect(messages.some((m) => m.includes('"folder" is project-only'))).toBe(true);
+  });
 });
 
 describe('leniency #1 — wrapper-lift (malformed-in → canonical-out)', () => {

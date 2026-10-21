@@ -110,9 +110,35 @@ const ReviewIntervalObjectSchema = z
     return obj.steps * multiplier;
   });
 
-const ReviewIntervalSchema = z
-  .union([z.number(), z.string().transform((v) => parseInt(v, 10)), ReviewIntervalObjectSchema])
+const ReviewIntervalNumericSchema = z
+  .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
   .pipe(z.number().min(1));
+
+// OMN-343 (slice 2, live-found gap from slice 1): a plain z.union([number,
+// string, object]) collapses ALL branch failures into a single top-level
+// `invalid_union` issue with a generic "Invalid input" message — the nested
+// REVIEW_UNIT_MSG (e.g. for `{steps:1, unit:'quarter'}`) is buried inside
+// `unionErrors` and never reaches the client (base.ts's VALIDATION_ERROR text
+// only reads the TOP-LEVEL issue's `.message`). Dispatch on the input SHAPE
+// instead of unioning: an object goes through ReviewIntervalObjectSchema
+// directly, so ITS issues (unit enum, strict, steps) surface at their own
+// path with their own message, not wrapped in a union. Number/string go
+// through the numeric branch the same way. `ctx.addIssue` re-homes each
+// sub-schema issue under the current path (zod concatenates), so e.g.
+// `changes.reviewInterval` + the object schema's `unit` issue path →
+// `changes.reviewInterval.unit`.
+const ReviewIntervalSchema = z.unknown().transform((val, ctx) => {
+  if (isPlainObject(val)) {
+    const result = ReviewIntervalObjectSchema.safeParse(val);
+    if (result.success) return result.data;
+    for (const issue of result.error.issues) ctx.addIssue(issue);
+    return z.NEVER;
+  }
+  const result = ReviewIntervalNumericSchema.safeParse(val);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) ctx.addIssue(issue);
+  return z.NEVER;
+});
 
 // ── OMN-97: strict everywhere + actionable redirects ─────────────────
 // `.strict()` does NOT propagate through discriminatedUnion/union (prior art
@@ -412,6 +438,91 @@ const TASK_ON_HOLD_MESSAGE =
   'status "on_hold" is project-only — tasks accept completed, dropped, or active (reopen). ' +
   'To postpone a task set deferDate; to pause it with its project, put the project on_hold.';
 
+// ── OMN-343 (slice 2, D1(b)): target-mismatch field table ────────────────────
+// A field settable on one target but not the other previously validated for
+// BOTH (one CreateDataSchema/UpdateChangesSchema serves task and project) and
+// was then silently dropped by the handler that doesn't read it (spec F3-F7).
+// These sets are verified against the actual consuming code, not just the
+// TaskCreateData/ProjectCreateData/TaskUpdateData/ProjectUpdateData contract
+// interfaces: every lowering in src/contracts/ast/mutation/defs.ts carries a
+// compile-time exhaustiveness guard (`_exhaustive: Record<keyof T, true>`)
+// enumerating exactly the fields it consumes — that guard is the ground
+// truth these lists were read off, not the schema's own comments (which had
+// drifted: `sequential`/`status` were commented "Project-specific" above
+// `folder` in CreateDataSchema despite being legal on tasks too).
+//
+// Fields NOT listed either way (name, note, tags, addTags, removeTags,
+// dueDate/deferDate/plannedDate + their clear flags, flagged, sequential) are
+// genuinely common to both targets — confirmed by both exhaustiveness guards
+// consuming them. `status` is also common on UPDATE (task: completed|dropped
+// |active; project: all four, on_hold handled above) so it is deliberately
+// absent from the UPDATE tables; CREATE has no task-side status support at
+// all (TaskCreateData has no `status` field — handleTaskCreate never reads
+// compiled.data.status), so CREATE's PROJECT_ONLY table includes it.
+const CREATE_TASK_ONLY_FIELDS = ['parentTaskId', 'estimatedMinutes', 'repetitionRule', 'project'] as const;
+const CREATE_PROJECT_ONLY_FIELDS = ['folder', 'status', 'reviewInterval'] as const;
+const UPDATE_TASK_ONLY_FIELDS = [
+  'parentTaskId',
+  'estimatedMinutes',
+  'clearEstimatedMinutes',
+  'repetitionRule',
+  'project',
+] as const;
+const UPDATE_PROJECT_ONLY_FIELDS = ['folder', 'reviewInterval'] as const;
+
+// One message per field: names the field AND the owning target, with brief
+// steering toward the right alternative (mirrors TASK_ON_HOLD_MESSAGE's style).
+const TARGET_MISMATCH_MESSAGES: Record<string, string> = {
+  parentTaskId:
+    '"parentTaskId" is task-only — projects cannot be nested under a task. Omit it, or use "folder" to place the project.',
+  estimatedMinutes:
+    '"estimatedMinutes" is task-only — projects have no time estimate. Set it on the project\'s tasks instead.',
+  clearEstimatedMinutes: '"clearEstimatedMinutes" is task-only — projects have no time estimate to clear.',
+  repetitionRule:
+    '"repetitionRule" is task-only — projects do not repeat. Set repetitionRule on the project\'s tasks instead.',
+  project:
+    '"project" is task-only — a project cannot be filed inside another project. Use "folder" to organize projects into folders.',
+  folder:
+    '"folder" is project-only — tasks don\'t have a folder. Set the task\'s "project" to file it, or "parentTaskId" for a subtask.',
+  status:
+    '"status" is project-only on create — tasks have no status at creation. Create the task, then update it with changes.status (completed|dropped|active).',
+  reviewInterval:
+    '"reviewInterval" is project-only — tasks don\'t have reviews. Set reviewInterval on the project instead.',
+};
+
+function targetMismatchMessage(field: string, target: 'task' | 'project'): string {
+  return (
+    TARGET_MISMATCH_MESSAGES[field] ?? `"${field}" is not supported on ${target === 'project' ? 'projects' : 'tasks'}.`
+  );
+}
+
+/**
+ * Add a VALIDATION_ERROR issue for every field present in `obj` that the
+ * given `target` doesn't support, per the create/update field tables above.
+ * Shared by the single-item, `data`-alias, and batch-item checks below so
+ * the three routes can't drift apart (same discipline as isTaskOnHold).
+ */
+function addTargetMismatchIssues(
+  ctx: z.RefinementCtx,
+  basePath: Array<string | number>,
+  target: 'task' | 'project',
+  obj: Record<string, unknown> | undefined,
+  taskOnlyFields: readonly string[],
+  projectOnlyFields: readonly string[],
+): void {
+  if (!obj) return;
+  const forbidden = target === 'project' ? taskOnlyFields : projectOnlyFields;
+  for (const field of forbidden) {
+    if (obj[field] !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [...basePath, field],
+        message: targetMismatchMessage(field, target),
+      });
+    }
+  }
+}
+
 // Main write schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const WriteSchema = z
@@ -462,6 +573,63 @@ export const WriteSchema = z
       m.operations.forEach((op, i) => {
         if (op.operation === 'update' && isTaskOnHold(op.target, op.changes)) {
           onHold(['mutation', 'operations', i, 'changes', 'status']);
+        }
+      });
+    }
+
+    // OMN-343 (slice 2): target-mismatched fields (F3-F7) — a field settable
+    // on one target but not the other must reject, not silently vanish. Fires
+    // for single create, single update (both the `changes` and `data`
+    // aliases), and per batch item (create and update sub-ops).
+    if (m.operation === 'create') {
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'data'],
+        m.target,
+        m.data as Record<string, unknown> | undefined,
+        CREATE_TASK_ONLY_FIELDS,
+        CREATE_PROJECT_ONLY_FIELDS,
+      );
+    }
+    if (m.operation === 'update') {
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'changes'],
+        m.target,
+        m.changes as Record<string, unknown> | undefined,
+        UPDATE_TASK_ONLY_FIELDS,
+        UPDATE_PROJECT_ONLY_FIELDS,
+      );
+      addTargetMismatchIssues(
+        ctx,
+        ['mutation', 'data'],
+        m.target,
+        m.data as Record<string, unknown> | undefined,
+        UPDATE_TASK_ONLY_FIELDS,
+        UPDATE_PROJECT_ONLY_FIELDS,
+      );
+    }
+    if (m.operation === 'batch') {
+      m.operations.forEach((op, i) => {
+        if (op.operation === 'create') {
+          addTargetMismatchIssues(
+            ctx,
+            ['mutation', 'operations', i, 'data'],
+            op.target,
+            op.data as Record<string, unknown> | undefined,
+            CREATE_TASK_ONLY_FIELDS,
+            CREATE_PROJECT_ONLY_FIELDS,
+          );
+        }
+        if (op.operation === 'update') {
+          addTargetMismatchIssues(
+            ctx,
+            ['mutation', 'operations', i, 'changes'],
+            op.target,
+            op.changes as Record<string, unknown> | undefined,
+            UPDATE_TASK_ONLY_FIELDS,
+            UPDATE_PROJECT_ONLY_FIELDS,
+          );
         }
       });
     }

@@ -141,6 +141,10 @@ FIELD PLACEMENT (fields go INSIDE data/changes, not beside them):
 - Unknown or misplaced keys are rejected (not silently dropped). Common fixes:
   estimate → estimatedMinutes; context → tags (no contexts in OF3+);
   priority → flagged (no priority levels); subtasks → a batch op with parentTempId.
+- A field on the wrong target also rejects (not silently ignored): task-only
+  fields (project, parentTaskId, estimatedMinutes, clearEstimatedMinutes,
+  repetitionRule) on a project, or project-only fields (folder, status at
+  create, reviewInterval) on a task — the error names the field and the target.
 
 FOLDER CREATION:
 - operation: "create_folder"
@@ -245,15 +249,15 @@ SAFETY:
     const createDataProperties: Record<string, unknown> = {
       name: { type: 'string' },
       note: { type: 'string' },
-      project: { type: 'string', description: 'name or ID; omit/null = inbox' },
-      parentTaskId: { type: 'string', description: 'subtask of this task ID' },
+      project: { type: 'string', description: 'task-only: name or ID; omit/null = inbox' },
+      parentTaskId: { type: 'string', description: 'task-only: subtask of this task ID' },
       tags: { type: 'array', items: { type: 'string' }, description: 'no contexts in OF3+ — use tags' },
       dueDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       deferDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       plannedDate: { type: 'string', description: 'YYYY-MM-DD [HH:mm]' },
       flagged: { type: 'boolean', description: 'no priority levels — use flagged' },
-      estimatedMinutes: { type: 'number', description: 'minutes (not "estimate")' },
-      repetitionRule: { type: 'object' },
+      estimatedMinutes: { type: 'number', description: 'task-only: minutes (not "estimate")' },
+      repetitionRule: { type: 'object', description: 'task-only: see REPETITION RULES below' },
       folder: { type: 'string', description: 'project-only: name/path/ID; bad path errors; null→root (see desc)' },
       sequential: { type: 'boolean', description: 'projects + task action groups' },
       status: {
@@ -277,7 +281,7 @@ SAFETY:
       clearDueDate: { type: 'boolean' },
       clearDeferDate: { type: 'boolean' },
       clearPlannedDate: { type: 'boolean' },
-      clearEstimatedMinutes: { type: 'boolean' },
+      clearEstimatedMinutes: { type: 'boolean', description: 'task-only' },
     };
     return {
       type: 'object',
