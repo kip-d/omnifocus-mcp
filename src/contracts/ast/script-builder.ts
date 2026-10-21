@@ -767,14 +767,135 @@ function generateSortComparator(sort: SortSpec[]): string {
   }`;
 }
 
+/** Shared context for the inbox script's sorted/unsorted body templates. */
+interface InboxScriptCtx {
+  matchesFilterBlock: string;
+  completionCheck: string;
+  fieldProjection: string;
+  folderExistsGuard: string;
+  filterDescription: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * OMN-335 slice 2 (D1): sort-before-slice path for the inbox script. Stays on
+ * the small `inbox` collection (never routes through buildFilteredTasksScript,
+ * which would move inbox reads onto the whole-DB `flattenedTasks` scan).
+ * Mirrors buildSortedScript — the sort key for each row is captured from the
+ * RAW task (TASK_SORT_VALUE_EXPRS) at push time, so it sorts correctly
+ * regardless of what `fields` requested (the OMN-305 trap).
+ */
+function buildSortedInboxScript(ctx: InboxScriptCtx, sort: SortSpec[]): string {
+  const sortComparator = generateSortComparator(sort);
+  const sortKeyExpr = `[${sort.map((s) => TASK_SORT_VALUE_EXPRS[s.field]).join(', ')}]`;
+  const offsetMetadata = ctx.offset > 0 ? `offset_applied: ${ctx.offset},` : '';
+
+  return `
+(() => {
+  ${ctx.folderExistsGuard}
+  const allResults = [];
+
+  ${ctx.matchesFilterBlock}
+
+  inbox.forEach(task => {
+    // Exclude completed tasks by default
+    ${ctx.completionCheck}
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    const __row = {
+      ${ctx.fieldProjection}
+    };
+    __row.__sortKey = ${sortKeyExpr};
+    allResults.push(__row);
+  });
+
+  // Sort all matched results in-script before applying limit
+  allResults.sort(${sortComparator});
+
+  // Slice for pagination
+  const sliced = allResults.slice(${ctx.offset}, ${ctx.offset} + ${ctx.limit});
+
+  // __sortKey is a scratch field for the comparator only — never part of the response.
+  sliced.forEach(r => { delete r.__sortKey; });
+
+  return JSON.stringify({
+    tasks: sliced,
+    count: sliced.length,
+    total_matched: allResults.length,
+    ${offsetMetadata}
+    sorted_in_script: true,
+    mode: 'inbox_ast',
+    filter_description: ${JSON.stringify(ctx.filterDescription)}
+  });
+})()
+`;
+}
+
+/** No-sort fast path for the inbox script — unchanged shape from before slice 2. */
+function buildUnsortedInboxScript(ctx: InboxScriptCtx): string {
+  const useOffset = ctx.offset > 0;
+  const offsetVars = useOffset ? `const offset = ${ctx.offset};\n  let skipped = 0;` : '';
+  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
+  const offsetMetadata = useOffset ? `offset_applied: ${ctx.offset},` : '';
+
+  return `
+(() => {
+  ${ctx.folderExistsGuard}
+  const results = [];
+  let count = 0;
+  let totalMatched = 0;
+  const limit = ${ctx.limit};
+  ${offsetVars}
+
+  ${ctx.matchesFilterBlock}
+
+  inbox.forEach(task => {
+    // Exclude completed tasks by default
+    ${ctx.completionCheck}
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    // OMN-154: count every match; the limit caps only the projected rows
+    totalMatched++;
+    if (count >= limit) return;
+
+    ${offsetCheck}
+
+    results.push({
+      ${ctx.fieldProjection}
+    });
+    count++;
+  });
+
+  return JSON.stringify({
+    tasks: results,
+    count: results.length,
+    total_matched: totalMatched,
+    ${offsetMetadata}
+    mode: 'inbox_ast',
+    filter_description: ${JSON.stringify(ctx.filterDescription)}
+  });
+})()
+`;
+}
+
 /**
  * Build an OmniJS script for inbox tasks with optional additional filters
  *
  * This function accepts a raw TaskFilter and normalizes it internally
  * after merging with the inbox filter (inInbox: true).
+ *
+ * OMN-335 slice 2 (D1): `options.sort` sorts the full inbox match population
+ * before slicing to limit/offset (buildSortedInboxScript), instead of only
+ * capping in DB order (buildUnsortedInboxScript, the unchanged fast path when
+ * sort is unset). Always stays on the `inbox` collection.
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false, noteTruncateLength } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
 
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
@@ -800,63 +921,30 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
       ? '' // AST handles it if explicitly set in filter
       : defaultCompletionCheck;
 
-  // Only include offset logic when offset > 0
-  const useOffset = offset > 0;
-  const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
-  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
-  const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
-
   // OMN-218 (review round 2): inbox mode was missing the guard entirely — a folder
   // filter combined with mode:'inbox' bypassed the loud-error path. Inbox tasks
   // structurally have no containing folder (the filter always matches nothing), but
   // an UNRESOLVABLE folder reference must still error, independent of match count.
   const folderExistsGuard = emitFolderNotFoundGuardsForFilter(filter, 'folder');
 
-  const script = `
-(() => {
-  ${folderExistsGuard}
-  const results = [];
-  let count = 0;
-  let totalMatched = 0;
-  const limit = ${limit};
-  ${offsetVars}
-
-  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
+  const matchesFilterBlock = `${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate for inbox
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
     return ${filterCode.predicate};
-  }
+  }`;
 
-  inbox.forEach(task => {
-    // Exclude completed tasks by default
-    ${completionCheck}
+  const ctx: InboxScriptCtx = {
+    matchesFilterBlock,
+    completionCheck,
+    fieldProjection,
+    folderExistsGuard,
+    filterDescription,
+    limit,
+    offset,
+  };
 
-    // Apply AST-generated filter
-    if (!matchesFilter(task)) return;
-
-    // OMN-154: count every match; the limit caps only the projected rows
-    totalMatched++;
-    if (count >= limit) return;
-
-    ${offsetCheck}
-
-    results.push({
-      ${fieldProjection}
-    });
-    count++;
-  });
-
-  return JSON.stringify({
-    tasks: results,
-    count: results.length,
-    total_matched: totalMatched,
-    ${offsetMetadata}
-    mode: 'inbox_ast',
-    filter_description: ${JSON.stringify(filterDescription)}
-  });
-})()
-`;
+  const script = sort && sort.length > 0 ? buildSortedInboxScript(ctx, sort) : buildUnsortedInboxScript(ctx);
 
   return {
     script: script.trim(),

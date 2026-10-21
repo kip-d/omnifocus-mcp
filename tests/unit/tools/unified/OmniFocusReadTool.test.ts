@@ -1040,17 +1040,23 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
-  // ─── Inbox + Sort (sortedInScript fix) ──────────────────────────
+  // ─── Inbox + Sort (OMN-335 slice 2: embedded in-script) ──────────────────
 
   describe('inbox mode with user-specified sort', () => {
-    it('applies sort post-hoc for inbox queries (sort not lost)', async () => {
-      // Inbox tasks returned unsorted from script
+    it('sorts via buildInboxScript (sort-before-slice), not post-hoc (OMN-335 slice 2)', async () => {
+      // buildInboxScript now embeds the sort itself (slice 2, D1): it sorts the
+      // FULL inbox match population before slicing to limit/offset, so execJson
+      // (mocked here) returns already-sorted rows — unlike the pre-slice-2 world,
+      // where inbox sort was a post-hoc re-sort of whatever DB order the script
+      // returned. Pin both the pass-through order AND the script shape so a
+      // regression back to post-hoc-only sorting is caught even if this mock
+      // data happened to already look sorted.
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
-            { id: 't2', name: 'Banana', dueDate: '2026-03-01T17:00:00.000Z' },
             { id: 't1', name: 'Apple', dueDate: '2026-02-15T17:00:00.000Z' },
+            { id: 't2', name: 'Banana', dueDate: '2026-03-01T17:00:00.000Z' },
             { id: 't3', name: 'Cherry', dueDate: null },
           ],
         },
@@ -1065,10 +1071,13 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      // Tasks should be sorted by name ascending (post-hoc sort applied)
       const names = result.data.tasks.map((t: any) => t.name);
       expect(names).toEqual(['Apple', 'Banana', 'Cherry']);
       expect(result.metadata.sort_applied).toBe(true);
+
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('inbox.forEach');
+      expect(script).toContain('allResults.sort(');
     });
   });
 
@@ -1390,6 +1399,27 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.filters_applied).toMatchObject({ inInbox: true });
     });
 
+    // OMN-367: executeCountOnly now routes through the shared isInboxRoute
+    // predicate (mode==='inbox' || filter.inInbox===true) instead of a
+    // hand-rolled `mode === 'inbox' && !countFilter.inInbox` check. This test
+    // pins explicit mode:'inbox' WITHOUT project:null (filters.project is
+    // absent, so the compiled filter carries no inInbox key at all going in) —
+    // the exact case the old check's `mode === 'inbox'` half existed for.
+    it("OMN-367: explicit mode:'inbox' without project:null still scopes countOnly to the inbox", async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 2 },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'inbox', filters: { flagged: true }, countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.total_count).toBe(2);
+      expect(result.metadata.filters_applied).toMatchObject({ inInbox: true, flagged: true });
+    });
+
     it('OMN-192: countOnly threads includeProjectRoot into the count filter via the compiled filter', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
@@ -1658,18 +1688,19 @@ describe('OmniFocusReadTool', () => {
   });
 
   describe('sort with date fields and null values (OMN-35 gap 3)', () => {
-    // Inbox path exercises post-hoc sortTasks (non-inbox sorts are embedded in
-    // OmniJS — sortedInScript:true — and skip post-hoc). Mirrors existing
-    // inbox+name sort test pattern.
+    // Inbox route (filters: { project: null }): OMN-335 slice 2 moved this sort
+    // in-script (buildInboxScript's sort-before-slice), so execJson (mocked
+    // here) returns already-sorted rows, mirroring the real script's output —
+    // this layer no longer re-sorts the inbox route post-hoc.
 
     it('dueDate asc: null dueDate sorts LAST regardless of name', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
-            { id: 't_null', name: 'Zebra', dueDate: null },
-            { id: 't_late', name: 'Mango', dueDate: '2026-12-01T17:00:00.000Z' },
             { id: 't_early', name: 'Apple', dueDate: '2026-01-15T17:00:00.000Z' },
+            { id: 't_late', name: 'Mango', dueDate: '2026-12-01T17:00:00.000Z' },
+            { id: 't_null', name: 'Zebra', dueDate: null },
           ],
         },
       } satisfies ScriptResult);
@@ -1692,9 +1723,9 @@ describe('OmniFocusReadTool', () => {
         success: true,
         data: {
           tasks: [
-            { id: 't_null', name: 'Zebra', dueDate: null },
             { id: 't_late', name: 'Mango', dueDate: '2026-12-01T17:00:00.000Z' },
             { id: 't_early', name: 'Apple', dueDate: '2026-01-15T17:00:00.000Z' },
+            { id: 't_null', name: 'Zebra', dueDate: null },
           ],
         },
       } satisfies ScriptResult);
@@ -2198,14 +2229,18 @@ describe('OmniFocusReadTool', () => {
       expect(script).not.toContain('_cutoff.getDate() + 3');
     });
 
-    it("today on the inbox applies today's default sort (modified desc) post-hoc", async () => {
+    it("today on the inbox applies today's default sort (modified desc) in-script (OMN-335 slice 2)", async () => {
+      // Mode default sorts now reach buildInboxScript too (slice 2 removed the
+      // inbox carve-out from slice 1's P2 wiring), so this is sorted-before-slice
+      // in-script, not a post-hoc re-sort — mock data reflects the already-sorted
+      // script output, and the script-shape assertions pin the mechanism.
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
-            { id: 't_old', name: 'Old', flagged: true, modified: '2026-09-01T12:00:00.000Z' },
             { id: 't_new', name: 'New', flagged: true, modified: '2026-09-20T12:00:00.000Z' },
             { id: 't_mid', name: 'Mid', flagged: true, modified: '2026-09-10T12:00:00.000Z' },
+            { id: 't_old', name: 'Old', flagged: true, modified: '2026-09-01T12:00:00.000Z' },
           ],
         },
       } satisfies ScriptResult);
@@ -2216,6 +2251,11 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.tasks.map((t: any) => t.id)).toEqual(['t_new', 't_mid', 't_old']);
+      expect(result.metadata.sort_applied).toBe(true);
+
+      const script = execJsonSpy.mock.calls[0][0] as string;
+      expect(script).toContain('inbox.forEach');
+      expect(script).toContain('allResults.sort(');
     });
 
     it('search + project:null takes the inbox route and reports mode inbox, like all', async () => {
@@ -2244,9 +2284,9 @@ describe('OmniFocusReadTool', () => {
   // OMN-335 P2: mode default sorts (MODE_DEFINITIONS.defaultSort) now reach the
   // script via buildTaskQuery's userSort fallback, so the POPULATION is sorted
   // in-script before the limit cap — not the capped page after it (the old
-  // post-hoc sortTasks() path). Non-inbox routes only; the inbox route has no
-  // `sort` option yet (buildInboxScript — slice 2) and keeps its existing
-  // post-hoc behavior (covered above).
+  // post-hoc sortTasks() path). Slice 2 extended this to the inbox route too
+  // (buildInboxScript now has a `sort` option — covered above, in the "mode
+  // combined with the inbox" and "inbox mode with user-specified sort" blocks).
   describe('OMN-335 P2: mode default sorts reach the script (sort-before-cap)', () => {
     it.each(['overdue', 'upcoming', 'today'])(
       'mode %s emits a sort before the slice and reports sort_applied: true',

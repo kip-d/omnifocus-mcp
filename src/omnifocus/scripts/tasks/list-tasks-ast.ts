@@ -73,6 +73,9 @@ export function buildListTasksScriptV4(params: {
       offset,
       fields,
       includeCompleted: filter.completed === true,
+      // OMN-335 slice 2: buildInboxScript now has a `sort` option (sort-before-slice,
+      // D1) — pass it through like the general-query branch below.
+      sort,
       noteTruncateLength,
     });
   } else {

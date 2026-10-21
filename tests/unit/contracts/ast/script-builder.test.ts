@@ -430,6 +430,52 @@ describe('buildInboxScript', () => {
     expect(result.script).not.toContain('const offset =');
     expect(result.script).not.toContain('skipped');
   });
+
+  // OMN-335 slice 2 (D1, P1): buildInboxScript gains a `sort` option —
+  // sort-before-slice over the `inbox` collection, never routed through
+  // buildFilteredTasksScript's `flattenedTasks` whole-DB scan.
+  describe('sort option (OMN-335 slice 2)', () => {
+    it('without sort: no sort machinery is emitted (unchanged fast path)', () => {
+      const result = buildInboxScript({});
+
+      expect(result.script).not.toContain('allResults.sort(');
+      expect(result.script).not.toContain('__sortKey');
+      expect(result.script).not.toContain('sorted_in_script');
+      expect(result.script).toContain('inbox.forEach');
+    });
+
+    it('with sort: collects all matches, sorts, then slices — still over `inbox`, never `flattenedTasks`', () => {
+      const result = buildInboxScript({}, { sort: [{ field: 'added', direction: 'desc' }] });
+
+      expect(result.script).toContain('inbox.forEach');
+      expect(result.script).not.toContain('flattenedTasks.forEach');
+      expect(result.script).toContain('allResults.sort(');
+      expect(result.script).toContain('allResults.slice(');
+      expect(result.script).toContain('sorted_in_script: true');
+      // __sortKey is scratch-only — deleted before the response leaves the script.
+      expect(result.script).toContain('delete r.__sortKey');
+    });
+
+    it('with sort: reads the raw task value (TASK_SORT_VALUE_EXPRS), not the projected row — the OMN-305 fix applies to inbox too', () => {
+      const result = buildInboxScript({}, { sort: [{ field: 'added', direction: 'desc' }], fields: ['name'] });
+
+      expect(result.script).toContain('task.added ? task.added.getTime() : null');
+    });
+
+    it('with sort + offset: slices offset..offset+limit after sorting (not a loop skip)', () => {
+      const result = buildInboxScript({}, { sort: [{ field: 'name', direction: 'asc' }], offset: 5, limit: 10 });
+
+      expect(result.script).toContain('allResults.slice(5, 5 + 10)');
+      expect(result.script).toContain('offset_applied: 5');
+      expect(result.script).not.toContain('skipped');
+    });
+
+    it('with sort: still counts every match for total_matched (not just the sliced page)', () => {
+      const result = buildInboxScript({}, { sort: [{ field: 'name', direction: 'asc' }], limit: 1 });
+
+      expect(result.script).toContain('total_matched: allResults.length');
+    });
+  });
 });
 
 describe('buildTaskByIdScript', () => {
