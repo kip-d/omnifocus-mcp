@@ -144,6 +144,54 @@ describe('WriteSchema calendar-validity (OMN-343 slice 2 gate follow-up)', () =>
       });
       expect(result.success).toBe(false);
     });
+
+    // OMN-343 (slice 2, gate finding B): `daysInMonth` passed Number(yearStr)
+    // straight to `Date.UTC(year, month, 0)`. Per the ECMAScript spec,
+    // `Date.UTC` (and `new Date(...)`) treats a 2-digit-range year 0-99 as
+    // 1900+year — so year 100 was silently read back as 2000, making
+    // "0100-02-29" validate (2000 IS a leap year) when year 100 actually
+    // is NOT (divisible by 100, not by 400). Years >= 100 fall outside that
+    // remapping window and were already correct. Fixed by replacing the
+    // Date.UTC trick with pure leap-rule arithmetic, so every year behaves
+    // the same regardless of magnitude.
+    it('rejects 0100-02-29 (year 100: divisible by 100, not 400 — not leap; previously misread as year 2000)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 't1', changes: { dueDate: '0100-02-29' } },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts 0096-02-29 (year 96: divisible by 4, not by 100 — leap)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 't1', changes: { dueDate: '0096-02-29' } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts 0400-02-29 (year 400: divisible by 400 — leap) on a batch update item', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          operations: [{ operation: 'update', target: 'task', id: 't1', changes: { dueDate: '0400-02-29' } }],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    // The concrete manifestation of the Date.UTC two-digit-year remap bug:
+    // `Date.UTC` (and `new Date(...)`) maps a year in 0-99 to 1900+year per
+    // the ECMAScript spec. Year 0 is the ONLY value in that range whose true
+    // leap-ness (0 % 400 === 0 → leap) differs from its remapped twin's
+    // (1900 % 400 === 300 → not leap) — every other year 1-99 keeps the same
+    // %4/%100 remainder under the +1900 shift, so this is the one case that
+    // actually flips under the old `daysInMonth`. Direct repro (pre-fix):
+    // `new Date(Date.UTC(0, 2, 0)).getUTCDate()` returns 28, not 29.
+    it('accepts 0000-02-29 (year 0: divisible by 400 — leap; previously misread via the year-0-99→1900s remap)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: { operation: 'update', target: 'task', id: 't1', changes: { dueDate: '0000-02-29' } },
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('still accepts valid dates (no regression)', () => {

@@ -40,9 +40,23 @@ const DATE_ONLY_FORMAT_MSG = 'Date format: YYYY-MM-DD (date only — RRULE UNTIL
 // script runs.
 const DAYS_IN_MONTH_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
 
-/** Last day of `month` (1-12) in `year`, leap-year aware (standard UTC day-0-of-next-month trick). */
+/** True if `year` is a leap year (Gregorian rule), without going through `Date`. */
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+const DAYS_IN_MONTH_TABLE = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+// OMN-343 (slice 2, gate finding B): the previous implementation computed this
+// via `new Date(Date.UTC(year, month, 0)).getUTCDate()` — `Date.UTC` maps a
+// 2-digit-range year (0-99) to 1900+year per the ECMAScript spec, so year 0
+// silently read back as 1900 (not leap) instead of staying year 0 (leap, by
+// `% 400 === 0`). Pure arithmetic sidesteps the Date year-remap behavior
+// entirely so this is correct for every year, not just those outside 0-99.
+/** Last day of `month` (1-12) in `year`, leap-year aware. */
 function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month === 2 && isLeapYear(year)) return 29;
+  return DAYS_IN_MONTH_TABLE[month - 1];
 }
 
 /**
@@ -532,16 +546,21 @@ const TASK_ON_HOLD_MESSAGE =
 // absent from the UPDATE tables; CREATE has no task-side status support at
 // all (TaskCreateData has no `status` field — handleTaskCreate never reads
 // compiled.data.status), so CREATE's PROJECT_ONLY table includes it.
-const CREATE_TASK_ONLY_FIELDS = ['parentTaskId', 'estimatedMinutes', 'repetitionRule', 'project'] as const;
-const CREATE_PROJECT_ONLY_FIELDS = ['folder', 'status', 'reviewInterval'] as const;
-const UPDATE_TASK_ONLY_FIELDS = [
+// Exported (not just module-local) so tests/unit/tools/unified/schemas/
+// write-schema-target-mismatch-contract-sync.test.ts can assert, at compile
+// time, that these tuples' element unions equal keyof TaskCreateData/
+// ProjectCreateData/TaskUpdateData/ProjectUpdateData set-differences — the
+// sync guard these lists had none of before (see the comment above).
+export const CREATE_TASK_ONLY_FIELDS = ['parentTaskId', 'estimatedMinutes', 'repetitionRule', 'project'] as const;
+export const CREATE_PROJECT_ONLY_FIELDS = ['folder', 'status', 'reviewInterval'] as const;
+export const UPDATE_TASK_ONLY_FIELDS = [
   'parentTaskId',
   'estimatedMinutes',
   'clearEstimatedMinutes',
   'repetitionRule',
   'project',
 ] as const;
-const UPDATE_PROJECT_ONLY_FIELDS = ['folder', 'reviewInterval'] as const;
+export const UPDATE_PROJECT_ONLY_FIELDS = ['folder', 'reviewInterval'] as const;
 
 // One message per field: names the field AND the owning target, with brief
 // steering toward the right alternative (mirrors TASK_ON_HOLD_MESSAGE's style).
