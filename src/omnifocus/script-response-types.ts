@@ -100,10 +100,32 @@ export interface ReviewProjectData {
   needsReview?: boolean;
 }
 
+/**
+ * OMN-340 (slice 2): metadata.total_found is the TRUE pre-cap count of every
+ * project matching the review filter; capped/cap disclose whether `projects`
+ * (sorted by nextReviewDate, then sliced) omits any of them; review_summary
+ * counts the WHOLE matched population — see ReviewListMetadataSchema
+ * (src/omnifocus/response-schemas/write.ts) for the authoritative shape.
+ */
+export interface ReviewListMetadata {
+  total_found: number;
+  capped: boolean;
+  cap: number;
+  review_summary: {
+    total_projects: number;
+    overdue: number;
+    due_today: number;
+    due_soon: number;
+    no_schedule: number;
+  };
+  [key: string]: unknown;
+}
+
 export interface ReviewListData {
   projects?: ReviewProjectData[];
   items?: ReviewProjectData[];
   count?: number;
+  metadata?: ReviewListMetadata;
 }
 
 // Task creation/update structures for OmniFocusWriteTool

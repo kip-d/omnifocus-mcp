@@ -389,6 +389,9 @@ ANALYSIS TYPES:
     unresolvable id in the batch fails loudly as its own row, not silently dropped.
     One shared reviewInterval applies to all listed projects on set_schedule.
   - list_for_review does NOT accept projectIds (rejected, not silently ignored)
+  - list_for_review's review_summary counts the WHOLE matched population; the returned
+    project list holds only the 100 nearest-due (coverage.capped flags when the true
+    total exceeds that)
   - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
   - review schedules cannot be removed, only changed: OmniFocus has no "not scheduled
     for review" project state (OMN-41/OMN-58/OMN-273)
@@ -3702,8 +3705,18 @@ TIME-WINDOW SCOPING:
   ): Promise<StandardResponseV2<unknown>> {
     const daysAhead = 7;
     const args = { operation: 'list_for_review', daysAhead };
+    // OMN-340 (slice 2): one `now` drives BOTH this script call (so its
+    // review_summary classification matches) and this handler's own per-row
+    // reviewStatus below — never two independent Date() reads.
+    const now = new Date();
 
-    const cacheKey = JSON.stringify(args);
+    // OMN-340: v1 -> v2 — total_found is now the TRUE pre-cap count,
+    // review_summary now counts the whole matched population, and the
+    // response carries capped/cap. Old cached v1 payloads (post-cap
+    // total_found, capped-sample review_summary) must not be served as if
+    // honest, so the cache key carries a version token (`now` stays OUT of
+    // the key — it would defeat caching entirely).
+    const cacheKey = JSON.stringify({ v: 2, ...args });
     const cached = this.cache.get<{ metadata?: Record<string, unknown>; projects?: unknown[] }>('reviews', cacheKey);
     if (cached) {
       this.logger.debug('Returning cached projects for review');
@@ -3719,7 +3732,10 @@ TIME-WINDOW SCOPING:
       } as StandardResponseV2<unknown>;
     }
 
-    const script = buildProjectsForReviewScript({ filter: args });
+    // `now` is passed to the script (outside the cache key) so its
+    // review_summary classification agrees with this handler's own per-row
+    // reviewStatus below — one instant, two readers.
+    const script = buildProjectsForReviewScript({ filter: { ...args, now: now.toISOString() } });
     const result = await this.execJson(script, REVIEWS_LIST_SCHEMA);
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -3745,7 +3761,6 @@ TIME-WINDOW SCOPING:
       );
     }
 
-    const now = new Date();
     const sourceProjects = src as Array<{
       id?: string;
       name?: string;
@@ -3800,21 +3815,43 @@ TIME-WINDOW SCOPING:
       };
     });
 
-    const standardResponse = createListResponseV2('manage_reviews', parsedProjects, 'projects', {
-      ...timer.toMetadata(),
-      operation: 'list_for_review',
-      filters_applied: args,
-      review_summary: {
-        total_projects: parsedProjects.length,
-        overdue: parsedProjects.filter((p) => p.reviewStatus === 'overdue').length,
-        due_today: parsedProjects.filter((p) => p.reviewStatus === 'due_today').length,
-        due_soon: parsedProjects.filter((p) => p.reviewStatus === 'due_soon').length,
-        no_schedule: parsedProjects.filter((p) => p.reviewStatus === 'no_schedule').length,
+    const scriptMetadata = data?.metadata;
+    // OMN-340 (slice 2): total_found is the script's TRUE pre-cap count;
+    // parsedProjects.length is however many detail rows this response
+    // actually carries (≤ cap) — buildCoverage is the ONE shared disclosure
+    // shape (src/tools/unified/coverage.ts, D4a), same as overdue_analysis.
+    const totalFound = scriptMetadata?.total_found ?? parsedProjects.length;
+    const cap = scriptMetadata?.cap ?? 100;
+
+    const standardResponse = createListResponseV2(
+      'manage_reviews',
+      parsedProjects,
+      'projects',
+      {
+        ...timer.toMetadata(),
+        operation: 'list_for_review',
+        filters_applied: args,
+        // OMN-340: counts the WHOLE matched population (the script computes
+        // this over every project before the detail cap, not just the capped
+        // `parsedProjects` returned alongside it). Falls back to recomputing
+        // from parsedProjects only if the script didn't emit it (defensive;
+        // REVIEWS_LIST_SCHEMA requires it on every success response).
+        review_summary: scriptMetadata?.review_summary ?? {
+          total_projects: parsedProjects.length,
+          overdue: parsedProjects.filter((p) => p.reviewStatus === 'overdue').length,
+          due_today: parsedProjects.filter((p) => p.reviewStatus === 'due_today').length,
+          due_soon: parsedProjects.filter((p) => p.reviewStatus === 'due_soon').length,
+          no_schedule: parsedProjects.filter((p) => p.reviewStatus === 'no_schedule').length,
+        },
+        coverage: { ...buildCoverage(totalFound, parsedProjects.length, cap) },
+        ...(data && typeof data === 'object' && 'metadata' in data
+          ? (data as { metadata?: Record<string, unknown> }).metadata
+          : {}),
       },
-      ...(data && typeof data === 'object' && 'metadata' in data
-        ? (data as { metadata?: Record<string, unknown> }).metadata
-        : {}),
-    });
+      // OMN-199 count honesty: metadata.total_count, summary.total_projects and the
+      // truncated flag describe the matched population, not the capped page.
+      { population: totalFound },
+    );
 
     this.cache.set('reviews', cacheKey, standardResponse);
     return standardResponse;

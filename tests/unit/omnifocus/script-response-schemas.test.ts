@@ -2625,6 +2625,11 @@ describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
         filter_applied: { overdue: false },
         generated_at: '2026-06-12T10:00:00.000Z',
         search_criteria: { overdue_only: false, days_ahead: 7, status_filter: ['active'], folder_filter: null },
+        // OMN-340 (slice 2): total_found is now the TRUE pre-cap count;
+        // capped/cap/review_summary are always emitted alongside it.
+        capped: false,
+        cap: 100,
+        review_summary: { total_projects: 1, overdue: 0, due_today: 0, due_soon: 0, no_schedule: 1 },
       },
     });
     expect(result.error?.issues ?? []).toEqual([]);
@@ -2656,6 +2661,9 @@ describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
         generated_at: '2026-06-12T10:00:00.000Z',
         filter_applied: { overdue: true },
         search_criteria: { overdue_only: true, days_ahead: 7 },
+        capped: false,
+        cap: 100,
+        review_summary: { total_projects: 1, overdue: 0, due_today: 0, due_soon: 0, no_schedule: 0 },
       },
     });
     expect(result.error?.issues ?? []).toEqual([]);
@@ -2686,6 +2694,60 @@ describe('REVIEWS_LIST_TYPED_SCHEMA', () => {
       ],
     });
     expect(result.success).toBe(false);
+  });
+
+  // OMN-340 (slice 2): review_summary (and capped/cap) are always emitted
+  // alongside total_found on the success branch — a schema test must cover
+  // them independently of the project-row tests above.
+  it('(b) rejects a payload missing review_summary (OMN-340 — full-population counts)', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [],
+      metadata: {
+        total_found: 0,
+        filter_applied: {},
+        generated_at: '2026-06-12T10:00:00.000Z',
+        search_criteria: {},
+        capped: false,
+        cap: 100,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(c) rejects closed-world: extra key in review_summary', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [],
+      metadata: {
+        total_found: 0,
+        filter_applied: {},
+        generated_at: '2026-06-12T10:00:00.000Z',
+        search_criteria: {},
+        capped: false,
+        cap: 100,
+        review_summary: { total_projects: 0, overdue: 0, due_today: 0, due_soon: 0, no_schedule: 0, scheduled: 0 },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('(a) accepts a capped payload with review_summary covering the full population', () => {
+    const result = REVIEWS_LIST_TYPED_SCHEMA.safeParse({
+      success: true,
+      projects: [],
+      metadata: {
+        total_found: 150,
+        filter_applied: {},
+        generated_at: '2026-06-12T10:00:00.000Z',
+        search_criteria: {},
+        capped: true,
+        cap: 100,
+        review_summary: { total_projects: 150, overdue: 10, due_today: 2, due_soon: 8, no_schedule: 50 },
+      },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+    expect(result.success).toBe(true);
   });
 });
 
