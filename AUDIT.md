@@ -182,7 +182,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       (`src/tools/unified/OmniFocusAnalyzeTool.ts:3243,3367-3376`, `isNonActionable`; `:3303`, `isListItem`). Fix:
       delete the `/^\*+\s/` pattern, since headings are already covered by `/^#+\s/` (Technique: Remove Dead Code).
       Verified: `node -e` with the verbatim regexes; the verifier reported HOLDS.
-- [ ] 17. [OMN-343] Task `update` accepts inputs and silently skips them while still reporting success:
+- [x] 17. [OMN-343] Task `update` accepts inputs and silently skips them while still reporting success:
       - The update date fields have no `DATE_REGEX` (create has it), and `sanitizeDateField` swallows the `localToUTC`
         throw.
       - `folder`, `reviewInterval` and `status: 'active'|'on_hold'` are accepted but not forwarded.
@@ -198,7 +198,8 @@ both keep the advertised JSON byte-for-byte as it is today.
         12). Needs a decision (Technique: Replace Conditional with Polymorphism). Verified:
         `s2-batchmax.ts`/`s2-sanit.ts` give `sanitizeTaskUpdates({status:'on_hold',folder:'X',reviewInterval:7}) -> {}`;
         the verifier reported MOSTLY HOLDS (`completed`/`dropped` status is forwarded). `task-sanitizer.test.ts:100-106`
-        pins the silent date drop.
+        pins the silent date drop. Status 2026-10-21: fixed across PR #303 (slice 1, dates/endDate/unit) and PR #308
+        (slice 2, target-mismatch rejection + sanitizer shrink).
 - [x] 18. [OMN-344] `tag_manage merge` with `targetTag === tagName` removes the tag from every task, deletes it, and
       reports "merged". Source and target resolve to the same tag, `mergeRetag` skips the re-add because `_hasTgt` is
       true, and then `deleteObject(_src)` runs. Neither the schema nor `validateTagManageParams` rejects it
@@ -460,18 +461,21 @@ both keep the advertised JSON byte-for-byte as it is today.
       (`src/contracts/ast/mutation/defs.ts:1659-1672`). Fix: validate destinations fail-closed (Technique: Introduce
       Assertion). Verified: read; the verifier reported HOLDS. Unverified at runtime: a unit test with `isTestMode`
       mocked, asserting that a move to a live project throws.
-- [ ] 49. [OMN-343] `minimalResponse` is accepted on create and complete and compiled through, but only task update
+- [x] 49. [OMN-343] `minimalResponse` is accepted on create and complete and compiled through, but only task update
       reads it, and that one honored path returns a hand-built literal without `metadata`
       (`src/tools/unified/schemas/write-schema.ts:301,334`; `src/tools/unified/compilers/MutationCompiler.ts:130,167`;
       `src/tools/unified/OmniFocusWriteTool.ts:710,763-772`). Fix: remove it from the create and complete members (Zod
       and inputSchema), or implement it everywhere. Needs a decision (Technique: Remove Parameter). Verified: grep; the
-      verifier reported HOLDS.
-- [ ] 50. [OMN-343] `reviewInterval` object form accepts any `unit` and maps unknown units to 1 day (`?? 1`), so
+      verifier reported HOLDS. Status 2026-10-21: fixed by this PR (slice 3) — removed from create/complete (Zod +
+      inputSchema + a WRITE_FIELD_REDIRECTS steering hint), kept on update, and update's minimal path now returns
+      through `createSuccessResponseV2` so it carries `metadata`.
+- [x] 50. [OMN-343] `reviewInterval` object form accepts any `unit` and maps unknown units to 1 day (`?? 1`), so
       `{steps:1, unit:'quarter'}` sets a **daily** review, and `fortnight` also becomes 1. The description lists only
       days/weeks/months/years (`src/tools/unified/schemas/write-schema.ts:74-88`). Fix: a closed, case-insensitive enum
       of the `UNIT_TO_DAYS` keys (Technique: Replace Type Code with Subclasses/enum). Verified: tsx
-      `WriteSchema.safeParse` gives `quarter -> 1`; the verifier reported HOLDS.
-- [ ] 51. [OMN-362] The write field set is hand-copied in two redundant places:
+      `WriteSchema.safeParse` gives `quarter -> 1`; the verifier reported HOLDS. Status 2026-10-21: fixed by PR #308
+      (slice 2) — closed enum of `UNIT_TO_DAYS` keys, case-insensitive, `?? 1` fallback removed.
+- [x] 51. [OMN-362] The write field set is hand-copied in two redundant places:
       - `MutationCompiler` redeclares `CreateData`/`UpdateChanges`/`BatchOperation` (the Zod output types) and casts
         into them, with no `SameKeys` guard (4 casts).
       - `task-sanitizer.ts` is a second per-field allowlist that re-implements Zod coercion, and it is where #17's drops
@@ -484,7 +488,9 @@ both keep the advertised JSON byte-for-byte as it is today.
         with PR #294 (`7b641d73`): the types are derived from the schema and all four casts are gone. The
         `task-sanitizer.ts` shrink is deliberately deferred, because removing the allowlist would let schema-valid
         fields it drops today reach the builders, which is the #17 behavior OMN-343 settles. OMN-364 tracks it, so this
-        item stays open.
+        item stays open. Status 2026-10-21: the `MutationCompiler` half was the 2026-10-11 PR #294 note above; the
+        `task-sanitizer.ts` shrink landed with PR #308 (slice 2) once #17's target-mismatch rejection made the
+        allowlist's drop role unreachable — both halves are now closed.
 - [x] 52. [OMN-363] Two tests in `OmniFocusWriteTool.test.ts` cannot fail:
       - `:334` "returns error when taskId is missing" asserts only `toBeDefined()` inside a `catch`.
       - `:1942` "rejects invalid date format in create" puts its assertion inside a `try` whose `catch` swallows the

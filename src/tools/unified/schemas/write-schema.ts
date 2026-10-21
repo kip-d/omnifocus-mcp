@@ -243,6 +243,12 @@ const WRITE_FIELD_REDIRECTS: Record<string, string> = {
   context: "OmniFocus 3+ has no contexts — use 'tags'",
   priority: "OmniFocus has no priority levels — use 'flagged: true'",
   subtasks: "create children via a batch op with 'parentTempId' (or set 'parentTaskId' on create)",
+  // OMN-343 (F9/D2): minimalResponse was accepted on create/complete and
+  // compiled through, but only task update ever read it — the other two
+  // operations silently ignored it. Removed from both schemas (the "delete
+  // from both schemas" precedent); this redirect turns the resulting
+  // unrecognized-key rejection into an actionable one.
+  minimalResponse: "only supported on 'update' — create and complete always return their full response",
 };
 
 // OMN-260: a bare root `{data:{...}}` (no `operation`, no `mutation`) is the
@@ -436,7 +442,8 @@ const MutationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: CreateDataSchema,
-    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
+    // OMN-343 (F9/D2): minimalResponse removed — see WRITE_FIELD_REDIRECTS.
+    // Create was never read by the only consumer (handleTaskUpdate).
   }),
   // Create folder operation
   strictObj({
@@ -469,7 +476,8 @@ const MutationSchema = z.discriminatedUnion('operation', [
     // ("tomorrow") slipped through Zod and surfaced as uncategorized
     // INTERNAL_ERROR downstream instead of a clean VALIDATION_ERROR.
     completionDate: dateTimeStringSchema().optional(),
-    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
+    // OMN-343 (F9/D2): minimalResponse removed — see WRITE_FIELD_REDIRECTS.
+    // Complete was never read by the only consumer (handleTaskUpdate).
   }),
   // Delete operation
   // OMN-71: the model consistently sends `target_id` (pairs with `target`),

@@ -188,6 +188,21 @@ function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
  *
  * Reading only `data.task.id` gave every complete/delete row and every project
  * row `id: 'unknown'`. A row with no id anywhere now gets null (OMN-141).
+ *
+ * OMN-343 (slice 3): shape 2 is UNREACHABLE via a real batch today — evidence,
+ * not a guess: `BatchOperationSchema`'s `update` member (write-schema.ts) has
+ * no `minimalResponse` field at all (strictObj would reject it as an
+ * unrecognized key if a caller tried), and `buildTaskCompiledForBatch`
+ * (OmniFocusWriteTool.ts) never sets `minimalResponse` on the `CompiledMutation`
+ * it hands to `dispatchTaskOperation` — so `handleTaskUpdate`'s
+ * `compiled.minimalResponse ?? false` is always `false` on the batch path, and
+ * every batch update goes through the full `createSuccessResponseV2` envelope
+ * (shape 1) regardless of what the single-item `minimalResponse:true` flag now
+ * returns (shape 1 too, since slice 3 — see `handleTaskUpdate`'s minimal
+ * branch). This detection branch is kept as defense-in-depth / for the unit
+ * tests that exercise it directly; it is intentionally NOT updated to mirror
+ * the new single-item minimal shape (which now also carries `metadata` and
+ * isn't flat) because nothing here produces that shape to detect.
  */
 function extractOperationResult(
   operation: 'update' | 'complete' | 'delete',
