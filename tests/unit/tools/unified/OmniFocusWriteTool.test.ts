@@ -558,8 +558,13 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.completed).toBe(false);
-      expect(result.dropDate).toBe('2026-10-19T14:46:34.039Z');
+      // OMN-343 (slice 3): the minimal path now returns through
+      // createSuccessResponseV2, so the live read-back lives under `data`,
+      // and the response carries `metadata` (operation, timestamp, ...).
+      expect(result.data.completed).toBe(false);
+      expect(result.data.dropDate).toBe('2026-10-19T14:46:34.039Z');
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata.operation).toBe('omnifocus_write');
     });
 
     it('OMN-137: omits the warnings key when update task script reports none (full response)', async () => {
@@ -604,7 +609,41 @@ describe('OmniFocusWriteTool task operations', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.warnings).toEqual(['status: boom']);
+      expect(result.data.warnings).toEqual(['status: boom']);
+    });
+
+    // OMN-343 (slice 3, F9/D2): minimalResponse was accepted on create and
+    // complete but silently never consumed there — it is now removed from
+    // both schemas, so sending it is a loud Zod rejection naming the field
+    // and redirecting to update, not an ignored flag. Asserted on the
+    // client-visible McpError text through tool.execute() (base.ts's
+    // `Invalid parameters: ${path}: ${message}`), not the raw Zod issue tree.
+    it('OMN-343: rejects minimalResponse on create with the field named and a redirect to update', async () => {
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'create',
+            target: 'task',
+            data: { name: 'Quick task' },
+            minimalResponse: true,
+          },
+        }),
+      ).rejects.toThrow(/minimalResponse.*only supported on 'update'/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('OMN-343: rejects minimalResponse on complete with the field named and a redirect to update', async () => {
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'complete',
+            target: 'task',
+            id: 'task-1',
+            minimalResponse: true,
+          },
+        }),
+      ).rejects.toThrow(/minimalResponse.*only supported on 'update'/);
+      expect(execJsonSpy).not.toHaveBeenCalled();
     });
   });
 

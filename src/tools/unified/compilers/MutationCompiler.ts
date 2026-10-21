@@ -23,7 +23,7 @@ export type CompiledMutation =
       operation: 'create';
       target: 'task' | 'project';
       data: CreateData;
-      minimalResponse?: boolean; // Bug #21: Reduce response size
+      // OMN-343 (F9/D2): minimalResponse removed — create never read it.
     }
   | {
       operation: 'create_folder';
@@ -43,7 +43,7 @@ export type CompiledMutation =
       taskId?: string;
       projectId?: string;
       completionDate?: string; // Bug #20: Allow custom completion date
-      minimalResponse?: boolean; // Bug #21: Reduce response size
+      // OMN-343 (F9/D2): minimalResponse removed — complete never read it.
     }
   | {
       operation: 'delete';
@@ -87,7 +87,6 @@ export class MutationCompiler {
           operation: 'create',
           target: mutation.target,
           data: mutation.data,
-          minimalResponse: mutation.minimalResponse, // Bug #21
         };
 
       case 'create_folder':
@@ -129,7 +128,6 @@ export class MutationCompiler {
           operation: 'complete',
           target: completeTarget,
           completionDate: mutation.completionDate, // Bug #20
-          minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
         if (completeTarget === 'task') {
