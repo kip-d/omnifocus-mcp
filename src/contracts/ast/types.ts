@@ -305,7 +305,7 @@ export const IS_PROJECT_ROOT_ROW_SNIPPET = `function isProjectRootRow(task) {
  * "[object Project.Status: Active]", the OMN-272 defect class).
  *
  * ONE definition spliced by every OmniJS emitter that ships a project
- * status string (fetchSlimmedData, productivity-stats-v3,
+ * status string (slimmed-data-scan, productivity-stats-v3,
  * projects-for-review, and — since OMN-274 — script-builder's read pipeline:
  * buildFilteredProjectsScript, buildProjectByIdScript, and the folder
  * listing's project rows) so the vocabulary cannot drift between call paths —

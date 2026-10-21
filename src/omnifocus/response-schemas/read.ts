@@ -441,8 +441,8 @@ export const CountResultSchema = z
   .strict();
 
 /**
- * Slimmed task row — emitted by the inline OmniJS bridge scan in fetchSlimmedData (OMN-269).
- * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData omniJsProgram taskData object.
+ * Slimmed task row — emitted by the OmniJS bridge scan in buildSlimmedDataScript (OMN-269).
+ * Source: scripts/analytics/slimmed-data-scan.ts omniJsProgram taskData object.
  * id, name, completed, flagged, status, tags, estimatedMinutes, children are always set.
  * Dates/project/noteHead are conditional (emitted only when the value is truthy).
  */
@@ -471,8 +471,8 @@ const SlimTaskSchema = z
   .strict();
 
 /**
- * Slimmed project row — emitted by fetchSlimmedData's OmniJS bridge scan projectData object.
- * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData.
+ * Slimmed project row — emitted by buildSlimmedDataScript's OmniJS bridge scan projectData object.
+ * Source: scripts/analytics/slimmed-data-scan.ts.
  * id, name, status, taskCount, availableTaskCount, folder always set (folder is null for
  * root-level projects); the per-project try/catch skips the whole project on error rather
  * than emitting a partial object. Dates are conditional (emitted only when set).
@@ -503,17 +503,18 @@ const SlimProjectSchema = z
   .strict();
 
 /**
- * Slimmed tag row — emitted by fetchSlimmedData's OmniJS bridge scan tag object.
- * Source: OmniFocusAnalyzeTool.ts fetchSlimmedData.
+ * Slimmed tag row — emitted by buildSlimmedDataScript's OmniJS bridge scan tag object.
+ * Source: scripts/analytics/slimmed-data-scan.ts.
  * id, name always set; taskCount always set (may be 0).
  */
 const SlimTagSchema = z.object({ id: z.string(), name: z.string(), taskCount: z.number() }).strict();
 
 /**
- * Slimmed-data bulk read — emitted by the inline OmniJS bridge scan in fetchSlimmedData
- * (src/tools/unified/OmniFocusAnalyzeTool.ts, method fetchSlimmedData; OMN-269).
+ * Slimmed-data bulk read — emitted by the OmniJS bridge scan in buildSlimmedDataScript
+ * (src/omnifocus/scripts/analytics/slimmed-data-scan.ts; OMN-269), executed by
+ * OmniFocusAnalyzeTool.fetchSlimmedData.
  *
- * Wire shape verified against the inline return statement:
+ * Wire shape verified against the scan's return statement:
  *   return JSON.stringify({ tasks: tasks, projects: projects, tags: tags })
  * where tasks/projects/tags are arrays built inside one evaluateJavascript scan.
  */
