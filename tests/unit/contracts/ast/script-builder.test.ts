@@ -4,6 +4,7 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  buildTasksByIdsScript,
   buildProjectByIdScript,
   buildTaskCountScript,
   buildFilteredProjectsScript,
@@ -558,6 +559,65 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
     expect(result.count).toBe(0);
     expect(result.mode).toBe('id_lookup');
     expect(result.targetId).toBe('missing');
+  });
+});
+
+describe('buildTasksByIdsScript (OMN-335 slice 3: smart_suggest phase 2)', () => {
+  it('uses Task.byIdentifier per id, never iterates flattenedTasks', () => {
+    const result = buildTasksByIdsScript(['a', 'b', 'c']);
+
+    expect(result.script).toContain('Task.byIdentifier(targetId)');
+    expect(result.script).not.toContain('flattenedTasks');
+    expect(result.script).toContain('targetIds.forEach');
+  });
+
+  it('preserves the ids_lookup result shape', () => {
+    const result = buildTasksByIdsScript(['a', 'b']);
+
+    expect(result.script).toContain("mode: 'ids_lookup'");
+    expect(result.script).toContain('count: results.length');
+  });
+
+  it('generates field projections', () => {
+    const result = buildTasksByIdsScript(['a'], ['id', 'name', 'flagged']);
+
+    expect(result.script).toContain('id: task.id.primaryKey');
+    expect(result.script).toContain('name: task.name');
+    expect(result.script).toContain('flagged: task.flagged');
+  });
+
+  it('always projects id even when the caller omits it from fields (mirrors buildTaskByIdScript, OMN-225)', () => {
+    const result = buildTasksByIdsScript(['a'], ['name']);
+    expect(result.script).toContain('id: task.id.primaryKey');
+  });
+});
+
+describe('buildTasksByIdsScript (vm-executed, OMN-335 slice 3)', () => {
+  function runByIds(script: string, tasksById: Record<string, unknown>): { tasks: any[]; count: number; mode: string } {
+    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const sandbox: Record<string, unknown> = { Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('resolves each id independently, in the requested order, skipping ids that do not resolve', () => {
+    const { script } = buildTasksByIdsScript(['found1', 'missing', 'found2'], ['id', 'name']);
+    const result = runByIds(script, {
+      found1: { id: { primaryKey: 'found1' }, name: 'First' },
+      found2: { id: { primaryKey: 'found2' }, name: 'Second' },
+      // 'missing' intentionally absent — byIdentifier returns null for it.
+    });
+
+    expect(result.tasks.map((t) => t.id)).toEqual(['found1', 'found2']);
+    expect(result.count).toBe(2);
+    expect(result.mode).toBe('ids_lookup');
+  });
+
+  it('all ids missing: returns empty results, not an error', () => {
+    const { script } = buildTasksByIdsScript(['missing1', 'missing2']);
+    const result = runByIds(script, {});
+
+    expect(result.tasks).toHaveLength(0);
+    expect(result.count).toBe(0);
   });
 });
 

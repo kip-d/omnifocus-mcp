@@ -16,6 +16,7 @@ import {
   scoreForSmartSuggest,
   countTodayCategories,
   type TaskQueryMode,
+  type ScreenableTask,
 } from '../../../../src/tools/tasks/task-query-pipeline.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
@@ -879,6 +880,51 @@ describe('scoreForSmartSuggest', () => {
       const result = scoreForSmartSuggest(tasks, 10);
       expect(result[0].screen_reasons).toContain('overdue_0d');
       expect(result[0].screen_reasons?.join()).not.toMatch(/due_today/);
+    });
+  });
+
+  // OMN-335 slice 3: scoreForSmartSuggest is now generic over `ScreenableTask`
+  // (id + the 4 scored fields) so phase 1's SLIM rows — the whole actionable
+  // population, uncapped — can be scored directly, without first fetching full
+  // OmniFocusTask rows. Selection/ordering must be identical to the
+  // full-OmniFocusTask call shape above.
+  describe('generic over ScreenableTask (OMN-335 slice 3 phase 1)', () => {
+    it('scores slim rows (no name/tags/etc.) the same way as full tasks', () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const slimRows: ScreenableTask[] = [
+        { id: '1', dueDate: yesterday.toISOString(), flagged: false, available: false },
+        { id: '2', dueDate: undefined, flagged: true, available: false },
+      ];
+
+      const result = scoreForSmartSuggest(slimRows, 10);
+      expect(result.map((t) => t.id)).toEqual(['1', '2']); // overdue (1) outranks flagged-only (2)
+      expect(result[0].screen_reasons.some((r) => r.startsWith('overdue_'))).toBe(true);
+    });
+
+    it('a best-scoring slim row LATE in input order is still selected under a tight limit — the whole input is scored, not a prefix', () => {
+      const fillers: ScreenableTask[] = Array.from({ length: 20 }, (_, i) => ({
+        id: `filler${i}`,
+        flagged: false,
+        available: false,
+      }));
+      const best: ScreenableTask = { id: 'best', flagged: true, available: true, estimatedMinutes: 5 };
+      const slimRows = [...fillers, best];
+
+      const result = scoreForSmartSuggest(slimRows, 1);
+      expect(result.map((t) => t.id)).toEqual(['best']);
+    });
+
+    it('ties are deterministic: equal scores keep input order (stable sort)', () => {
+      const slimRows: ScreenableTask[] = [
+        { id: 'a', flagged: true, available: false },
+        { id: 'b', flagged: true, available: false },
+        { id: 'c', flagged: true, available: false },
+      ];
+
+      const result = scoreForSmartSuggest(slimRows, 3);
+      expect(result.map((t) => t.id)).toEqual(['a', 'b', 'c']);
     });
   });
 });

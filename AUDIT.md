@@ -101,7 +101,7 @@ both keep the advertised JSON byte-for-byte as it is today.
      `new Date(${JSON.stringify(v)})` plus a format refinement, which falls out of #4 (Technique: Introduce Assertion).
      Verified: tsx probe `/tmp/audit-31d52e9e/s3/date-chain.ts`; fuzzing 10 hostile values across every other filter
      channel produced valid scripts; the verifier reported HOLDS.
-- [ ] 8. [OMN-335] Three task paths sort or score only a page that was already capped in database order, while reporting
+- [x] 8. [OMN-335] Three task paths sort or score only a page that was already capped in database order, while reporting
      `sort_applied: true`:
      - `buildInboxScript`, used by every `project:null` or `inInbox` read, stops at `limit` with no in-script sort, and
        the tool sorts that page afterwards.
@@ -113,7 +113,11 @@ both keep the advertised JSON byte-for-byte as it is today.
        slices, and push mode default sorts and smart_suggest pre-selection into the script (Technique: Substitute
        Algorithm). Verified: tsx probe `/tmp/audit-31d52e9e/s3/inbox-sort.ts` gives
        `inbox | in-script sort: false | caps in loop: true`; the verifier reported HOLDS. OMN-305 (sort key vs `fields`)
-       is a different bug; its fix would not fix this.
+       is a different bug; its fix would not fix this. Status 2026-10-21: fixed across three slices — mode default
+       sorts + raw-value comparator (PR #301), inbox sort-before-slice (PR #306), and smart_suggest's two-phase
+       screen-then-judge (this PR): phase 1 screens the whole actionable population (uncapped, slim projection), scores
+       it in TS, then phase 2 fetches full rows for the top N by id. All three paths now sort/score the population, not
+       a pre-capped page.
 - [x] 9. [OMN-336] `bulk_delete` of tasks runs only `cache.clear('tasks')`, a category no reader uses. Single delete
      invalidates analytics, projects and tags. After a bulk delete, `productivity_stats`, `overdue_analysis` and
      `workflow_analysis` serve pre-delete numbers for up to 1 h, and `projects includeStats` counts stay stale for up to
