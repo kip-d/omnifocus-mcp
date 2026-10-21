@@ -1016,6 +1016,62 @@ export function buildTaskByIdScript(taskId: string, fields: string[] = []): Gene
   };
 }
 
+/**
+ * Build an OmniJS script that resolves MULTIPLE tasks by id (OMN-335 slice 3,
+ * smart_suggest phase 2).
+ *
+ * Mirrors buildTaskByIdScript's O(1)-per-id pattern (Task.byIdentifier, never
+ * flattenedTasks) but loops over a list of ids instead of a single one. An id
+ * that no longer resolves (task completed/deleted between phase 1 and phase 2)
+ * is silently skipped here — the CALLER (OmniFocusReadTool.executeSmartSuggest)
+ * is responsible for diffing the requested ids against the returned rows and
+ * reporting any that vanished; this builder only emits the rows it found.
+ *
+ * Returns the same inner-OmniJS-body contract as buildTaskByIdScript
+ * (`{tasks, count, mode}`) — the caller wraps it in app.evaluateJavascript.
+ */
+export function buildTasksByIdsScript(
+  taskIds: string[],
+  fields: string[] = [],
+  noteTruncateLength?: number,
+): GeneratedScript {
+  // OMN-225: see ensureIdField. Unlike buildTaskByIdScript (always full detail,
+  // no truncation — id lookups are a detail view), smart_suggest's phase 2 keeps
+  // the caller's ordinary note-truncation policy, so noteTruncateLength threads
+  // through here.
+  const fieldProjection = generateFieldProjection(ensureIdField(fields), { noteTruncateLength });
+  const idsJson = JSON.stringify(taskIds);
+
+  const script = `
+(() => {
+  const results = [];
+  const targetIds = ${idsJson};
+
+  targetIds.forEach(targetId => {
+    const task = Task.byIdentifier(targetId);
+    if (task) {
+      results.push({
+        ${fieldProjection}
+      });
+    }
+  });
+
+  return JSON.stringify({
+    tasks: results,
+    count: results.length,
+    mode: 'ids_lookup',
+    targetIds: targetIds
+  });
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription: `id in [${taskIds.length} ids]`,
+    isEmptyFilter: taskIds.length === 0,
+  };
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================

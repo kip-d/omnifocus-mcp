@@ -23,6 +23,7 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  buildTasksByIdsScript,
 } from '../../../contracts/ast/script-builder.js';
 
 /**
@@ -138,6 +139,68 @@ export function buildListTasksScriptV4(params: {
 }
 
 /**
+ * Build a V4 multi-id task fetch script (OMN-335 slice 3, smart_suggest phase 2).
+ *
+ * Resolves each id via Task.byIdentifier (O(1) per id, never flattenedTasks —
+ * mirrors buildTaskByIdScript/buildListTasksScriptV4's id-lookup branch) and
+ * wraps the result in the SAME JXA + metadata envelope buildListTasksScriptV4
+ * emits, so the caller can validate the response with the identical
+ * TASK_LIST_SCHEMA / TaskListMetadataSchema (no new response-schema layer).
+ * `sorted_in_script`/`offset`/`limit_applied` are filled with the fixed values
+ * that are always true for this path (no sort, no pagination — the caller
+ * already decided the exact id set and its order).
+ *
+ * An id that doesn't resolve (task completed/deleted between phase 1 and
+ * phase 2) is simply absent from `result.tasks` — the caller diffs the
+ * requested ids against the returned rows to detect and report the gap.
+ */
+export function buildTasksByIdsQueryScript(
+  taskIds: string[],
+  fields: string[] = [],
+  noteTruncateLength?: number,
+): string {
+  const generatedScript = buildTasksByIdsScript(taskIds, fields, noteTruncateLength);
+
+  return `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const resultJson = app.evaluateJavascript(${JSON.stringify(generatedScript.script)});
+    const result = JSON.parse(resultJson);
+
+    if (result && result.error) {
+      return resultJson;
+    }
+
+    return JSON.stringify({
+      tasks: result.tasks,
+      metadata: {
+        total_count: result.count,
+        total_matched: result.count,
+        sorted_in_script: false,
+        limit_applied: ${taskIds.length},
+        offset: 0,
+        mode: result.mode,
+        filter_description: ${JSON.stringify(generatedScript.filterDescription)},
+        optimization: 'ast_v4',
+        architecture: 'ast_first'
+      }
+    });
+
+  } catch (error) {
+    return JSON.stringify({
+      error: true,
+      message: error.message || String(error),
+      stack: error.stack || '',
+      context: 'tasks_by_ids_v4_ast'
+    });
+  }
+})();
+`;
+}
+
+/**
  * Script template for V4 - kept for compatibility with buildScript pattern
  *
  * Note: This is a simplified template that gets the filter and options
@@ -145,4 +208,4 @@ export function buildListTasksScriptV4(params: {
  * AST pipeline.
  */
 // Re-export for convenience
-export { buildFilteredTasksScript, buildInboxScript, buildTaskByIdScript };
+export { buildFilteredTasksScript, buildInboxScript, buildTaskByIdScript, buildTasksByIdsScript };

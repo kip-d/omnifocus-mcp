@@ -1968,6 +1968,177 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  describe('OMN-335 slice 3: smart_suggest two-phase (screen whole population, fetch top N)', () => {
+    it('phase 1 projects only the slim scoring fields, is uncapped, and reaches a late-DB-order best scorer the old capped path could not', async () => {
+      // 10 zero-score filler rows, then the best scorer LAST in phase-1 array
+      // order (simulating it being far down DB iteration order). The OLD
+      // single-phase implementation capped phase 1 at `limit` (2) in DB order
+      // BEFORE scoring, so this task could never even be scored. The new
+      // phase 1 is uncapped, so it reaches it regardless of position.
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const fillerRows = Array.from({ length: 10 }, (_, i) => ({
+        id: `filler${i}`,
+        flagged: false,
+        available: false,
+      }));
+      const bestRow = { id: 'late-best', flagged: true, available: true, dueDate: yesterday.toISOString() };
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [...fillerRows, bestRow], metadata: { total_matched: 11 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            {
+              id: 'late-best',
+              name: 'Late best scorer',
+              flagged: true,
+              available: true,
+              dueDate: yesterday.toISOString(),
+            },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks.map((t: any) => t.id)).toContain('late-best');
+
+      const phase1Script = execJsonSpy.mock.calls[0][0] as string;
+      // Slim projection: the scoring fields are there, nothing richer (no
+      // name/note/tags projection — phase 1 never needs them).
+      expect(phase1Script).toContain('dueDate');
+      expect(phase1Script).toContain('available');
+      expect(phase1Script).toContain('estimatedMinutes');
+      expect(phase1Script).not.toContain('name: task.name');
+      expect(phase1Script).not.toContain('tags:');
+      // Uncapped: the script's embedded `limit` is NOT the caller's requested
+      // limit (2) — it's the large uncapped sentinel.
+      expect(phase1Script).not.toContain('const limit = 2;');
+    });
+
+    it('phase 2 is called with exactly the selected ids (Task.byIdentifier, no flattenedTasks scan), in score order, with screen_reasons preserved under a fields projection (OMN-259 carry)', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'low', flagged: true, available: false }, // score 50
+            { id: 'high', flagged: true, available: true, dueDate: yesterday.toISOString() }, // score ~140-180
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'low', name: 'Low scorer' },
+            { id: 'high', name: 'High scorer' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2, fields: ['id', 'name'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+
+      const phase2Script = execJsonSpy.mock.calls[1][0] as string;
+      expect(phase2Script).toContain('high');
+      expect(phase2Script).toContain('low');
+      expect(phase2Script).toContain('Task.byIdentifier');
+      expect(phase2Script).not.toContain('flattenedTasks');
+
+      // Score order: 'high' (overdue+flagged+available) outranks 'low' (flagged only).
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['high', 'low']);
+      // screen_reasons survive the narrow `fields` projection, as before (OMN-259 carry).
+      expect(result.data.tasks[0].screen_reasons).toEqual(expect.arrayContaining(['flagged', 'available']));
+    });
+
+    it('a selected id that vanishes between phase 1 and phase 2 is dropped, not silently backfilled, and reported honestly', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'gone', flagged: true },
+            { id: 'stays', flagged: true, available: true },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+      // Phase 2 only resolves 'stays' — 'gone' no longer exists (completed/deleted
+      // between phase 1 and phase 2).
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'stays', name: 'Still here' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(1);
+      expect(result.data.tasks[0].id).toBe('stays');
+      expect(result.metadata.vanished_count).toBe(1);
+      expect(result.summary.key_insights.some((s: string) => s.includes('vanished'))).toBe(true);
+    });
+
+    it('total_count is the whole phase-1 actionable population, independent of the returned shortlist size', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 'only-one', flagged: true }],
+          // 137 actionable tasks matched the filter; only 1 scored > 0.
+          metadata: { total_matched: 137 },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'only-one', name: 'Solo' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(1);
+      expect(result.metadata.total_count).toBe(137);
+      expect(result.metadata.returned_count).toBe(1);
+      expect(result.metadata.truncated).toBe(true);
+    });
+
+    it('zero scored candidates: short-circuits without a phase-2 call, still reports the whole population', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 't1', flagged: false, available: false }],
+          metadata: { total_matched: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(0);
+      expect(result.metadata.total_count).toBe(1);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip when nothing scored
+    });
+  });
+
   describe('OMN-154: projects envelope reports population', () => {
     it('total_count + summary.total_projects = script total_matched; truncated set', async () => {
       execJsonSpy.mockResolvedValueOnce({
@@ -2215,6 +2386,13 @@ describe('OmniFocusReadTool', () => {
     });
 
     it('smart_suggest on the inbox scores rows and reports its own mode', async () => {
+      // OMN-335 slice 3: smart_suggest is two-phase — phase 1 (slim screen,
+      // mocked here) selects t1 (flagged scores > 0), phase 2 (by-id fetch)
+      // returns its full row.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', flagged: true, available: true }] },
+      } satisfies ScriptResult);
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: { tasks: [{ id: 't1', name: 'Inbox thing', flagged: true, available: true }] },
