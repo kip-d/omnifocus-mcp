@@ -551,6 +551,13 @@ export function createAnalyticsResponseV2<T>(
       summary.total_items_analyzed = dataObj.velocity.tasksCompleted;
     } else if (dataObj.stats?.totalTasks) {
       summary.total_items_analyzed = dataObj.stats.totalTasks;
+    } else if (typeof metadata.tasks_analyzed === 'number') {
+      // pattern_analysis's `data` is a findings record (no .stats/.velocity
+      // shape above ever matches it), so total_items_analyzed was silently
+      // stuck at 0 while metadata.tasks_analyzed carried the real count —
+      // a lying count-shaped field in every pattern_analysis response.
+      // Live-caught 2026-10-21 (OMN-340 slice 3 follow-up).
+      summary.total_items_analyzed = metadata.tasks_analyzed;
     }
   }
 

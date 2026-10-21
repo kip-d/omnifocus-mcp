@@ -158,7 +158,7 @@ both keep the advertised JSON byte-for-byte as it is today.
       splice `TERMINAL_STATUS_HELPER` and gate on `!isTerminalStatus(task.taskStatus)` (Technique: Substitute
       Algorithm). Verified: read and grep; the verifier reported HOLDS. Note for OMN-110: an oracle that preserves
       current behavior would pin this bug.
-- [ ] 14. [OMN-340] `overdue_analysis` builds `groupedAnalysis[*].count` and project-bottleneck counts from a sample
+- [x] 14. [OMN-340] `overdue_analysis` builds `groupedAnalysis[*].count` and project-bottleneck counts from a sample
       capped at 100 and collected in database order (not the most overdue), while `summary.totalOverdue` is uncapped.
       The key findings ("critical: N", "Most overdue in X (n)") present sample counts as totals. The script's
       `tasksAnalyzed` is dropped by the handler
@@ -166,7 +166,11 @@ both keep the advertised JSON byte-for-byte as it is today.
       `src/tools/unified/OmniFocusAnalyzeTool.ts:967,1047-1054,1129-1137`). Fix: count urgency buckets and per-project
       totals uncapped in the script, cap only the task arrays, and surface `tasks_detailed`/`detail_capped` (Technique:
       Separate Query from Modifier). Verified: read; the verifier reported HOLDS. Unverified at runtime: a unit test
-      with 150 mocked overdue rows asserting that the bucket counts sum to `totalOverdue`.
+      with 150 mocked overdue rows asserting that the bucket counts sum to `totalOverdue`. Status 2026-10-21: fixed
+      across OMN-340's three slices — overdue_analysis counts the whole population and caps only the detail (PR #302,
+      slice 1), list_for_review sorts before the cap with a true `total_found` (PR #307, slice 2), and
+      pattern_analysis's budget now counts admitted rows with an honest `coverage` block (this PR, slice 3). All three
+      share `buildCoverage` (`src/tools/unified/coverage.ts`).
 - [x] 15. [OMN-341] `recurring_tasks {operation:'patterns'}` discards the script's computed `patterns[]` and ships
       placeholders (`patterns: {}`, `recurringTasks: []`, `byFrequency: {}`). Its project insight reads `.count`, but
       the script emits `recurringCount`, so it renders "Project X has the most recurring tasks (undefined)". The unit
@@ -288,7 +292,7 @@ both keep the advertised JSON byte-for-byte as it is today.
         probes; the verifier reported HOLDS. Status 2026-09-28: the `task_velocity` bullet landed with item #6 (PR
         #281), which also added the shared formatter (`formatLocalDay` in `src/utils/timezone.ts`). The
         due-date-bunching bullet is still open.
-- [ ] 27. [OMN-340] Analyze ops cap or truncate silently in three places:
+- [x] 27. [OMN-340] Analyze ops cap or truncate silently in three places:
       - `pattern_analysis` scans `Math.min(flattenedTasks.length, 3000)` **raw** rows, with completed, dropped and root
         rows using up the budget, and no capped flag.
       - `list_for_review` stops at 100 in database order and sorts afterwards, so the most overdue reviews can be
@@ -297,7 +301,12 @@ both keep the advertised JSON byte-for-byte as it is today.
         (`src/tools/unified/OmniFocusAnalyzeTool.ts:1173,1437-1473,1316-1323,3635-3744`;
         `src/omnifocus/scripts/reviews/projects-for-review.ts:51,108-109,176-180`). Fix: count admitted rows against the
         cap, collect then sort then slice, and emit `capped`/`scanned_total` the way `clarify_candidates` does
-        (Technique: Split Loop). Verified: read; the verifier reported HOLDS.
+        (Technique: Split Loop). Verified: read; the verifier reported HOLDS. Status 2026-10-21: all three fixed —
+        `list_for_review` sorts before the cap with a true `total_found` and full-population `review_summary` (PR #307,
+        slice 2); `pattern_analysis`'s scan now counts the budget against ADMITTED rows (not raw rows walked), keeps
+        counting the true admissible population past the budget for an honest `coverage.total`, and surfaces
+        `coverage.scanned_total` (this PR, slice 3) — the three per-detector terminal-state re-filters this bug's
+        admission fix (#286/OMN-338) left in place were also collapsed into the scan, the single source of truth.
 - [ ] 28. [OMN-352] Analytics aggregates are keyed by project **name**, and OmniFocus allows duplicate names:
       - `productivity_stats.projectStats[name]` overwrites, so one project's stats are lost.
       - The workflow and overdue maps merge same-named projects.
