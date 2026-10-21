@@ -43,8 +43,6 @@ export function v3EnvelopeSchema<T extends z.ZodTypeAny>(dataSchema: T) {
  * Source-verified (grep `v: 'ast'`):
  *  - tag-script-builder.ts: every success branch emits {ok:true, v:'ast', items, summary}
  *  - analyze-recurring-tasks-ast.ts buildRecurringTasksScript: emits {ok:true, v:'ast', tasks, summary, metadata}
- *  - analyze-recurring-tasks-ast.ts buildRecurringSummaryScript: emits {ok:true, v:'ast', summary, metadata}
- *    — summary-only has NO items/tasks key; that endpoint has no call site (confirmed orphan).
  *
  * Instantiate once at module scope and reuse; do not construct per request.
  */

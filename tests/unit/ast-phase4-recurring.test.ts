@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  buildRecurringTasksScript,
-  buildRecurringSummaryScript,
-} from '../../src/omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
+import { buildRecurringTasksScript } from '../../src/omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
 
 describe('Phase 4 AST Builders - Recurring Tasks', () => {
   describe('buildRecurringTasksScript', () => {
@@ -82,31 +79,6 @@ describe('Phase 4 AST Builders - Recurring Tasks', () => {
       expect(result.script).toContain('overdue');
       expect(result.script).toContain('dueThisWeek');
       expect(result.script).toContain('byFrequency');
-    });
-  });
-
-  describe('buildRecurringSummaryScript', () => {
-    it('should generate valid summary script', () => {
-      const result = buildRecurringSummaryScript();
-      expect(result.script).toContain('evaluateJavascript');
-      expect(result.script).toContain('flattenedTasks.forEach');
-      expect(result.script).toContain('repetitionRule');
-    });
-
-    it('should not include task details in summary', () => {
-      const result = buildRecurringSummaryScript();
-      // Summary script should be simpler - no task array building
-      expect(result.script).toContain('totalRecurring');
-      expect(result.script).toContain('overdue');
-      expect(result.filterDescription).toContain('summary');
-    });
-
-    it('should count by frequency', () => {
-      const result = buildRecurringSummaryScript();
-      expect(result.script).toContain('byFrequency');
-      expect(result.script).toContain('Daily');
-      expect(result.script).toContain('Weekly');
-      expect(result.script).toContain('Monthly');
     });
   });
 });
