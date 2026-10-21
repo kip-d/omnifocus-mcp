@@ -3823,27 +3823,35 @@ TIME-WINDOW SCOPING:
     const totalFound = scriptMetadata?.total_found ?? parsedProjects.length;
     const cap = scriptMetadata?.cap ?? 100;
 
-    const standardResponse = createListResponseV2('manage_reviews', parsedProjects, 'projects', {
-      ...timer.toMetadata(),
-      operation: 'list_for_review',
-      filters_applied: args,
-      // OMN-340: counts the WHOLE matched population (the script computes
-      // this over every project before the detail cap, not just the capped
-      // `parsedProjects` returned alongside it). Falls back to recomputing
-      // from parsedProjects only if the script didn't emit it (defensive;
-      // REVIEWS_LIST_SCHEMA requires it on every success response).
-      review_summary: scriptMetadata?.review_summary ?? {
-        total_projects: parsedProjects.length,
-        overdue: parsedProjects.filter((p) => p.reviewStatus === 'overdue').length,
-        due_today: parsedProjects.filter((p) => p.reviewStatus === 'due_today').length,
-        due_soon: parsedProjects.filter((p) => p.reviewStatus === 'due_soon').length,
-        no_schedule: parsedProjects.filter((p) => p.reviewStatus === 'no_schedule').length,
+    const standardResponse = createListResponseV2(
+      'manage_reviews',
+      parsedProjects,
+      'projects',
+      {
+        ...timer.toMetadata(),
+        operation: 'list_for_review',
+        filters_applied: args,
+        // OMN-340: counts the WHOLE matched population (the script computes
+        // this over every project before the detail cap, not just the capped
+        // `parsedProjects` returned alongside it). Falls back to recomputing
+        // from parsedProjects only if the script didn't emit it (defensive;
+        // REVIEWS_LIST_SCHEMA requires it on every success response).
+        review_summary: scriptMetadata?.review_summary ?? {
+          total_projects: parsedProjects.length,
+          overdue: parsedProjects.filter((p) => p.reviewStatus === 'overdue').length,
+          due_today: parsedProjects.filter((p) => p.reviewStatus === 'due_today').length,
+          due_soon: parsedProjects.filter((p) => p.reviewStatus === 'due_soon').length,
+          no_schedule: parsedProjects.filter((p) => p.reviewStatus === 'no_schedule').length,
+        },
+        coverage: { ...buildCoverage(totalFound, parsedProjects.length, cap) },
+        ...(data && typeof data === 'object' && 'metadata' in data
+          ? (data as { metadata?: Record<string, unknown> }).metadata
+          : {}),
       },
-      coverage: { ...buildCoverage(totalFound, parsedProjects.length, cap) },
-      ...(data && typeof data === 'object' && 'metadata' in data
-        ? (data as { metadata?: Record<string, unknown> }).metadata
-        : {}),
-    });
+      // OMN-199 count honesty: metadata.total_count, summary.total_projects and the
+      // truncated flag describe the matched population, not the capped page.
+      { population: totalFound },
+    );
 
     this.cache.set('reviews', cacheKey, standardResponse);
     return standardResponse;

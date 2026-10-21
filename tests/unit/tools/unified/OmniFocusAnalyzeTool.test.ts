@@ -1988,6 +1988,13 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.metadata.coverage).toEqual({ total: 150, returned: 2, capped: true, cap: 100 });
       // total_found itself must also be the true pre-cap count.
       expect(res.metadata.total_found).toBe(150);
+      // The generic list envelope must agree (OMN-199 count honesty): total_count
+      // and summary.total_projects are the population, and the page is flagged.
+      expect(res.metadata.total_count).toBe(150);
+      expect(res.metadata.returned_count).toBe(2);
+      expect(res.metadata.truncated).toBe(true);
+      expect(res.summary.total_projects).toBe(150);
+      expect(res.summary.key_insight).toMatch(/^Showing 2 of 150 matching projects \(truncated\)/);
     });
 
     it('OMN-340: coverage.capped is false when the true total does not exceed the cap', async () => {
