@@ -16,18 +16,36 @@ import { ReadSchema } from '../../../../src/tools/unified/schemas/read-schema.js
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
 
+// The object literal starting at `start`, found by brace depth so trailing
+// prose on the line can't leak into it.
+function objectLiteralAt(line: string, start: number): string {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') inString = !inString;
+    if (inString) continue;
+    if (ch === '{') depth++;
+    if (ch === '}' && --depth === 0) return line.slice(start, i + 1);
+  }
+  throw new Error(`Unbalanced example: ${line}`);
+}
+
+// Every line in the block carrying `{ query:` is an example; one that can't be
+// extracted throws rather than silently dropping out of coverage.
 function commonQueryExamples(): { label: string; payload: unknown }[] {
   const description = new OmniFocusReadTool({} as CacheManager).description;
   const block = description.split('COMMON QUERIES:')[1].split('\n\n')[0];
   return block
     .split('\n')
-    .map((line) => /^- ([^:]+): (\{ query: .*\} \})/.exec(line))
-    .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => ({
-      label: m[1],
-      // Examples are JS object literals; quote the bare keys to read them as JSON.
-      payload: JSON.parse(m[2].replace(/(\w+):/g, '"$1":')) as unknown,
-    }));
+    .filter((line) => line.includes('{ query:'))
+    .map((line) => {
+      const literal = objectLiteralAt(line, line.indexOf('{ query:'));
+      // Examples are JS object literals; quote bare keys (only after `{` or `,`,
+      // so a colon inside a string value is left alone) to read them as JSON.
+      const json = literal.replace(/([{,]\s*)(\w+):/g, '$1"$2":');
+      return { label: line.slice(2, line.indexOf(':')), payload: JSON.parse(json) as unknown };
+    });
 }
 
 describe('omnifocus_read COMMON QUERIES examples', () => {
@@ -38,7 +56,7 @@ describe('omnifocus_read COMMON QUERIES examples', () => {
   });
 
   it.each(examples)('$label parses against ReadSchema', ({ payload }) => {
-    expect(ReadSchema.safeParse(payload).success).toBe(true);
+    expect(ReadSchema.safeParse(payload).error?.issues).toBeUndefined();
   });
 
   it('includes a text-search example using the filters.text object form', () => {
