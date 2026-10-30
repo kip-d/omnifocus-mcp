@@ -8,6 +8,7 @@
  * while the correct syntax sat only further down, under FILTER OPERATORS.
  */
 
+import vm from 'node:vm';
 import { describe, it, expect, vi } from 'vitest';
 import { OmniFocusReadTool } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
@@ -23,7 +24,11 @@ function objectLiteralAt(line: string, start: number): string {
   let inString = false;
   for (let i = start; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') inString = !inString;
+    if (inString && ch === '\\') {
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") inString = !inString;
     if (inString) continue;
     if (ch === '{') depth++;
     if (ch === '}' && --depth === 0) return line.slice(start, i + 1);
@@ -41,10 +46,9 @@ function commonQueryExamples(): { label: string; payload: unknown }[] {
     .filter((line) => line.includes('{ query:'))
     .map((line) => {
       const literal = objectLiteralAt(line, line.indexOf('{ query:'));
-      // Examples are JS object literals; quote bare keys (only after `{` or `,`,
-      // so a colon inside a string value is left alone) to read them as JSON.
-      const json = literal.replace(/([{,]\s*)(\w+):/g, '$1"$2":');
-      return { label: line.slice(2, line.indexOf(':')), payload: JSON.parse(json) as unknown };
+      // Examples are JS object literals (this repo's own description text), so
+      // evaluate them as JS in an empty context rather than regex them into JSON.
+      return { label: line.slice(2, line.indexOf(':')), payload: vm.runInNewContext(`(${literal})`) as unknown };
     });
 }
 

@@ -371,6 +371,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - inbox, available, blocked, all; search is accepted but behaves like all (filters do the searching)
 - forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the exact matching population (limit-independent); truncated:true marks a partial page (raise limit or paginate with offset).
 - smart_suggest: candidate shortlist from mechanical signals, NOT a priority ranking. Each task carries screen_reasons (e.g. overdue_5d, due_today, flagged, available, quick_win) naming the signals that selected it — YOU re-rank using GTD engage criteria (context, time available, energy, priority) plus whatever context you have that the server can't see. Includes overdue, due-soon, and next tasks (all actionable statuses).
+
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
 - dates (dueDate, deferDate, plannedDate, completionDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
