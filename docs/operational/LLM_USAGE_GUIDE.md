@@ -112,7 +112,7 @@ omnifocus_read({ query: { type: 'tasks', mode: 'today', limit: 50 } });
 omnifocus_read({ query: { type: 'tasks', mode: 'upcoming' } });
 
 // 3. Search for specific items
-omnifocus_read({ query: { type: 'tasks', mode: 'search', search: 'budget' } });
+omnifocus_read({ query: { type: 'tasks', filters: { text: { contains: 'budget' } } } });
 ```
 
 ### Task Creation with Tags

@@ -358,6 +358,8 @@ COMMON QUERIES:
 - Flagged: { query: { type: "tasks", mode: "flagged" } }
 - Upcoming (7 days): { query: { type: "tasks", mode: "upcoming", daysAhead: 7 } }
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
+- Search by name: { query: { type: "tasks", filters: { name: { contains: "Airtable" } } } } — also works with type: "projects"
+- Search name OR note: { query: { type: "tasks", filters: { text: { contains: "Airtable" } } } } — broader (matches note bodies); use name before a write. Search terms always go in an object under filters.name or filters.text; there is no filters.search key, and no mode is needed
 - Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
 - metadata.total_count always reports the FULL matching population; truncated: true marks a partial result (raise limit or paginate with offset)
 
@@ -366,10 +368,9 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - overdue: Tasks past their due date
 - flagged: Flagged tasks
 - upcoming: Tasks due in next N days (set daysAhead, default 7)
-- inbox, available, blocked, search, all
+- inbox, available, blocked, all; search is accepted but behaves like all (filters do the searching)
 - forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the exact matching population (limit-independent); truncated:true marks a partial page (raise limit or paginate with offset).
 - smart_suggest: candidate shortlist from mechanical signals, NOT a priority ranking. Each task carries screen_reasons (e.g. overdue_5d, due_today, flagged, available, quick_win) naming the signals that selected it — YOU re-rank using GTD engage criteria (context, time available, energy, priority) plus whatever context you have that the server can't see. Includes overdue, due-soon, and next tasks (all actionable statuses).
-- To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
