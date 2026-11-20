@@ -5,6 +5,7 @@
  *   npm run api:regen                      export from the running OmniFocus via the JXA bridge
  *   npm run api:regen -- --from <file>     use a saved raw export (offline runs, tests)
  *   npm run api:regen -- --api-dir <dir>   write somewhere other than src/omnifocus/api
+ *   npm run api:regen -- --force           allow an export older than the current snapshot (never deletes newer ones)
  *
  * Steps: export, prepend the regen header, drop `?` on optional parameters that precede a required one
  * (TS1016), format with prettier, write OmniFocus-<version>-d.ts, repoint the OmniFocus.d.ts symlink,
@@ -26,7 +27,17 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format, resolveConfig } from 'prettier';
 import { isRunDirectly } from './lib/run-directly.js';
-import { addHeader, diffSnapshots, formatDiff, normalizeText, parseExportInfo } from './lib/api-snapshot.js';
+import {
+  addHeader,
+  compareVersions,
+  diffSnapshots,
+  formatDiff,
+  normalizeText,
+  parseExportInfo,
+  selectRetentionDeletions,
+} from './lib/api-snapshot.js';
+
+export { compareVersions };
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_API_DIR = join(PROJECT_ROOT, 'src', 'omnifocus', 'api');
@@ -36,14 +47,19 @@ const SNAPSHOT_FILE = /^OmniFocus-(.+)-d\.ts$/;
 export interface Args {
   from: string | null;
   apiDir: string;
+  force: boolean;
 }
 
 export class UsageError extends Error {}
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { from: null, apiDir: DEFAULT_API_DIR };
+  const args: Args = { from: null, apiDir: DEFAULT_API_DIR, force: false };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
+    if (flag === '--force') {
+      args.force = true;
+      continue;
+    }
     if (flag === '--from' || flag === '--api-dir') {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -56,23 +72,25 @@ export function parseArgs(argv: string[]): Args {
   return args;
 }
 
-/** Compare dotted version strings numerically (4.10.1 > 4.9). */
-export function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  return 0;
-}
+const EXPORT_TIMEOUT_MS = 60_000;
 
 function exportFromOmniFocus(): string {
-  return execFileSync(
-    'osascript',
-    ['-l', 'JavaScript', '-e', 'Application("OmniFocus").evaluateJavascript("app.getTypeScriptDeclarations()")'],
-    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-  );
+  try {
+    return execFileSync(
+      'osascript',
+      ['-l', 'JavaScript', '-e', 'Application("OmniFocus").evaluateJavascript("app.getTypeScriptDeclarations()")'],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: EXPORT_TIMEOUT_MS },
+    );
+  } catch (err) {
+    const e = err as { code?: string };
+    if (e.code === 'ETIMEDOUT') {
+      throw new Error(
+        `OmniFocus did not answer within ${EXPORT_TIMEOUT_MS / 1000}s. It is likely not responding or blocked by a dialog; ` +
+          'dismiss any dialog (or restart OmniFocus) and retry, or use --from <raw-export>.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function buildSnapshot(raw: string, filepath: string): Promise<{ version: string; content: string }> {
@@ -102,7 +120,20 @@ async function main(): Promise<void> {
   const others = listVersions(args.apiDir).filter((v) => v !== newVersion);
   const previous = linked && linked !== newVersion ? linked : others[others.length - 1];
 
+  // Everything that can fail is read and validated BEFORE the first write, so a failure leaves the tree untouched.
+  if (previous !== undefined && compareVersions(newVersion, previous) < 0 && !args.force) {
+    throw new Error(
+      `Export is OmniFocus ${newVersion}, older than the current snapshot ${previous}. ` +
+        'Refusing to replace a newer snapshot; pass --force to regenerate from an older app anyway.',
+    );
+  }
   const { content } = await buildSnapshot(raw, fileFor(newVersion));
+  const diffText =
+    previous !== undefined
+      ? formatDiff(previous, newVersion, diffSnapshots(readFileSync(fileFor(previous), 'utf8'), content))
+      : 'No previous snapshot to diff against.';
+  const deletions = selectRetentionDeletions(listVersions(args.apiDir), newVersion, previous);
+
   writeFileSync(fileFor(newVersion), content);
 
   try {
@@ -112,20 +143,14 @@ async function main(): Promise<void> {
   }
   symlinkSync(`OmniFocus-${newVersion}-d.ts`, linkPath);
 
-  // Retention: keep current + previous, delete everything older.
-  for (const v of listVersions(args.apiDir)) {
-    if (v !== newVersion && v !== previous) {
-      rmSync(fileFor(v));
-      console.log(`Removed older snapshot OmniFocus-${v}-d.ts`);
-    }
+  // Retention: keep current + previous, delete only versions older than previous.
+  for (const v of deletions) {
+    rmSync(fileFor(v));
+    console.log(`Removed older snapshot OmniFocus-${v}-d.ts`);
   }
 
   console.log(`Wrote ${fileFor(newVersion)}`);
-  if (previous) {
-    console.log(formatDiff(previous, newVersion, diffSnapshots(readFileSync(fileFor(previous), 'utf8'), content)));
-  } else {
-    console.log('No previous snapshot to diff against.');
-  }
+  console.log(diffText);
   console.log('Next: npx tsc --noEmit -p tsconfig.json');
 }
 

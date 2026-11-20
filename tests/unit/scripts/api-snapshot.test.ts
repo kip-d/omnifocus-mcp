@@ -3,7 +3,7 @@
  * 4.9 and 4.10.1 exports), the header builder, and the token-stream member differ.
  */
 import { describe, it, expect } from 'vitest';
-import {
+import { selectRetentionDeletions ,
   addHeader,
   diffSnapshots,
   extractMembers,
@@ -184,5 +184,26 @@ describe('regen script helpers', () => {
     expect(parseArgs(['--from', 'x.d.ts']).from).toMatch(/x\.d\.ts$/);
     expect(() => parseArgs(['--from'])).toThrow(UsageError);
     expect(() => parseArgs(['--bogus'])).toThrow(UsageError);
+  });
+});
+
+describe('selectRetentionDeletions', () => {
+  it('deletes only versions older than previous', () => {
+    expect(selectRetentionDeletions(['4.7', '4.8', '4.9', '4.10.1'], '4.10.1', '4.9')).toEqual(['4.7', '4.8']);
+  });
+
+  it('an older export never deletes a newer snapshot', () => {
+    // Regenerating 4.8 while 4.9 is current: previous = 4.9, so 4.10.1 and 4.9 both survive.
+    expect(selectRetentionDeletions(['4.7', '4.8', '4.9', '4.10.1'], '4.8', '4.9')).toEqual(['4.7']);
+  });
+
+  it('keeps the new version and previous, and deletes nothing without a previous', () => {
+    expect(selectRetentionDeletions(['4.9', '4.10.1'], '4.10.1', '4.9')).toEqual([]);
+    expect(selectRetentionDeletions(['4.9'], '4.10.1', undefined)).toEqual([]);
+  });
+
+  it('parses --force', () => {
+    expect(parseArgs(['--force']).force).toBe(true);
+    expect(parseArgs([]).force).toBe(false);
   });
 });

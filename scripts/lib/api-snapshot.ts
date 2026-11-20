@@ -205,3 +205,32 @@ export function formatDiff(beforeLabel: string, afterLabel: string, d: SnapshotD
   for (const m of sorted(d.added)) lines.push(`+ ${where(m.container)}: ${m.text}`);
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Versions and retention
+// ---------------------------------------------------------------------------
+
+/** Compare dotted version strings numerically (4.10.1 > 4.9). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/**
+ * Snapshot versions to delete: keep `newVersion` and `previous`, delete only versions strictly older than
+ * `previous`. A newer version is never selected, so regenerating from an older app cannot destroy a newer
+ * snapshot. With no `previous`, nothing is deleted.
+ */
+export function selectRetentionDeletions(
+  versions: string[],
+  newVersion: string,
+  previous: string | undefined,
+): string[] {
+  if (previous === undefined) return [];
+  return versions.filter((v) => v !== newVersion && v !== previous && compareVersions(v, previous) < 0);
+}

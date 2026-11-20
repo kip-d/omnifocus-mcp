@@ -121,11 +121,14 @@ When a new version of OmniFocus is released, run the script. It is the procedure
 npm run api:regen                          # exports from the running OmniFocus (JXA bridge)
 npm run api:regen -- --from <raw-export>   # offline: use a saved export instead
 npm run api:regen -- --api-dir <dir>       # write somewhere other than this directory
+npm run api:regen -- --force               # allow an export older than the current snapshot
 ```
 
-OmniFocus must be running for the live form. The version comes from the export's first line, so there is nothing to name
-by hand. Older OmniFocus (before 4.9, no `getTypeScriptDeclarations`) can save **Automation** → **API Reference** →
-export icon → **TypeScript**, then pass the saved file with `--from`.
+OmniFocus must be running for the live form; the export times out after 60s if OmniFocus is wedged or blocked by a
+dialog. The script refuses an export older than the current snapshot unless `--force` is given, and never deletes a
+snapshot newer than the previous one. All reads and validation finish before the first write. The version comes from the
+export's first line, so there is nothing to name by hand. Older OmniFocus (before 4.9, no `getTypeScriptDeclarations`)
+can save **Automation** → **API Reference** → export icon → **TypeScript**, then pass the saved file with `--from`.
 
 After the run:
 
