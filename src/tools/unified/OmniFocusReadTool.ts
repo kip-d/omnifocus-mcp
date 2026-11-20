@@ -2,7 +2,7 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
 import { QueryCompiler, type CompiledQuery } from './compilers/QueryCompiler.js';
-import { buildListTasksScriptV4, isInboxRoute } from '../../omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4, buildTasksByIdsQueryScript, isInboxRoute } from '../../omnifocus/scripts/tasks.js';
 import {
   buildTaskCountScript,
   buildFilteredProjectsScript,
@@ -53,11 +53,13 @@ import {
   sortTasks,
   projectFields,
   carryNoteTruncatedMarker,
-  scoreForSmartSuggest,
+  rankForSmartSuggest,
   countTodayCategories,
   MODE_INJECTED_FIELDS,
   type TaskQueryMode,
+  type ScreenableTask,
 } from '../tasks/task-query-pipeline.js';
+import type { OmniFocusTask } from '../../omnifocus/types.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 import { isEmptyFolderFilter } from '../../contracts/ast/filter-generator.js';
 import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
@@ -81,6 +83,19 @@ const TASK_LIST_SCHEMA = listResultSchema(['tasks', 'items'], {
   rowSchema: TaskRowSchema,
   metadata: TaskListMetadataSchema,
 });
+
+/**
+ * OMN-335 slice 3: smart_suggest phase 1's projection — exactly the fields
+ * `ScreenableTask`/`scoreForSmartSuggest` read. `satisfies` pins every entry to a
+ * key of `ScreenableTask`, so a renamed or removed key fails the build.
+ */
+const SMART_SUGGEST_SCREEN_FIELDS = [
+  'id',
+  'dueDate',
+  'flagged',
+  'available',
+  'estimatedMinutes',
+] as const satisfies readonly (keyof ScreenableTask)[];
 
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
@@ -193,21 +208,27 @@ function resolveNoteTruncateLength(details: boolean | undefined): number | undef
 // =============================================================================
 
 interface TaskQueryPlan {
-  script: string;
   filter: TaskFilter;
   mode: TaskQueryMode | undefined;
+  inboxRoute: boolean;
   scriptFields: string[];
   limit: number;
-  sortedInScript: boolean;
+  fieldsMode: FieldsMode;
+  noteTruncateLength: number | undefined;
+  /** Caller sort, else the mode's default sort. */
+  userSort: Extract<CompiledQuery, { type: 'tasks' }>['sort'] | ReturnType<typeof getDefaultSort>;
 }
+
+/** A task-list script's outcome: raw script data, or a ready-to-return error response (shared by every task-list script run, incl. both smart_suggest phases). */
+type TaskScriptOutcome = { ok: true; data: unknown } | { ok: false; response: unknown };
+
+/** How a query's response fields were determined — shared alias (sonarjs/use-type-alias: 3+ inline repeats of this union). */
+type FieldsMode = 'minimal' | 'detailed' | 'explicit';
 
 /**
  * Determine the fields_mode for metadata reporting.
  */
-function resolveFieldsMode(
-  userFields: string[] | undefined,
-  details: boolean | undefined,
-): 'minimal' | 'detailed' | 'explicit' {
+function resolveFieldsMode(userFields: string[] | undefined, details: boolean | undefined): FieldsMode {
   if (userFields && userFields.length > 0) return 'explicit';
   if (details) return 'detailed';
   return 'minimal';
@@ -238,10 +259,38 @@ export function isNarrowLookupFilter(filter: NarrowLookupFilter): boolean {
 }
 
 /**
- * Build the full task query: resolve mode, augment filters, inject fields, build script.
+ * OMN-335 slice 3: merge smart_suggest's phase-2 full rows back onto the
+ * phase-1 score order, reattaching each task's screen_reasons. An id selected
+ * in phase 1 that no longer resolves in phase 2 (completed/deleted in
+ * between) is reported via `vanishedIds` rather than silently dropped from
+ * the count — the caller surfaces it in metadata + a key_insight.
  */
-function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
-  if (compiled.type !== 'tasks') throw new Error('buildTaskQuery: wrong type');
+function reconcileSmartSuggestOrder(
+  selectedIds: string[],
+  reasonsById: Map<string, string[]>,
+  fullRowsById: Map<string, OmniFocusTask>,
+): { orderedTasks: OmniFocusTask[]; vanishedIds: string[] } {
+  const orderedTasks: OmniFocusTask[] = [];
+  const vanishedIds: string[] = [];
+  for (const id of selectedIds) {
+    const row = fullRowsById.get(id);
+    if (!row) {
+      vanishedIds.push(id);
+      continue;
+    }
+    orderedTasks.push({ ...row, screen_reasons: reasonsById.get(id) });
+  }
+  return { orderedTasks, vanishedIds };
+}
+
+/**
+ * Plan the task query: resolve mode, augment filters, inject fields, resolve sort.
+ * Shared by the single-script path (buildTaskScript) and smart_suggest's two
+ * phases, so field/filter resolution (the 'available' force-inject, the
+ * isProjectRoot injection, fields_mode, note truncation) can't drift between them.
+ */
+function planTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
+  if (compiled.type !== 'tasks') throw new Error('planTaskQuery: wrong type');
   const limit = compiled.limit || 25;
   // OMN-330: a constraining mode wins. 'inbox' replaces only the modes that add no
   // constraint — 'all' (the compiler's default) and 'search' — so their label reflects
@@ -309,19 +358,20 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 
   // including inbox — with no more route-specific carve-out.
   const userSort = compiled.sort ?? getDefaultSort(mode);
 
-  const script = buildListTasksScriptV4({
-    filter,
-    fields: scriptFields,
-    limit,
-    offset: compiled.offset,
-    mode: inboxRoute ? 'inbox' : undefined,
-    sort: userSort,
-    noteTruncateLength,
-  });
+  return { filter, mode, inboxRoute, scriptFields, limit, fieldsMode, noteTruncateLength, userSort };
+}
 
-  // sortedInScript is true whenever a sort (user-specified or mode-default) was
-  // embedded in-script — true on every route, including inbox (slice 2).
-  return { script, filter, mode, scriptFields, limit, sortedInScript: !!userSort, fieldsMode };
+/** Build the single-script (one capped scan) task-list script for a plan. */
+function buildTaskScript(plan: TaskQueryPlan, offset: number | undefined): string {
+  return buildListTasksScriptV4({
+    filter: plan.filter,
+    fields: plan.scriptFields,
+    limit: plan.limit,
+    offset,
+    mode: plan.inboxRoute ? 'inbox' : undefined,
+    sort: plan.userSort,
+    noteTruncateLength: plan.noteTruncateLength,
+  });
 }
 
 // OMN-88: date fields parseProjects converts string → Date. Mirrors the
@@ -369,6 +419,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - inbox, available, blocked, search, all
 - forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the exact matching population (limit-independent); truncated:true marks a partial page (raise limit or paginate with offset).
 - smart_suggest: candidate shortlist from mechanical signals, NOT a priority ranking. Each task carries screen_reasons (e.g. overdue_5d, due_today, flagged, available, quick_win) naming the signals that selected it — YOU re-rank using GTD engage criteria (context, time available, energy, priority) plus whatever context you have that the server can't see. Includes overdue, due-soon, and next tasks (all actionable statuses).
+  Paging: offset pages the ranked shortlist; total_count = shortlist size (tasks scoring > 0), metadata.screened_count = the screened population; truncated = more shortlist pages. A due-today task is promoted onto page 1. countOnly counts the screened population (no scoring). metadata.vanished_count = shortlisted tasks deleted, completed or dropped between the two phases. Cost: scans every incomplete task, so it scales with database size.
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:
@@ -445,6 +496,8 @@ PERFORMANCE:
             },
             mode: {
               type: 'string',
+              description:
+                'smart_suggest: offset pages the ranked shortlist; total_count = shortlist size, metadata.screened_count = screened population; countOnly counts the screened population; vanished_count = tasks deleted/completed/dropped between phases; a due-today task is promoted onto page 1; scans every incomplete task (cost scales with database size).',
               enum: [
                 'all',
                 'inbox',
@@ -562,12 +615,13 @@ PERFORMANCE:
     const timer = new OperationTimerV2();
 
     // OMN-133: forecast_past rewrites to a single OR query and re-enters the standard
-    // pipeline — dispatch before buildTaskQuery (it is not a MODE_DEFINITIONS mode).
+    // pipeline — dispatch before planTaskQuery (it is not a MODE_DEFINITIONS mode).
     if (compiled.mode === 'forecast_past') {
       return this.executeForecastPast(compiled);
     }
 
-    const { script, filter, mode, limit, sortedInScript, fieldsMode } = buildTaskQuery(compiled);
+    const plan = planTaskQuery(compiled);
+    const { filter, mode, fieldsMode } = plan;
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
@@ -579,26 +633,24 @@ PERFORMANCE:
       return this.executeIdLookup(filter, compiled.fields, timer);
     }
 
-    // --- Execute main query ---
-    const result = await this.execJson(script, TASK_LIST_SCHEMA);
-
-    if (!isScriptSuccess(result)) {
-      // OMN-218: an unresolvable folder reference fails loudly (NOT_FOUND), not as an
-      // opaque SCRIPT_ERROR or a silent empty result.
-      if (isFolderNotFoundError(result)) {
-        return this.folderNotFoundResponse('tasks', result, timer);
-      }
-      return createErrorResponseV2(
-        'tasks',
-        'SCRIPT_ERROR',
-        `Failed to get tasks (mode: ${mode || 'all'})`,
-        'Check if OmniFocus is running',
-        isScriptError(result) ? result.details : undefined,
-        timer.toMetadata(),
-      );
+    // OMN-335 slice 3: smart_suggest is a two-phase query (slim uncapped screen,
+    // then a by-id fetch for the scored top N) — it can't share the single-script,
+    // single-cap shape below. It runs AFTER the countOnly and id fast paths (which
+    // work the same for every mode) and shares the plan's field/filter resolution.
+    if (mode === 'smart_suggest') {
+      return this.executeSmartSuggest(compiled, plan, timer);
     }
 
-    const data = result.data as {
+    // --- Execute main query ---
+    const sortedInScript = !!plan.userSort;
+    const outcome = await this.execTaskScript(
+      buildTaskScript(plan, compiled.offset),
+      timer,
+      `Failed to get tasks (mode: ${mode || 'all'})`,
+    );
+    if (!outcome.ok) return outcome.response;
+
+    const data = outcome.data as {
       tasks?: unknown[];
       items?: unknown[];
       metadata?: { total_matched?: number; sorted_in_script?: boolean };
@@ -606,14 +658,9 @@ PERFORMANCE:
     let tasks = parseTasks(data.tasks || data.items || []);
     const totalMatched = data.metadata?.total_matched;
 
-    // Smart suggest: score and rank
-    if (mode === 'smart_suggest') {
-      tasks = scoreForSmartSuggest(tasks, limit);
-    }
-
     // Sort: skip post-hoc sort when sort was already applied in-script.
     // OMN-335 (slices 1-2): user-specified sorts AND mode default sorts (e.g.,
-    // overdue -> dueDate asc) are embedded in OmniJS via buildTaskQuery's
+    // overdue -> dueDate asc) are embedded in OmniJS via planTaskQuery's
     // userSort (sort-before-cap fix) whenever sortedInScript is true — on every
     // route, including inbox. This branch is now a harmless safety net, not the
     // primary path, for all of them.
@@ -658,6 +705,192 @@ PERFORMANCE:
       offset: compiled.offset || 0,
       summary: !isNarrowLookup,
     });
+  }
+
+  /**
+   * OMN-335 slice 3 (D3a): smart_suggest's two-phase screen-then-judge.
+   *
+   * Phase 1 (screen): a slim, UNCAPPED scan over the whole actionable
+   * population — buildListTasksScriptV4 with SMART_SUGGEST_SCREEN_FIELDS with
+   * `uncapped: true` (no limit in the script), on the same filter/route (including the
+   * inbox route via isInboxRoute) every other mode uses. The old single-phase
+   * version capped at `limit` in DB order BEFORE scoring, so the "best N"
+   * could only ever be the best of an arbitrary N — this phase visits every
+   * match (bounded payload: 5 scalar fields per row, no notes/tags/etc.).
+   * `total_matched` from this phase IS the actionable population (the script
+   * never caps, so `total_matched === tasks.length` here).
+   *
+   * Score ALL of phase 1 in TS via scoreForSmartSuggest (weights/reasons
+   * byte-identical to before), requesting the top `offset + limit` ids —
+   * then slice off the first `offset` of that ranked list. `offset` gets its
+   * natural meaning on a ranked list this way: rank window
+   * [offset, offset+limit) in score order, not "skip N DB-order rows before
+   * scoring" (which would be meaningless — there's no DB order to skip
+   * before scoring). Tie-break: score desc, then phase-1 array order (a
+   * stable sort — see scoreForSmartSuggest's doc comment).
+   *
+   * Phase 2 (judge's raw material): fetch full rows for exactly the ids in
+   * that rank window via buildTasksByIdsQueryScript (Task.byIdentifier per
+   * id — no flattenedTasks scan) with the caller's requested/default
+   * fields, the same projection an ordinary query would use. Reattach
+   * screen_reasons and restore the phase-1 score order (phase 2 doesn't
+   * preserve order on its own). An id that no longer resolves
+   * (completed/deleted between phases) is dropped — never silently
+   * backfilled to the limit — and reported via metadata.vanished_count plus
+   * a key_insight.
+   *
+   * total_count semantics (OMN-335 §4/D4, count honesty): the RANKED
+   * CANDIDATE count (score > 0) — the population `offset` pages through, so
+   * `truncated` (offset + returned < total_count) ends at the last real page.
+   * The screened actionable population is reported separately as
+   * metadata.screened_count. An offset beyond the candidates returns an empty
+   * page with total_count still the candidate count.
+   */
+  private async executeSmartSuggest(
+    compiled: CompiledQuery,
+    plan: TaskQueryPlan,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    if (compiled.type !== 'tasks') throw new Error('executeSmartSuggest: wrong type');
+    const limit = plan.limit;
+    const offset = compiled.offset || 0;
+
+    const { filter, inboxRoute, fieldsMode, noteTruncateLength } = plan;
+    // The RETURNED fields (phase 2); the plan already force-injected 'available'
+    // (OMN-130 #3), so the response always carries it as it always has.
+    const responseFields = plan.scriptFields;
+    const isNarrowLookup = isNarrowLookupFilter(filter);
+
+    // --- Phase 1: slim, uncapped screen over the whole actionable population ---
+    const phase1Script = buildListTasksScriptV4({
+      filter,
+      fields: [...SMART_SUGGEST_SCREEN_FIELDS],
+      limit,
+      uncapped: true,
+      offset: 0,
+      mode: inboxRoute ? 'inbox' : undefined,
+    });
+    const phase1 = await this.execTaskScript(phase1Script, timer, 'Failed to get tasks (mode: smart_suggest)');
+    if (!phase1.ok) return phase1.response;
+
+    const phase1Data = phase1.data as {
+      tasks?: unknown[];
+      items?: unknown[];
+      metadata?: { total_matched?: number };
+    };
+    const screenRows = parseTasks(phase1Data.tasks || phase1Data.items || []) as unknown as ScreenableTask[];
+    const population = phase1Data.metadata?.total_matched ?? screenRows.length;
+
+    const baseMetadata: Partial<StandardMetadataV2> = {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'smart_suggest',
+      offset,
+      // The page order comes from the internal score; an explicit caller sort
+      // is applied to the returned page afterwards (see below).
+      sort_applied: !!compiled.sort,
+      fields_mode: fieldsMode,
+      // The whole actionable population phase 1 screened (total_count is the
+      // ranked candidate count, the pageable subset of it).
+      screened_count: population,
+    };
+
+    // --- Score the WHOLE population in TS; take the ranked window [offset, offset+limit) ---
+    const ranked = rankForSmartSuggest(screenRows, limit);
+    const selected = ranked.slice(offset, offset + limit);
+    // The pageable population is the ranked candidate list (score > 0), not the
+    // screened population: total_count/truncated are measured against it so a
+    // client paging until truncated=false stops at the last real page.
+    const candidateCount = ranked.length;
+    if (selected.length === 0) {
+      return createTaskResponseV2('tasks', [], baseMetadata, {
+        population: candidateCount,
+        offset,
+        summary: !isNarrowLookup,
+      });
+    }
+
+    const selectedIds = selected.map((t) => t.id);
+    const reasonsById = new Map(selected.map((t) => [t.id, t.screen_reasons]));
+
+    // --- Phase 2: fetch full rows for exactly the selected ids ---
+    // An explicit sort key must be readable in phase 2 even when `fields` omits
+    // it: project it, sort, then strip back to what the caller asked for.
+    const sortKeys = (compiled.sort ?? []).map((sortSpec) => sortSpec.field as string);
+    const phase2Fields = [...new Set([...responseFields, ...sortKeys])];
+    // Mirror phase 1's effective filter: skip rows now completed/dropped only
+    // when that state was excluded from the screen.
+    const phase2Script = buildTasksByIdsQueryScript(selectedIds, phase2Fields, noteTruncateLength, {
+      skipCompleted: filter.completed !== true,
+      skipDropped: filter.dropped !== true,
+    });
+    const phase2 = await this.execTaskScript(phase2Script, timer, 'Failed to fetch smart_suggest shortlist details');
+    if (!phase2.ok) return phase2.response;
+
+    const phase2Data = phase2.data as { tasks?: unknown[]; items?: unknown[] };
+    const fullRowsById = new Map(parseTasks(phase2Data.tasks || phase2Data.items || []).map((t) => [t.id, t]));
+
+    const { orderedTasks, vanishedIds } = reconcileSmartSuggestOrder(selectedIds, reasonsById, fullRowsById);
+
+    const metadata: Partial<StandardMetadataV2> = { ...baseMetadata };
+    if (vanishedIds.length > 0) {
+      metadata.vanished_count = vanishedIds.length;
+    }
+
+    // An explicit sort reorders the returned page only (it can't change which
+    // tasks are selected — the score decides that). Sorted before projection;
+    // phase 2 projected the sort keys, and projectFields strips them again.
+    const pageTasks = compiled.sort
+      ? sortTasks(orderedTasks, compiled.sort as import('../tasks/filter-types.js').SortOption[])
+      : orderedTasks;
+    const projectedTasks = projectFields(pageTasks, compiled.fields?.length ? compiled.fields : responseFields);
+    const response = createTaskResponseV2('tasks', projectedTasks, metadata, {
+      population: candidateCount,
+      offset,
+      // Vanished rows were consumed from the window even though not returned.
+      consumed: selected.length,
+      summary: !isNarrowLookup,
+    }) as { summary?: { key_insights?: unknown } };
+
+    if (vanishedIds.length > 0 && response.summary && Array.isArray(response.summary.key_insights)) {
+      (response.summary.key_insights as string[]).unshift(
+        `${vanishedIds.length} shortlisted task(s) vanished between screening and fetch (completed or deleted elsewhere) and were dropped, not backfilled`,
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Shared script execution + error mapping for every task-list script (the
+   * single-script path and both smart_suggest phases): the OMN-218 folder
+   * NOT_FOUND mapping, else SCRIPT_ERROR. One copy, so the paths can't drift.
+   */
+  private async execTaskScript(
+    script: string,
+    timer: OperationTimerV2,
+    failureMessage: string,
+  ): Promise<TaskScriptOutcome> {
+    const result = await this.execJson(script, TASK_LIST_SCHEMA);
+    if (!isScriptSuccess(result)) {
+      // OMN-218: an unresolvable folder reference fails loudly (NOT_FOUND), not as an
+      // opaque SCRIPT_ERROR or a silent empty result.
+      if (isFolderNotFoundError(result)) {
+        return { ok: false, response: this.folderNotFoundResponse('tasks', result, timer) };
+      }
+      return {
+        ok: false,
+        response: createErrorResponseV2(
+          'tasks',
+          'SCRIPT_ERROR',
+          failureMessage,
+          'Check if OmniFocus is running',
+          isScriptError(result) ? result.details : undefined,
+          timer.toMetadata(),
+        ),
+      };
+    }
+    return { ok: true, data: result.data };
   }
 
   /**
@@ -740,7 +973,7 @@ PERFORMANCE:
     timer: OperationTimerV2,
   ): Promise<unknown> {
     // mode is 'inbox' either because the caller asked for it or because an
-    // unconstrained mode met an inInbox filter (buildTaskQuery, OMN-330). 'inbox' is
+    // unconstrained mode met an inInbox filter (planTaskQuery, OMN-330). 'inbox' is
     // not in MODE_DEFINITIONS, so augmentFilterForMode adds nothing — this guard is
     // what scopes an explicit mode:'inbox' count (no project:null) to the inbox.
     // OMN-367: reuses the single shared inbox-route predicate (isInboxRoute,

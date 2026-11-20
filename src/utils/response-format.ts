@@ -99,6 +99,12 @@ export interface CountHonestyInput {
   population?: number;
   /** Offset the caller applied; participates in the truncation formula (R2/D5). */
   offset?: number;
+  /**
+   * Rows consumed from the population by this page, when that differs from the
+   * rows returned (smart_suggest drops tasks that vanished between its two
+   * phases). Defaults to the returned count. Drives only the truncation test.
+   */
+  consumed?: number;
 }
 
 /**
@@ -128,7 +134,7 @@ export function applyCountHonesty(
   const population = counts.population;
   const offset = counts.offset ?? 0;
   const returned = typeof response.metadata.returned_count === 'number' ? response.metadata.returned_count : 0;
-  const isTruncated = offset + returned < population;
+  const isTruncated = offset + (counts.consumed ?? returned) < population;
 
   response.metadata.total_count = population;
   if (isTruncated) {

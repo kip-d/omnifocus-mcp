@@ -31,6 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING: `minimalResponse` is task-update only** (OMN-343 slice 3/3) — `minimalResponse: true` is now rejected on
+  create, complete and project update (it was silently ignored there); `minimalResponse: false` is accepted as a no-op
+  on create, complete and update (other operations — delete, bulk_delete, batch, create_folder, tag_manage — never took
+  the key and still reject it as unknown), and string booleans (`"true"`/`"false"`) are coerced. The task-update minimal
+  response moves under `data` (`data.id`, `data.fields_updated`, live status read-back, warnings) with the standard
+  `metadata` block; the "no valid updates" early return honors the flag too. Batch update rows never use the minimal
+  shape.
 - **`osascript` spawns are serialized process-wide** (OMN-321) — `OmniAutomation` and `DiagnosticOmniAutomation` now run
   every `osascript` spawn through a FIFO queue (`src/omnifocus/osascript-queue.ts`): the second of two concurrent bridge
   calls is not spawned until the first child has closed. Previously nothing gated concurrent tool calls after startup;
@@ -45,6 +52,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `wip_limits`, `onhold_reactivation`, and `sequential_blocked_far` each independently rebuilt the same `Map` over up to
   3000 tasks; requesting all three together (exactly what `guided_review`'s `standard` mode does in one call) tripled
   that O(n) pass for no reason. No behavior change — same data, computed once and shared.
+
+- **Internal (no client-visible change): the `filters.search` alias is removed from the AST lowering** (OMN-307) — the
+  AST builder honored `filter.search` as a legacy alias for `filter.text`, but the read schema has never exposed a
+  `filters.search` key, so `{ filters: { search: "..." } }` was rejected at the boundary with
+  `Unrecognized key(s) in object: 'search'` and the lowering branch was unreachable from every MCP client. A layer-5
+  path with no layer-1 door. Deleted rather than exposed: `filters.text` already provides identical name-OR-note
+  matching and is advertised, so wiring `search` through would have added a public field — and the full contract-matrix
+  walk — purely to gain a synonym. `search` survives as a tasks **`mode`** value (a view selector), which is untouched.
+  No `inputSchema` or tool-description change, because the alias was never advertised. Regression cover added in
+  `read-schema.test.ts` pinning that `filters.search` is rejected while `mode: "search"` and `filters.text` still
+  validate; the AST tests that previously asserted alias-equals-text now assert the alias is inert, and the OMN-115
+  `fastSearch` cases were re-pointed at `text` so that fast path stays covered on a reachable code path.
+
 - **BREAKING (analyze response): `task_velocity` drops four fabricated fields and gains four real ones;
   `productivity_stats` surfaces three computed fields it was discarding** (OMN-289) — the response now contains exactly
   what was actually computed: nothing real hidden, nothing fake shipped. **Added to `velocity`:** `averageCreated`,
@@ -222,6 +242,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **`smart_suggest` screens the whole population, then fetches the top N** (OMN-335 slice 3) — phase 1 scans every
+  incomplete task with a 5-field projection and scores all of them; phase 2 fetches full rows for the selected ids.
+  Previously it capped at `limit` in database order before scoring. `offset` now pages the ranked shortlist;
+  `total_count` is the shortlist size (score > 0), `metadata.screened_count` the screened population, and `truncated` is
+  measured against the shortlist. `metadata.vanished_count` counts shortlisted tasks deleted, completed or dropped
+  between phases. A due-today task is promoted onto page 1. `countOnly`, `filters.id` and an explicit `sort` still work.
+  Cost scales with database size (every incomplete task is scanned).
 - **Tasks `project`-by-name filter now resolves real projects** (OMN-224) —
   `read { type:"tasks", filters:{ project: "<exact existing name>" } }` returned **0 tasks** (a `SCRIPT_ERROR`) for real
   populated projects; only the `projectId` filter worked. The OmniJS emitter (`emitProjectComparison`) built its

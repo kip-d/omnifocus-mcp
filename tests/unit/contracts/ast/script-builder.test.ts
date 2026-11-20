@@ -4,6 +4,7 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  buildTasksByIdsScript,
   buildProjectByIdScript,
   buildTaskCountScript,
   buildFilteredProjectsScript,
@@ -532,7 +533,10 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
     script: string,
     tasksById: Record<string, unknown>,
   ): { tasks: any[]; count: number; mode: string; targetId: string } {
-    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const Task = {
+      byIdentifier: (id: string) => tasksById[id] ?? null,
+      Status: { Dropped: 'DROPPED', Completed: 'COMPLETED', Available: 'AVAILABLE' },
+    };
     const sandbox: Record<string, unknown> = { Task, JSON };
     return JSON.parse(vm.runInNewContext(script, sandbox) as string);
   }
@@ -558,6 +562,140 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
     expect(result.count).toBe(0);
     expect(result.mode).toBe('id_lookup');
     expect(result.targetId).toBe('missing');
+  });
+});
+
+describe('uncapped scan option (OMN-335 slice 3: smart_suggest phase 1)', () => {
+  it('filtered script: uncapped omits the limit declaration and check; capped keeps them', () => {
+    const uncapped = buildFilteredTasksScript({}, { limit: 25, uncapped: true }).script;
+    expect(uncapped).not.toContain('count >= limit');
+    expect(uncapped).not.toContain('const limit');
+    expect(uncapped).not.toContain('MAX_SAFE');
+    expect(uncapped).toContain('totalMatched++');
+    const capped = buildFilteredTasksScript({}, { limit: 25 }).script;
+    expect(capped).toContain('count >= limit');
+  });
+
+  it('inbox script: uncapped omits the limit declaration and check', () => {
+    const uncapped = buildInboxScript({}, { limit: 25, uncapped: true }).script;
+    expect(uncapped).not.toContain('count >= limit');
+    expect(uncapped).not.toContain('const limit');
+    expect(buildInboxScript({}, { limit: 25 }).script).toContain('count >= limit');
+  });
+
+  it('throws when uncapped is combined with sort (the sorted path always slices to limit)', () => {
+    const sort = [{ field: 'dueDate' as const, direction: 'asc' as const }];
+    expect(() => buildFilteredTasksScript({}, { uncapped: true, sort })).toThrow(/uncapped.*sort/i);
+    expect(() => buildInboxScript({}, { uncapped: true, sort })).toThrow(/uncapped.*sort/i);
+  });
+
+  it('vm-executed: uncapped returns every match', () => {
+    const { script } = buildFilteredTasksScript({}, { limit: 1, uncapped: true, fields: ['id'] });
+    const mk = (id: string) => ({ id: { primaryKey: id }, completed: false, taskStatus: 'A', project: null });
+    const flattenedTasks = [mk('a'), mk('b'), mk('c')];
+    const Task = { Status: { Dropped: 'D', Blocked: 'B' } };
+    const result = JSON.parse(vm.runInNewContext(script, { flattenedTasks, Task, JSON }) as string);
+    expect(result.tasks).toHaveLength(3);
+  });
+});
+
+describe('buildTasksByIdsScript (OMN-335 slice 3: smart_suggest phase 2)', () => {
+  it('uses Task.byIdentifier per id, never iterates flattenedTasks', () => {
+    const result = buildTasksByIdsScript(['a', 'b', 'c']);
+
+    expect(result.script).toContain('Task.byIdentifier(targetId)');
+    expect(result.script).not.toContain('flattenedTasks');
+    expect(result.script).toContain('targetIds.forEach');
+  });
+
+  it('preserves the ids_lookup result shape', () => {
+    const result = buildTasksByIdsScript(['a', 'b']);
+
+    expect(result.script).toContain("mode: 'ids_lookup'");
+    expect(result.script).toContain('count: results.length');
+  });
+
+  it('generates field projections', () => {
+    const result = buildTasksByIdsScript(['a'], ['id', 'name', 'flagged']);
+
+    expect(result.script).toContain('id: task.id.primaryKey');
+    expect(result.script).toContain('name: task.name');
+    expect(result.script).toContain('flagged: task.flagged');
+  });
+
+  it('always projects id even when the caller omits it from fields (mirrors buildTaskByIdScript, OMN-225)', () => {
+    const result = buildTasksByIdsScript(['a'], ['name']);
+    expect(result.script).toContain('id: task.id.primaryKey');
+  });
+});
+
+describe('buildTasksByIdsScript (vm-executed, OMN-335 slice 3)', () => {
+  function runByIds(script: string, tasksById: Record<string, unknown>): { tasks: any[]; count: number; mode: string } {
+    const Task = {
+      byIdentifier: (id: string) => tasksById[id] ?? null,
+      Status: { Dropped: 'DROPPED', Completed: 'COMPLETED', Available: 'AVAILABLE' },
+    };
+    const sandbox: Record<string, unknown> = { Task, JSON };
+    return JSON.parse(vm.runInNewContext(script, sandbox) as string);
+  }
+
+  it('resolves each id independently, in the requested order, skipping ids that do not resolve', () => {
+    const { script } = buildTasksByIdsScript(['found1', 'missing', 'found2'], ['id', 'name']);
+    const result = runByIds(script, {
+      found1: { id: { primaryKey: 'found1' }, name: 'First' },
+      found2: { id: { primaryKey: 'found2' }, name: 'Second' },
+      // 'missing' intentionally absent — byIdentifier returns null for it.
+    });
+
+    expect(result.tasks.map((t) => t.id)).toEqual(['found1', 'found2']);
+    expect(result.count).toBe(2);
+    expect(result.mode).toBe('ids_lookup');
+  });
+
+  it('emits a terminal-state guard (completed / Task.Status.Dropped) before projecting a resolved task', () => {
+    const { script } = buildTasksByIdsScript(['a']);
+    expect(script).toContain('task.completed');
+    expect(script).toContain('task.taskStatus !== Task.Status.Dropped');
+    expect(script.indexOf('Task.Status.Dropped')).toBeLessThan(script.indexOf('results.push'));
+  });
+
+  it('skips tasks completed or dropped since phase 1 (byIdentifier still resolves them)', () => {
+    const { script } = buildTasksByIdsScript(['live', 'done', 'dropped'], ['id', 'name']);
+    const result = runByIds(script, {
+      live: { id: { primaryKey: 'live' }, name: 'L', completed: false, taskStatus: 'AVAILABLE' },
+      done: { id: { primaryKey: 'done' }, name: 'D', completed: true, taskStatus: 'COMPLETED' },
+      dropped: { id: { primaryKey: 'dropped' }, name: 'X', completed: false, taskStatus: 'DROPPED' },
+    });
+    expect(result.tasks.map((t) => t.id)).toEqual(['live']);
+    expect(result.count).toBe(1);
+  });
+
+  it('terminal guard follows the effective filter flags (text)', () => {
+    const both = buildTasksByIdsScript(['a']).script;
+    expect(both).toContain('!task.completed');
+    expect(both).toContain('task.taskStatus !== Task.Status.Dropped');
+    const keepCompleted = buildTasksByIdsScript(['a'], [], undefined, { skipCompleted: false }).script;
+    expect(keepCompleted).not.toContain('!task.completed');
+    expect(keepCompleted).toContain('task.taskStatus !== Task.Status.Dropped');
+    const keepDropped = buildTasksByIdsScript(['a'], [], undefined, { skipDropped: false }).script;
+    expect(keepDropped).toContain('!task.completed');
+    expect(keepDropped).not.toContain('task.taskStatus !== Task.Status.Dropped');
+  });
+
+  it('skipCompleted:false returns completed rows (vanished stays 0 for a completed:true query)', () => {
+    const { script } = buildTasksByIdsScript(['done'], ['id'], undefined, { skipCompleted: false });
+    const result = runByIds(script, {
+      done: { id: { primaryKey: 'done' }, completed: true, taskStatus: 'COMPLETED' },
+    });
+    expect(result.tasks.map((t) => t.id)).toEqual(['done']);
+  });
+
+  it('all ids missing: returns empty results, not an error', () => {
+    const { script } = buildTasksByIdsScript(['missing1', 'missing2']);
+    const result = runByIds(script, {});
+
+    expect(result.tasks).toHaveLength(0);
+    expect(result.count).toBe(0);
   });
 });
 
