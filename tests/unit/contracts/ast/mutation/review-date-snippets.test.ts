@@ -58,9 +58,12 @@ describe('OMN-249 — next-review-date path parity (typed instance vs raw spec)'
 
   it('spec path without a base date still computes from now (set_schedule adapter guard)', () => {
     const fns = loadSnippets();
-    const before = Date.now();
+    // The snippet advances by calendar days (setDate), so on a DST day "+1 day"
+    // is 23 or 25 hours, not 24. Compute the bound the same way.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
     const d = fns.calculateNextReviewFromSpec({ unit: 'day', steps: 1 }, null) as Date;
-    expect(d.getTime()).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1000 - 5000);
+    expect(d.getTime()).toBeGreaterThanOrEqual(tomorrow.getTime() - 5000);
   });
 });
 

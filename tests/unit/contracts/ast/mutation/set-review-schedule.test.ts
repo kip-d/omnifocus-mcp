@@ -110,10 +110,16 @@ describe('set-review-schedule — behavior goldens (exact JSON, vm-executed)', (
     };
     const after = Date.now();
 
+    // The script advances by calendar days (setDate), so across a DST change
+    // "10 days" is 239 or 241 hours, not 240. Compute the bounds the same way.
+    const plusTenCalendarDays = (ms: number) => {
+      const d = new Date(ms);
+      d.setDate(d.getDate() + 10);
+      return d.getTime();
+    };
     const next = new Date(parsed.results.successful[0].nextReviewDate).getTime();
-    const tenDays = 10 * 24 * 60 * 60 * 1000;
-    expect(next).toBeGreaterThanOrEqual(before + tenDays - 5000);
-    expect(next).toBeLessThanOrEqual(after + tenDays + 5000);
+    expect(next).toBeGreaterThanOrEqual(plusTenCalendarDays(before) - 5000);
+    expect(next).toBeLessThanOrEqual(plusTenCalendarDays(after) + 5000);
     expect(parsed.results.successful[0].changes[1]).toMatch(/^Next review date calculated and set to /);
   });
 
