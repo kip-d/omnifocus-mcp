@@ -118,7 +118,8 @@ async function main(): Promise<void> {
   const linkPath = join(args.apiDir, SYMLINK);
   const linked = existsSync(linkPath) ? SNAPSHOT_FILE.exec(readlinkSync(linkPath))?.[1] : undefined;
   const others = listVersions(args.apiDir).filter((v) => v !== newVersion);
-  const previous = linked && linked !== newVersion ? linked : others[others.length - 1];
+  // `| undefined` is real: `others` is empty when no other snapshot exists (indexing isn't checked by tsconfig).
+  const previous: string | undefined = linked && linked !== newVersion ? linked : others[others.length - 1];
 
   // Everything that can fail is read and validated BEFORE the first write, so a failure leaves the tree untouched.
   if (previous !== undefined && compareVersions(newVersion, previous) < 0 && !args.force) {
