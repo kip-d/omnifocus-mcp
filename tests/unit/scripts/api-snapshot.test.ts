@@ -259,7 +259,7 @@ describe('committed snapshots', () => {
 
 describe('non-numeric versions', () => {
   it('parseExportInfo rejects a beta version with guidance', () => {
-    expect(() => parseExportInfo('// OmniFocus 4.11b1 API\n')).toThrow(/4\.11b1.*--from/s);
+    expect(() => parseExportInfo('// TypeScript definitions for OmniFocus 4.11b1 (v1)\n')).toThrow(/4\.11b1.*--from/s);
   });
   it('compareVersions throws on a non-numeric segment', () => {
     expect(() => compareVersions('4.11b1', '4.10')).toThrow(/non-numeric/);
