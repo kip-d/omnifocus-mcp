@@ -234,7 +234,7 @@ if [ "$MODE" = "verify" ]; then
   }
   status_appeared() {
     new_region="$(tail -n "+$((before_lines + 1))" "$RUN_LOG" 2>/dev/null || true)"
-    printf '%s' "$new_region" | grep -qaE '^STATUS: '
+    grep -qaE '^STATUS: ' <<< "$new_region"
   }
   # NOT `launchctl print | grep -q`: under pipefail, grep -q exiting at the
   # first match can SIGPIPE a still-writing launchctl and turn a running job
