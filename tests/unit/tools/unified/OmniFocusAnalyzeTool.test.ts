@@ -6,6 +6,22 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 import { createScriptSuccess, createScriptError } from '../../../../src/omnifocus/script-result-types.js';
 import { RecurringPatternsSchema } from '../../../../src/omnifocus/response-schemas/read.js';
 
+// pattern_analysis fixtures mock the slimmed-data scan payload directly.
+// scanMeta is required (#312 review round 2: a missing block must fail, not
+// be invented), so each fixture states a complete, uncapped scan of exactly
+// the tasks it lists. Tests of capped or unreadable coverage pass their own.
+function slimScan<T extends { tasks: unknown[] }>(payload: T) {
+  return createScriptSuccess({
+    ...payload,
+    scanMeta: {
+      scannedTotal: payload.tasks.length,
+      admittedTotal: payload.tasks.length,
+      unreadableTotal: 0,
+      cap: 3000,
+    },
+  });
+}
+
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -2152,7 +2168,7 @@ describe('OmniFocusAnalyzeTool', () => {
     it('waiting_for returns evidence-bundle candidates with raw dates and no verdict fields', async () => {
       const fortyFiveDaysAgo = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 'w1',
@@ -2209,7 +2225,7 @@ describe('OmniFocusAnalyzeTool', () => {
     // candidate, never vague/score, and each candidate is actionable by id.
     it('clarify_candidates returns screened candidates with evidence bundles and screen reasons', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 'c1',
@@ -2269,7 +2285,7 @@ describe('OmniFocusAnalyzeTool', () => {
     });
 
     it('the retired next_actions key is reported as unrecognized, not silently ignored', async () => {
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+      mockOmni.executeJson.mockResolvedValue(slimScan({ tasks: [], projects: [], tags: [] }));
 
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['next_actions'] } },
@@ -2294,7 +2310,7 @@ describe('OmniFocusAnalyzeTool', () => {
         children: 0,
       });
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             mkTask('e1', 'A', 30),
             mkTask('e2', 'B', 30),
@@ -2322,7 +2338,7 @@ describe('OmniFocusAnalyzeTool', () => {
     });
 
     it('still succeeds honestly on a genuinely empty (but fetched) database', async () => {
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+      mockOmni.executeJson.mockResolvedValue(slimScan({ tasks: [], projects: [], tags: [] }));
 
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
@@ -2346,7 +2362,7 @@ describe('OmniFocusAnalyzeTool', () => {
     ];
 
     function mockDb() {
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects, tags: [] }));
+      mockOmni.executeJson.mockResolvedValue(slimScan({ tasks: [], projects, tags: [] }));
     }
 
     it('reports only active zero-available projects (id, name, folder), excluding on-hold and healthy ones', async () => {
@@ -2372,7 +2388,7 @@ describe('OmniFocusAnalyzeTool', () => {
       // so status-string drift (new OF version, locale) surfaces the project
       // rather than hiding it from the weekly review.
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             { id: 'px', name: 'Drifted status', status: 'mystery rendering', taskCount: 1, availableTaskCount: 0 },
@@ -2398,7 +2414,7 @@ describe('OmniFocusAnalyzeTool', () => {
     it('dormant_projects excludes done/dropped projects (raw JXA status strings)', async () => {
       const old = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString();
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             {
@@ -2441,7 +2457,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('review_gaps sees active and on-hold projects despite raw JXA status strings', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             { id: 'r1', name: 'Never reviewed active', status: 'active status', taskCount: 1, availableTaskCount: 1 },
@@ -2487,7 +2503,7 @@ describe('OmniFocusAnalyzeTool', () => {
           dueDate: '2026-09-26T00:00:00.000Z', // 2026-09-25 17:00 PDT
         });
         mockOmni.executeJson.mockResolvedValue(
-          createScriptSuccess({
+          slimScan({
             tasks: Array.from({ length: 9 }, (_, i) => mkTask(i)),
             projects: [{ id: 'pw', name: 'Work', status: 'active', taskCount: 9, availableTaskCount: 9 }],
             tags: [],
@@ -2526,7 +2542,7 @@ describe('OmniFocusAnalyzeTool', () => {
         estimatedMinutes: null,
       });
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [1, 2, 3, 4, 5, 6, 7].map(mkTask),
           projects: [
             { id: 'w1', name: 'Overloaded on hold', status: 'on hold status', taskCount: 7, availableTaskCount: 7 },
@@ -2586,7 +2602,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports info severity with an honest empty list when nothing is stalled', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [{ id: 'p2', name: 'Healthy', status: 'active status', taskCount: 1, availableTaskCount: 1 }],
           tags: [],
@@ -2633,7 +2649,7 @@ describe('OmniFocusAnalyzeTool', () => {
           tasks,
           projects: [],
           tags: [],
-          scanMeta: { scannedTotal: 4200, admittedTotal: 3400, cap: 3000 },
+          scanMeta: { scannedTotal: 4200, admittedTotal: 3400, unreadableTotal: 0, cap: 3000 },
         }),
       );
       const res: any = await tool.execute({
@@ -2648,6 +2664,7 @@ describe('OmniFocusAnalyzeTool', () => {
         capped: true,
         cap: 3000,
         scanned_total: 4200,
+        unreadable: 0,
       });
       // The generic analytics summary must also carry the honest count
       // (OMN-340 slice-3 follow-up: this used to be stuck at 0 for every
@@ -2673,15 +2690,68 @@ describe('OmniFocusAnalyzeTool', () => {
           ],
           projects: [],
           tags: [],
-          scanMeta: { scannedTotal: 1, admittedTotal: 1, cap: 3000 },
+          scanMeta: { scannedTotal: 1, admittedTotal: 1, unreadableTotal: 0, cap: 3000 },
         }),
       );
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
       });
-      expect(res.metadata.coverage).toEqual({ total: 1, returned: 1, capped: false, cap: 3000, scanned_total: 1 });
+      expect(res.metadata.coverage).toEqual({
+        total: 1,
+        returned: 1,
+        capped: false,
+        cap: 3000,
+        scanned_total: 1,
+        unreadable: 0,
+      });
       expect(res.metadata.tasks_analyzed).toBe(1);
       expect(res.summary.total_items_analyzed).toBe(1);
+    });
+  });
+
+  describe('pattern_analysis coverage honesty (#312 review round 2)', () => {
+    const row = (id: string) => ({
+      id,
+      name: id,
+      completed: false,
+      flagged: false,
+      status: 'available',
+      tags: [],
+      estimatedMinutes: null,
+      children: 0,
+    });
+
+    it('surfaces unreadable rows in coverage, so an uncapped result missing tasks says so', async () => {
+      mockOmni.executeJson.mockResolvedValue(
+        createScriptSuccess({
+          tasks: [row('a'), row('b')],
+          projects: [],
+          tags: [],
+          scanMeta: { scannedTotal: 3, admittedTotal: 2, unreadableTotal: 1, cap: 3000 },
+        }),
+      );
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+      expect(res.success).toBe(true);
+      expect(res.metadata.coverage).toEqual({
+        total: 2,
+        returned: 2,
+        capped: false,
+        cap: 3000,
+        scanned_total: 3,
+        unreadable: 1,
+      });
+    });
+
+    it('a scan payload without scanMeta is an EXECUTION_ERROR, never coverage invented from tasks.length', async () => {
+      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [row('a')], projects: [], tags: [] }));
+      const res: any = await tool.execute({
+        analysis: { type: 'pattern_analysis', params: { insights: ['duplicates'] } },
+      });
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('EXECUTION_ERROR');
+      expect(res.metadata?.coverage).toBeUndefined();
     });
   });
 
@@ -2698,7 +2768,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports an on-hold project with a task whose defer date has passed', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't1',
@@ -2747,7 +2817,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports an on-hold project with a task due within the window, but not one due far out', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't2',
@@ -2806,7 +2876,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports an on-hold project whose nextReviewDate has passed, even with no qualifying task', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             {
@@ -2832,7 +2902,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('does not report an on-hold project with no qualifying signal, or an active project at all', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't5',
@@ -2876,7 +2946,7 @@ describe('OmniFocusAnalyzeTool', () => {
     });
 
     it('empty case: no on-hold projects at all', async () => {
-      mockOmni.executeJson.mockResolvedValue(createScriptSuccess({ tasks: [], projects: [], tags: [] }));
+      mockOmni.executeJson.mockResolvedValue(slimScan({ tasks: [], projects: [], tags: [] }));
       const res: any = await tool.execute({
         analysis: { type: 'pattern_analysis', params: { insights: ['onhold_reactivation'] } },
       });
@@ -2885,7 +2955,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports a project matching multiple signals only once, in priority order (defer > due > review)', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't9',
@@ -2926,7 +2996,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('ignores a completed task whose defer date has passed', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't-done',
@@ -2964,7 +3034,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('does not fire on a dropped task with a past defer date or a near-term due date — dropped has completed:false', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't10',
@@ -3012,7 +3082,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('reports a sequential project whose first incomplete task is deferred far out, with the count of tasks behind it', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't1',
@@ -3082,7 +3152,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('does not report a sequential project whose first incomplete task is deferred soon', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't4',
@@ -3120,7 +3190,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('does not report a non-sequential (parallel) project, even with a far-deferred first task', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't5',
@@ -3158,7 +3228,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('a sequential project with no incomplete tasks at all is not reported (nothing to block on)', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             {
@@ -3182,7 +3252,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('a sequential project whose first incomplete task has no defer date at all is not reported', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't6',
@@ -3220,7 +3290,7 @@ describe('OmniFocusAnalyzeTool', () => {
     it('a task deferred exactly at the daysOut boundary (30 days) is not reported — only strictly more', async () => {
       const exactlyAtBoundary = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't7',
@@ -3258,7 +3328,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('skips a completed task at the front of the array — the first INCOMPLETE task is what counts', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't8a',
@@ -3311,7 +3381,7 @@ describe('OmniFocusAnalyzeTool', () => {
 
     it('skips a dropped task at the front of the array — dropped has completed:false but is not the head', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't8c',
@@ -3367,7 +3437,7 @@ describe('OmniFocusAnalyzeTool', () => {
   describe('fetchSlimmedData sequential field (OMN-315)', () => {
     it('a project with sequential:true survives the scan and reaches a detector that reads it', async () => {
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [],
           projects: [
             {
@@ -3398,7 +3468,7 @@ describe('OmniFocusAnalyzeTool', () => {
     it('computes the task-by-project grouping once, even when all three consumers are requested together', async () => {
       const groupSpy = vi.spyOn(tool as any, 'groupTasksByProject');
       mockOmni.executeJson.mockResolvedValue(
-        createScriptSuccess({
+        slimScan({
           tasks: [
             {
               id: 't1',

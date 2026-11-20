@@ -523,6 +523,7 @@ const SlimScanMetaSchema = z
   .object({
     scannedTotal: z.number(),
     admittedTotal: z.number(),
+    unreadableTotal: z.number(),
     cap: z.number(),
   })
   .strict();
@@ -536,17 +537,16 @@ const SlimScanMetaSchema = z
  *   return JSON.stringify({ tasks, projects, tags, scanMeta })
  * where tasks/projects/tags are arrays built inside one evaluateJavascript scan,
  * and scanMeta is the OMN-340 slice-3 budget-disclosure block. scanMeta is
- * optional here only so pre-OMN-340 test fixtures that mock this shape
- * directly (bypassing the real scan) don't all need updating; the real
- * emitter always sets it, and OmniFocusAnalyzeTool.fetchSlimmedData falls
- * back to a scanMeta derived from the parsed tasks array when it's absent.
+ * REQUIRED: a payload without it fails validation and surfaces as an
+ * EXECUTION_ERROR, never as a coverage block invented from tasks.length that
+ * would claim full, uncapped coverage (#312 review round 2).
  */
 export const SlimmedDataSchema = z
   .object({
     tasks: z.array(SlimTaskSchema),
     projects: z.array(SlimProjectSchema),
     tags: z.array(SlimTagSchema),
-    scanMeta: SlimScanMetaSchema.optional(),
+    scanMeta: SlimScanMetaSchema,
   })
   .strict();
 

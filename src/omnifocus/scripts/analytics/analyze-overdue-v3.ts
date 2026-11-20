@@ -15,7 +15,7 @@
  * - Overdue task detection with days past due calculation
  * - Blocked task identification (using task.blocked API)
  * - Next action detection (using task.next API)
- * - Project bottleneck tracking (counts only; see OMN-340 slice 3 below)
+ * - Project bottleneck tracking (counts only)
  * - Urgency grouping (critical, high, medium, low)
  * - Pattern insights and recommendations
  */
@@ -226,13 +226,8 @@ export const ANALYZE_OVERDUE_V3 = `
                   projectBottlenecks[overdueTask.project].count++;
                   projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
                 }
-                // OMN-340 (slice 3): a per-tag bottleneck accumulator and
-                // each project bottleneck's per-task name list were built
-                // here but never read by anything downstream (projectList
-                // below reads only count/blockedCount/totalDaysOverdue; no
-                // response field or schema ever carried either structure).
-                // Removed rather than wired up — see PR for this slice. (No
-                // backticks in this comment: it sits inside a template literal.)
+                // projectList below reads only count, blockedCount and
+                // totalDaysOverdue; nothing else is accumulated per project.
               } else {
                 // Track non-blocked overdue in projects
                 if (overdueTask.project !== 'Inbox') {

@@ -103,7 +103,7 @@ describe('buildSlimmedDataScript', () => {
         mk('live', S.Available),
       ]);
       expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['live']);
-      expect(out.scanMeta).toEqual({ scannedTotal: 4, admittedTotal: 1, cap: 3000 });
+      expect(out.scanMeta).toEqual({ scannedTotal: 4, admittedTotal: 1, unreadableTotal: 0, cap: 3000 });
     });
 
     it('3000+ terminal rows followed by live rows: the live rows are still analyzed (budget counts ADMITTED rows)', () => {
@@ -114,7 +114,7 @@ describe('buildSlimmedDataScript', () => {
       // Pre-OMN-340, the raw walk stopped at the first 3000 rows (all
       // terminal here), so NONE of the live rows would ever be seen.
       expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(live.map((_, i) => `live-${i}`));
-      expect(out.scanMeta).toEqual({ scannedTotal: 3010, admittedTotal: 5, cap: 3000 });
+      expect(out.scanMeta).toEqual({ scannedTotal: 3010, admittedTotal: 5, unreadableTotal: 0, cap: 3000 });
     });
 
     it('capped: admitted population exceeds the budget — scanMeta.admittedTotal is the TRUE admissible count, not the capped detail length', () => {
@@ -124,7 +124,7 @@ describe('buildSlimmedDataScript', () => {
       expect(out.tasks.length).toBe(3000);
       // The walk keeps counting admitted rows past the budget (cheap:
       // admission-only, no row built) so admittedTotal is the true population.
-      expect(out.scanMeta).toEqual({ scannedTotal: 3010, admittedTotal: 3010, cap: 3000 });
+      expect(out.scanMeta).toEqual({ scannedTotal: 3010, admittedTotal: 3010, unreadableTotal: 0, cap: 3000 });
     });
 
     it('uncapped: admitted population under the budget — scannedTotal/admittedTotal/tasks.length agree', () => {
@@ -132,7 +132,7 @@ describe('buildSlimmedDataScript', () => {
       const live = Array.from({ length: 50 }, (_, i) => mk(`live-${i}`, S.Available));
       const out = run(program, live);
       expect(out.tasks.length).toBe(50);
-      expect(out.scanMeta).toEqual({ scannedTotal: 50, admittedTotal: 50, cap: 3000 });
+      expect(out.scanMeta).toEqual({ scannedTotal: 50, admittedTotal: 50, unreadableTotal: 0, cap: 3000 });
     });
 
     // #312 gate finding: the walk covers the whole database, so taskStatus —
@@ -186,12 +186,42 @@ describe('buildSlimmedDataScript', () => {
       expect(out.projects[0].availableTaskCount).toBe(3);
     });
 
+    // #312 review round 2: a row that throws is never silently counted as
+    // admitted. A throw during admission or row build moves the row to
+    // unreadableTotal, so an uncapped scan always has admittedTotal ===
+    // tasks.length and the loss is disclosed, not hidden.
+    it('a row that throws while its row is built is unreadable, not admitted', () => {
+      const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 3000, includeCompleted: false }));
+      const bad = mk('bad', S.Available);
+      Object.defineProperty(bad, 'name', {
+        get: () => {
+          throw new Error('unreadable name');
+        },
+      });
+      const out = run(program, [mk('a', S.Available), bad, mk('b', S.Available)]);
+      expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['a', 'b']);
+      expect(out.scanMeta).toEqual({ scannedTotal: 3, admittedTotal: 2, unreadableTotal: 1, cap: 3000 });
+    });
+
+    it('a row that throws during admission is unreadable too', () => {
+      const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 3000, includeCompleted: false }));
+      const bad = mk('bad', S.Available);
+      Object.defineProperty(bad, 'taskStatus', {
+        get: () => {
+          throw new Error('unreadable status');
+        },
+      });
+      const out = run(program, [bad, mk('a', S.Available)]);
+      expect(out.tasks.map((t: { id: string }) => t.id)).toEqual(['a']);
+      expect(out.scanMeta).toEqual({ scannedTotal: 2, admittedTotal: 1, unreadableTotal: 1, cap: 3000 });
+    });
+
     it('a smaller maxTasks budget caps tasks.length at that value, not at 3000', () => {
       const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 2, includeCompleted: false }));
       const live = Array.from({ length: 5 }, (_, i) => mk(`live-${i}`, S.Available));
       const out = run(program, live);
       expect(out.tasks.length).toBe(2);
-      expect(out.scanMeta).toEqual({ scannedTotal: 5, admittedTotal: 5, cap: 2 });
+      expect(out.scanMeta).toEqual({ scannedTotal: 5, admittedTotal: 5, unreadableTotal: 0, cap: 2 });
     });
   });
 });

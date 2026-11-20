@@ -102,10 +102,17 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
       // literal.)
       let scannedTotal = 0;
       let admittedTotal = 0;
+      // A row whose reads throw, during admission or while its row is built,
+      // is UNREADABLE: counted here and taken back out of admittedTotal, so
+      // an uncapped scan always has admittedTotal === tasks.length and the
+      // loss is disclosed instead of silently shrinking the result (#312
+      // review round 2).
+      let unreadableTotal = 0;
       const availByProject = {};
       for (let i = 0; i < allTasks.length; i++) {
         scannedTotal++;
         const task = allTasks[i];
+        let admitted = false;
         try {
           const completed = task.completed;
           if (!includeCompleted && completed) continue;
@@ -141,6 +148,7 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
           // Admitted: not completed (unless include_completed), not a
           // project root, not dropped (unless include_completed).
           admittedTotal++;
+          admitted = true;
           // OMN-340: the 3000 budget is consumed by ADMITTED rows only. Once
           // filled, keep counting admittedTotal (coverage.total must be the
           // true admissible population) but stop building full rows.
@@ -184,7 +192,8 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
 
           tasks.push(taskData);
         } catch(e) {
-          // Skip problematic tasks
+          unreadableTotal++;
+          if (admitted) admittedTotal--;
         }
       }
 
@@ -230,9 +239,16 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
         // OMN-340 (slice 3): scanMeta.admittedTotal is the true admissible
         // population (every non-root, non-terminal task), independent of the
         // maxTasks budget; scannedTotal is every raw row walked (always
-        // allTasks.length, since the walk no longer stops early). The tool
-        // builds the shared coverage disclosure from these.
-        scanMeta: { scannedTotal: scannedTotal, admittedTotal: admittedTotal, cap: maxTasks }
+        // allTasks.length, since the walk no longer stops early);
+        // unreadableTotal is rows dropped because a read threw (never part of
+        // admittedTotal). The tool builds the shared coverage disclosure from
+        // these.
+        scanMeta: {
+          scannedTotal: scannedTotal,
+          admittedTotal: admittedTotal,
+          unreadableTotal: unreadableTotal,
+          cap: maxTasks
+        }
       });
     })()`;
 

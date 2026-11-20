@@ -1297,12 +1297,22 @@ describe('FOLDER_LIST_SCHEMA', () => {
 // ---------------------------------------------------------------------------
 
 describe('SlimmedDataSchema', () => {
+  // scanMeta is required (#312 review round 2); every payload below carries a
+  // valid one so each test exercises only the key it names.
+  const META = { scannedTotal: 0, admittedTotal: 0, unreadableTotal: 0, cap: 3000 };
+
+  it('(b) rejects payload missing scanMeta — coverage is never invented from tasks.length', () => {
+    const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [], tags: [] });
+    expect(result.success).toBe(false);
+  });
+
   it('(a) accepts representative slimmed-data payload', () => {
     // Fixture per the OMN-269 OmniJS emitter contract:
     // tasks: id, name, completed, flagged, status, tags, estimatedMinutes, children always emitted.
     // projects: id, name, status, taskCount, availableTaskCount, folder always emitted.
     // tags: id, name, taskCount always emitted.
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [
         {
           id: 't1',
@@ -1323,7 +1333,7 @@ describe('SlimmedDataSchema', () => {
   });
 
   it('(a) accepts empty arrays for all keys', () => {
-    const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [], tags: [] });
+    const result = SlimmedDataSchema.safeParse({ scanMeta: META, tasks: [], projects: [], tags: [] });
     expect(result.success).toBe(true);
   });
 
@@ -1332,6 +1342,7 @@ describe('SlimmedDataSchema', () => {
     // with no ?./coalesce, so an unset estimate serializes as null and must validate (was z.number()
     // .optional(), which fail-closed the whole fetchSlimmedData read for any un-estimated task).
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [
         {
           id: 't1',
@@ -1352,22 +1363,23 @@ describe('SlimmedDataSchema', () => {
   });
 
   it('(b) rejects payload missing tasks key', () => {
-    const result = SlimmedDataSchema.safeParse({ projects: [], tags: [] });
+    const result = SlimmedDataSchema.safeParse({ scanMeta: META, projects: [], tags: [] });
     expect(result.success).toBe(false);
   });
 
   it('(b) rejects payload missing projects key', () => {
-    const result = SlimmedDataSchema.safeParse({ tasks: [], tags: [] });
+    const result = SlimmedDataSchema.safeParse({ scanMeta: META, tasks: [], tags: [] });
     expect(result.success).toBe(false);
   });
 
   it('(b) rejects payload missing tags key', () => {
-    const result = SlimmedDataSchema.safeParse({ tasks: [], projects: [] });
+    const result = SlimmedDataSchema.safeParse({ scanMeta: META, tasks: [], projects: [] });
     expect(result.success).toBe(false);
   });
 
   it('(c) rejects closed-world: unexpected extra top-level key', () => {
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [],
       projects: [],
       tags: [],
@@ -1381,8 +1393,10 @@ describe('SlimmedDataSchema', () => {
 // exercise SlimProjectSchema's .strict() at all (mockOmni.executeJson bypasses
 // real Zod validation). This is the actual regression guard.
 describe('SlimmedDataSchema (OMN-315)', () => {
+  const META = { scannedTotal: 0, admittedTotal: 0, unreadableTotal: 0, cap: 3000 };
   it('accepts a project with sequential:true and preserves the value', () => {
     const result = SlimmedDataSchema.parse({
+      scanMeta: META,
       tasks: [],
       projects: [
         {
@@ -1402,6 +1416,7 @@ describe('SlimmedDataSchema (OMN-315)', () => {
 
   it('accepts a project without a sequential key at all (genuinely optional)', () => {
     const result = SlimmedDataSchema.parse({
+      scanMeta: META,
       tasks: [],
       projects: [
         { id: 'p2', name: 'No seq field', status: 'active', taskCount: 0, availableTaskCount: 0, folder: null },
@@ -2960,8 +2975,10 @@ describe('RecurringPatternsSchema (deepened OMN-158 Task 3)', () => {
 // ---------------------------------------------------------------------------
 
 describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
+  const META = { scannedTotal: 0, admittedTotal: 0, unreadableTotal: 0, cap: 3000 };
   it('(a) accepts full payload with all optional fields on task row', () => {
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [
         {
           id: 't1',
@@ -3001,6 +3018,7 @@ describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
 
   it('(b) rejects task row missing required completed field', () => {
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [{ id: 't1', name: 'Task', flagged: false, status: 'available', tags: [] }],
       projects: [],
       tags: [],
@@ -3010,6 +3028,7 @@ describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
 
   it('(c) rejects closed-world: extra key in task row', () => {
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [{ id: 't1', name: 'Task', completed: false, flagged: false, status: 'available', tags: [], rogue: true }],
       projects: [],
       tags: [],
@@ -3019,6 +3038,7 @@ describe('SlimmedDataSchema (deepened OMN-158 Task 3)', () => {
 
   it('(c) rejects closed-world: extra key in tag row', () => {
     const result = SlimmedDataSchema.safeParse({
+      scanMeta: META,
       tasks: [],
       projects: [],
       tags: [{ id: 'tag1', name: 'Work', taskCount: 3, rogue: true }],

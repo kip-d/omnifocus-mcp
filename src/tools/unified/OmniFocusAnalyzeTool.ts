@@ -372,6 +372,9 @@ ANALYSIS TYPES:
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
   the screen does not judge; YOU judge each candidate from its evidence and act by id.
+  Detectors run over at most 3000 live tasks; metadata.coverage reports the true live
+  total, how many were analyzed, capped (true when some were left out) and unreadable
+  (tasks skipped because a read failed). When capped, findings cover only part of the database.
 - workflow_analysis: Workflow EVIDENCE — whole-DB counters, per-project counts/rates/avgAge, and
   deferral facts (incl. two independent screen counts: over90Days, keywordMatched). It reports
   measurements only; it does not score, rank, or recommend. YOU draw the conclusions.
@@ -1388,6 +1391,10 @@ TIME-WINDOW SCOPING:
         coverage: {
           ...buildCoverage(slimData.scanMeta.admittedTotal, slimData.tasks.length, slimData.scanMeta.cap),
           scanned_total: slimData.scanMeta.scannedTotal,
+          // Rows dropped because a read threw: never in total or returned,
+          // so a non-zero value means the analysis is missing tasks even
+          // when capped is false.
+          unreadable: slimData.scanMeta.unreadableTotal,
         },
         query_time_ms: duration,
         from_cache: false,
@@ -1479,7 +1486,7 @@ TIME-WINDOW SCOPING:
     tasks: SlimTask[];
     projects: ProjectData[];
     tags: TagData[];
-    scanMeta: { scannedTotal: number; admittedTotal: number; cap: number };
+    scanMeta: { scannedTotal: number; admittedTotal: number; unreadableTotal: number; cap: number };
   } | null> {
     // Number.isFinite (not ||) so an explicit max_tasks of 0 means 0, not 3000
     const parsedMaxTasks = Number(options.max_tasks);
@@ -1510,8 +1517,18 @@ TIME-WINDOW SCOPING:
       tasks: SlimTask[];
       projects: ProjectData[];
       tags: TagData[];
-      scanMeta?: { scannedTotal: number; admittedTotal: number; cap: number };
+      scanMeta?: { scannedTotal: number; admittedTotal: number; unreadableTotal: number; cap: number };
     };
+
+    // The coverage block is built from scanMeta, so a payload without it has
+    // no honest coverage to report. SlimmedDataSchema already requires it on
+    // the real path; this check keeps the tool fail-closed on its own, never
+    // inventing coverage from tasks.length (#312 review round 2).
+    if (!parsed.scanMeta) {
+      this.patternLogger.error('fetchSlimmedData payload has no scanMeta; refusing to invent coverage');
+      return null;
+    }
+    const scanMeta = parsed.scanMeta;
 
     // Normalize status ONCE at the boundary so every detector inherits the
     // canonical vocabulary instead of re-interpreting raw JXA renderings
@@ -1519,16 +1536,8 @@ TIME-WINDOW SCOPING:
     // review_gaps' status checks — see normalizeProjectStatus).
     return {
       ...parsed,
+      scanMeta,
       projects: parsed.projects.map((p) => ({ ...p, status: normalizeProjectStatus(p.status) })),
-      // OMN-340 (slice 3): scanMeta is always set by the real emitter. The
-      // fallback below covers only test fixtures that mock this shape
-      // directly (pre-OMN-340), treating the mocked tasks as the whole,
-      // uncapped, already-admitted population.
-      scanMeta: parsed.scanMeta ?? {
-        scannedTotal: parsed.tasks.length,
-        admittedTotal: parsed.tasks.length,
-        cap: maxTasks,
-      },
     };
   }
 
