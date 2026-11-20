@@ -2,36 +2,36 @@
 
 This directory contains the official TypeScript definitions for OmniFocus automation.
 
-## Current Version: OmniFocus.d.ts → OmniFocus-4.9-d.ts
+## Current Version: OmniFocus.d.ts → OmniFocus-4.10.1-d.ts
 
 - **Current**: `OmniFocus.d.ts` (symlink to latest version)
-- **Latest Version**: OmniFocus 4.9
-- **Previous Version**: OmniFocus 4.8.11 (kept for reference)
+- **Latest Version**: OmniFocus 4.10.1
+- **Previous Version**: OmniFocus 4.9 (kept for reference)
 - **Minimum Required**: OmniFocus 4.7+
-- **Drift note**: 4.8.11 → 4.9 adds four members and removes none (verified 2026-09-15, class/member-name diff): see
+- **Drift note**: 4.9 → 4.10.1 has no member changes (verified 2026-11-20 by `npm run api:regen`'s member diff): see
   Version History. The regenerate-and-diff step is the platform-drift signal for the OMN-148 behavioral spec (its
   platform-contract source).
 
 ## File Structure
 
 - `OmniFocus.d.ts` - Symlink to the current version (always points to latest)
-- `OmniFocus-4.9-d.ts` - Official TypeScript definitions for OmniFocus 4.9
-- `OmniFocus-4.8.11-d.ts` - TypeScript definitions for OmniFocus 4.8.11 (previous)
+- `OmniFocus-4.10.1-d.ts` - Official TypeScript definitions for OmniFocus 4.10.1
+- `OmniFocus-4.9-d.ts` - TypeScript definitions for OmniFocus 4.9 (previous)
 - `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
 
-### Manual carry-overs each regeneration
+### What the regen script does to the raw export
 
-Both are mechanical and hand-done today; OMN-328 tracks scripting them.
+`scripts/regen-api-snapshot.ts` applies these to the raw export; nothing is hand-edited.
 
-1. The regen-instructions header block (the raw export lacks it).
-2. **Optional-before-required normalization.** The 4.9 export marks a parameter `?:` whenever it accepts `null`, even
-   when a required parameter follows it. TypeScript's grammar rejects that (TS1016). Saved as a real `.d.ts` with
+1. **Header block.** Inserts the regen-instructions comment after the export's two-line banner.
+2. **Optional-before-required normalization.** The export marks a parameter `?:` whenever it accepts `null`, even when a
+   required parameter follows it. TypeScript's grammar rejects that (TS1016). Saved as a real `.d.ts` with
    `skipLibCheck` (tsc's default, and set in this repo's `tsconfig`) the export compiles clean — but this directory's
    versioned files are named `OmniFocus-X.Y-d.ts`, and hyphen-d is not a declaration file, so `skipLibCheck` does not
-   cover them and `npm run build` fails. Drop the `?` on every optional parameter that precedes a required one; the type
-   stays `T | null`, so nothing is lost. Do this on the raw single-line export, before prettier wraps signatures.
-   `npx tsc --noEmit -p tsconfig.json` lists every site you missed. Re-derive the site list from that output at every
-   regeneration; the table below records what 4.9 needed and is a snapshot, not a checklist for later versions:
+   cover them and `npm run build` fails. The script parses each parameter list (splitting on top-level commas, so nested
+   parentheses, brackets and generics are safe), finds the last required parameter, and drops the `?` from every
+   optional parameter before it; the type stays `T | null`, so nothing is lost. The export has carried the same sites
+   since 4.9; this table is a snapshot of what 4.10.1 needed, not a checklist:
 
    | Declaration                              | Parameter(s) losing `?` | Required parameter that follows |
    | ---------------------------------------- | ----------------------- | ------------------------------- |
@@ -43,18 +43,18 @@ Both are mechanical and hand-done today; OMN-328 tracks scripting them.
    | `LanguageModel.Tool` constructor         | `inputSchema`           | `f`                             |
    | `Settings.setObjectForKey`               | `value`                 | `key`                           |
 
-### Retired carry-over
-
-The `_omnijs_AnonymousProxy` placeholder that 4.8.x exports needed is gone — 4.9 declares `LanguageModel.Tool` and types
-`Session.withTools()` against it.
+3. **Prettier.** Formats the result with the repo's prettier config (4-space to 2-space indents, wrapped signatures), so
+   the committed file is what `npm run format:check` and the pre-commit hook expect. The script's output is byte-stable
+   apart from the export's own `Generated on` timestamp line.
+4. **Symlink and retention.** Writes `OmniFocus-<version>-d.ts`, repoints `OmniFocus.d.ts`, and deletes snapshots older
+   than the previous one (the keep-two rule: current plus previous).
 
 ### Diffing two snapshots
 
-Compare by class and member name, never by line. The pre-commit hook prettier-reformats the export (4-space → 2-space
-indents), 4.9 marks optional parameters `?:` where 4.8.x did not, and prettier then wraps the longer signatures across
-lines — so both a bare `diff` and a sorted-line diff are pure noise. Parse each file into
-`{container → set of whitespace-stripped member lines}` (drop `?` markers and trailing punctuation) and diff the sets.
-No checked-in script does this yet; OMN-328 adds one alongside the regen tooling.
+The script prints the class/member diff against the previous snapshot on every run. The differ
+(`scripts/lib/api-snapshot.ts`) works on a token stream, never on lines: it strips `//` comments, collapses whitespace,
+ignores `?` markers, then splits on `;` `{` `}` while tracking a container stack. Indentation, wrapping and prettier
+formatting therefore produce no diff; a changed signature shows as one removal plus one addition.
 
 ## Usage
 
@@ -115,73 +115,42 @@ invoked — a silent no-op, not a failure, so check that the property lines actu
 
 ## How to Regenerate API Definitions
 
-When a new version of OmniFocus is released, follow these steps to update the TypeScript definitions:
-
-### Step 1: Export from OmniFocus
-
-OmniFocus 4.9+ exposes the export as an API, so this is a one-liner (OmniFocus must be running; the first line of the
-output names the version and build):
+When a new version of OmniFocus is released, run the script. It is the procedure.
 
 ```bash
-osascript -l JavaScript -e 'Application("OmniFocus").evaluateJavascript("app.getTypeScriptDeclarations()")' \
-  > src/omnifocus/api/OmniFocus-[VERSION]-d.ts
+npm run api:regen                          # exports from the running OmniFocus (JXA bridge)
+npm run api:regen -- --from <raw-export>   # offline: use a saved export instead
+npm run api:regen -- --api-dir <dir>       # write somewhere other than this directory
 ```
 
-Replace `[VERSION]` with the version from the first line of the output (e.g., `4.9`). The export includes Omni's
-per-member doc comments; keep them.
+OmniFocus must be running for the live form. The version comes from the export's first line, so there is nothing to name
+by hand. Older OmniFocus (before 4.9, no `getTypeScriptDeclarations`) can save **Automation** → **API Reference** →
+export icon → **TypeScript**, then pass the saved file with `--from`.
 
-Fallback for OmniFocus older than 4.9 (no `getTypeScriptDeclarations`): **Automation** → **API Reference** → export icon
-→ **TypeScript** format saves `OmniFocus.ts` to Downloads. Its first line names the version too (or check **OmniFocus →
-About OmniFocus**), then:
+After the run:
 
-```bash
-mv ~/Downloads/OmniFocus.ts src/omnifocus/api/OmniFocus-[VERSION]-d.ts
-```
-
-### Step 2: Version and Archive
-
-1. Apply the manual carry-overs to the new file (see the numbered list above): the regen-instructions header block (copy
-   from the previous snapshot's top comment, updating the "Generated via" line), then the optional-before-required
-   normalization. `npx tsc --noEmit -p tsconfig.json` reports any TS1016 site you missed.
-
-2. Retarget the symlink and apply the retention convention (keep current + previous, delete N-2):
-   ```bash
-   cd src/omnifocus/api
-   ln -sfn OmniFocus-[VERSION]-d.ts OmniFocus.d.ts
-   git rm OmniFocus-[N-2_VERSION]-d.ts
-   ```
-   (`OmniFocus.d.ts` is a symlink — never `git mv` it to "archive" anything.)
-
-### Step 3: Update Documentation
-
-1. Update the version information at the top of this README
-2. Check for new API features by comparing versions with a class/member-name diff (see **Diffing two snapshots** above —
-   line-based and sorted-line diffs are noise)
-3. Document any new features or breaking changes — and skim the OmniFocus release notes
-   (omnigroup.com/releasenotes/omnifocus) for Omni Automation entries: BEHAVIORAL changes ship with identical type
-   signatures and are invisible to any typings diff
-4. Update references in code that use version-specific features
-
-### Step 4: Test and Verify
-
-1. Run `npm run ci:local`: format check, build, typecheck, lint, unit tests, then three live checks against the built
-   server (startup, tool registration, and a `system version` tool call) — so the vendored types are exercised by a real
-   server boot, not only by `tsc`
-2. Run the integration suite, which `ci:local` skips: `npm run test:integration` (long-running, against live OmniFocus;
+1. Read the printed member diff. A clean run reports `No member changes.`; anything else is an API change to document.
+2. `npx tsc --noEmit -p tsconfig.json` (the acceptance check), then `npm run ci:local`: format check, build, typecheck,
+   lint, unit tests, and three live checks against the built server, so the vendored types are exercised by a real
+   server boot, not only by `tsc`.
+3. Run the integration suite, which `ci:local` skips: `npm run test:integration` (long-running, against live OmniFocus;
    run it in the background, see `tests/integration/PERFORMANCE.md`). A vendored-types change is exactly where a real
-   OmniFocus behavioral mismatch surfaces only here. For 4.9: 196 passed, 22 skipped, 0 failed on macOS 27.
-3. Test any scripts that use new API features
+   OmniFocus behavioral mismatch surfaces only here.
+4. Update the version block at the top of this README and add a Version History entry. Skim the OmniFocus release notes
+   (omnigroup.com/releasenotes/omnifocus) for Omni Automation entries: BEHAVIORAL changes ship with identical type
+   signatures and are invisible to any typings diff.
+5. Update references in code that use version-specific features, then commit `src/omnifocus/api/`.
 
-### Step 5: Commit Changes
-
-```bash
-git add src/omnifocus/api/
-git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
-```
+`OmniFocus.d.ts` is a symlink — never `git mv` it to "archive" anything.
 
 ## Version History
 
-- **4.9** - Current version (September 2026; build 187.2.1, exported 2026-09-15 on macOS 27)
+- **4.10.1** - Current version (November 2026; build 190.2, exported 2026-11-20 on macOS 27.0.1)
+  - No member changes from 4.9 (class/member diff, `npm run api:regen`); the new file differs from 4.9 only in the
+    export banner and header comment
+  - Same seven optional-before-required sites as 4.9, now normalized by the script instead of by hand
+  - Behavioral (release-notes layer, NOT visible in typings): not reviewed
+- **4.9** - Previous version (September 2026; build 187.2.1, exported 2026-09-15 on macOS 27)
   - New: `Application.getTypeScriptDeclarations(filterString?)` — the export itself is now an API call
   - New: `LanguageModel.Tool` class; `LanguageModel.Session.withTools()` now takes `Array<LanguageModel.Tool>` (replaces
     the undocumented `_omnijs_AnonymousProxy`)
@@ -189,7 +158,7 @@ git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
   - No changes to Task, Project, Tag, Folder, Database, or any enum. Optional parameters are now marked `?:`
   - Behavioral (release-notes layer, NOT visible in typings): Apple Intelligence date-parsing fallback (beta, UI only);
     Siri AI (beta); monthly repeat "Next to Last"/"Day" options (UI only). 4.8.13 shipped no automation changes
-- **4.8.11** - Previous version (May 2026, regenerated June 2026)
+- **4.8.11** - (May 2026, regenerated June 2026; file retired under the keep-two rule)
   - API-identical to 4.8.6 (verified by sorted-content diff) — maintenance releases only
   - Behavioral (release-notes layer, NOT visible in typings): 4.8.9 enforces mutually exclusive tags in Omni Automation;
     4.8.10 fixed an Automation note-text crash; 4.8.11 fixed an Automation link-style regression

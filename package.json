@@ -48,6 +48,7 @@
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
     "diagnose-failures": "npx tsx scripts/diagnose-failures.ts",
+    "api:regen": "npx tsx scripts/regen-api-snapshot.ts",
     "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
     "conformance": "npm run build && npx tsx scripts/llm-conformance-probe.ts",
     "baseline:record": "npx tsx scripts/record-suite-timing.ts",
