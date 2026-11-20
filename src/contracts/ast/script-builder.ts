@@ -84,6 +84,12 @@ const TASK_SORT_VALUE_EXPRS: Record<SortableField, string> = {
 export interface ScriptOptions {
   /** Maximum tasks to return */
   limit?: number;
+  /**
+   * Visit and project EVERY match: the script emits no limit declaration and no
+   * limit check (OMN-335 slice 3, smart_suggest's whole-population screen).
+   * Applies to the unsorted path; `limit` is then ignored by the script.
+   */
+  uncapped?: boolean;
   /** Number of tasks to skip (for pagination) */
   offset?: number;
   /** Fields to include in response */
@@ -458,6 +464,7 @@ interface ScriptBuildContext {
   hasProjectPreamble: boolean;
   projectValue: string | undefined | null;
   limit: number;
+  uncapped: boolean;
   offset: number;
   /**
    * OMN-218: an OmniJS guard statement emitted at the top of the row loop that returns a
@@ -564,6 +571,8 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
   const warningsBlock = generateWarningsBlock(ctx);
   const warningsMetadata = generateWarningsMetadata(ctx.hasProjectPreamble);
   const matchesFilterBlock = generateMatchesFilterBlock(ctx);
+  const limitDecl = ctx.uncapped ? '' : `const limit = ${ctx.limit};`;
+  const limitCheck = ctx.uncapped ? '' : 'if (count >= limit) return;';
 
   return `
 (() => {
@@ -571,7 +580,7 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
   const results = [];
   let count = 0;
   let totalMatched = 0;
-  const limit = ${ctx.limit};
+  ${limitDecl}
   ${offsetVars}
 
   ${matchesFilterBlock}
@@ -584,7 +593,7 @@ function buildUnsortedScript(ctx: ScriptBuildContext): string {
 
     // OMN-154: count every match; the limit caps only the projected rows
     totalMatched++;
-    if (count >= limit) return;
+    ${limitCheck}
 
     ${offsetCheck}
 
@@ -670,7 +679,15 @@ function applyHonestyDefaults<F extends { completed?: boolean; dropped?: boolean
 }
 
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
+  const {
+    limit = 50,
+    uncapped = false,
+    offset = 0,
+    fields = [],
+    includeCompleted = false,
+    sort,
+    noteTruncateLength,
+  } = options;
 
   // OMN-157: dropped is the third terminal state, excluded by default. It is
   // SYNTHETIC in OmniJS (no task.dropped property), so the default MUST route
@@ -720,6 +737,7 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     hasProjectPreamble: !!filterCode.preamble,
     projectValue: filter.projectId ?? filter.project,
     limit,
+    uncapped,
     offset,
     folderExistsGuard,
   };
@@ -775,6 +793,7 @@ interface InboxScriptCtx {
   folderExistsGuard: string;
   filterDescription: string;
   limit: number;
+  uncapped: boolean;
   offset: number;
 }
 
@@ -840,6 +859,8 @@ function buildUnsortedInboxScript(ctx: InboxScriptCtx): string {
   const offsetVars = useOffset ? `const offset = ${ctx.offset};\n  let skipped = 0;` : '';
   const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
   const offsetMetadata = useOffset ? `offset_applied: ${ctx.offset},` : '';
+  const limitDecl = ctx.uncapped ? '' : `const limit = ${ctx.limit};`;
+  const limitCheck = ctx.uncapped ? '' : 'if (count >= limit) return;';
 
   return `
 (() => {
@@ -847,7 +868,7 @@ function buildUnsortedInboxScript(ctx: InboxScriptCtx): string {
   const results = [];
   let count = 0;
   let totalMatched = 0;
-  const limit = ${ctx.limit};
+  ${limitDecl}
   ${offsetVars}
 
   ${ctx.matchesFilterBlock}
@@ -861,7 +882,7 @@ function buildUnsortedInboxScript(ctx: InboxScriptCtx): string {
 
     // OMN-154: count every match; the limit caps only the projected rows
     totalMatched++;
-    if (count >= limit) return;
+    ${limitCheck}
 
     ${offsetCheck}
 
@@ -895,7 +916,15 @@ function buildUnsortedInboxScript(ctx: InboxScriptCtx): string {
  * sort is unset). Always stays on the `inbox` collection.
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
+  const {
+    limit = 50,
+    uncapped = false,
+    offset = 0,
+    fields = [],
+    includeCompleted = false,
+    sort,
+    noteTruncateLength,
+  } = options;
 
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
@@ -941,6 +970,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
     folderExistsGuard,
     filterDescription,
     limit,
+    uncapped,
     offset,
   };
 

@@ -53,7 +53,7 @@ import {
   sortTasks,
   projectFields,
   carryNoteTruncatedMarker,
-  scoreForSmartSuggest,
+  rankForSmartSuggest,
   countTodayCategories,
   MODE_INJECTED_FIELDS,
   type TaskQueryMode,
@@ -96,13 +96,6 @@ const SMART_SUGGEST_SCREEN_FIELDS = [
   'available',
   'estimatedMinutes',
 ] as const satisfies readonly (keyof ScreenableTask)[];
-
-/**
- * Phase 1 must visit every actionable-population match, not a capped page of
- * it (OMN-335 D3a) — this sentinel is large enough that the script's
- * `count >= limit` cap never trips for any real OmniFocus database.
- */
-const SMART_SUGGEST_UNCAPPED_LIMIT = Number.MAX_SAFE_INTEGER;
 
 /**
  * Filtered project list result — emitted by buildFilteredProjectsScript.
@@ -426,6 +419,7 @@ MODES (tasks queries ONLY — not valid on type:"projects"):
 - inbox, available, blocked, search, all
 - forecast_past: tasks past their dueDate OR past their plannedDate (the OmniFocus Forecast "Past" union), excluding blocked tasks. NOTE: a dueDate-overdue task buckets under "Today" (not "Past") in the OF Forecast UI, so this union is intentionally broader than the literal Past section. total_count is the exact matching population (limit-independent); truncated:true marks a partial page (raise limit or paginate with offset).
 - smart_suggest: candidate shortlist from mechanical signals, NOT a priority ranking. Each task carries screen_reasons (e.g. overdue_5d, due_today, flagged, available, quick_win) naming the signals that selected it — YOU re-rank using GTD engage criteria (context, time available, energy, priority) plus whatever context you have that the server can't see. Includes overdue, due-soon, and next tasks (all actionable statuses).
+  Paging: offset pages the ranked shortlist; total_count = shortlist size (tasks scoring > 0), metadata.screened_count = the screened population; truncated = more shortlist pages. A due-today task is promoted onto page 1. countOnly counts the screened population (no scoring). metadata.vanished_count = shortlisted tasks deleted, completed or dropped between the two phases. Cost: scans every incomplete task, so it scales with database size.
 - To SEARCH projects (or tasks) use filters, not mode: filters: { name: { contains: "..." } } or filters: { text: { matches: "regex" } }
 
 FILTER OPERATORS:
@@ -502,6 +496,8 @@ PERFORMANCE:
             },
             mode: {
               type: 'string',
+              description:
+                'smart_suggest: offset pages the ranked shortlist; total_count = shortlist size, metadata.screened_count = screened population; countOnly counts the screened population; vanished_count = tasks deleted/completed/dropped between phases; a due-today task is promoted onto page 1; scans every incomplete task (cost scales with database size).',
               enum: [
                 'all',
                 'inbox',
@@ -619,7 +615,7 @@ PERFORMANCE:
     const timer = new OperationTimerV2();
 
     // OMN-133: forecast_past rewrites to a single OR query and re-enters the standard
-    // pipeline — dispatch before buildTaskQuery (it is not a MODE_DEFINITIONS mode).
+    // pipeline — dispatch before planTaskQuery (it is not a MODE_DEFINITIONS mode).
     if (compiled.mode === 'forecast_past') {
       return this.executeForecastPast(compiled);
     }
@@ -664,7 +660,7 @@ PERFORMANCE:
 
     // Sort: skip post-hoc sort when sort was already applied in-script.
     // OMN-335 (slices 1-2): user-specified sorts AND mode default sorts (e.g.,
-    // overdue -> dueDate asc) are embedded in OmniJS via buildTaskQuery's
+    // overdue -> dueDate asc) are embedded in OmniJS via planTaskQuery's
     // userSort (sort-before-cap fix) whenever sortedInScript is true — on every
     // route, including inbox. This branch is now a harmless safety net, not the
     // primary path, for all of them.
@@ -715,8 +711,8 @@ PERFORMANCE:
    * OMN-335 slice 3 (D3a): smart_suggest's two-phase screen-then-judge.
    *
    * Phase 1 (screen): a slim, UNCAPPED scan over the whole actionable
-   * population — buildListTasksScriptV4 with SMART_SUGGEST_SCREEN_FIELDS and
-   * SMART_SUGGEST_UNCAPPED_LIMIT, on the same filter/route (including the
+   * population — buildListTasksScriptV4 with SMART_SUGGEST_SCREEN_FIELDS with
+   * `uncapped: true` (no limit in the script), on the same filter/route (including the
    * inbox route via isInboxRoute) every other mode uses. The old single-phase
    * version capped at `limit` in DB order BEFORE scoring, so the "best N"
    * could only ever be the best of an arbitrary N — this phase visits every
@@ -743,13 +739,12 @@ PERFORMANCE:
    * backfilled to the limit — and reported via metadata.vanished_count plus
    * a key_insight.
    *
-   * total_count semantics (OMN-335 §4/D4, count honesty): the actionable
-   * population screened in phase 1 — the same "population the cap was taken
-   * from" meaning every other mode's total_count already carries — NOT the
-   * size of the returned shortlist. `truncated` follows the same
-   * applyCountHonesty rule as every other mode (offset + returned < population),
-   * and now means what it says: an offset beyond the ranked candidate count
-   * returns an empty page with total_count still the population.
+   * total_count semantics (OMN-335 §4/D4, count honesty): the RANKED
+   * CANDIDATE count (score > 0) — the population `offset` pages through, so
+   * `truncated` (offset + returned < total_count) ends at the last real page.
+   * The screened actionable population is reported separately as
+   * metadata.screened_count. An offset beyond the candidates returns an empty
+   * page with total_count still the candidate count.
    */
   private async executeSmartSuggest(
     compiled: CompiledQuery,
@@ -770,7 +765,8 @@ PERFORMANCE:
     const phase1Script = buildListTasksScriptV4({
       filter,
       fields: [...SMART_SUGGEST_SCREEN_FIELDS],
-      limit: SMART_SUGGEST_UNCAPPED_LIMIT,
+      limit,
+      uncapped: true,
       offset: 0,
       mode: inboxRoute ? 'inbox' : undefined,
     });
@@ -794,12 +790,24 @@ PERFORMANCE:
       // is applied to the returned page afterwards (see below).
       sort_applied: !!compiled.sort,
       fields_mode: fieldsMode,
+      // The whole actionable population phase 1 screened (total_count is the
+      // ranked candidate count, the pageable subset of it).
+      screened_count: population,
     };
 
     // --- Score the WHOLE population in TS; take the ranked window [offset, offset+limit) ---
-    const selected = scoreForSmartSuggest(screenRows, limit, offset);
+    const ranked = rankForSmartSuggest(screenRows, limit);
+    const selected = ranked.slice(offset, offset + limit);
+    // The pageable population is the ranked candidate list (score > 0), not the
+    // screened population: total_count/truncated are measured against it so a
+    // client paging until truncated=false stops at the last real page.
+    const candidateCount = ranked.length;
     if (selected.length === 0) {
-      return createTaskResponseV2('tasks', [], baseMetadata, { population, offset, summary: !isNarrowLookup });
+      return createTaskResponseV2('tasks', [], baseMetadata, {
+        population: candidateCount,
+        offset,
+        summary: !isNarrowLookup,
+      });
     }
 
     const selectedIds = selected.map((t) => t.id);
@@ -828,7 +836,7 @@ PERFORMANCE:
       : orderedTasks;
     const projectedTasks = projectFields(pageTasks, compiled.fields);
     const response = createTaskResponseV2('tasks', projectedTasks, metadata, {
-      population,
+      population: candidateCount,
       offset,
       summary: !isNarrowLookup,
     }) as { summary?: { key_insights?: unknown } };
@@ -954,7 +962,7 @@ PERFORMANCE:
     timer: OperationTimerV2,
   ): Promise<unknown> {
     // mode is 'inbox' either because the caller asked for it or because an
-    // unconstrained mode met an inInbox filter (buildTaskQuery, OMN-330). 'inbox' is
+    // unconstrained mode met an inInbox filter (planTaskQuery, OMN-330). 'inbox' is
     // not in MODE_DEFINITIONS, so augmentFilterForMode adds nothing — this guard is
     // what scopes an explicit mode:'inbox' count (no project:null) to the inbox.
     // OMN-367: reuses the single shared inbox-route predicate (isInboxRoute,

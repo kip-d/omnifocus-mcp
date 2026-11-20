@@ -14,6 +14,7 @@ import {
   sortTasks,
   projectFields,
   scoreForSmartSuggest,
+  rankForSmartSuggest,
   countTodayCategories,
   type TaskQueryMode,
   type ScreenableTask,
@@ -965,6 +966,49 @@ describe('scoreForSmartSuggest', () => {
       expect(p2).not.toContain('dt'); // ... and only there
       expect(p1.slice(0, 2)).toEqual(['o7', 'o6']); // ranks 1-2 untouched
       expect(p2).toEqual(['o5', 'o4', 'o3']);
+    });
+
+    it('promotes the HIGHEST-RANKED due-today task, not the first in input order', () => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const dueToday = (id: string, flagged: boolean) => ({
+        id,
+        name: id,
+        completed: false,
+        flagged,
+        blocked: false,
+        dueDate: laterToday.toISOString(),
+      });
+      // dtLow (80) is first in input; dtHigh (130) outranks it.
+      const pop = [dueToday('dtLow', false), dueToday('dtHigh', true), ...makePopulation().slice(1)];
+      const ids = scoreForSmartSuggest(pop, 3).map((t) => t.id);
+      expect(ids).toEqual(['o7', 'o6', 'dtHigh']);
+    });
+
+    it('moves nothing when a due-today task is already inside the first window', () => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const dueToday = (id: string, flagged: boolean) => ({
+        id,
+        name: id,
+        completed: false,
+        flagged,
+        blocked: false,
+        available: flagged,
+        estimatedMinutes: flagged ? 5 : undefined,
+        dueDate: laterToday.toISOString(),
+      });
+      // dtTop scores 180 (ties o7, earlier in input => rank 1). dtLow is first in input but ranks last.
+      const pop = [dueToday('dtLow', false), dueToday('dtTop', true), ...makePopulation().slice(1)];
+      const ids = scoreForSmartSuggest(pop, 3).map((t) => t.id);
+      expect(ids).toEqual(['dtTop', 'o7', 'o6']);
+    });
+
+    it('rankForSmartSuggest returns the whole ranked candidate list (score > 0 only)', () => {
+      const pop = [...makePopulation(), { id: 'zero', name: 'Z', completed: false, flagged: false, blocked: false }];
+      const ranked = rankForSmartSuggest(pop, 3);
+      expect(ranked).toHaveLength(9);
+      expect(ranked.map((t) => t.id)).not.toContain('zero');
     });
 
     it('offset 0 keeps the previous behavior for the first window', () => {

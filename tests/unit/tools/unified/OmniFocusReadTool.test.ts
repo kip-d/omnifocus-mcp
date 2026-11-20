@@ -1946,15 +1946,25 @@ describe('OmniFocusReadTool', () => {
       expect('truncated' in result.metadata).toBe(false);
     });
 
-    it('smart_suggest mode inherits the contract (population + truncated)', async () => {
+    it('smart_suggest mode inherits the contract (candidate count + truncated; screened_count = population)', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
-            { id: 't1', name: 'Alpha', flagged: false, completed: false },
-            { id: 't2', name: 'Beta', flagged: false, completed: false },
+            { id: 't1', flagged: true },
+            { id: 't2', flagged: true },
+            { id: 't3', flagged: true },
           ],
           metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha' },
+            { id: 't2', name: 'Beta' },
+          ],
         },
       } satisfies ScriptResult);
 
@@ -1963,7 +1973,8 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.total_count).toBe(3);
+      expect(result.metadata.screened_count).toBe(48);
       expect(result.metadata.truncated).toBe(true);
     });
   });
@@ -2094,7 +2105,7 @@ describe('OmniFocusReadTool', () => {
       expect(result.summary.key_insights.some((s: string) => s.includes('vanished'))).toBe(true);
     });
 
-    it('total_count is the whole phase-1 actionable population, independent of the returned shortlist size', async () => {
+    it('total_count is the ranked candidate count (not the screened population); screened_count carries the population; not truncated when every candidate is returned', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
@@ -2114,12 +2125,14 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.tasks).toHaveLength(1);
-      expect(result.metadata.total_count).toBe(137);
+      expect(result.metadata.total_count).toBe(1);
+      expect(result.metadata.screened_count).toBe(137);
       expect(result.metadata.returned_count).toBe(1);
-      expect(result.metadata.truncated).toBe(true);
+      expect(result.metadata.truncated).toBeUndefined();
+      expect(JSON.stringify(result.summary)).not.toContain('truncated');
     });
 
-    it('zero scored candidates: short-circuits without a phase-2 call, still reports the whole population', async () => {
+    it('zero scored candidates: short-circuits without a phase-2 call, reports 0 candidates and the screened population', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
@@ -2134,7 +2147,8 @@ describe('OmniFocusReadTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.tasks).toHaveLength(0);
-      expect(result.metadata.total_count).toBe(1);
+      expect(result.metadata.total_count).toBe(0);
+      expect(result.metadata.screened_count).toBe(1);
       expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip when nothing scored
     });
 
@@ -2222,8 +2236,21 @@ describe('OmniFocusReadTool', () => {
       expect(result.success).toBe(true);
       expect(result.data.tasks).toHaveLength(0);
       expect(result.metadata.total_count).toBe(2);
+      expect(result.metadata.screened_count).toBe(2);
       expect(result.metadata.offset).toBe(10);
       expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip — nothing to fetch
+    });
+
+    it('phase 1 is uncapped without a MAX_SAFE_INTEGER sentinel in the script, and limit_applied reports the real page limit', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+      await tool.execute({ query: { type: 'tasks', mode: 'smart_suggest', limit: 7 } });
+      const phase1Script = execJsonSpy.mock.calls[0][0] as string;
+      expect(phase1Script).not.toContain('9007199254740991');
+      expect(phase1Script).not.toContain('count >= limit');
+      expect(phase1Script).toContain('limit_applied: 7');
     });
 
     it('countOnly still returns a count of the smart_suggest population (one count script, no phases)', async () => {

@@ -450,6 +450,19 @@ export function scoreForSmartSuggest<T extends ScreenableTask>(
   limit: number,
   offset = 0,
 ): (T & { screen_reasons: string[] })[] {
+  return rankForSmartSuggest(tasks, limit).slice(offset, offset + limit);
+}
+
+/**
+ * The FULL ranked candidate list (score > 0, score desc, input-order ties)
+ * with the due-today override applied once. `limit` is only the first-window
+ * size the override promotes into; the list is not truncated. Its length is the
+ * pageable population (smart_suggest's `total_count`).
+ */
+export function rankForSmartSuggest<T extends ScreenableTask>(
+  tasks: T[],
+  limit: number,
+): (T & { screen_reasons: string[] })[] {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
@@ -496,23 +509,21 @@ export function scoreForSmartSuggest<T extends ScreenableTask>(
 
   const ranked = scoredTasks.filter((t) => t._score > 0).sort((a, b) => b._score - a._score);
 
-  // Ensure at least one due-today task is surfaced. Applied ONCE to the FULL
-  // ranked order (not to the [0, offset+limit) window): a due-today task ranked
-  // below the first window is moved to the last slot of that window, and
-  // everything between shifts down one. The order stays a permutation, so
-  // consecutive pages [offset, offset+limit) are disjoint and gap-free.
-  const dueTodayCandidate = scoredTasks.find(
+  // Ensure at least one due-today task is surfaced: the HIGHEST-RANKED due-today
+  // candidate (first in ranked order, not in input order). Applied ONCE to the
+  // FULL ranked order: if it ranks below the first window, it moves to the last
+  // slot of that window and everything between shifts down one. The order stays a
+  // permutation, so consecutive pages [offset, offset+limit) are disjoint and
+  // gap-free. If a due-today task is already inside the window, nothing moves.
+  const dueTodayIndex = ranked.findIndex(
     (t) => t.task.dueDate && new Date(t.task.dueDate).toDateString() === now.toDateString(),
   );
-  if (dueTodayCandidate && limit > 0) {
-    const index = ranked.findIndex((t) => t.task.id === dueTodayCandidate.task.id);
-    if (index >= limit) {
-      ranked.splice(index, 1);
-      ranked.splice(limit - 1, 0, dueTodayCandidate);
-    }
+  if (dueTodayIndex >= limit && limit > 0) {
+    const [candidate] = ranked.splice(dueTodayIndex, 1);
+    ranked.splice(limit - 1, 0, candidate);
   }
 
-  return ranked.slice(offset, offset + limit).map((t) => t.task);
+  return ranked.map((t) => t.task);
 }
 
 // =============================================================================

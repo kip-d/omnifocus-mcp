@@ -49,12 +49,14 @@ export function buildListTasksScriptV4(params: {
   filter: TaskFilter | NormalizedTaskFilter;
   fields?: string[];
   limit?: number;
+  /** Scan every match with no cap (smart_suggest phase 1); `limit` is then only reported as limit_applied. */
+  uncapped?: boolean;
   offset?: number;
   mode?: string;
   sort?: Array<{ field: SortableField; direction: 'asc' | 'desc' }>;
   noteTruncateLength?: number;
 }): string {
-  const { filter, fields = [], limit = 50, offset = 0, mode = 'all', sort, noteTruncateLength } = params;
+  const { filter, fields = [], limit = 50, uncapped, offset = 0, mode = 'all', sort, noteTruncateLength } = params;
 
   // Route to appropriate script builder based on mode
   // Filter is expected to be already normalized by QueryCompiler.
@@ -71,6 +73,7 @@ export function buildListTasksScriptV4(params: {
     delete inboxFilter.inInbox; // Already handled by inbox collection
     generatedScript = buildInboxScript(inboxFilter, {
       limit,
+      uncapped,
       offset,
       fields,
       includeCompleted: filter.completed === true,
@@ -83,6 +86,7 @@ export function buildListTasksScriptV4(params: {
     // General filtered query
     generatedScript = buildFilteredTasksScript(filter, {
       limit,
+      uncapped,
       offset,
       fields,
       includeCompleted: filter.completed === true,

@@ -565,6 +565,34 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
   });
 });
 
+describe('uncapped scan option (OMN-335 slice 3: smart_suggest phase 1)', () => {
+  it('filtered script: uncapped omits the limit declaration and check; capped keeps them', () => {
+    const uncapped = buildFilteredTasksScript({}, { limit: 25, uncapped: true }).script;
+    expect(uncapped).not.toContain('count >= limit');
+    expect(uncapped).not.toContain('const limit');
+    expect(uncapped).not.toContain('MAX_SAFE');
+    expect(uncapped).toContain('totalMatched++');
+    const capped = buildFilteredTasksScript({}, { limit: 25 }).script;
+    expect(capped).toContain('count >= limit');
+  });
+
+  it('inbox script: uncapped omits the limit declaration and check', () => {
+    const uncapped = buildInboxScript({}, { limit: 25, uncapped: true }).script;
+    expect(uncapped).not.toContain('count >= limit');
+    expect(uncapped).not.toContain('const limit');
+    expect(buildInboxScript({}, { limit: 25 }).script).toContain('count >= limit');
+  });
+
+  it('vm-executed: uncapped returns every match', () => {
+    const { script } = buildFilteredTasksScript({}, { limit: 1, uncapped: true, fields: ['id'] });
+    const mk = (id: string) => ({ id: { primaryKey: id }, completed: false, taskStatus: 'A', project: null });
+    const flattenedTasks = [mk('a'), mk('b'), mk('c')];
+    const Task = { Status: { Dropped: 'D', Blocked: 'B' } };
+    const result = JSON.parse(vm.runInNewContext(script, { flattenedTasks, Task, JSON }) as string);
+    expect(result.tasks).toHaveLength(3);
+  });
+});
+
 describe('buildTasksByIdsScript (OMN-335 slice 3: smart_suggest phase 2)', () => {
   it('uses Task.byIdentifier per id, never iterates flattenedTasks', () => {
     const result = buildTasksByIdsScript(['a', 'b', 'c']);
