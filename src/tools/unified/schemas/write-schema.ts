@@ -243,13 +243,12 @@ const WRITE_FIELD_REDIRECTS: Record<string, string> = {
   context: "OmniFocus 3+ has no contexts — use 'tags'",
   priority: "OmniFocus has no priority levels — use 'flagged: true'",
   subtasks: "create children via a batch op with 'parentTempId' (or set 'parentTaskId' on create)",
-  // OMN-343 (F9/D2): minimalResponse was accepted on create/complete and
-  // compiled through, but only task update ever read it — the other two
-  // operations silently ignored it. Removed from both schemas (the "delete
-  // from both schemas" precedent); this redirect turns the resulting
-  // unrecognized-key rejection into an actionable one.
+  // OMN-343 (F9/D2): minimalResponse is a MUTATION-LEVEL sibling of
+  // `operation`/`id`, valid on task update only. This redirect fires for an
+  // unrecognized key at any depth, so the text covers the misplaced-inside-
+  // `data`/`changes` case too.
   minimalResponse:
-    "only supported on task 'update' — create, complete and project update always return their full response",
+    "'minimalResponse' is a mutation-level sibling of 'operation' and 'id' (not a field inside 'data' or 'changes'), and is only supported on task 'update' — create, complete and project update always return their full response",
 };
 
 // OMN-260: a bare root `{data:{...}}` (no `operation`, no `mutation`) is the
@@ -437,14 +436,26 @@ const TagActionSchema = z.enum([
 ]);
 
 // Mutation schema - discriminated union by operation
+// OMN-343: create/complete never read minimalResponse. Small models send
+// `minimalResponse: false` routinely (see normalize-input.test.ts), so `false`
+// is accepted as a no-op; only `true` (which would promise a minimal response
+// that never comes) is rejected. coerceBoolean handles Claude Desktop's
+// stringified params ("true"/"false").
+const MINIMAL_RESPONSE_UNSUPPORTED_MESSAGE =
+  '"minimalResponse: true" is only supported on task \'update\' — create and complete always return their full response. Omit it (minimalResponse: false is accepted and ignored).';
+const minimalResponseNoop = coerceBoolean()
+  .optional()
+  .superRefine((v, ctx) => {
+    if (v === true) ctx.addIssue({ code: z.ZodIssueCode.custom, message: MINIMAL_RESPONSE_UNSUPPORTED_MESSAGE });
+  });
+
 const MutationSchema = z.discriminatedUnion('operation', [
   // Create operation (task/project)
   strictObj({
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: CreateDataSchema,
-    // OMN-343 (F9/D2): minimalResponse removed — see WRITE_FIELD_REDIRECTS.
-    // Create was never read by the only consumer (handleTaskUpdate).
+    minimalResponse: minimalResponseNoop, // OMN-343: false = no-op, true rejected
   }),
   // Create folder operation
   strictObj({
@@ -464,7 +475,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     id: z.string(),
     changes: UpdateChangesSchema.optional(),
     data: UpdateChangesSchema.optional(),
-    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
+    minimalResponse: coerceBoolean().optional(), // Bug #21: Reduce response size (task update only)
   }),
   // Complete operation
   strictObj({
@@ -477,8 +488,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     // ("tomorrow") slipped through Zod and surfaced as uncategorized
     // INTERNAL_ERROR downstream instead of a clean VALIDATION_ERROR.
     completionDate: dateTimeStringSchema().optional(),
-    // OMN-343 (F9/D2): minimalResponse removed — see WRITE_FIELD_REDIRECTS.
-    // Complete was never read by the only consumer (handleTaskUpdate).
+    minimalResponse: minimalResponseNoop, // OMN-343: false = no-op, true rejected
   }),
   // Delete operation
   // OMN-71: the model consistently sends `target_id` (pairs with `target`),
@@ -686,7 +696,7 @@ export const WriteSchema = z
     // the full response while implying otherwise. Same reject-not-ignore
     // contract as the target-mismatch table below. Batch items cannot carry
     // it (BatchOperationSchema is strict), so only the single update needs this.
-    if (m.operation === 'update' && m.target === 'project' && m.minimalResponse !== undefined) {
+    if (m.operation === 'update' && m.target === 'project' && m.minimalResponse === true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['mutation', 'minimalResponse'],

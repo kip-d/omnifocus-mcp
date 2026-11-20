@@ -408,7 +408,7 @@ describe('flattenBatchResults', () => {
   // OMN-377 (gate round 3): the live status read-back must survive the batch
   // flatten — a batch drop/reopen otherwise shows only `changes: ['status']`,
   // the same echo-not-confirmation the single path was fixed to avoid.
-  it('OMN-377: update rows carry live completed/dropDate ; absent stays absent', () => {
+  it('OMN-377: update rows carry live completed/dropDate; an absent readback stays absent', () => {
     const nestedResults = {
       created: [],
       updated: [
@@ -428,7 +428,7 @@ describe('flattenBatchResults', () => {
         },
         {
           success: true,
-          data: { projectId: 'p1', name: 'Project row' },
+          data: { task: { id: 'u-plain', name: 'Plain', updated: true, changes: { name: 'Plain' } } },
           metadata: {},
         },
       ],
@@ -446,10 +446,48 @@ describe('flattenBatchResults', () => {
     const flat = flattenBatchResults(nestedResults) as Array<FlatBatchResult & Record<string, unknown>>;
 
     expect(flat[0]).toMatchObject({ id: 'u-drop', completed: false, dropDate: '2026-10-19T14:46:34.039Z' });
+    expect(flat[1]).toMatchObject({ id: 'u-plain' });
     expect('completed' in flat[1]).toBe(false);
     expect('dropDate' in flat[1]).toBe(false);
     // complete rows are out of scope (OMN-377 follow-up) — unchanged shape.
     expect('completed' in flat[2]).toBe(false);
+  });
+});
+
+// OMN-343 (slice 3): batch update rows never come back in the minimal shape.
+// The flat minimalResponse branch in batch-response-flatten.ts is deleted, so
+// the only way a row could be minimal is the schema accepting the flag.
+describe('batch update rows are never minimal', () => {
+  it('BatchOperationSchema rejects minimalResponse on an item', async () => {
+    const { WriteSchema } = await import('../../../../src/tools/unified/schemas/write-schema.js');
+    const result = WriteSchema.safeParse({
+      mutation: {
+        operation: 'batch',
+        operations: [
+          { operation: 'update', target: 'task', id: 't1', changes: { flagged: true }, minimalResponse: true },
+        ],
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(JSON.stringify(result.error.issues)).toMatch(/minimalResponse/);
+  });
+
+  it('a flattened batch update row carries its data, not the minimal shape', () => {
+    const flat = flattenBatchResults({
+      created: [],
+      updated: [
+        {
+          success: true,
+          data: { task: { id: 'u1', name: 'Row', updated: true, changes: { flagged: true } } },
+          metadata: {},
+        },
+      ],
+      completed: [],
+      deleted: [],
+      errors: [],
+    }) as Array<FlatBatchResult & Record<string, unknown>>;
+    expect(flat[0]).toMatchObject({ id: 'u1', name: 'Row', changes: ['flagged'] });
+    expect('fields_updated' in flat[0]).toBe(false);
   });
 });
 

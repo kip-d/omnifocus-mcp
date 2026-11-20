@@ -174,7 +174,7 @@ those rather than assuming they are already in context.
 // Bulk delete (confirm with user first!)
 { mutation: { operation: "bulk_delete", target: "task", ids: ["id1", "id2", "id3"] } }
 
-// Reduce response size on mutations (update only — create/complete always return full)
+// Reduce response size on mutations (task update only — create/complete/project update always return full)
 { mutation: { operation: "update", target: "task", id: "...", changes: { flagged: true }, minimalResponse: true } }
 ```
 

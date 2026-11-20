@@ -745,6 +745,14 @@ SAFETY:
 
     // If no valid updates, return early
     if (Object.keys(safeUpdates).length === 0) {
+      if (minimalResponse) {
+        return createSuccessResponseV2(
+          'omnifocus_write',
+          { id: taskId, operation: 'update_task', task_id: taskId, fields_updated: [] as string[] },
+          undefined,
+          { ...timer.toMetadata(), input_params: { taskId }, message: 'No valid updates provided' },
+        );
+      }
       return createSuccessResponseV2(
         'omnifocus_write',
         { task: { id: taskId, name: '', updated: false as const, changes: {} } },
@@ -807,11 +815,9 @@ SAFETY:
           ...liftWarnings(parsedUpdateResult),
         },
         undefined,
-        {
-          ...timer.toMetadata(),
-          updated_id: taskId,
-          input_params: { taskId, fields_updated: Object.keys(safeUpdates) },
-        },
+        // Duplicates trimmed: data.id / data.fields_updated already carry the
+        // id and field list, so metadata keeps only the standard block.
+        { ...timer.toMetadata(), input_params: { taskId } },
       );
     }
 

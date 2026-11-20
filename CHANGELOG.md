@@ -31,6 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING: `minimalResponse` is task-update only** (OMN-343 slice 3/3) — `minimalResponse: true` is now rejected on
+  create, complete and project update (it was silently ignored there); `minimalResponse: false` is accepted everywhere
+  as a no-op, and string booleans (`"true"`/`"false"`) are coerced. The task-update minimal response moves under `data`
+  (`data.id`, `data.fields_updated`, live status read-back, warnings) with the standard `metadata` block; the "no valid
+  updates" early return honors the flag too. Batch update rows never use the minimal shape.
 - **`osascript` spawns are serialized process-wide** (OMN-321) — `OmniAutomation` and `DiagnosticOmniAutomation` now run
   every `osascript` spawn through a FIFO queue (`src/omnifocus/osascript-queue.ts`): the second of two concurrent bridge
   calls is not spawned until the first child has closed. Previously nothing gated concurrent tool calls after startup;

@@ -647,6 +647,136 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  describe('OMN-343 slice 3 round 2 — minimalResponse leniency, coercion, shape', () => {
+    const TRUE_TEXT =
+      /"minimalResponse: true" is only supported on task 'update' — create and complete always return their full response\. Omit it/;
+
+    it('rejects minimalResponse:true on create with the exact client text', async () => {
+      await expect(
+        tool.execute({
+          mutation: { operation: 'create', target: 'task', data: { name: 'x' }, minimalResponse: true },
+        }),
+      ).rejects.toThrow(TRUE_TEXT);
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects minimalResponse:true on complete with the exact client text', async () => {
+      await expect(
+        tool.execute({ mutation: { operation: 'complete', target: 'task', id: 't1', minimalResponse: true } }),
+      ).rejects.toThrow(TRUE_TEXT);
+    });
+
+    it('rejects the string "true" on create (coerced)', async () => {
+      await expect(
+        tool.execute({
+          mutation: { operation: 'create', target: 'task', data: { name: 'x' }, minimalResponse: 'true' },
+        }),
+      ).rejects.toThrow(TRUE_TEXT);
+    });
+
+    it('rejects minimalResponse:true on project update with the exact client text', async () => {
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'update',
+            target: 'project',
+            id: 'p1',
+            changes: { flagged: true },
+            minimalResponse: true,
+          },
+        }),
+      ).rejects.toThrow(
+        '"minimalResponse" applies to task updates only — project updates always return their full response. Omit it.',
+      );
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts minimalResponse:false on create and the write proceeds', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ taskId: 'new-1', name: 'x' }));
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'x' }, minimalResponse: false },
+      })) as any;
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalled();
+    });
+
+    it('accepts the string "false" on complete and the write proceeds', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ taskId: 'task-done', name: 'Done', completed: true }));
+      const result = (await tool.execute({
+        mutation: { operation: 'complete', target: 'task', id: 'task-done', minimalResponse: 'false' },
+      })) as any;
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalled();
+    });
+
+    it('accepts minimalResponse:false on project update and the write proceeds', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ id: 'p1', name: 'P' }));
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'p1',
+          changes: { flagged: true },
+          minimalResponse: false,
+        },
+      })) as any;
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalled();
+    });
+
+    it('coerces minimalResponse:"true" on task update to the minimal shape', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ ok: true, v: '3', data: { taskId: 'tm', name: 'M', updated: true, warnings: [] } }),
+      );
+      const result = (await tool.execute({
+        mutation: { operation: 'update', target: 'task', id: 'tm', changes: { name: 'M' }, minimalResponse: 'true' },
+      })) as any;
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('tm');
+      expect(result.data.fields_updated).toEqual(['name']);
+      expect(result.data.task).toBeUndefined();
+    });
+
+    it('minimal early return (no valid updates) uses the minimal shape', async () => {
+      const result = (await tool.execute({
+        mutation: { operation: 'update', target: 'task', id: 'tn', changes: {}, minimalResponse: true },
+      })) as any;
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('tn');
+      expect(result.data.fields_updated).toEqual([]);
+      expect(result.data.task).toBeUndefined();
+      expect(result.metadata.message).toBe('No valid updates provided');
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('minimal response drops duplicated id/field-list metadata', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ ok: true, v: '3', data: { taskId: 'td', name: 'D', updated: true, warnings: [] } }),
+      );
+      const result = (await tool.execute({
+        mutation: { operation: 'update', target: 'task', id: 'td', changes: { name: 'D' }, minimalResponse: true },
+      })) as any;
+      expect(result.data.id).toBe('td');
+      expect(result.data.fields_updated).toEqual(['name']);
+      expect(result.metadata.updated_id).toBeUndefined();
+      expect(result.metadata.input_params.fields_updated).toBeUndefined();
+      expect(result.metadata.operation).toBe('omnifocus_write');
+    });
+
+    it('minimalResponse inside changes gets the move-it-up guidance', async () => {
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'update',
+            target: 'task',
+            id: 't1',
+            changes: { flagged: true, minimalResponse: true },
+          },
+        }),
+      ).rejects.toThrow(/mutation-level sibling of 'operation' and 'id'/);
+    });
+  });
+
   // ─── COMPLETE ───────────────────────────────────────────────────────
 
   describe('task complete', () => {
