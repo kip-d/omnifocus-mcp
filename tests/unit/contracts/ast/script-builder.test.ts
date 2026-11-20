@@ -664,6 +664,26 @@ describe('buildTasksByIdsScript (vm-executed, OMN-335 slice 3)', () => {
     expect(result.count).toBe(1);
   });
 
+  it('terminal guard follows the effective filter flags (text)', () => {
+    const both = buildTasksByIdsScript(['a']).script;
+    expect(both).toContain('!task.completed');
+    expect(both).toContain('task.taskStatus !== Task.Status.Dropped');
+    const keepCompleted = buildTasksByIdsScript(['a'], [], undefined, { skipCompleted: false }).script;
+    expect(keepCompleted).not.toContain('!task.completed');
+    expect(keepCompleted).toContain('task.taskStatus !== Task.Status.Dropped');
+    const keepDropped = buildTasksByIdsScript(['a'], [], undefined, { skipDropped: false }).script;
+    expect(keepDropped).toContain('!task.completed');
+    expect(keepDropped).not.toContain('task.taskStatus !== Task.Status.Dropped');
+  });
+
+  it('skipCompleted:false returns completed rows (vanished stays 0 for a completed:true query)', () => {
+    const { script } = buildTasksByIdsScript(['done'], ['id'], undefined, { skipCompleted: false });
+    const result = runByIds(script, {
+      done: { id: { primaryKey: 'done' }, completed: true, taskStatus: 'COMPLETED' },
+    });
+    expect(result.tasks.map((t) => t.id)).toEqual(['done']);
+  });
+
   it('all ids missing: returns empty results, not an error', () => {
     const { script } = buildTasksByIdsScript(['missing1', 'missing2']);
     const result = runByIds(script, {});

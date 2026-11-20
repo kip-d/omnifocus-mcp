@@ -814,7 +814,16 @@ PERFORMANCE:
     const reasonsById = new Map(selected.map((t) => [t.id, t.screen_reasons]));
 
     // --- Phase 2: fetch full rows for exactly the selected ids ---
-    const phase2Script = buildTasksByIdsQueryScript(selectedIds, responseFields, noteTruncateLength);
+    // An explicit sort key must be readable in phase 2 even when `fields` omits
+    // it: project it, sort, then strip back to what the caller asked for.
+    const sortKeys = (compiled.sort ?? []).map((sortSpec) => sortSpec.field as string);
+    const phase2Fields = [...new Set([...responseFields, ...sortKeys])];
+    // Mirror phase 1's effective filter: skip rows now completed/dropped only
+    // when that state was excluded from the screen.
+    const phase2Script = buildTasksByIdsQueryScript(selectedIds, phase2Fields, noteTruncateLength, {
+      skipCompleted: filter.completed !== true,
+      skipDropped: filter.dropped !== true,
+    });
     const phase2 = await this.execTaskScript(phase2Script, timer, 'Failed to fetch smart_suggest shortlist details');
     if (!phase2.ok) return phase2.response;
 
@@ -829,12 +838,12 @@ PERFORMANCE:
     }
 
     // An explicit sort reorders the returned page only (it can't change which
-    // tasks are selected — the score decides that). Before projection, so the
-    // sort key is readable even when `fields` omits it.
+    // tasks are selected — the score decides that). Sorted before projection;
+    // phase 2 projected the sort keys, and projectFields strips them again.
     const pageTasks = compiled.sort
       ? sortTasks(orderedTasks, compiled.sort as import('../tasks/filter-types.js').SortOption[])
       : orderedTasks;
-    const projectedTasks = projectFields(pageTasks, compiled.fields);
+    const projectedTasks = projectFields(pageTasks, compiled.fields?.length ? compiled.fields : responseFields);
     const response = createTaskResponseV2('tasks', projectedTasks, metadata, {
       population: candidateCount,
       offset,

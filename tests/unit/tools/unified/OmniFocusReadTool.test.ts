@@ -2324,6 +2324,62 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.sort_applied).toBe(true);
     });
 
+    it('sorting by a key not in fields: phase 2 projects the key, the page is reordered, the key is stripped, sort_applied is true', async () => {
+      const mk = (i: number, dueOffset: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() + dueOffset);
+        return { id: `k${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      // Phase 1 score order (flagged only, tie => input order): k0, k1, k2.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [mk(0, 5), mk(1, 1), mk(2, 3)], metadata: { total_matched: 3 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'k0', name: 'A', dueDate: mk(0, 5).dueDate },
+            { id: 'k1', name: 'B', dueDate: mk(1, 1).dueDate },
+            { id: 'k2', name: 'C', dueDate: mk(2, 3).dueDate },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          mode: 'smart_suggest',
+          limit: 3,
+          fields: ['id', 'name'],
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(execJsonSpy.mock.calls[1][0] as string).toContain('dueDate');
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['k1', 'k2', 'k0']);
+      expect(result.data.tasks[0].dueDate).toBeUndefined();
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
+    it('filters.completed:true: phase 2 does not skip completed rows (the caller asked for them)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'c1', flagged: true }], metadata: { total_matched: 1 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'c1', name: 'Done' }] },
+      } satisfies ScriptResult);
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', filters: { completed: true } },
+      })) as any;
+      const phase2Script = execJsonSpy.mock.calls[1][0] as string;
+      expect(phase2Script).not.toContain('!task.completed');
+      expect(phase2Script).toContain('task.taskStatus !== Task.Status.Dropped');
+      expect(result.metadata.vanished_count).toBeUndefined();
+    });
+
     it('without an explicit sort, sort_applied stays false and score order is kept', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,

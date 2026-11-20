@@ -162,8 +162,9 @@ export function buildTasksByIdsQueryScript(
   taskIds: string[],
   fields: string[] = [],
   noteTruncateLength?: number,
+  terminal?: { skipCompleted?: boolean; skipDropped?: boolean },
 ): string {
-  const generatedScript = buildTasksByIdsScript(taskIds, fields, noteTruncateLength);
+  const generatedScript = buildTasksByIdsScript(taskIds, fields, noteTruncateLength, terminal);
 
   return `
 (() => {

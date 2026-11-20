@@ -1064,7 +1064,17 @@ export function buildTasksByIdsScript(
   taskIds: string[],
   fields: string[] = [],
   noteTruncateLength?: number,
+  terminal: { skipCompleted?: boolean; skipDropped?: boolean } = {},
 ): GeneratedScript {
+  // Skip a resolved task that is now completed/dropped ONLY when phase 1's
+  // effective filter excluded that state; a caller who asked for completed
+  // (or dropped) tasks must get them back, not have them reported as vanished.
+  const { skipCompleted = true, skipDropped = true } = terminal;
+  const terminalConditions = [
+    ...(skipCompleted ? ['!task.completed'] : []),
+    ...(skipDropped ? ['task.taskStatus !== Task.Status.Dropped'] : []),
+  ].join(' && ');
+  const resolvedGuard = terminalConditions ? `task && ${terminalConditions}` : 'task';
   // OMN-225: see ensureIdField. Unlike buildTaskByIdScript (always full detail,
   // no truncation — id lookups are a detail view), smart_suggest's phase 2 keeps
   // the caller's ordinary note-truncation policy, so noteTruncateLength threads
@@ -1083,7 +1093,7 @@ export function buildTasksByIdsScript(
     // reached a terminal state since phase 1 must be skipped explicitly; the
     // caller counts any requested-but-absent id as vanished (three terminal
     // states: completed, dropped, deleted).
-    if (task && !task.completed && task.taskStatus !== Task.Status.Dropped) {
+    if (${resolvedGuard}) {
       results.push({
         ${fieldProjection}
       });
