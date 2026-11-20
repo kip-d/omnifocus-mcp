@@ -149,7 +149,10 @@ After the run:
   - No member changes from 4.9 (class/member diff, `npm run api:regen`); the new file differs from 4.9 only in the
     export banner and header comment
   - Same seven optional-before-required sites as 4.9, now normalized by the script instead of by hand
-  - Behavioral (release-notes layer, NOT visible in typings): not reviewed
+  - Behavioral (release-notes layer, NOT visible in typings): reviewed 2026-11-20 across 4.9.1, 4.9.2, 4.9.3 and 4.10.1
+    (there is no 4.10.0 entry). No automation, plug-in, repetition, tag, perspective or project-review bullets. The
+    changes are Shortcuts tweaks, Apple Intelligence and Siri date-parsing fixes (both beta), sync hang and crash fixes,
+    and a Dates & Times Settings crash fix. No mention of an official Omni MCP server.
 - **4.9** - Previous version (September 2026; build 187.2.1, exported 2026-09-15 on macOS 27)
   - New: `Application.getTypeScriptDeclarations(filterString?)` — the export itself is now an API call
   - New: `LanguageModel.Tool` class; `LanguageModel.Session.withTools()` now takes `Array<LanguageModel.Tool>` (replaces
