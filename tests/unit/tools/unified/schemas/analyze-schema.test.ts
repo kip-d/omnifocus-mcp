@@ -200,6 +200,41 @@ describe('AnalyzeSchema', () => {
       expect(AnalyzeSchema.safeParse(input).success).toBe(false);
     });
 
+    // OMN-370: the item dates feed batchPayload, which omnifocus_write rejects when
+    // the date is calendar-invalid (OMN-343 s2). Before this, the pre-flight
+    // accepted "2026-02-30" and reported readyToCreate:true for a payload the
+    // write tool then refused.
+    it.each([
+      ['dueDate', '2026-02-30'],
+      ['dueDate', '2026-13-01'],
+      ['deferDate', '2026-03-31 24:00'],
+      ['deferDate', '2026-03-31 12:60'],
+    ])('rejects an item whose %s is calendar-invalid (%s)', (field, value) => {
+      const input = {
+        analysis: { type: 'parse_meeting_notes', params: { items: [{ name: 'X', [field]: value }] } },
+      };
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe(
+          `Invalid calendar date: "${value}". Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm`,
+        );
+      }
+    });
+
+    it.each(['2024-02-29', '2026-03-31 23:59', '2026-03-31T08:00', '2026-03-31 08:00:30'])(
+      'accepts a valid item date (%s), including leap day and both separators',
+      (value) => {
+        const input = {
+          analysis: {
+            type: 'parse_meeting_notes',
+            params: { items: [{ name: 'X', dueDate: value, deferDate: value }] },
+          },
+        };
+        expect(AnalyzeSchema.safeParse(input).success).toBe(true);
+      },
+    );
+
     it('rejects an item with an empty name', () => {
       const input = {
         analysis: { type: 'parse_meeting_notes', params: { items: [{ name: '' }] } },

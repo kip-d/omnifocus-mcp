@@ -84,9 +84,9 @@ export function getCurrentTimezoneOffset(): number {
   return new Date().getTimezoneOffset();
 }
 
-// Read-filter date format (OMN-332). Sibling write-side validators — keep in step:
-// DATE_REGEX (schemas/write-schema.ts) and ITEM_DATE_REGEX (schemas/analyze-schema.ts).
-// Deliberately stricter than those: no "T" separator, no seconds.
+// Read-filter date format (OMN-332). Sibling write-side validator — keep in step:
+// DATE_REGEX (schemas/write-schema.ts; parse_meeting_notes item dates reuse it).
+// Deliberately stricter than that: no "T" separator, no seconds.
 const LOCAL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
 
 /**
