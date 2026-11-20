@@ -40,7 +40,7 @@ describe('isInboxRoute', () => {
 // (TaskListMetadataSchema) — no new response-schema layer needed for this path.
 describe('buildTasksByIdsQueryScript', () => {
   function runWrapped(script: string, tasksById: Record<string, unknown>): unknown {
-    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null, Status: { Dropped: 'DROPPED' } };
     const Application = () => ({
       evaluateJavascript: (inner: string) => vm.runInNewContext(inner, { Task, JSON }),
     });

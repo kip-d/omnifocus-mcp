@@ -2225,6 +2225,90 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.offset).toBe(10);
       expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip — nothing to fetch
     });
+
+    it('countOnly still returns a count of the smart_suggest population (one count script, no phases)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 7, optimization: 'omnijs_count_no_tags' },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(7);
+      expect(result.metadata.mode).toBe('smart_suggest');
+      expect(result.data.tasks).toHaveLength(0);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('filters.id still takes the id fast path (single lookup, no scoring phases)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'task-abc', name: 'Found', completed: false, flagged: false, blocked: false }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', filters: { id: 'task-abc' }, fields: ['id', 'name'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('id_lookup');
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['task-abc']);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('an explicit sort reorders the returned page after scoring and sort_applied reports it', async () => {
+      const mk = (i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (i + 1));
+        return { id: `s${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      // Score order: s2, s1, s0.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [mk(0), mk(1), mk(2)], metadata: { total_matched: 3 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 's0', name: 'Alpha' },
+            { id: 's1', name: 'Bravo' },
+            { id: 's2', name: 'Charlie' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          mode: 'smart_suggest',
+          limit: 3,
+          fields: ['id', 'name'],
+          sort: [{ field: 'name', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['s0', 's1', 's2']); // name asc, not score order
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
+    it('without an explicit sort, sort_applied stays false and score order is kept', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'a', flagged: true }], metadata: { total_matched: 1 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'a', name: 'A' }] },
+      } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'smart_suggest' } })) as any;
+      expect(result.metadata.sort_applied).toBe(false);
+    });
   });
 
   describe('OMN-154: projects envelope reports population', () => {
