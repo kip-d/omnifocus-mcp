@@ -302,7 +302,10 @@ SAFETY:
             changes: { type: 'object', properties: updateChangesProperties },
             id: { type: 'string' },
             target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
-            minimalResponse: { type: 'boolean' },
+            minimalResponse: {
+              type: 'boolean',
+              description: 'task update only: skip the full task echo, keep id/fields_updated + metadata',
+            },
 
             // complete
             // OMN-85: format must match the Zod regex (YYYY-MM-DD optionally
@@ -742,6 +745,14 @@ SAFETY:
 
     // If no valid updates, return early
     if (Object.keys(safeUpdates).length === 0) {
+      if (minimalResponse) {
+        return createSuccessResponseV2(
+          'omnifocus_write',
+          { id: taskId, operation: 'update_task', task_id: taskId, fields_updated: [] as string[] },
+          undefined,
+          { ...timer.toMetadata(), input_params: { taskId }, message: 'No valid updates provided' },
+        );
+      }
       return createSuccessResponseV2(
         'omnifocus_write',
         { task: { id: taskId, name: '', updated: false as const, changes: {} } },
@@ -789,15 +800,25 @@ SAFETY:
     this.logger.info(`Updated task: ${taskId}`);
 
     if (minimalResponse) {
-      return {
-        success: true,
-        id: taskId,
-        operation: 'update_task',
-        task_id: taskId, // Keep for backwards compatibility
-        fields_updated: Object.keys(safeUpdates),
-        ...liveStatusReadback(parsedUpdateResult),
-        ...liftWarnings(parsedUpdateResult),
-      };
+      // OMN-343 (F9/D2, slice 3): previously a hand-built literal with no
+      // `metadata` block — the only reader of `compiled.minimalResponse`
+      // (this path) is now the only write operation that still accepts the
+      // flag, so it carries the same metadata shape the full response does.
+      return createSuccessResponseV2(
+        'omnifocus_write',
+        {
+          id: taskId,
+          operation: 'update_task',
+          task_id: taskId, // Keep for backwards compatibility
+          fields_updated: Object.keys(safeUpdates),
+          ...liveStatusReadback(parsedUpdateResult),
+          ...liftWarnings(parsedUpdateResult),
+        },
+        undefined,
+        // Duplicates trimmed: data.id / data.fields_updated already carry the
+        // id and field list, so metadata keeps only the standard block.
+        { ...timer.toMetadata(), input_params: { taskId } },
+      );
     }
 
     return this.buildTaskUpdateResponse(taskId, safeUpdates, parsedUpdateResult, timer);

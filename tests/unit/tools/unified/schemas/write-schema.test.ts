@@ -1621,4 +1621,112 @@ describe('WriteSchema', () => {
       });
     });
   });
+
+  // OMN-343 (slice 3, F9/D2): minimalResponse is update-only. create/complete
+  // reject it as an unrecognized key (with a steering hint); update still
+  // accepts it.
+  describe('OMN-343 slice 3 — minimalResponse is update-only', () => {
+    it('rejects minimalResponse on create task', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x' },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(JSON.stringify(result.error.issues)).toMatch(/minimalResponse/);
+      }
+    });
+
+    it('rejects minimalResponse on create project', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'p' },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects minimalResponse on complete', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'complete',
+          target: 'task',
+          id: 'task-1',
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(JSON.stringify(result.error.issues)).toMatch(/minimalResponse/);
+      }
+    });
+
+    it('the unrecognized-key error names the field and redirects to update', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: { name: 'x' },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const message = JSON.stringify(result.error.issues);
+        expect(message).toMatch(/only supported on task 'update'/);
+      }
+    });
+
+    it('rejects minimalResponse on update with target project, naming the field', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-1',
+          changes: { flagged: true },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.join('.') === 'mutation.minimalResponse');
+        expect(issue?.message).toBe(
+          '"minimalResponse" applies to task updates only — project updates always return their full response. Omit it.',
+        );
+      }
+    });
+
+    it('rejects minimalResponse on a batch update item (unrecognized key)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          operations: [
+            { operation: 'update', target: 'project', id: 'p1', changes: { flagged: true }, minimalResponse: true },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(JSON.stringify(result.error.issues)).toMatch(/minimalResponse/);
+    });
+
+    it('still accepts minimalResponse on update', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          id: 'task-1',
+          changes: { flagged: true },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });
