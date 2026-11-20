@@ -312,8 +312,16 @@ if [ "$MODE" = "verify" ]; then
   # an awk SIGPIPE) would otherwise fail the assignment and set -e would kill
   # the whole verify with no verdict printed at all — observed via the
   # launchctl-down harness scenario. An empty rc already prints as "unknown".
-  rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}' || true)"
-  echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
+  # Read rc ONLY when termination was confirmed: while the job is still running
+  # (or launchctl could not be probed) "last exit code" is the PREVIOUS run's
+  # value, and trusting it would report OK/FAILED for a run still in flight.
+  rc=""
+  if [ -n "$terminated" ]; then
+    rc="$(launchctl print "$GUI/$LABEL" 2>/dev/null | awk '/last exit code/{print $NF; exit}' || true)"
+    echo "  last exit code = ${rc:-unknown} (0 = suite passed; 127 = PATH bug)"
+  else
+    echo "  last exit code = not read (job termination was not confirmed; any value would be the previous run's)"
+  fi
 
   # Read the verdict ONLY from this run's region of the log.
   status_line="$(printf '%s' "$new_region" | grep -aE '^STATUS: ' | tail -1 || true)"
@@ -336,6 +344,18 @@ if [ "$MODE" = "verify" ]; then
   fi
   echo "  ${status_line:-STATUS: (none recorded)}"
   echo "  $leak_line"
+
+  # Termination never confirmed: the run may still be mutating the live
+  # database, so neither PASS nor FAIL is a trustworthy verdict. Inconclusive.
+  if [ -z "$terminated" ]; then
+    if [ -n "$job_probe_failed" ]; then
+      echo "  VERIFY INCONCLUSIVE — launchctl could not be queried, so job termination was never observed." >&2
+    else
+      echo "  VERIFY INCONCLUSIVE — the job is still running after ${term_budget}s (cleanup may still be mutating OmniFocus)." >&2
+    fi
+    echo "  Re-verify once it settles; check $RUN_LOG and $LAUNCHD_LOG." >&2
+    exit 3
+  fi
 
   # A WEDGED run is not a pass and not a failure: the job worked, the
   # environment didn't. Say so plainly rather than reporting green.
