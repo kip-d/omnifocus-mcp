@@ -14,8 +14,8 @@ type SameKeys<A, B> =
   Exclude<keyof A, keyof B> extends never ? (Exclude<keyof B, keyof A> extends never ? true : never) : never;
 
 // Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
-// Siblings — keep in step: ITEM_DATE_REGEX (analyze-schema.ts) mirrors this; the
-// read-filter validator LOCAL_DATE_RE (utils/timezone.ts, OMN-332) is stricter.
+// parse_meeting_notes item dates (analyze-schema.ts) reuse dateTimeStringSchema below
+// (OMN-370); the read-filter validator LOCAL_DATE_RE (utils/timezone.ts, OMN-332) is stricter.
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
 const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 
@@ -103,7 +103,7 @@ const calendarInvalidMessage = (formatMsg: string) => (value: string) => ({
  * definition so every date field (create/update dueDate/deferDate/plannedDate,
  * complete's completionDate, single and batch) rejects the same inputs the
  * same way. */
-const dateTimeStringSchema = () =>
+export const dateTimeStringSchema = () =>
   z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).refine(isCalendarValidDate, calendarInvalidMessage(DATE_FORMAT_MSG));
 
 /** Shared date-only string schema (DATE_ONLY_REGEX + calendar-validity) — repetitionRule.endDate. */

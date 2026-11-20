@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { coerceObject } from '../../schemas/coercion-helpers.js';
 import { isLocalDateString, localDateBoundToUTC } from '../../../utils/timezone.js';
+import { dateTimeStringSchema } from './write-schema.js';
 
 // OMN-90: every nested object literal carries `.strict()`. Zod's
 // `discriminatedUnion` does NOT propagate strictness to its members, and
@@ -55,24 +56,18 @@ const VelocityScopeSchema = z
 // OMN-124: one already-extracted action item passed by the caller (the LLM).
 // Mirrors the write tool's CreateData (name/note/project/tags/dates/flagged/
 // estimatedMinutes) so the preview can emit a batch payload that round-trips
-// into omnifocus_write { batch } unchanged. Dates are validated loosely here
-// ('YYYY-MM-DD[ HH:mm]', no Z) — the write boundary is the strict enforcement
-// point. `.strict()` so unknown keys are rejected, not silently dropped.
-// Mirror of write-schema's DATE_REGEX (not exported there). Validating dates
-// here keeps the "ready to send" promise honest — a bad date is rejected at this
-// boundary instead of silently riding into a batchPayload the write tool rejects.
-// Mirror of DATE_REGEX (write-schema.ts); the read-filter validator LOCAL_DATE_RE
-// (utils/timezone.ts, OMN-332) is the stricter sibling.
-const ITEM_DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
-const ITEM_DATE_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
+// into omnifocus_write { batch } unchanged. `.strict()` so unknown keys are rejected, not silently dropped.
+// Item dates use the write tool's own date schema (format + calendar validity,
+// OMN-370), so the "ready to send" promise stays honest: any date that would make
+// omnifocus_write reject the batchPayload is rejected here first, with the same message.
 
 const ParsedItemSchema = z
   .object({
     name: z.string().min(1),
     project: z.string().nullable().optional(), // existing/new name, or null = inbox
     tags: z.array(z.string()).optional(),
-    dueDate: z.string().regex(ITEM_DATE_REGEX, ITEM_DATE_MSG).optional(),
-    deferDate: z.string().regex(ITEM_DATE_REGEX, ITEM_DATE_MSG).optional(),
+    dueDate: dateTimeStringSchema().optional(),
+    deferDate: dateTimeStringSchema().optional(),
     estimatedMinutes: z.number().int().positive().optional(),
     flagged: z.boolean().optional(),
     note: z.string().optional(),
