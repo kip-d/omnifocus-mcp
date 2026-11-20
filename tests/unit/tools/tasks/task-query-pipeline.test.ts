@@ -927,6 +927,51 @@ describe('scoreForSmartSuggest', () => {
       expect(result.map((t) => t.id)).toEqual(['a', 'b', 'c']);
     });
   });
+
+  describe('OMN-335 s3: rank paging with the due-today override', () => {
+    const makePopulation = (): OmniFocusTask[] => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const overdue = Array.from({ length: 8 }, (_, i) => {
+        const due = new Date();
+        due.setDate(due.getDate() - (i + 1));
+        return {
+          id: `o${i}`,
+          name: `O${i}`,
+          completed: false,
+          flagged: false,
+          blocked: false,
+          dueDate: due.toISOString(),
+        };
+      });
+      // Due-today scores 80 -- below every overdue row, so it ranks last (9th).
+      return [
+        { id: 'dt', name: 'DT', completed: false, flagged: false, blocked: false, dueDate: laterToday.toISOString() },
+        ...overdue,
+      ];
+    };
+
+    it('consecutive pages are disjoint and gap-free; the override promotes once, into the first window', () => {
+      const pop = makePopulation();
+      const page = (offset: number) => scoreForSmartSuggest(pop, 3, offset).map((t) => t.id);
+      const p1 = page(0);
+      const p2 = page(3);
+      const p3 = page(6);
+
+      const all = [...p1, ...p2, ...p3];
+      expect(new Set(all).size).toBe(9); // disjoint: no id twice
+      expect(all.sort()).toEqual(pop.map((t) => t.id).sort()); // gap-free: every ranked row exactly once
+      expect(p1).toContain('dt'); // due-today surfaced on page 1 ...
+      expect(p2).not.toContain('dt'); // ... and only there
+      expect(p1.slice(0, 2)).toEqual(['o7', 'o6']); // ranks 1-2 untouched
+      expect(p2).toEqual(['o5', 'o4', 'o3']);
+    });
+
+    it('offset 0 keeps the previous behavior for the first window', () => {
+      const ids = scoreForSmartSuggest(makePopulation(), 3).map((t) => t.id);
+      expect(ids).toEqual(['o7', 'o6', 'dt']);
+    });
+  });
 });
 
 describe('projectFields carries screen_reasons (OMN-259)', () => {

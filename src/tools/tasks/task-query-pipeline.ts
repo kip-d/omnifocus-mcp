@@ -440,10 +440,15 @@ export type ScreenableTask = Pick<OmniFocusTask, 'id' | 'dueDate' | 'flagged' | 
  * scores keep their relative input order (which, for phase 1, is the
  * database's natural iteration order for that filter). Deterministic, not
  * arbitrary.
+ *
+ * `offset` pages through the ranked order: the result is ranks
+ * [offset, offset+limit). The due-today override is applied to the full order
+ * before slicing, so pages never overlap or skip a rank.
  */
 export function scoreForSmartSuggest<T extends ScreenableTask>(
   tasks: T[],
   limit: number,
+  offset = 0,
 ): (T & { screen_reasons: string[] })[] {
   const now = new Date();
   const todayEnd = new Date(now);
@@ -489,28 +494,25 @@ export function scoreForSmartSuggest<T extends ScreenableTask>(
     return { task: { ...task, screen_reasons: reasons } as T & { screen_reasons: string[] }, _score: score };
   });
 
-  const suggestedTasks = scoredTasks
-    .filter((t) => t._score > 0)
-    .sort((a, b) => b._score - a._score)
-    .slice(0, limit)
-    .map((t) => t.task);
+  const ranked = scoredTasks.filter((t) => t._score > 0).sort((a, b) => b._score - a._score);
 
-  // Ensure at least one due-today task is surfaced
+  // Ensure at least one due-today task is surfaced. Applied ONCE to the FULL
+  // ranked order (not to the [0, offset+limit) window): a due-today task ranked
+  // below the first window is moved to the last slot of that window, and
+  // everything between shifts down one. The order stays a permutation, so
+  // consecutive pages [offset, offset+limit) are disjoint and gap-free.
   const dueTodayCandidate = scoredTasks.find(
     (t) => t.task.dueDate && new Date(t.task.dueDate).toDateString() === now.toDateString(),
   );
-  if (dueTodayCandidate) {
-    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.task.id);
-    if (!alreadyIncluded) {
-      if (suggestedTasks.length < limit) {
-        suggestedTasks.push(dueTodayCandidate.task);
-      } else if (suggestedTasks.length > 0) {
-        suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate.task;
-      }
+  if (dueTodayCandidate && limit > 0) {
+    const index = ranked.findIndex((t) => t.task.id === dueTodayCandidate.task.id);
+    if (index >= limit) {
+      ranked.splice(index, 1);
+      ranked.splice(limit - 1, 0, dueTodayCandidate);
     }
   }
 
-  return suggestedTasks;
+  return ranked.slice(offset, offset + limit).map((t) => t.task);
 }
 
 // =============================================================================

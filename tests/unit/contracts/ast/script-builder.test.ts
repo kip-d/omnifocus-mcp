@@ -533,7 +533,10 @@ describe('buildTaskByIdScript (vm-executed, OMN-185)', () => {
     script: string,
     tasksById: Record<string, unknown>,
   ): { tasks: any[]; count: number; mode: string; targetId: string } {
-    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const Task = {
+      byIdentifier: (id: string) => tasksById[id] ?? null,
+      Status: { Dropped: 'DROPPED', Completed: 'COMPLETED', Available: 'AVAILABLE' },
+    };
     const sandbox: Record<string, unknown> = { Task, JSON };
     return JSON.parse(vm.runInNewContext(script, sandbox) as string);
   }
@@ -594,7 +597,10 @@ describe('buildTasksByIdsScript (OMN-335 slice 3: smart_suggest phase 2)', () =>
 
 describe('buildTasksByIdsScript (vm-executed, OMN-335 slice 3)', () => {
   function runByIds(script: string, tasksById: Record<string, unknown>): { tasks: any[]; count: number; mode: string } {
-    const Task = { byIdentifier: (id: string) => tasksById[id] ?? null };
+    const Task = {
+      byIdentifier: (id: string) => tasksById[id] ?? null,
+      Status: { Dropped: 'DROPPED', Completed: 'COMPLETED', Available: 'AVAILABLE' },
+    };
     const sandbox: Record<string, unknown> = { Task, JSON };
     return JSON.parse(vm.runInNewContext(script, sandbox) as string);
   }
@@ -610,6 +616,24 @@ describe('buildTasksByIdsScript (vm-executed, OMN-335 slice 3)', () => {
     expect(result.tasks.map((t) => t.id)).toEqual(['found1', 'found2']);
     expect(result.count).toBe(2);
     expect(result.mode).toBe('ids_lookup');
+  });
+
+  it('emits a terminal-state guard (completed / Task.Status.Dropped) before projecting a resolved task', () => {
+    const { script } = buildTasksByIdsScript(['a']);
+    expect(script).toContain('task.completed');
+    expect(script).toContain('task.taskStatus !== Task.Status.Dropped');
+    expect(script.indexOf('Task.Status.Dropped')).toBeLessThan(script.indexOf('results.push'));
+  });
+
+  it('skips tasks completed or dropped since phase 1 (byIdentifier still resolves them)', () => {
+    const { script } = buildTasksByIdsScript(['live', 'done', 'dropped'], ['id', 'name']);
+    const result = runByIds(script, {
+      live: { id: { primaryKey: 'live' }, name: 'L', completed: false, taskStatus: 'AVAILABLE' },
+      done: { id: { primaryKey: 'done' }, name: 'D', completed: true, taskStatus: 'COMPLETED' },
+      dropped: { id: { primaryKey: 'dropped' }, name: 'X', completed: false, taskStatus: 'DROPPED' },
+    });
+    expect(result.tasks.map((t) => t.id)).toEqual(['live']);
+    expect(result.count).toBe(1);
   });
 
   it('all ids missing: returns empty results, not an error', () => {

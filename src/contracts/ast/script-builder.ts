@@ -1049,7 +1049,11 @@ export function buildTasksByIdsScript(
 
   targetIds.forEach(targetId => {
     const task = Task.byIdentifier(targetId);
-    if (task) {
+    // Task.byIdentifier still resolves completed/dropped tasks, so a task that
+    // reached a terminal state since phase 1 must be skipped explicitly; the
+    // caller counts any requested-but-absent id as vanished (three terminal
+    // states: completed, dropped, deleted).
+    if (task && !task.completed && task.taskStatus !== Task.Status.Dropped) {
       results.push({
         ${fieldProjection}
       });
