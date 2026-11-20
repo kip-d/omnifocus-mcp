@@ -647,3 +647,184 @@ both keep the advertised JSON byte-for-byte as it is today.
 
 - An inbox list/count missing subtasks of inbox tasks: REFUTED. `task.inInbox` also excludes contained tasks
   (`src/omnifocus/api/OmniFocus.d.ts:782-783`), so the `inbox`-collection path and the OR-branch path agree.
+
+## Attack-surface audit 2026-10-21 at 268b1c60
+
+Method: modeled on Anthropic's "Using Claude to reduce code attack surface". The goal is shrinking what is reachable,
+not hunting bugs. Analysis only; no code changed. Threat model: a local Mac server with full OmniFocus write access.
+Hostile inputs are (a) anything that reaches `--http`, including a browser on the same machine (DNS rebinding, CSRF) and
+LAN hosts, and (b) MCP tool arguments an LLM produces after reading prompt-injected task names, notes or tool output.
+The primary deployment is stdio. Every item below was demonstrated dynamically, with a curl against `--http` (built
+`dist/`, `NODE_ENV=test SANDBOX_GUARD_ENABLED=true` unless noted) or a tsx probe; anything that could not be
+demonstrated is under **Dropped**. Probes are in the session scratchpad (`probe-*.mts`, `guard-combo.mts`,
+`env-nan.mts`). Deduped against items 1–70 and their OMN tickets; #36 (OMN-356, open) already records the HTTP defaults,
+so #71 adds the dynamic proof and the full gate set rather than restating it.
+
+Priority here reads as security reach: P0 = a web page can drive OmniFocus writes in a supported configuration; P1 = a
+configuration silently weakens a control; P2 = reachable but bounded surface; P3 = hygiene.
+
+### Entry-point inventory
+
+| Entry                                                                                                                                                | Default | Gate                                                                            | Reaches                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| stdio transport                                                                                                                                      | **on**  | the client's own per-tool permission prompt                                     | all 4 tools, 6 prompts                                                                                                              |
+| `--http` (`/mcp`, `/health`, `/sessions`)                                                                                                            | off     | optional bearer token; no Host/Origin check; CORS `*`                           | the same as stdio, plus the session list                                                                                            |
+| `omnifocus_read` (tasks ×11 modes, projects, tags, perspectives, folders)                                                                            | on      | `ReadSchema` strict, normalization                                              | JXA/OmniJS read, cache                                                                                                              |
+| `omnifocus_write` create / update / complete / create_folder                                                                                         | on      | `WriteSchema` strict + superRefine                                              | OmniJS write, cache invalidate                                                                                                      |
+| `omnifocus_write` delete, `bulk_delete` (≤100), `batch` (≤100, any mix), `tag_manage` delete/merge, `update status:dropped`                          | on      | Zod only; `dryRun` opt-in on batch/bulk_delete; sandbox guard in test mode only | irreversible deletes; a project delete cascades                                                                                     |
+| `omnifocus_analyze` (7 read ops; `manage_reviews` mark_reviewed/set_schedule ≤100)                                                                   | on      | `AnalyzeSchema`; `readOnlyHint:false` (OMN-284)                                 | reads; review writes                                                                                                                |
+| `system` version / diagnostics / metrics / cache                                                                                                     | on      | `SystemToolSchema` strict                                                       | fixed-arg `git`/osascript; `cache.clear()`                                                                                          |
+| prompts (6)                                                                                                                                          | on      | required-arg presence only                                                      | text only                                                                                                                           |
+| CLI flags `--http --port --host`                                                                                                                     | —       | `parseCLIArgs`                                                                  | bind address                                                                                                                        |
+| env `MCP_AUTH_TOKEN MCP_HOST MCP_PORT`                                                                                                               | unset   | **override the CLI flags**                                                      | auth, bind                                                                                                                          |
+| env `NODE_ENV SANDBOX_GUARD_ENABLED`                                                                                                                 | unset   | OMN-46 startup assert (one direction only)                                      | write guard, failure-log suppression, cache warm                                                                                    |
+| env `OMNIFOCUS_MAX_SCRIPT_SIZE OMNIFOCUS_SCRIPT_TIMEOUT`                                                                                             | unset   | `parseInt`, no validation                                                       | script size cap, spawn timeout                                                                                                      |
+| env `OMNIFOCUS_MCP_DISABLE_FAILURE_LOG LOG_LEVEL STRUCTURED_LOGGING MCP_CLI_TESTING CI NO_CACHE_WARMING ENABLE_CACHE_WARMING MCP_SKIP_AUTO_START TZ` | unset   | —                                                                               | logging and warm toggles only; reviewed, no weakening found                                                                         |
+| filesystem                                                                                                                                           | on      | —                                                                               | `~/.omnifocus-mcp/tool-failures/*.jsonl` (failure + normalization logs)                                                             |
+| network out                                                                                                                                          | —       | —                                                                               | none from MCP paths: `src/diagnostics/linear-filer.ts` has no importer under `src/` (type-only from `scripts/diagnose-failures.ts`) |
+
+### P0 — a web page can drive OmniFocus writes
+
+- [ ] 71. [OMN-356] With `--http` and no token, the default configuration, any web page the user visits can read and
+      delete OmniFocus data by DNS rebinding. The server never checks `Host` or `Origin`, so a request carrying
+      `Host: evil.example` is served. `GET /sessions` hands over the live session id, and from then on the browser
+      treats every call as same-origin, so CORS never applies (`src/http-server.ts:113-147`, `handleRequest`;
+      `src/session-manager.ts:93-100`, transport built without `enableDnsRebindingProtection`; `src/utils/cli.ts:21`).
+      The bind is `*` (`lsof` shows `TCP *:39117`), so LAN hosts are in scope too; on this Mac only the application
+      firewall stopped a LAN-IP probe, which is host configuration, not a code control. Plain cross-origin CSRF
+      **without** rebinding is weaker than the CORS header suggests: a JSON body forces a preflight, a `text/plain` body
+      gets 415, real responses carry no `Access-Control-Allow-Origin` (so the page can't read `mcp-session-id`), and the
+      SDK rejects `initialize` batched with a `tools/call` ("Only one initialization request is allowed"). Failure
+      scenario: the user runs `node dist/index.js --http`; a page they open rebinds its hostname to 127.0.0.1, reads
+      `/sessions`, and calls `omnifocus_write` `bulk_delete` with 100 ids taken from a prior `omnifocus_read`. Verified
+      by curl over loopback with `Host: evil.example:39117` and `Origin: http://evil.example`: `initialize` → 200 plus a
+      session id; `/sessions` → the id; `omnifocus_read` `countOnly` → a live `total_count: 119`; `omnifocus_write`
+      `delete` with a fake id → the script ran and answered `Task not found: zzzAuditNonexistent1`. Proposed gates (one
+      PR, BREAKING for anyone using `--http` today):
+      1. Default `host` to `127.0.0.1`; binding anything else needs an explicit `--host`.
+      2. Refuse to start HTTP without `MCP_AUTH_TOKEN` unless `--insecure-no-auth` is passed (replaces the warning at
+         `src/utils/cli.ts:106-112`).
+      3. A Host allowlist (`127.0.0.1:<port>`, `localhost:<port>`, plus `--host` if set) and an Origin allowlist (none
+         by default), checked in `handleRequest` **before routing**. The SDK's `allowedHosts`/`allowedOrigins` run only
+         inside `transport.handleRequest`, so on their own they would leave `/sessions` and `/health` open.
+      4. Drop `Access-Control-Allow-Origin: *` from the preflight (no browser client is supported).
+      5. `crypto.timingSafeEqual` over SHA-256 digests in `validateAuthToken` (`src/session-manager.ts:257-268`), and
+         `/sessions` returns a count, not ids. These two are carried over from #36 unchanged; the timing leak itself was
+         not demonstrated (not attempted: a loopback timing oracle needs many samples), so it rides along as hygiene.
+         Blast radius: `src/utils/cli.ts`, `src/http-server.ts`, `src/session-manager.ts`, their unit tests, README/CLI
+         help, CHANGELOG. Supersedes #36's fix list.
+
+### P1 — configuration silently weakens a control
+
+- [ ] 72. `MCP_HOST` overrides an explicit `--host`. "Environment variables override command line args"
+      (`src/utils/cli.ts:78-81`) inverts the usual precedence, so an inherited `MCP_HOST=0.0.0.0` silently widens a bind
+      the operator narrowed on the command line. `MCP_PORT` has the same shape but is harmless. Failure scenario: a
+      shell profile exports `MCP_HOST=0.0.0.0`; the user starts `--http --host 127.0.0.1` and is listening on every
+      interface. Verified: `MCP_HOST=0.0.0.0 node dist/index.js --http --host 127.0.0.1 --port 39118` → `lsof` shows
+      `TCP *:39118`. Proposed gate: the CLI flag wins over the env; if both are set and differ, log it loudly at
+      startup. BREAKING (minor): anyone relying on env-over-flag.
+- [ ] 73. `MCP_AUTH_TOKEN` set but empty turns auth off, and any length is accepted. `if (process.env.MCP_AUTH_TOKEN)`
+      treats `""` as unset (`src/utils/cli.ts:79`), so a templated launcher whose secret expanded to nothing runs with
+      no auth and only a warning. A one-character token is accepted. Verified: `MCP_AUTH_TOKEN=` → the no-auth warning
+      fires and `/sessions` answers 200 with no credential; `MCP_AUTH_TOKEN=a` → `Bearer a` is accepted. Proposed gate:
+      reject at startup when the variable is defined but empty, and when it is shorter than 32 characters; folds into
+      #71's refuse-without-token gate. BREAKING for short tokens.
+- [ ] 74. `SANDBOX_GUARD_ENABLED=true` without `NODE_ENV=test` silently turns the guard off. OMN-46's startup assert
+      covers only the reverse combination (`src/utils/sandbox-guard.ts:40-42`), and `isTestMode` needs both
+      (`src/contracts/ast/mutation-script-builder.ts:74-75`). An operator who sets the guard flag on its own, or a
+      harness that sets `NODE_ENV=development`, believes writes are fenced while they reach live data. The dev server in
+      `~/.claude.json` sets both today, so nothing is exposed now. Verified: `guard-combo.mts` gives
+      `{"SANDBOX_GUARD_ENABLED":"true","isTestMode":false,"startupAssertThrew":false}`, and the same for
+      `NODE_ENV=development`. Proposed gate: reject at startup when `SANDBOX_GUARD_ENABLED=true` and `NODE_ENV!=='test'`
+      (the guard was asked for and can't run). Not breaking.
+
+### P2 — reachable but bounded
+
+- [ ] 75. A failed validation writes the attacker's input to disk with no size cap, at about 3× amplification.
+      `handleExecuteError` → `logToolFailure` stores the raw value three times: Zod's `errorMessage`, `validationErrors`
+      and `inputArgs`. Redaction is by key name only, so the value under a non-sensitive key, every unrecognized **key
+      name**, and enum `received` text land verbatim (`src/tools/base.ts:230-236,268-319`; `src/utils/logger.ts:41`).
+      The same text goes back in the `McpError` message and to stderr. There is no truncation and no file cap; it is
+      suppressed only under `NODE_ENV=test` or `OMNIFOCUS_MCP_DISABLE_FAILURE_LOG`. Over stdio the LLM's output budget
+      bounds it; over `--http` (5 MB body cap) it is a disk-fill loop. Verified by curl against `--http` with `HOME`
+      redirected and `NODE_ENV` unset (the input fails Zod, so no script runs): a 1,048,775-byte request with a bad
+      `dueDate` → a 3,152,552-byte failure-log record, a 2,097,748-byte response and 1,051,325 bytes of stderr. Proposed
+      gate: truncate every string in the record and in the client-facing Zod message (e.g. 256 chars, with an
+      elided-length marker), cap the record (e.g. 16 KB) and the daily file (e.g. 10 MB, then stop writing and log
+      once). Not breaking. Blast radius: `src/tools/base.ts`, `src/diagnostics/failure-log.ts`, tests.
+- [ ] 76. Destructive operations are always advertised, with no opt-in and no confirmation: `delete`, `bulk_delete` (100
+      ids), `batch` (100 operations, any of them deletes), `tag_manage` delete/merge, and `update status:dropped`. All
+      of them sit inside `omnifocus_write`, alongside create/update. The client's permission prompt is per **tool**, so
+      a user who allows `omnifocus_write` for routine captures has also allowed a prompt-injected 100-id delete.
+      `dryRun` defaults to false. Verified: `tools/list` advertises `bulk_delete`, and `delete` reaches a live script
+      (see #71's curl). Proposed gate (Needs a decision; BREAKING either way):
+      - (a) Move the irreversible operations to a separate tool, e.g. `omnifocus_delete`, with `destructiveHint:true`,
+        so clients gate them separately and `omnifocus_write` can be auto-allowed. Recommended: it uses the client's
+        existing gate instead of inventing one.
+      - (b) Hide them unless `OMNIFOCUS_MCP_ENABLE_DESTRUCTIVE=1`; drop them from both schemas when off (per the
+        delete-don't-stub norm).
+      - Either way, consider lowering the `bulk_delete`/`batch` delete cap below 100. Blast radius for (a): both write
+        schemas, `OmniFocusWriteTool`, a new tool class, `src/tools/index.ts`, normalization `WRAPPER_HINTS`, the
+        omnifocus-assistant skill, tests and docs; it walks the Vertical Contract Matrix.
+- [ ] 77. A non-numeric `OMNIFOCUS_MAX_SCRIPT_SIZE` turns off the script size cap. `parseInt('abc')` is `NaN`, and
+      `script.length > NaN` is always false (`src/omnifocus/OmniAutomation.ts:49-55,70`). A non-numeric
+      `OMNIFOCUS_SCRIPT_TIMEOUT` fails closed instead: `spawn` throws `ERR_OUT_OF_RANGE` on a `NaN` timeout, so every
+      script errors. Verified: `env-nan.mts` gives
+      `{"maxScriptSize":"NaN","timeout":"NaN","tenMBscriptPassesSizeCheck":true}`; `node -e` reproduces the spawn throw.
+      Proposed gate: reject a non-positive-integer value at startup for both. Not breaking.
+
+### P3 — hygiene
+
+- [ ] 78. The tool name and prompt name are interpolated raw into stderr log lines, so a caller can forge log entries:
+      `` `Tool not found: ${name}` `` (`src/tools/index.ts:93`) and `` `Getting prompt: ${name}` ``
+      (`src/prompts/index.ts:56`, info level, on by default). Verified: a `tools/call` over `--http` whose name embeds
+      `\n[2026-10-21T00:00:00.000Z] [INFO] [server] FORGED: all writes verified` → that text is its own line (line 17)
+      of the server's stderr. Proposed gate: `JSON.stringify` the name in both messages, or escape C0 characters
+      centrally in the logger's text formatter. Not breaking.
+- [ ] ~~79. `system.testScript` is advertised as a "custom script" but never runs.~~ Duplicate of #39 [OMN-358], whose
+      decided spec (`Technical/specs/OMN-358-system-testscript-and-ttls.md`) narrows it to `z.enum(['list_tasks'])`.
+      That closes the same surface. Kept here only as the dedupe record.
+
+### Pass 3 — early reachability (no findings beyond #75 and #78)
+
+- **Ordering:** every tool inherits `BaseTool.execute`. Strict Zod parse plus normalization (`src/tools/base.ts:151`)
+  runs before script building, execution, cache-key construction (`OmniFocusReadTool.ts:1106`,
+  `OmniFocusAnalyzeTool.ts:553,3507`) and metrics. Before validation, only the unknown-tool log (#78), the
+  `LOG_LEVEL=debug` args dump (`src/tools/index.ts:99-106`, key-redacted, off by default) and the failure log on
+  validation failure (#75) see raw input.
+- **Script embedding:** no tool argument and no OmniFocus value breaks out of a string literal. A payload with `"` `'`
+  `` ` `` `\` `${…}` `*/`, a newline and U+2028 went through every tool-reachable builder (task list and count across
+  text/name/tags/project/folder/id filters; project list and by-id; folders; tags; create task and tag; merge tags; the
+  sandbox guard). The emitted JXA ran in a node `vm` with a stub `Application`, and the captured bridge program compiled
+  with the payload intact as a JSON literal and no side effect (`probe-reachable.mts`). The earlier fixes for OMN-332,
+  OMN-334 and OMN-361 are present at HEAD. No `eval` or `new Function` exists in `src/`.
+
+### Dropped during verification
+
+- Latent double-embedding, not reachable from the MCP seam. `buildRecurringTasksScript` splices
+  `JSON.stringify(project|projectId)` into a nested JXA template literal, so `${…}` would run in JXA and `"` would break
+  out in OmniJS (`src/omnifocus/scripts/recurring/analyze-recurring-tasks-ast.ts:203-204`).
+  `buildProjectsForReviewScript` has the same shape for `filter`
+  (`src/omnifocus/scripts/reviews/projects-for-review.ts:44,53`). Neither is reachable: `recurring_tasks` params are
+  `.strict()` to `operation`/`sortBy` (`analyze-schema.ts:146-151`), and the review caller passes constants.
+  `OmniAutomation.buildScript` re-substitutes a `{{key}}` found inside an earlier value, but every caller passes one
+  key. Proven only at builder level (`probe-nested.ts`). Surface-reduction note, not a finding: deleting the unused
+  `project`/`projectId`/`filter` parameters removes the trap before a future schema change re-exposes it.
+- A timing attack on the `===` token compare: not demonstrated (not attempted); kept only as hygiene in #71.
+- LAN reachability: not demonstrable on this Mac, because the application firewall drops the probe. The `*` bind itself
+  is shown in #71.
+- `omnifocus_analyze` declares `destructiveHint:false` while `manage_reviews` writes: already decided in OMN-284
+  (`readOnlyHint:false`); not re-raised.
+- Cross-origin CSRF without rebinding: blocked in practice (see #71); it does not stand on its own.
+
+### Blast radius of the full proposed set
+
+#71–#78 together touch about 13 source files plus tests and docs (`cli.ts`, `http-server.ts`, `session-manager.ts`,
+`index.ts`, `sandbox-guard.ts`, `OmniAutomation.ts`, `base.ts`, `failure-log.ts`, `tools/index.ts`, `prompts/index.ts`,
+`SystemTool.ts`, both write schemas, `OmniFocusWriteTool.ts`), and #76(a) adds a new tool. That is over the 10-file
+threshold: **no tickets are filed until Kip approves the blast radius.** A suggested slicing:
+
+- (1) HTTP hardening, #71–#73 (3 files, BREAKING).
+- (2) Startup env validation, #74 and #77 (3 files).
+- (3) Failure-log caps and log escaping, #75 and #78 (4 files).
+- (4) The #76 decision, then its own slice.
