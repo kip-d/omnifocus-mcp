@@ -678,6 +678,13 @@ function applyHonestyDefaults<F extends { completed?: boolean; dropped?: boolean
   return applyProjectRootDefault(f);
 }
 
+/** `uncapped` only exists on the unsorted path; the sorted paths always slice to `limit`, so the combination would silently cap. */
+function assertUncappedWithoutSort(uncapped: boolean, sort: SortSpec[] | undefined): void {
+  if (uncapped && sort && sort.length > 0) {
+    throw new Error('ScriptOptions: `uncapped` cannot be combined with `sort` (sorted scripts slice to `limit`)');
+  }
+}
+
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const {
     limit = 50,
@@ -688,6 +695,7 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     sort,
     noteTruncateLength,
   } = options;
+  assertUncappedWithoutSort(uncapped, sort);
 
   // OMN-157: dropped is the third terminal state, excluded by default. It is
   // SYNTHETIC in OmniJS (no task.dropped property), so the default MUST route
@@ -925,6 +933,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
     sort,
     noteTruncateLength,
   } = options;
+  assertUncappedWithoutSort(uncapped, sort);
 
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });

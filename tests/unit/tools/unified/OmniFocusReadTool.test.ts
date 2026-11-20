@@ -2380,6 +2380,44 @@ describe('OmniFocusReadTool', () => {
       expect(result.metadata.vanished_count).toBeUndefined();
     });
 
+    describe('truncated after a phase-2 vanish is measured from the selected window', () => {
+      const run = async (candidateCount: number, offset: number) => {
+        const rows = Array.from({ length: candidateCount }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (i + 1));
+          // i=0 has the fewest days overdue -> lowest score; rank order is the reverse.
+          return { id: `v${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+        });
+        const rankedIds = [...rows].reverse().map((r) => r.id);
+        const window = rankedIds.slice(offset, offset + 2);
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { tasks: rows, metadata: { total_matched: candidateCount } },
+        } satisfies ScriptResult);
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          // The first id of the window vanished: only one row comes back.
+          data: { tasks: [{ id: window[1], name: 'Survivor' }] },
+        } satisfies ScriptResult);
+        return (await tool.execute({
+          query: { type: 'tasks', mode: 'smart_suggest', limit: 2, offset },
+        })) as any;
+      };
+
+      it('vanish on the last page: truncated is not reported (no pages remain)', async () => {
+        const result = await run(4, 2);
+        expect(result.metadata.vanished_count).toBe(1);
+        expect(result.metadata.returned_count).toBe(1);
+        expect(result.metadata.truncated).toBeUndefined();
+      });
+
+      it('vanish on a middle page: truncated stays true', async () => {
+        const result = await run(6, 2);
+        expect(result.metadata.vanished_count).toBe(1);
+        expect(result.metadata.truncated).toBe(true);
+      });
+    });
+
     it('without an explicit sort, sort_applied stays false and score order is kept', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,

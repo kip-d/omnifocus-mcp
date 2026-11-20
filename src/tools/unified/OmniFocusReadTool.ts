@@ -847,6 +847,8 @@ PERFORMANCE:
     const response = createTaskResponseV2('tasks', projectedTasks, metadata, {
       population: candidateCount,
       offset,
+      // Vanished rows were consumed from the window even though not returned.
+      consumed: selected.length,
       summary: !isNarrowLookup,
     }) as { summary?: { key_insights?: unknown } };
 

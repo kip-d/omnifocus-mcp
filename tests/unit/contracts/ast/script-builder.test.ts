@@ -583,6 +583,12 @@ describe('uncapped scan option (OMN-335 slice 3: smart_suggest phase 1)', () => 
     expect(buildInboxScript({}, { limit: 25 }).script).toContain('count >= limit');
   });
 
+  it('throws when uncapped is combined with sort (the sorted path always slices to limit)', () => {
+    const sort = [{ field: 'dueDate' as const, direction: 'asc' as const }];
+    expect(() => buildFilteredTasksScript({}, { uncapped: true, sort })).toThrow(/uncapped.*sort/i);
+    expect(() => buildInboxScript({}, { uncapped: true, sort })).toThrow(/uncapped.*sort/i);
+  });
+
   it('vm-executed: uncapped returns every match', () => {
     const { script } = buildFilteredTasksScript({}, { limit: 1, uncapped: true, fields: ['id'] });
     const mk = (id: string) => ({ id: { primaryKey: id }, completed: false, taskStatus: 'A', project: null });
