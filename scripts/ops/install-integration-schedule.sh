@@ -16,6 +16,10 @@
 #   OF_MCP_BIN_DIR   (default ~/bin)             where the wrapper is installed
 #   OF_MCP_REPO_DIR  (default ~/omnifocus-mcp)   prod checkout the job runs against
 #
+# Exit codes (--verify): 0 OK; 1 failed / no STATUS; 2 usage or unparseable wrapper
+# defaults; 3 inconclusive (WEDGED, or termination unconfirmed); 4 suite PASSED but
+# test fixtures leaked or leak status unknown/not scanned.
+#
 # NOTE: --verify runs the FULL suite through launchd (~15 min) and writes to the
 # real OmniFocus database. It is the only way to prove the job actually works —
 # a plist that loads is not a job that runs — but it is not a quick check.
@@ -37,6 +41,16 @@ WRAPPER_DEST="$BIN_DIR/of-mcp-integration"
 LAUNCHD_LOG="$HOME/.omnifocus-mcp/integration-launchd.log"
 RUN_LOG="$HOME/.omnifocus-mcp/integration.log"
 GUI="gui/$(id -u)"
+
+# A PASS verdict is only OK when the leak scan positively reported clean. The
+# wrapper writes "LEAK: none detected"; "(none recorded)" is the legacy spelling.
+# Anything else (fixtures remain, UNKNOWN, not scanned) is NOT clean.
+leak_is_clean() { # <leak-line>
+  case "$1" in
+    "LEAK: none detected"*|"LEAK: (none recorded)"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 uninstall() {
   echo "Unloading $LABEL ..."
@@ -158,8 +172,10 @@ if [ "$MODE" = "verify" ]; then
   # above exists to prevent. Cheap insurance against a silent wrong answer.
   [ -n "$before_lines" ] || before_lines=0
 
-  launchctl kickstart -k "$GUI/$LABEL"
-
+  # All budget/timeout/KILL_GRACE derivation happens BEFORE kickstart: a parse
+  # failure here exits 2 while nothing is running yet. Run after the kickstart,
+  # it would abort --verify while the 15-65 min suite keeps mutating the live
+  # database unsupervised and with no verdict.
   # DERIVE the budgets from the wrapper's own timeouts instead of hardcoding
   # them. A fixed 360x5s = 30 min was shorter than the wrapper's worst case
   # (build 600 + suite 2700 + cleanup 600 = 65 min), so a merely-slow-but-
@@ -220,6 +236,15 @@ if [ "$MODE" = "verify" ]; then
     if [ "$1" -ge 60 ]; then printf '%s min' $(( $1 / 60 )); else printf '%ss' "$1"; fi
   }
 
+  # In the normal path STATUS is written only after preflight plus all three
+  # run_bounded phases return, so the budget covers all four — three of them
+  # with the kill grace.
+  verify_budget="$(budget_with_slack $(( preflight_t + build_t + suite_t + cleanup_t )) 3)"
+  # Budget for the post-STATUS wait for the job to terminate (cleanup phase).
+  term_budget="$(budget_with_slack "$cleanup_t" 1)"
+
+  launchctl kickstart -k "$GUI/$LABEL"
+
   # Poll PREDICATE every 5s until it succeeds (0) or BUDGET seconds are
   # exhausted (1). Both waits below share this: two hand-rolled copies of the
   # same cadence math is how one copy gets a fix and the other keeps the bug.
@@ -263,10 +288,6 @@ if [ "$MODE" = "verify" ]; then
     ! grep -qE '^[[:space:]]*pid =' <<< "$out"
   }
 
-  # In the normal path STATUS is written only after preflight plus all three
-  # run_bounded phases return, so the budget covers all four — three of them
-  # with the kill grace.
-  verify_budget="$(budget_with_slack $(( preflight_t + build_t + suite_t + cleanup_t )) 3)"
   echo "  waiting up to $(fmt_duration "$verify_budget") for this run's STATUS line ..."
   if ! poll_for "$verify_budget" status_appeared; then
     # status_appeared leaves the last (non-matching) tail in new_region; the
@@ -295,7 +316,6 @@ if [ "$MODE" = "verify" ]; then
   # region captured at STATUS time and printed the reassuring
   # "LEAK: (none recorded)" while cleanup was still running against the live
   # database (OMN-304).
-  term_budget="$(budget_with_slack "$cleanup_t" 1)"
   echo "  STATUS seen; waiting up to $(fmt_duration "$term_budget") for the job to finish (cleanup may still be running) ..."
   terminated=""
   if poll_for "$term_budget" job_terminated; then
@@ -382,7 +402,13 @@ if [ "$MODE" = "verify" ]; then
         echo "  these disagree, so the run is not trustworthy. See $RUN_LOG and $LAUNCHD_LOG" >&2
         exit 1
       fi
-      echo "  OK (job executed and the suite passed)." ;;
+      if ! leak_is_clean "$leak_line"; then
+        echo "  VERIFY FAILED (leak) — the suite passed but test fixtures may remain in OmniFocus:" >&2
+        echo "  $leak_line" >&2
+        echo "  Clean up:  (cd $REPO_DIR && npm run test:cleanup -- --apply), then re-verify." >&2
+        exit 4
+      fi
+      echo "  OK (job executed and the suite passed, no leaked fixtures)." ;;
     *)
       echo "  VERIFY FAILED — see $RUN_LOG and $LAUNCHD_LOG" >&2
       exit 1 ;;

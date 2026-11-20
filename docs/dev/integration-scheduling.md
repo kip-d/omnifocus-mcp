@@ -92,8 +92,9 @@ STATUS: PASS (suite exit 0)          # or FAILED — suite exit N / WEDGED — �
 LEAK: none detected                  # or LEAK: test fixtures remain …
 ```
 
-`--verify` distinguishes the three outcomes: exit 0 (job ran, suite passed), exit 1 (job ran, suite failed), exit 3
-(**inconclusive** — OmniFocus was unreachable, so the suite never ran; the job itself is fine).
+`--verify` distinguishes four outcomes: exit 0 (job ran, suite passed, no leaked fixtures), exit 1 (job ran, suite
+failed), exit 3 (**inconclusive** — OmniFocus was unreachable, so the suite never ran; the job itself is fine), exit 4
+(suite passed but fixtures leaked, or leak status unknown or not scanned; clean up and re-verify).
 
 How it avoids reading a previous run's result, since launchd's "last exit code" persists between runs: it records the
 run log's **line count** before `kickstart`, then waits for a `STATUS:` line to appear _beyond that mark_. The wrapper
