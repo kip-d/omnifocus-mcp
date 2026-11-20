@@ -310,8 +310,9 @@ both keep the advertised JSON byte-for-byte as it is today.
         `list_for_review` sorts before the cap with a true `total_found` and full-population `review_summary` (PR #307,
         slice 2); `pattern_analysis`'s scan now counts the budget against ADMITTED rows (not raw rows walked), keeps
         counting the true admissible population past the budget for an honest `coverage.total`, and surfaces
-        `coverage.scanned_total` (this PR, slice 3) — the three per-detector terminal-state re-filters this bug's
-        admission fix (#286/OMN-338) left in place were also collapsed into the scan, the single source of truth.
+        `coverage.scanned_total` (PR #312, slice 3). The same walk now also computes each project's
+        `availableTaskCount`, so `taskStatus` is read once per row across the whole database instead of in two passes.
+        The per-detector `isLiveTask` guard stays: the scan admits terminal rows when `include_completed` is true.
 - [ ] 28. [OMN-352] Analytics aggregates are keyed by project **name**, and OmniFocus allows duplicate names:
       - `productivity_stats.projectStats[name]` overwrites, so one project's stats are lost.
       - The workflow and overdue maps merge same-named projects.

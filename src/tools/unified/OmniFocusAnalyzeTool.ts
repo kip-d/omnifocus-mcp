@@ -163,17 +163,20 @@ interface SlimTask {
   children: number;
 }
 
-// OMN-340 (slice 3): isLiveTask (not completed, not dropped) used to be
-// re-applied per detector as a defense-in-depth guard against the scan
-// admitting terminal rows. That created the exact bug class it was meant to
-// prevent — a terminal-state change applied to one detector and missed in
-// another (OMN-338/OMN-315) — because there were THREE places to keep in
-// sync: the scan, detectOnholdReactivation, detectSequentialBlockedFar. The
-// scan (fetchSlimmedData's OmniJS admission loop, above) is now the SOLE
-// terminal-state guard: it never admits a completed (unless
-// include_completed, which pattern_analysis hardcodes false), dropped, or
-// project-root row into slimData.tasks, so every detector's input is already
-// live. Do not re-add a per-detector filter — fix admission in the scan.
+// Neither terminal state: not completed and not dropped. OmniFocus reports a
+// dropped task with completed===false, so the status check is required too.
+// One predicate shared by every detector that needs live tasks, so a change to
+// terminal-state semantics cannot be applied to one detector and missed in
+// another (OMN-338 / OMN-315 bug class).
+//
+// The scan already skips both states when include_completed is false, but
+// fetchSlimmedData honours include_completed: true, which admits them. This
+// guard is what keeps a terminal task out of these detectors in that mode
+// (#312 review), so it stays even though pattern_analysis passes false today.
+function isLiveTask(t: Pick<SlimTask, 'completed' | 'status'>): boolean {
+  return !t.completed && t.status !== 'dropped';
+}
+
 // Canonical project-status vocabulary, mirroring safeGetStatus in
 // scripts/shared/helpers.ts: JXA renders status as 'active status',
 // 'on hold status', etc.; every ProjectData consumer gets THIS normalized
@@ -1751,10 +1754,10 @@ TIME-WINDOW SCOPING:
     for (const project of projects) {
       if (project.status !== 'onHold') continue;
 
-      // OMN-340 (slice 3): the scan is the sole terminal-state guard (see
-      // isLiveTask's retirement comment above) — tasksByProject is built from
-      // slimData.tasks, which never contains a completed/dropped/root row.
-      const projTasks = tasksByProject.get(project.id) ?? [];
+      // Both terminal states excluded here, whatever the scan admitted: a
+      // terminal task's stale defer/due date must never signal reactivation.
+      // The scan skips both only when include_completed is false (OMN-338).
+      const projTasks = (tasksByProject.get(project.id) ?? []).filter(isLiveTask);
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
         const reason = signal({ project, projTasks, now, dueSoonCutoff, daysAhead });
@@ -1801,11 +1804,10 @@ TIME-WINDOW SCOPING:
 
     for (const p of projects) {
       if (p.status !== 'active' || p.sequential !== true) continue;
-      // OMN-340 (slice 3): the scan is the sole terminal-state guard (see
-      // isLiveTask's retirement comment above) — tasksByProject is built from
-      // slimData.tasks, which never contains a dropped/completed/root row, so
-      // incomplete[0] is already the true live head.
-      const incomplete = tasksByProject.get(p.id) ?? [];
+      // Both terminal states excluded: a dropped task has completed===false,
+      // so without the status check a dropped task could be picked as the
+      // sequential project's "head" blocking task.
+      const incomplete = (tasksByProject.get(p.id) ?? []).filter(isLiveTask);
       if (incomplete.length === 0) continue;
 
       const head = incomplete[0];

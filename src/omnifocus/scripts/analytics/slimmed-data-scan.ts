@@ -84,37 +84,59 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
       // so admittedTotal is the TRUE admissible population ("count the
       // population, cap only the detail" — OMN-335/340 principle); once
       // tasks.length reaches maxTasks, admitted rows past the budget are
-      // still counted (admittedTotal++) but NOT built into a full row, so the
-      // post-budget pass stays cheap (no per-field try/catch, no date/tag
-      // reads) however large the raw DB is beyond the old 3000-row walk.
+      // still counted (admittedTotal++) but NOT built into a full row (no
+      // per-field try/catch, no date/tag reads).
       //
-      // Admission checks are ordered cheapest-first: completed is a stored
-      // boolean (cheapest), .project is a reference compare, .taskStatus is
-      // read last because OmniFocus may compute it (blocked/available chain)
-      // rather than store it — most non-admitted rows in a real GTD database
-      // are completed, so ordering this way skips the costliest check for
-      // the majority of rows. (No backticks in this comment block: it sits
-      // inside a TS template literal.)
+      // This one walk also computes availByProject (availableTaskCount for
+      // every project), which used to be a second whole-database pass. Both
+      // passes read taskStatus, the costliest read here because OmniFocus may
+      // compute it (blocked/available chain) rather than store it; sharing
+      // the walk reads it ONCE per row, into status, for admission, the
+      // built row and the count alike. Checks run cheapest-first: completed
+      // is a stored boolean, and a completed row is never actionable, so it
+      // leaves before any taskStatus read (most rows in a real GTD database
+      // are completed); .project is a reference compare. The count is
+      // recorded before the dropped skip and the budget check, so it stays
+      // whole-database however small maxTasks is (#312 review). (No
+      // backticks in this comment block: it sits inside a TS template
+      // literal.)
       let scannedTotal = 0;
       let admittedTotal = 0;
+      const availByProject = {};
       for (let i = 0; i < allTasks.length; i++) {
         scannedTotal++;
         const task = allTasks[i];
         try {
           const completed = task.completed;
           if (!includeCompleted && completed) continue;
-          // OMN-338: skip project ROOT rows (non-null .project), as the
-          // uncapped pass below does. Otherwise every detector sees each
-          // project as a task: deadline_health overdue, clarify_candidates
-          // names, +1 on every WIP count. Bare check inside this row's
-          // try/catch keeps the loop's fail-closed semantics (a throwing read
-          // drops the row, as before). Do NOT swap in the fail-open shared
+          // OMN-338: skip project ROOT rows (non-null .project) in both the
+          // admission and the count. Otherwise every detector sees each
+          // project as a task (deadline_health overdue, clarify_candidates
+          // names, +1 on every WIP count), and a root task reads as
+          // actionable even when the project has no workable children
+          // (live-caught: counting roots turned 12 of 13 stalled projects
+          // "healthy"). Bare check inside this row's try/catch keeps the
+          // loop's fail-closed semantics (a throwing read drops the row, as
+          // before). Do NOT swap in the fail-open shared
           // IS_PROJECT_ROOT_ROW_SNIPPET here (OMN-290 splice-site lesson).
           if (task.project) continue;
+          const status = task.taskStatus;
+          // availableTaskCount: every descendant's containingProject IS its
+          // project, so this equals the per-project flattened count. Its own
+          // try/catch: an unreadable container costs only this row's count,
+          // never its admission.
+          if (ACTIONABLE.indexOf(status) !== -1) {
+            try {
+              const proj = task.containingProject;
+              if (proj) {
+                const pid = proj.id.primaryKey;
+                availByProject[pid] = (availByProject[pid] || 0) + 1;
+              }
+            } catch(e) {}
+          }
           // Dropped tasks keep completed===false, so the completed filter
-          // alone let them through to every detector. Checked last: reading
-          // taskStatus is the costliest of these three checks.
-          if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;
+          // alone let them through to every detector.
+          if (!includeCompleted && status === Task.Status.Dropped) continue;
 
           // Admitted: not completed (unless include_completed), not a
           // project root, not dropped (unless include_completed).
@@ -129,7 +151,7 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
             name: task.name,
             completed: completed,
             flagged: task.flagged,
-            status: taskStatusString(task.taskStatus)
+            status: taskStatusString(status)
           };
 
           // Per-field try/catch (as in the JXA version): one misbehaving
@@ -165,33 +187,6 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
           // Skip problematic tasks
         }
       }
-
-      // availableTaskCount for ALL projects in one uncapped pass over the
-      // global collection (every descendant's containingProject IS its
-      // project, so this equals the per-project flattened count) instead of
-      // re-walking each project's subtree. Deliberately separate from the
-      // capped task loop above: coupling counts to max_tasks would undercount
-      // projects beyond the cap into false "stalled" reports. Failure
-      // granularity (review rounds 2-4): one bad task costs only itself
-      // (inner try/catch); a failure of the pass itself propagates to a
-      // script error and the OMN-268 envelope — an unreadable count must NOT
-      // surface as a real 0.
-      const availByProject = {};
-      flattenedTasks.forEach(t => {
-        try {
-          // The global collection INCLUDES each project's root task, which
-          // project.flattenedTasks excludes — and a root task reads as
-          // actionable even when the project has no workable children.
-          // Root tasks have a non-null .project; skip them (live-caught:
-          // counting roots turned 12 of 13 stalled projects "healthy").
-          if (t.project) return;
-          if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
-          const proj = t.containingProject;
-          if (!proj) return;
-          const pid = proj.id.primaryKey;
-          availByProject[pid] = (availByProject[pid] || 0) + 1;
-        } catch(e) {}
-      });
 
       const projects = [];
       flattenedProjects.forEach(project => {

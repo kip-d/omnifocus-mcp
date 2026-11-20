@@ -16,10 +16,14 @@ describe('buildSlimmedDataScript', () => {
     expect(program).toContain('const includeCompleted = true;');
   });
 
-  it('skips project root rows in both the admission loop and the availability pass (OMN-338)', () => {
+  it('skips project root rows before both admission and the availability count, in the one shared walk (OMN-338, #312)', () => {
     const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 3000, includeCompleted: false }));
-    expect(program).toContain('if (task.project) continue;');
-    expect(program).toContain('if (t.project) return;');
+    const rootSkip = program.indexOf('if (task.project) continue;');
+    const count = program.indexOf('availByProject[pid] = (availByProject[pid] || 0) + 1;');
+    expect(rootSkip).toBeGreaterThan(-1);
+    expect(count).toBeGreaterThan(rootSkip);
+    // The second whole-database pass is gone: one walk feeds both consumers.
+    expect(program).not.toContain('flattenedTasks.forEach');
   });
 
   it('splices the shared actionable-status and project-status definitions', () => {
@@ -44,7 +48,8 @@ describe('buildSlimmedDataScript', () => {
       const loopHead = program.slice(loopStart, rowBuilt);
       expect(loopHead).toContain('if (!includeCompleted && completed) continue;');
       expect(loopHead).toContain('if (task.project) continue;');
-      expect(loopHead).toContain('if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;');
+      expect(loopHead).toContain('const status = task.taskStatus;');
+      expect(loopHead).toContain('if (!includeCompleted && status === Task.Status.Dropped) continue;');
       const admittedIdx = loopHead.indexOf('admittedTotal++;');
       const budgetIdx = loopHead.indexOf('if (tasks.length >= maxTasks) continue;');
       expect(admittedIdx).toBeGreaterThan(-1);
@@ -74,21 +79,21 @@ describe('buildSlimmedDataScript', () => {
       children: [],
       ...extra,
     });
-    const sandbox = (flattenedTasks: unknown[]) => ({
+    const PS = { Active: {}, OnHold: {}, Done: {}, Dropped: {} };
+    const sandbox = (flattenedTasks: unknown[], flattenedProjects: unknown[] = []) => ({
       Task: { Status: S },
-      Project: { Status: { Active: {}, OnHold: {}, Done: {}, Dropped: {} } },
+      Project: { Status: PS },
       flattenedTasks,
-      flattenedProjects: [],
+      flattenedProjects,
       flattenedTags: [],
     });
-    const run = (program: string, flattenedTasks: unknown[]) =>
-      JSON.parse(vm.runInNewContext(program, sandbox(flattenedTasks)) as string);
+    const run = (program: string, flattenedTasks: unknown[], flattenedProjects: unknown[] = []) =>
+      JSON.parse(vm.runInNewContext(program, sandbox(flattenedTasks, flattenedProjects)) as string);
 
-    // OMN-340 (slice 3): collapses the per-detector terminal-state guards
-    // (isLiveTask in OmniFocusAnalyzeTool's detectOnholdReactivation /
-    // detectSequentialBlockedFar) into this one scan admission — this is the
-    // invariant's real pin: a root, dropped, OR completed row never reaches
-    // `tasks`, i.e. never reaches any detector's input.
+    // The scan's admission invariant with include_completed false: a root,
+    // dropped, OR completed row never reaches `tasks`. The detectors that need
+    // live tasks keep their own isLiveTask guard for include_completed true,
+    // which this admission does not filter (#312 review).
     it('ships only the live non-root, non-terminal task', () => {
       const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 3000, includeCompleted: false }));
       const out = run(program, [
@@ -128,6 +133,57 @@ describe('buildSlimmedDataScript', () => {
       const out = run(program, live);
       expect(out.tasks.length).toBe(50);
       expect(out.scanMeta).toEqual({ scannedTotal: 50, admittedTotal: 50, cap: 3000 });
+    });
+
+    // #312 gate finding: the walk covers the whole database, so taskStatus —
+    // the costliest read, which OmniFocus may compute rather than store — is
+    // read once per row and shared by admission, the built row and the
+    // availability count, never per consumer. A completed row is decided by
+    // the stored boolean alone and pays no taskStatus read; a root row is
+    // skipped before the read.
+    it('reads taskStatus at most once per row, and never on a completed or root row', () => {
+      const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 1, includeCompleted: false }));
+      const reads: Record<string, number> = {};
+      const counted = (id: string, taskStatus: object, extra: Record<string, unknown> = {}) => {
+        const t = mk(id, taskStatus, extra);
+        reads[id] = 0;
+        Object.defineProperty(t, 'taskStatus', {
+          get: () => {
+            reads[id]++;
+            return taskStatus;
+          },
+        });
+        return t;
+      };
+      run(program, [
+        counted('live', S.Available),
+        counted('pastBudget', S.Available),
+        counted('dropped', S.Dropped),
+        counted('completed', S.Completed, { completed: true }),
+        counted('root', S.Available, { project: proj }),
+      ]);
+      expect(reads).toEqual({ live: 1, pastBudget: 1, dropped: 1, completed: 0, root: 0 });
+    });
+
+    it('availableTaskCount counts every actionable non-root task, including rows past the detail budget', () => {
+      const program = omniJsProgram(buildSlimmedDataScript({ maxTasks: 1, includeCompleted: false }));
+      const project = { id: { primaryKey: 'p1' }, name: 'Proj', status: PS.Active, task: null };
+      const out = run(
+        program,
+        [
+          mk('a1', S.Available),
+          mk('a2', S.Next),
+          mk('a3', S.DueSoon),
+          mk('blocked', S.Blocked),
+          mk('dropped', S.Dropped),
+          mk('completed', S.Completed, { completed: true }),
+          mk('root', S.Available, { project: proj }),
+        ],
+        [project],
+      );
+      expect(out.tasks.length).toBe(1);
+      expect(out.projects).toHaveLength(1);
+      expect(out.projects[0].availableTaskCount).toBe(3);
     });
 
     it('a smaller maxTasks budget caps tasks.length at that value, not at 3000', () => {

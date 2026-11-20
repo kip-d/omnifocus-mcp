@@ -15,8 +15,7 @@
  * - Overdue task detection with days past due calculation
  * - Blocked task identification (using task.blocked API)
  * - Next action detection (using task.next API)
- * - Project bottleneck tracking
- * - Tag bottleneck tracking
+ * - Project bottleneck tracking (counts only; see OMN-340 slice 3 below)
  * - Urgency grouping (critical, high, medium, low)
  * - Pattern insights and recommendations
  */
