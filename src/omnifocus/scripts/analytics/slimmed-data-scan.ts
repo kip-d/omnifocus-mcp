@@ -29,6 +29,12 @@
  *   exceed JXA's on projects with nested groups. Exact JXA parity was
  *   attempted and rejected: the closest reproduction (direct children
  *   actionable-or-with-actionable-descendant) still mismatched 2/219.
+ *
+ * OMN-340 (slice 3): the maxTasks budget applies to ADMITTED rows (not
+ * completed, not dropped, not a project root — unless includeCompleted),
+ * never to raw rows walked. The returned scanMeta block ({scannedTotal,
+ * admittedTotal, cap}) lets the caller build an honest coverage disclosure
+ * even when the admissible population exceeds the budget.
  */
 import { ACTIONABLE_STATUSES_ARRAY_LITERAL, PROJECT_STATUS_STRING_SNIPPET } from '../../../contracts/ast/types.js';
 
@@ -70,29 +76,90 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
       const maxTasks = ${String(maxTasks)};
       const includeCompleted = ${String(includeCompleted)};
 
-      for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
+      // OMN-340 (slice 3): the budget applies to ADMITTED rows, not raw rows
+      // walked. Before this, completed/dropped/root rows burned a slot in the
+      // Math.min(allTasks.length, maxTasks) walk, so the scan could exhaust
+      // its budget on terminal rows before reaching a single live task. The
+      // walk below always covers every raw row (scannedTotal === allTasks.length)
+      // so admittedTotal is the TRUE admissible population ("count the
+      // population, cap only the detail" — OMN-335/340 principle); once
+      // tasks.length reaches maxTasks, admitted rows past the budget are
+      // still counted (admittedTotal++) but NOT built into a full row (no
+      // per-field try/catch, no date/tag reads).
+      //
+      // This one walk also computes availByProject (availableTaskCount for
+      // every project), which used to be a second whole-database pass. Both
+      // passes read taskStatus, the costliest read here because OmniFocus may
+      // compute it (blocked/available chain) rather than store it; sharing
+      // the walk reads it ONCE per row, into status, for admission, the
+      // built row and the count alike. Checks run cheapest-first: completed
+      // is a stored boolean, and a completed row is never actionable, so it
+      // leaves before any taskStatus read (most rows in a real GTD database
+      // are completed); .project is a reference compare. The count is
+      // recorded before the dropped skip and the budget check, so it stays
+      // whole-database however small maxTasks is (#312 review). (No
+      // backticks in this comment block: it sits inside a TS template
+      // literal.)
+      let scannedTotal = 0;
+      let admittedTotal = 0;
+      // A row whose reads throw, during admission or while its row is built,
+      // is UNREADABLE: counted here and taken back out of admittedTotal, so
+      // an uncapped scan always has admittedTotal === tasks.length and the
+      // loss is disclosed instead of silently shrinking the result (#312
+      // review round 2).
+      let unreadableTotal = 0;
+      const availByProject = {};
+      for (let i = 0; i < allTasks.length; i++) {
+        scannedTotal++;
         const task = allTasks[i];
+        let admitted = false;
         try {
-          // OMN-338: skip project ROOT rows (non-null .project), as the
-          // uncapped pass below does. Otherwise every detector sees each
-          // project as a task: deadline_health overdue, clarify_candidates
-          // names, +1 on every WIP count. Bare check inside this row's
-          // try/catch keeps the loop's fail-closed semantics (a throwing read
-          // drops the row, as before). Do NOT swap in the fail-open shared
-          // IS_PROJECT_ROOT_ROW_SNIPPET here (OMN-290 splice-site lesson).
-          if (task.project) continue;
           const completed = task.completed;
           if (!includeCompleted && completed) continue;
+          // OMN-338: skip project ROOT rows (non-null .project) in both the
+          // admission and the count. Otherwise every detector sees each
+          // project as a task (deadline_health overdue, clarify_candidates
+          // names, +1 on every WIP count), and a root task reads as
+          // actionable even when the project has no workable children
+          // (live-caught: counting roots turned 12 of 13 stalled projects
+          // "healthy"). Bare check inside this row's try/catch keeps the
+          // loop's fail-closed semantics (a throwing read drops the row, as
+          // before). Do NOT swap in the fail-open shared
+          // IS_PROJECT_ROOT_ROW_SNIPPET here (OMN-290 splice-site lesson).
+          if (task.project) continue;
+          const status = task.taskStatus;
+          // availableTaskCount: every descendant's containingProject IS its
+          // project, so this equals the per-project flattened count. Its own
+          // try/catch: an unreadable container costs only this row's count,
+          // never its admission.
+          if (ACTIONABLE.indexOf(status) !== -1) {
+            try {
+              const proj = task.containingProject;
+              if (proj) {
+                const pid = proj.id.primaryKey;
+                availByProject[pid] = (availByProject[pid] || 0) + 1;
+              }
+            } catch(e) {}
+          }
           // Dropped tasks keep completed===false, so the completed filter
           // alone let them through to every detector.
-          if (!includeCompleted && task.taskStatus === Task.Status.Dropped) continue;
+          if (!includeCompleted && status === Task.Status.Dropped) continue;
+
+          // Admitted: not completed (unless include_completed), not a
+          // project root, not dropped (unless include_completed).
+          admittedTotal++;
+          admitted = true;
+          // OMN-340: the 3000 budget is consumed by ADMITTED rows only. Once
+          // filled, keep counting admittedTotal (coverage.total must be the
+          // true admissible population) but stop building full rows.
+          if (tasks.length >= maxTasks) continue;
 
           const taskData = {
             id: task.id.primaryKey,
             name: task.name,
             completed: completed,
             flagged: task.flagged,
-            status: taskStatusString(task.taskStatus)
+            status: taskStatusString(status)
           };
 
           // Per-field try/catch (as in the JXA version): one misbehaving
@@ -125,36 +192,10 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
 
           tasks.push(taskData);
         } catch(e) {
-          // Skip problematic tasks
+          unreadableTotal++;
+          if (admitted) admittedTotal--;
         }
       }
-
-      // availableTaskCount for ALL projects in one uncapped pass over the
-      // global collection (every descendant's containingProject IS its
-      // project, so this equals the per-project flattened count) instead of
-      // re-walking each project's subtree. Deliberately separate from the
-      // capped task loop above: coupling counts to max_tasks would undercount
-      // projects beyond the cap into false "stalled" reports. Failure
-      // granularity (review rounds 2-4): one bad task costs only itself
-      // (inner try/catch); a failure of the pass itself propagates to a
-      // script error and the OMN-268 envelope — an unreadable count must NOT
-      // surface as a real 0.
-      const availByProject = {};
-      flattenedTasks.forEach(t => {
-        try {
-          // The global collection INCLUDES each project's root task, which
-          // project.flattenedTasks excludes — and a root task reads as
-          // actionable even when the project has no workable children.
-          // Root tasks have a non-null .project; skip them (live-caught:
-          // counting roots turned 12 of 13 stalled projects "healthy").
-          if (t.project) return;
-          if (ACTIONABLE.indexOf(t.taskStatus) === -1) return;
-          const proj = t.containingProject;
-          if (!proj) return;
-          const pid = proj.id.primaryKey;
-          availByProject[pid] = (availByProject[pid] || 0) + 1;
-        } catch(e) {}
-      });
 
       const projects = [];
       flattenedProjects.forEach(project => {
@@ -191,7 +232,24 @@ export function buildSlimmedDataScript({ maxTasks, includeCompleted }: SlimmedDa
         } catch(e) {}
       });
 
-      return JSON.stringify({ tasks: tasks, projects: projects, tags: tags });
+      return JSON.stringify({
+        tasks: tasks,
+        projects: projects,
+        tags: tags,
+        // OMN-340 (slice 3): scanMeta.admittedTotal is the true admissible
+        // population (every non-root, non-terminal task), independent of the
+        // maxTasks budget; scannedTotal is every raw row walked (always
+        // allTasks.length, since the walk no longer stops early);
+        // unreadableTotal is rows dropped because a read threw (never part of
+        // admittedTotal). The tool builds the shared coverage disclosure from
+        // these.
+        scanMeta: {
+          scannedTotal: scannedTotal,
+          admittedTotal: admittedTotal,
+          unreadableTotal: unreadableTotal,
+          cap: maxTasks
+        }
+      });
     })()`;
 
   // Minimal JXA wrapper (OMNIJS-FIRST-PATTERN). The program is injected via

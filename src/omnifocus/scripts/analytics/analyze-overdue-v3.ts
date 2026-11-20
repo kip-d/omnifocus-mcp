@@ -15,8 +15,7 @@
  * - Overdue task detection with days past due calculation
  * - Blocked task identification (using task.blocked API)
  * - Next action detection (using task.next API)
- * - Project bottleneck tracking
- * - Tag bottleneck tracking
+ * - Project bottleneck tracking (counts only)
  * - Urgency grouping (critical, high, medium, low)
  * - Pattern insights and recommendations
  */
@@ -55,7 +54,6 @@ export const ANALYZE_OVERDUE_V3 = `
           const now = new Date(nowTime);
           const overdueTasks = [];
           const projectBottlenecks = {};
-          const tagBottlenecks = {};
 
           // Shared shape-builder: the per-task loop below and the post-loop
           // mostOverdue step (OMN-253) both need id/name/dueDate/daysOverdue/
@@ -221,29 +219,15 @@ export const ANALYZE_OVERDUE_V3 = `
                     projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
-                      blockedCount: 0,
-                      tasks: []
+                      blockedCount: 0
                     };
                   }
                   projectBottlenecks[overdueTask.project].blockedCount++;
                   projectBottlenecks[overdueTask.project].count++;
                   projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
-
-                // Track tag bottlenecks
-                for (let i = 0; i < overdueTask.tags.length; i++) {
-                  const tag = overdueTask.tags[i];
-                  if (!tagBottlenecks[tag]) {
-                    tagBottlenecks[tag] = {
-                      count: 0,
-                      blockedCount: 0,
-                      tasks: []
-                    };
-                  }
-                  tagBottlenecks[tag].blockedCount++;
-                  tagBottlenecks[tag].tasks.push(overdueTask.name);
-                }
+                // projectList below reads only count, blockedCount and
+                // totalDaysOverdue; nothing else is accumulated per project.
               } else {
                 // Track non-blocked overdue in projects
                 if (overdueTask.project !== 'Inbox') {
@@ -251,13 +235,11 @@ export const ANALYZE_OVERDUE_V3 = `
                     projectBottlenecks[overdueTask.project] = {
                       count: 0,
                       totalDaysOverdue: 0,
-                      blockedCount: 0,
-                      tasks: []
+                      blockedCount: 0
                     };
                   }
                   projectBottlenecks[overdueTask.project].count++;
                   projectBottlenecks[overdueTask.project].totalDaysOverdue += daysOverdue;
-                  projectBottlenecks[overdueTask.project].tasks.push(overdueTask.name);
                 }
               }
 
