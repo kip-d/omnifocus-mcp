@@ -1,11 +1,15 @@
 #!/bin/sh
 
-# Pre-push: run typecheck, format check, lint, and unit tests before pushing
+# Pre-push: run typecheck (src + tests), format check, lint, and unit tests before pushing
 # This ensures no broken code reaches the remote
 echo "Running pre-push checks..."
 
 # Typecheck first (catches type errors that tests might miss)
 npm run typecheck || exit 1
+
+# Test files have their own tsconfig (tsconfig.test.json); `typecheck` never sees them, so a
+# test-file type error passed this hook and failed CI (OMN-307).
+npm run typecheck:test || exit 1
 
 # Formatting. CI runs this over **/*.{ts,js,json,md}, so it covers markdown and
 # JSON that `npm run lint` (eslint over src/ only) never sees. Added 2026-08-06
