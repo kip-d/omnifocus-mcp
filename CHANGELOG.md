@@ -235,6 +235,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **`smart_suggest` screens the whole population, then fetches the top N** (OMN-335 slice 3) — phase 1 scans every
+  incomplete task with a 5-field projection and scores all of them; phase 2 fetches full rows for the selected ids.
+  Previously it capped at `limit` in database order before scoring. `offset` now pages the ranked shortlist;
+  `total_count` is the shortlist size (score > 0), `metadata.screened_count` the screened population, and `truncated` is
+  measured against the shortlist. `metadata.vanished_count` counts shortlisted tasks deleted, completed or dropped
+  between phases. A due-today task is promoted onto page 1. `countOnly`, `filters.id` and an explicit `sort` still work.
+  Cost scales with database size (every incomplete task is scanned).
 - **Tasks `project`-by-name filter now resolves real projects** (OMN-224) —
   `read { type:"tasks", filters:{ project: "<exact existing name>" } }` returned **0 tasks** (a `SCRIPT_ERROR`) for real
   populated projects; only the `projectId` filter worked. The OmniJS emitter (`emitProjectComparison`) built its

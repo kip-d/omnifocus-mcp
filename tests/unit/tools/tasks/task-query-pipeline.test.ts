@@ -14,8 +14,10 @@ import {
   sortTasks,
   projectFields,
   scoreForSmartSuggest,
+  rankForSmartSuggest,
   countTodayCategories,
   type TaskQueryMode,
+  type ScreenableTask,
 } from '../../../../src/tools/tasks/task-query-pipeline.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
@@ -879,6 +881,139 @@ describe('scoreForSmartSuggest', () => {
       const result = scoreForSmartSuggest(tasks, 10);
       expect(result[0].screen_reasons).toContain('overdue_0d');
       expect(result[0].screen_reasons?.join()).not.toMatch(/due_today/);
+    });
+  });
+
+  // OMN-335 slice 3: scoreForSmartSuggest is now generic over `ScreenableTask`
+  // (id + the 4 scored fields) so phase 1's SLIM rows — the whole actionable
+  // population, uncapped — can be scored directly, without first fetching full
+  // OmniFocusTask rows. Selection/ordering must be identical to the
+  // full-OmniFocusTask call shape above.
+  describe('generic over ScreenableTask (OMN-335 slice 3 phase 1)', () => {
+    it('scores slim rows (no name/tags/etc.) the same way as full tasks', () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const slimRows: ScreenableTask[] = [
+        { id: '1', dueDate: yesterday.toISOString(), flagged: false, available: false },
+        { id: '2', dueDate: undefined, flagged: true, available: false },
+      ];
+
+      const result = scoreForSmartSuggest(slimRows, 10);
+      expect(result.map((t) => t.id)).toEqual(['1', '2']); // overdue (1) outranks flagged-only (2)
+      expect(result[0].screen_reasons.some((r) => r.startsWith('overdue_'))).toBe(true);
+    });
+
+    it('a best-scoring slim row LATE in input order is still selected under a tight limit — the whole input is scored, not a prefix', () => {
+      const fillers: ScreenableTask[] = Array.from({ length: 20 }, (_, i) => ({
+        id: `filler${i}`,
+        flagged: false,
+        available: false,
+      }));
+      const best: ScreenableTask = { id: 'best', flagged: true, available: true, estimatedMinutes: 5 };
+      const slimRows = [...fillers, best];
+
+      const result = scoreForSmartSuggest(slimRows, 1);
+      expect(result.map((t) => t.id)).toEqual(['best']);
+    });
+
+    it('ties are deterministic: equal scores keep input order (stable sort)', () => {
+      const slimRows: ScreenableTask[] = [
+        { id: 'a', flagged: true, available: false },
+        { id: 'b', flagged: true, available: false },
+        { id: 'c', flagged: true, available: false },
+      ];
+
+      const result = scoreForSmartSuggest(slimRows, 3);
+      expect(result.map((t) => t.id)).toEqual(['a', 'b', 'c']);
+    });
+  });
+
+  describe('OMN-335 s3: rank paging with the due-today override', () => {
+    const makePopulation = (): OmniFocusTask[] => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const overdue = Array.from({ length: 8 }, (_, i) => {
+        const due = new Date();
+        due.setDate(due.getDate() - (i + 1));
+        return {
+          id: `o${i}`,
+          name: `O${i}`,
+          completed: false,
+          flagged: false,
+          blocked: false,
+          dueDate: due.toISOString(),
+        };
+      });
+      // Due-today scores 80 -- below every overdue row, so it ranks last (9th).
+      return [
+        { id: 'dt', name: 'DT', completed: false, flagged: false, blocked: false, dueDate: laterToday.toISOString() },
+        ...overdue,
+      ];
+    };
+
+    it('consecutive pages are disjoint and gap-free; the override promotes once, into the first window', () => {
+      const pop = makePopulation();
+      const page = (offset: number) => scoreForSmartSuggest(pop, 3, offset).map((t) => t.id);
+      const p1 = page(0);
+      const p2 = page(3);
+      const p3 = page(6);
+
+      const all = [...p1, ...p2, ...p3];
+      expect(new Set(all).size).toBe(9); // disjoint: no id twice
+      expect(all.sort()).toEqual(pop.map((t) => t.id).sort()); // gap-free: every ranked row exactly once
+      expect(p1).toContain('dt'); // due-today surfaced on page 1 ...
+      expect(p2).not.toContain('dt'); // ... and only there
+      expect(p1.slice(0, 2)).toEqual(['o7', 'o6']); // ranks 1-2 untouched
+      expect(p2).toEqual(['o5', 'o4', 'o3']);
+    });
+
+    it('promotes the HIGHEST-RANKED due-today task, not the first in input order', () => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const dueToday = (id: string, flagged: boolean) => ({
+        id,
+        name: id,
+        completed: false,
+        flagged,
+        blocked: false,
+        dueDate: laterToday.toISOString(),
+      });
+      // dtLow (80) is first in input; dtHigh (130) outranks it.
+      const pop = [dueToday('dtLow', false), dueToday('dtHigh', true), ...makePopulation().slice(1)];
+      const ids = scoreForSmartSuggest(pop, 3).map((t) => t.id);
+      expect(ids).toEqual(['o7', 'o6', 'dtHigh']);
+    });
+
+    it('moves nothing when a due-today task is already inside the first window', () => {
+      const laterToday = new Date();
+      laterToday.setHours(23, 59, 0, 0);
+      const dueToday = (id: string, flagged: boolean) => ({
+        id,
+        name: id,
+        completed: false,
+        flagged,
+        blocked: false,
+        available: flagged,
+        estimatedMinutes: flagged ? 5 : undefined,
+        dueDate: laterToday.toISOString(),
+      });
+      // dtTop scores 180 (ties o7, earlier in input => rank 1). dtLow is first in input but ranks last.
+      const pop = [dueToday('dtLow', false), dueToday('dtTop', true), ...makePopulation().slice(1)];
+      const ids = scoreForSmartSuggest(pop, 3).map((t) => t.id);
+      expect(ids).toEqual(['dtTop', 'o7', 'o6']);
+    });
+
+    it('rankForSmartSuggest returns the whole ranked candidate list (score > 0 only)', () => {
+      const pop = [...makePopulation(), { id: 'zero', name: 'Z', completed: false, flagged: false, blocked: false }];
+      const ranked = rankForSmartSuggest(pop, 3);
+      expect(ranked).toHaveLength(9);
+      expect(ranked.map((t) => t.id)).not.toContain('zero');
+    });
+
+    it('offset 0 keeps the previous behavior for the first window', () => {
+      const ids = scoreForSmartSuggest(makePopulation(), 3).map((t) => t.id);
+      expect(ids).toEqual(['o7', 'o6', 'dt']);
     });
   });
 });

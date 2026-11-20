@@ -402,6 +402,16 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
 // =============================================================================
 
 /**
+ * The subset of task fields the smart_suggest score actually reads. OMN-335
+ * slice 3's phase 1 (the slim, uncapped screen over the whole actionable
+ * population) projects exactly these fields — this type is the single
+ * source of truth both for that phase-1 projection AND for what
+ * `scoreForSmartSuggest` requires of its input, so the two can never drift
+ * out of sync silently.
+ */
+export type ScreenableTask = Pick<OmniFocusTask, 'id' | 'dueDate' | 'flagged' | 'available' | 'estimatedMinutes'>;
+
+/**
  * Screen tasks for smart suggestions (OMN-259: screen + evidence + model-judges).
  *
  * The additive score is INTERNAL — it exists only to pick a small shortlist
@@ -416,13 +426,48 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
  * - Flagged: +50 → 'flagged'
  * - Available: +30 → 'available'
  * - Quick win (≤15 min): +20 → 'quick_win'
+ *
+ * Generic over `T extends ScreenableTask` (OMN-335 slice 3): the OLD caller
+ * passed full `OmniFocusTask[]` (a single capped page, already fetched with
+ * full fields); the NEW caller (OmniFocusReadTool.executeSmartSuggest) passes
+ * the phase-1 SLIM rows (id + the 4 scored fields only) over the WHOLE
+ * actionable population, then uses the returned ids + screen_reasons to drive
+ * a phase-2 by-id fetch for full rows. Both call shapes share this one
+ * function — selection/ordering logic is identical either way.
+ *
+ * Tie-break (score ties): stable sort on phase-1/input array order — Array.
+ * prototype.sort is spec-guaranteed stable (ES2019+), so two tasks with equal
+ * scores keep their relative input order (which, for phase 1, is the
+ * database's natural iteration order for that filter). Deterministic, not
+ * arbitrary.
+ *
+ * `offset` pages through the ranked order: the result is ranks
+ * [offset, offset+limit). The due-today override is applied to the full order
+ * before slicing, so pages never overlap or skip a rank.
  */
-export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): OmniFocusTask[] {
+export function scoreForSmartSuggest<T extends ScreenableTask>(
+  tasks: T[],
+  limit: number,
+  offset = 0,
+): (T & { screen_reasons: string[] })[] {
+  return rankForSmartSuggest(tasks, limit).slice(offset, offset + limit);
+}
+
+/**
+ * The FULL ranked candidate list (score > 0, score desc, input-order ties)
+ * with the due-today override applied once. `limit` is only the first-window
+ * size the override promotes into; the list is not truncated. Its length is the
+ * pageable population (smart_suggest's `total_count`).
+ */
+export function rankForSmartSuggest<T extends ScreenableTask>(
+  tasks: T[],
+  limit: number,
+): (T & { screen_reasons: string[] })[] {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  const screen = (task: OmniFocusTask): { score: number; reasons: string[] } => {
+  const screen = (task: ScreenableTask): { score: number; reasons: string[] } => {
     let score = 0;
     const reasons: string[] = [];
 
@@ -457,33 +502,28 @@ export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): Omn
     return { score, reasons };
   };
 
-  const scoredTasks = tasks.map((task) => {
+  const scoredTasks: Array<{ task: T & { screen_reasons: string[] }; _score: number }> = tasks.map((task) => {
     const { score, reasons } = screen(task);
-    return { task: { ...task, screen_reasons: reasons }, _score: score };
+    return { task: { ...task, screen_reasons: reasons } as T & { screen_reasons: string[] }, _score: score };
   });
 
-  const suggestedTasks = scoredTasks
-    .filter((t) => t._score > 0)
-    .sort((a, b) => b._score - a._score)
-    .slice(0, limit)
-    .map((t) => t.task);
+  const ranked = scoredTasks.filter((t) => t._score > 0).sort((a, b) => b._score - a._score);
 
-  // Ensure at least one due-today task is surfaced
-  const dueTodayCandidate = scoredTasks.find(
+  // Ensure at least one due-today task is surfaced: the HIGHEST-RANKED due-today
+  // candidate (first in ranked order, not in input order). Applied ONCE to the
+  // FULL ranked order: if it ranks below the first window, it moves to the last
+  // slot of that window and everything between shifts down one. The order stays a
+  // permutation, so consecutive pages [offset, offset+limit) are disjoint and
+  // gap-free. If a due-today task is already inside the window, nothing moves.
+  const dueTodayIndex = ranked.findIndex(
     (t) => t.task.dueDate && new Date(t.task.dueDate).toDateString() === now.toDateString(),
   );
-  if (dueTodayCandidate) {
-    const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.task.id);
-    if (!alreadyIncluded) {
-      if (suggestedTasks.length < limit) {
-        suggestedTasks.push(dueTodayCandidate.task);
-      } else if (suggestedTasks.length > 0) {
-        suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate.task;
-      }
-    }
+  if (dueTodayIndex >= limit && limit > 0) {
+    const [candidate] = ranked.splice(dueTodayIndex, 1);
+    ranked.splice(limit - 1, 0, candidate);
   }
 
-  return suggestedTasks;
+  return ranked.map((t) => t.task);
 }
 
 // =============================================================================

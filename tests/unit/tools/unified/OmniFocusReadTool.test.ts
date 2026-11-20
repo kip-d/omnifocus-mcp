@@ -1946,15 +1946,25 @@ describe('OmniFocusReadTool', () => {
       expect('truncated' in result.metadata).toBe(false);
     });
 
-    it('smart_suggest mode inherits the contract (population + truncated)', async () => {
+    it('smart_suggest mode inherits the contract (candidate count + truncated; screened_count = population)', async () => {
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: {
           tasks: [
-            { id: 't1', name: 'Alpha', flagged: false, completed: false },
-            { id: 't2', name: 'Beta', flagged: false, completed: false },
+            { id: 't1', flagged: true },
+            { id: 't2', flagged: true },
+            { id: 't3', flagged: true },
           ],
           metadata: { total_matched: 48, sorted_in_script: false },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't1', name: 'Alpha' },
+            { id: 't2', name: 'Beta' },
+          ],
         },
       } satisfies ScriptResult);
 
@@ -1963,8 +1973,462 @@ describe('OmniFocusReadTool', () => {
       })) as any;
 
       expect(result.success).toBe(true);
-      expect(result.metadata.total_count).toBe(48);
+      expect(result.metadata.total_count).toBe(3);
+      expect(result.metadata.screened_count).toBe(48);
       expect(result.metadata.truncated).toBe(true);
+    });
+  });
+
+  describe('OMN-335 slice 3: smart_suggest two-phase (screen whole population, fetch top N)', () => {
+    it('phase 1 projects only the slim scoring fields, is uncapped, and reaches a late-DB-order best scorer the old capped path could not', async () => {
+      // 10 zero-score filler rows, then the best scorer LAST in phase-1 array
+      // order (simulating it being far down DB iteration order). The OLD
+      // single-phase implementation capped phase 1 at `limit` (2) in DB order
+      // BEFORE scoring, so this task could never even be scored. The new
+      // phase 1 is uncapped, so it reaches it regardless of position.
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const fillerRows = Array.from({ length: 10 }, (_, i) => ({
+        id: `filler${i}`,
+        flagged: false,
+        available: false,
+      }));
+      const bestRow = { id: 'late-best', flagged: true, available: true, dueDate: yesterday.toISOString() };
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [...fillerRows, bestRow], metadata: { total_matched: 11 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            {
+              id: 'late-best',
+              name: 'Late best scorer',
+              flagged: true,
+              available: true,
+              dueDate: yesterday.toISOString(),
+            },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks.map((t: any) => t.id)).toContain('late-best');
+
+      const phase1Script = execJsonSpy.mock.calls[0][0] as string;
+      // Slim projection: the scoring fields are there, nothing richer (no
+      // name/note/tags projection — phase 1 never needs them).
+      expect(phase1Script).toContain('dueDate');
+      expect(phase1Script).toContain('available');
+      expect(phase1Script).toContain('estimatedMinutes');
+      expect(phase1Script).not.toContain('name: task.name');
+      expect(phase1Script).not.toContain('tags:');
+      // Uncapped: the script's embedded `limit` is NOT the caller's requested
+      // limit (2) — it's the large uncapped sentinel.
+      expect(phase1Script).not.toContain('const limit = 2;');
+    });
+
+    it('phase 2 is called with exactly the selected ids (Task.byIdentifier, no flattenedTasks scan), in score order, with screen_reasons preserved under a fields projection (OMN-259 carry)', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'low', flagged: true, available: false }, // score 50
+            { id: 'high', flagged: true, available: true, dueDate: yesterday.toISOString() }, // score ~140-180
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'low', name: 'Low scorer' },
+            { id: 'high', name: 'High scorer' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2, fields: ['id', 'name'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+
+      const phase2Script = execJsonSpy.mock.calls[1][0] as string;
+      expect(phase2Script).toContain('high');
+      expect(phase2Script).toContain('low');
+      expect(phase2Script).toContain('Task.byIdentifier');
+      expect(phase2Script).not.toContain('flattenedTasks');
+
+      // Score order: 'high' (overdue+flagged+available) outranks 'low' (flagged only).
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['high', 'low']);
+      // screen_reasons survive the narrow `fields` projection, as before (OMN-259 carry).
+      expect(result.data.tasks[0].screen_reasons).toEqual(expect.arrayContaining(['flagged', 'available']));
+    });
+
+    it('a selected id that vanishes between phase 1 and phase 2 is dropped, not silently backfilled, and reported honestly', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'gone', flagged: true },
+            { id: 'stays', flagged: true, available: true },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+      // Phase 2 only resolves 'stays' — 'gone' no longer exists (completed/deleted
+      // between phase 1 and phase 2).
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'stays', name: 'Still here' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 2 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(1);
+      expect(result.data.tasks[0].id).toBe('stays');
+      expect(result.metadata.vanished_count).toBe(1);
+      expect(result.summary.key_insights.some((s: string) => s.includes('vanished'))).toBe(true);
+    });
+
+    it('total_count is the ranked candidate count (not the screened population); screened_count carries the population; not truncated when every candidate is returned', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 'only-one', flagged: true }],
+          // 137 actionable tasks matched the filter; only 1 scored > 0.
+          metadata: { total_matched: 137 },
+        },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'only-one', name: 'Solo' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(1);
+      expect(result.metadata.total_count).toBe(1);
+      expect(result.metadata.screened_count).toBe(137);
+      expect(result.metadata.returned_count).toBe(1);
+      expect(result.metadata.truncated).toBeUndefined();
+      expect(JSON.stringify(result.summary)).not.toContain('truncated');
+    });
+
+    it('zero scored candidates: short-circuits without a phase-2 call, reports 0 candidates and the screened population', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 't1', flagged: false, available: false }],
+          metadata: { total_matched: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(0);
+      expect(result.metadata.total_count).toBe(0);
+      expect(result.metadata.screened_count).toBe(1);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip when nothing scored
+    });
+
+    it('offset pages through the ranked shortlist: consecutive windows are disjoint, consecutive, and in score order', async () => {
+      // 6 candidates with strictly distinct scores (more days overdue → higher
+      // score): t5 is the best scorer, t0 the worst. Rank order (best first):
+      // t5, t4, t3, t2, t1, t0.
+      const makeRow = (i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (i + 1));
+        return { id: `t${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      const population = Array.from({ length: 6 }, (_, i) => makeRow(i));
+
+      // --- offset 0, limit 3 → ranks [0,3) ---
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: population, metadata: { total_matched: 6 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't5', name: 'T5' },
+            { id: 't4', name: 'T4' },
+            { id: 't3', name: 'T3' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const page1 = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 3, offset: 0 },
+      })) as any;
+
+      expect(page1.success).toBe(true);
+      expect(page1.data.tasks.map((t: any) => t.id)).toEqual(['t5', 't4', 't3']);
+      expect(page1.metadata.offset).toBe(0);
+
+      // --- offset 3, limit 3 → ranks [3,6) (the next page) ---
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: population, metadata: { total_matched: 6 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't2', name: 'T2' },
+            { id: 't1', name: 'T1' },
+            { id: 't0', name: 'T0' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const page2 = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 3, offset: 3 },
+      })) as any;
+
+      expect(page2.success).toBe(true);
+      expect(page2.data.tasks.map((t: any) => t.id)).toEqual(['t2', 't1', 't0']);
+      expect(page2.metadata.offset).toBe(3);
+
+      // Disjoint, consecutive rank windows — no overlap, no gap.
+      const page1Ids = page1.data.tasks.map((t: any) => t.id);
+      const page2Ids = page2.data.tasks.map((t: any) => t.id);
+      expect(page1Ids.filter((id: string) => page2Ids.includes(id))).toHaveLength(0);
+    });
+
+    it('offset beyond the candidate count returns an empty page; total_count stays the whole population; no phase-2 call', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'a', flagged: true },
+            { id: 'b', flagged: true },
+          ],
+          metadata: { total_matched: 2 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', limit: 10, offset: 10 },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks).toHaveLength(0);
+      expect(result.metadata.total_count).toBe(2);
+      expect(result.metadata.screened_count).toBe(2);
+      expect(result.metadata.offset).toBe(10);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1); // no phase-2 round-trip — nothing to fetch
+    });
+
+    it('phase 1 is uncapped without a MAX_SAFE_INTEGER sentinel in the script, and limit_applied reports the real page limit', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [], metadata: { total_matched: 0 } },
+      } satisfies ScriptResult);
+      await tool.execute({ query: { type: 'tasks', mode: 'smart_suggest', limit: 7 } });
+      const phase1Script = execJsonSpy.mock.calls[0][0] as string;
+      expect(phase1Script).not.toContain('9007199254740991');
+      expect(phase1Script).not.toContain('count >= limit');
+      expect(phase1Script).toContain('limit_applied: 7');
+    });
+
+    it('countOnly still returns a count of the smart_suggest population (one count script, no phases)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { count: 7, optimization: 'omnijs_count_no_tags' },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', countOnly: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.count_only).toBe(true);
+      expect(result.metadata.total_count).toBe(7);
+      expect(result.metadata.mode).toBe('smart_suggest');
+      expect(result.data.tasks).toHaveLength(0);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('filters.id still takes the id fast path (single lookup, no scoring phases)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'task-abc', name: 'Found', completed: false, flagged: false, blocked: false }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', filters: { id: 'task-abc' }, fields: ['id', 'name'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('id_lookup');
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['task-abc']);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('an explicit sort reorders the returned page after scoring and sort_applied reports it', async () => {
+      const mk = (i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (i + 1));
+        return { id: `s${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      // Score order: s2, s1, s0.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [mk(0), mk(1), mk(2)], metadata: { total_matched: 3 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 's0', name: 'Alpha' },
+            { id: 's1', name: 'Bravo' },
+            { id: 's2', name: 'Charlie' },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          mode: 'smart_suggest',
+          limit: 3,
+          fields: ['id', 'name'],
+          sort: [{ field: 'name', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['s0', 's1', 's2']); // name asc, not score order
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
+    it('sorting by a key not in fields: phase 2 projects the key, the page is reordered, the key is stripped, sort_applied is true', async () => {
+      const mk = (i: number, dueOffset: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() + dueOffset);
+        return { id: `k${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+      };
+      // Phase 1 score order (flagged only, tie => input order): k0, k1, k2.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [mk(0, 5), mk(1, 1), mk(2, 3)], metadata: { total_matched: 3 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 'k0', name: 'A', dueDate: mk(0, 5).dueDate },
+            { id: 'k1', name: 'B', dueDate: mk(1, 1).dueDate },
+            { id: 'k2', name: 'C', dueDate: mk(2, 3).dueDate },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          mode: 'smart_suggest',
+          limit: 3,
+          fields: ['id', 'name'],
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(execJsonSpy.mock.calls[1][0] as string).toContain('dueDate');
+      expect(result.data.tasks.map((t: any) => t.id)).toEqual(['k1', 'k2', 'k0']);
+      expect(result.data.tasks[0].dueDate).toBeUndefined();
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
+    it('filters.completed:true: phase 2 does not skip completed rows (the caller asked for them)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'c1', flagged: true }], metadata: { total_matched: 1 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'c1', name: 'Done' }] },
+      } satisfies ScriptResult);
+      const result = (await tool.execute({
+        query: { type: 'tasks', mode: 'smart_suggest', filters: { completed: true } },
+      })) as any;
+      const phase2Script = execJsonSpy.mock.calls[1][0] as string;
+      expect(phase2Script).not.toContain('!task.completed');
+      expect(phase2Script).toContain('task.taskStatus !== Task.Status.Dropped');
+      expect(result.metadata.vanished_count).toBeUndefined();
+    });
+
+    describe('truncated after a phase-2 vanish is measured from the selected window', () => {
+      const run = async (candidateCount: number, offset: number) => {
+        const rows = Array.from({ length: candidateCount }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (i + 1));
+          // i=0 has the fewest days overdue -> lowest score; rank order is the reverse.
+          return { id: `v${i}`, flagged: true, available: false, dueDate: d.toISOString() };
+        });
+        const rankedIds = [...rows].reverse().map((r) => r.id);
+        const window = rankedIds.slice(offset, offset + 2);
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { tasks: rows, metadata: { total_matched: candidateCount } },
+        } satisfies ScriptResult);
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          // The first id of the window vanished: only one row comes back.
+          data: { tasks: [{ id: window[1], name: 'Survivor' }] },
+        } satisfies ScriptResult);
+        return (await tool.execute({
+          query: { type: 'tasks', mode: 'smart_suggest', limit: 2, offset },
+        })) as any;
+      };
+
+      it('vanish on the last page: truncated is not reported (no pages remain)', async () => {
+        const result = await run(4, 2);
+        expect(result.metadata.vanished_count).toBe(1);
+        expect(result.metadata.returned_count).toBe(1);
+        expect(result.metadata.truncated).toBeUndefined();
+      });
+
+      it('vanish on a middle page: truncated stays true', async () => {
+        const result = await run(6, 2);
+        expect(result.metadata.vanished_count).toBe(1);
+        expect(result.metadata.truncated).toBe(true);
+      });
+    });
+
+    it('without an explicit sort, sort_applied stays false and score order is kept', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'a', flagged: true }], metadata: { total_matched: 1 } },
+      } satisfies ScriptResult);
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'a', name: 'A' }] },
+      } satisfies ScriptResult);
+      const result = (await tool.execute({ query: { type: 'tasks', mode: 'smart_suggest' } })) as any;
+      expect(result.metadata.sort_applied).toBe(false);
     });
   });
 
@@ -2215,6 +2679,13 @@ describe('OmniFocusReadTool', () => {
     });
 
     it('smart_suggest on the inbox scores rows and reports its own mode', async () => {
+      // OMN-335 slice 3: smart_suggest is two-phase — phase 1 (slim screen,
+      // mocked here) selects t1 (flagged scores > 0), phase 2 (by-id fetch)
+      // returns its full row.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', flagged: true, available: true }] },
+      } satisfies ScriptResult);
       execJsonSpy.mockResolvedValueOnce({
         success: true,
         data: { tasks: [{ id: 't1', name: 'Inbox thing', flagged: true, available: true }] },
