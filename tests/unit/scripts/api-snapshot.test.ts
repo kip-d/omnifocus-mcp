@@ -3,7 +3,8 @@
  * 4.9 and 4.10.1 exports), the header builder, and the token-stream member differ.
  */
 import { describe, it, expect } from 'vitest';
-import { selectRetentionDeletions ,
+import {
+  selectRetentionDeletions,
   addHeader,
   diffSnapshots,
   extractMembers,
