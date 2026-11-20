@@ -1680,8 +1680,40 @@ describe('WriteSchema', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         const message = JSON.stringify(result.error.issues);
-        expect(message).toMatch(/only supported on 'update'/);
+        expect(message).toMatch(/only supported on task 'update'/);
       }
+    });
+
+    it('rejects minimalResponse on update with target project, naming the field', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-1',
+          changes: { flagged: true },
+          minimalResponse: true,
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.join('.') === 'mutation.minimalResponse');
+        expect(issue?.message).toBe(
+          '"minimalResponse" applies to task updates only — project updates always return their full response. Omit it.',
+        );
+      }
+    });
+
+    it('rejects minimalResponse on a batch update item (unrecognized key)', () => {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'batch',
+          operations: [
+            { operation: 'update', target: 'project', id: 'p1', changes: { flagged: true }, minimalResponse: true },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(JSON.stringify(result.error.issues)).toMatch(/minimalResponse/);
     });
 
     it('still accepts minimalResponse on update', () => {

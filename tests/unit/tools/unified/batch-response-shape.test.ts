@@ -187,19 +187,17 @@ describe('flattenBatchResults', () => {
     expect(flat).toEqual([expect.objectContaining({ operation: op, success: true, id, name })]);
   });
 
-  // Review of #282: the minimalResponse branch dropped a failure's message, and
-  // error rows can carry the caller's tempId beside the real id.
-  it('OMN-333: a failed minimalResponse row keeps its message; error rows carry tempId', () => {
+  // Review of #282: error rows can carry the caller's tempId beside the real id.
+  it('OMN-333: error rows carry tempId', () => {
     const flat = flattenBatchResults({
       created: [],
-      updated: [{ success: false, id: 'm1', fields_updated: [], error: 'nope' }],
+      updated: [],
       completed: [],
       deleted: [],
       errors: [{ phase: 'update', id: 'real-1', tempId: 't1', error: 'Task not found: real-1' }],
     });
 
-    expect(flat[0]).toMatchObject({ operation: 'update', success: false, id: 'm1', error: 'nope' });
-    expect(flat[1]).toEqual({
+    expect(flat[0]).toEqual({
       operation: 'update',
       success: false,
       id: 'real-1',
@@ -407,43 +405,10 @@ describe('flattenBatchResults', () => {
     expect('warnings' in flat[1]).toBe(false);
   });
 
-  it('OMN-137: should lift warnings from minimalResponse update results too', () => {
-    // minimalResponse updates carry warnings at the top level of the flat object.
-    const nestedResults = {
-      created: [],
-      updated: [
-        {
-          success: true,
-          id: 'task-min-w',
-          operation: 'update_task',
-          task_id: 'task-min-w',
-          fields_updated: ['status'],
-          warnings: ['status: boom'],
-        },
-        {
-          success: true,
-          id: 'task-min-c',
-          operation: 'update_task',
-          task_id: 'task-min-c',
-          fields_updated: ['flagged'],
-        },
-      ],
-      completed: [],
-      deleted: [],
-      errors: [],
-    };
-
-    const flat = flattenBatchResults(nestedResults);
-
-    expect(flat).toHaveLength(2);
-    expect(flat[0].warnings).toEqual(['status: boom']);
-    expect('warnings' in flat[1]).toBe(false);
-  });
-
   // OMN-377 (gate round 3): the live status read-back must survive the batch
   // flatten — a batch drop/reopen otherwise shows only `changes: ['status']`,
   // the same echo-not-confirmation the single path was fixed to avoid.
-  it('OMN-377: update rows carry live completed/dropDate (envelope and minimal shapes); absent stays absent', () => {
+  it('OMN-377: update rows carry live completed/dropDate ; absent stays absent', () => {
     const nestedResults = {
       created: [],
       updated: [
@@ -460,15 +425,6 @@ describe('flattenBatchResults', () => {
             },
           },
           metadata: {},
-        },
-        {
-          success: true,
-          id: 'u-min',
-          operation: 'update_task',
-          task_id: 'u-min',
-          fields_updated: ['status'],
-          completed: false,
-          dropDate: null,
         },
         {
           success: true,
@@ -490,39 +446,10 @@ describe('flattenBatchResults', () => {
     const flat = flattenBatchResults(nestedResults) as Array<FlatBatchResult & Record<string, unknown>>;
 
     expect(flat[0]).toMatchObject({ id: 'u-drop', completed: false, dropDate: '2026-10-19T14:46:34.039Z' });
-    expect(flat[1]).toMatchObject({ id: 'u-min', completed: false, dropDate: null });
-    expect('completed' in flat[2]).toBe(false);
-    expect('dropDate' in flat[2]).toBe(false);
+    expect('completed' in flat[1]).toBe(false);
+    expect('dropDate' in flat[1]).toBe(false);
     // complete rows are out of scope (OMN-377 follow-up) — unchanged shape.
-    expect('completed' in flat[3]).toBe(false);
-  });
-
-  it('should handle minimalResponse update results (no nested data.task envelope)', () => {
-    // When minimalResponse is true, handleTaskUpdate returns a flat object
-    // instead of createSuccessResponseV2 envelope
-    const nestedResults = {
-      created: [],
-      updated: [
-        {
-          success: true,
-          id: 'task1',
-          operation: 'update_task',
-          task_id: 'task1',
-          fields_updated: ['flagged', 'dueDate'],
-        },
-      ],
-      completed: [],
-      deleted: [],
-      errors: [],
-    };
-
-    const flat = flattenBatchResults(nestedResults);
-
-    expect(flat).toHaveLength(1);
-    expect(flat[0].operation).toBe('update');
-    expect(flat[0].success).toBe(true);
-    expect(flat[0].id).toBe('task1');
-    expect((flat[0] as FlatBatchResult & { changes: string[] }).changes).toEqual(['flagged', 'dueDate']);
+    expect('completed' in flat[2]).toBe(false);
   });
 });
 

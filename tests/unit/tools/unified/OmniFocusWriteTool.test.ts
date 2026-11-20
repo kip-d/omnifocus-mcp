@@ -628,7 +628,7 @@ describe('OmniFocusWriteTool task operations', () => {
             minimalResponse: true,
           },
         }),
-      ).rejects.toThrow(/minimalResponse.*only supported on 'update'/);
+      ).rejects.toThrow(/minimalResponse.*only supported on task 'update'/);
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
 
@@ -642,7 +642,7 @@ describe('OmniFocusWriteTool task operations', () => {
             minimalResponse: true,
           },
         }),
-      ).rejects.toThrow(/minimalResponse.*only supported on 'update'/);
+      ).rejects.toThrow(/minimalResponse.*only supported on task 'update'/);
       expect(execJsonSpy).not.toHaveBeenCalled();
     });
   });

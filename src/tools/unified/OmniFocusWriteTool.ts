@@ -304,7 +304,7 @@ SAFETY:
             target_id: { type: 'string', description: 'Alias for id, accepted on delete (pairs with target)' },
             minimalResponse: {
               type: 'boolean',
-              description: 'update only: skip the full task echo, keep id/fields_updated + metadata',
+              description: 'task update only: skip the full task echo, keep id/fields_updated + metadata',
             },
 
             // complete

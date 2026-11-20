@@ -91,7 +91,7 @@ interface NestedBatchResults {
  *
  * Input shape (nested):
  *   created: [{ success, created, failed, totalItems, results: [{ tempId, realId, success, type }], mapping }]
- *   updated: [{ success, data: { task: { id, name, changes } }, metadata }]  or minimalResponse shape
+ *   updated: [{ success, data: { task: { id, name, changes } }, metadata }]
  *   completed: [{ success, data: { task: { id, name } }, metadata }]
  *   deleted: [{ success, data: { task: { id, name } }, metadata }]
  *   errors: [{ phase, id, error }]
@@ -110,7 +110,7 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
     }
   }
 
-  // Updates — unwrap from StandardResponseV2 or minimalResponse envelope
+  // Updates — unwrap from the StandardResponseV2 envelope
   for (const updateResult of results.updated) {
     const result = updateResult as Record<string, unknown>;
     flat.push(extractOperationResult('update', result));
@@ -178,55 +178,19 @@ function flattenCreateItem(item: CreateItemResult): FlatBatchResult {
 /**
  * Extract id, name, and operation-specific fields from a per-operation result.
  *
- * Handles two shapes:
- * 1. StandardResponseV2 envelope. The entity sits in one of (OMN-333):
+ * Reads a StandardResponseV2 envelope. The entity sits in one of (OMN-333):
  *    - `data.task` — `{ id, name, changes }` (task update) or the script's
  *      `{ taskId, name, ... }` (task complete/delete)
  *    - `data.project` — the script's `{ projectId, name, ... }` (project complete/delete)
  *    - `data` itself — `{ projectId, name, ... }` spread in (project update)
- * 2. minimalResponse: { success, id, fields_updated: [...] }
  *
  * Reading only `data.task.id` gave every complete/delete row and every project
  * row `id: 'unknown'`. A row with no id anywhere now gets null (OMN-141).
- *
- * OMN-343 (slice 3): shape 2 is UNREACHABLE via a real batch today — evidence,
- * not a guess: `BatchOperationSchema`'s `update` member (write-schema.ts) has
- * no `minimalResponse` field at all (strictObj would reject it as an
- * unrecognized key if a caller tried), and `buildTaskCompiledForBatch`
- * (OmniFocusWriteTool.ts) never sets `minimalResponse` on the `CompiledMutation`
- * it hands to `dispatchTaskOperation` — so `handleTaskUpdate`'s
- * `compiled.minimalResponse ?? false` is always `false` on the batch path, and
- * every batch update goes through the full `createSuccessResponseV2` envelope
- * (shape 1) regardless of what the single-item `minimalResponse:true` flag now
- * returns (shape 1 too, since slice 3 — see `handleTaskUpdate`'s minimal
- * branch). This detection branch is kept as defense-in-depth / for the unit
- * tests that exercise it directly; it is intentionally NOT updated to mirror
- * the new single-item minimal shape (which now also carries `metadata` and
- * isn't flat) because nothing here produces that shape to detect.
  */
 function extractOperationResult(
   operation: 'update' | 'complete' | 'delete',
   result: Record<string, unknown>,
 ): FlatBatchResult {
-  // Check for minimalResponse shape (flat object with id and fields_updated)
-  if ('fields_updated' in result && typeof result.id === 'string') {
-    const entry: FlatBatchResult = {
-      operation,
-      success: result.success !== false,
-      id: result.id as string,
-    };
-    if (operation === 'update') {
-      entry.changes = result.fields_updated as string[];
-      Object.assign(entry, liveStatusReadback(result));
-    }
-    if (!entry.success) {
-      entry.error = errorMessageOf(result.error) ?? UNKNOWN_ERROR;
-    }
-    // OMN-137: minimalResponse updates carry warnings at the top level — keep them (non-empty only).
-    Object.assign(entry, liftWarnings(result));
-    return entry;
-  }
-
   const data = result.data as Record<string, unknown> | undefined;
   const task = data?.task as Record<string, unknown> | undefined;
   const entity = task ?? (data?.project as Record<string, unknown> | undefined) ?? data;

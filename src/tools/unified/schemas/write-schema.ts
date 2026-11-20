@@ -248,7 +248,8 @@ const WRITE_FIELD_REDIRECTS: Record<string, string> = {
   // operations silently ignored it. Removed from both schemas (the "delete
   // from both schemas" precedent); this redirect turns the resulting
   // unrecognized-key rejection into an actionable one.
-  minimalResponse: "only supported on 'update' — create and complete always return their full response",
+  minimalResponse:
+    "only supported on task 'update' — create, complete and project update always return their full response",
 };
 
 // OMN-260: a bare root `{data:{...}}` (no `operation`, no `mutation`) is the
@@ -590,6 +591,9 @@ const TARGET_MISMATCH_MESSAGES: Record<string, string> = {
     '"reviewInterval" is project-only — tasks don\'t have reviews. Set reviewInterval on the project instead.',
 };
 
+const MINIMAL_RESPONSE_PROJECT_MESSAGE =
+  '"minimalResponse" applies to task updates only — project updates always return their full response. Omit it.';
+
 function targetMismatchMessage(field: string, target: 'task' | 'project'): string {
   return (
     TARGET_MISMATCH_MESSAGES[field] ?? `"${field}" is not supported on ${target === 'project' ? 'projects' : 'tasks'}.`
@@ -674,6 +678,19 @@ export const WriteSchema = z
         if (op.operation === 'update' && isTaskOnHold(op.target, op.changes)) {
           onHold(['mutation', 'operations', i, 'changes', 'status']);
         }
+      });
+    }
+
+    // OMN-343 (slice 3): only handleTaskUpdate reads minimalResponse; the
+    // project-update route never sees it, so accepting it there would return
+    // the full response while implying otherwise. Same reject-not-ignore
+    // contract as the target-mismatch table below. Batch items cannot carry
+    // it (BatchOperationSchema is strict), so only the single update needs this.
+    if (m.operation === 'update' && m.target === 'project' && m.minimalResponse !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mutation', 'minimalResponse'],
+        message: MINIMAL_RESPONSE_PROJECT_MESSAGE,
       });
     }
 
