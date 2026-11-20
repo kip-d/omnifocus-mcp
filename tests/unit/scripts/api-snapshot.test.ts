@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  selectPreviousVersion,
   selectRetentionDeletions,
   addHeader,
   diffSnapshots,
@@ -132,7 +133,7 @@ describe('differ', () => {
     '}',
   ].join('\n');
 
-  it('reports no diff for whitespace, wrapping, comment and ?-marker changes', () => {
+  it('reports no diff for whitespace, wrapping and comment changes', () => {
     const wrapped = [
       'declare class Alert {',
       '    constructor (',
@@ -141,7 +142,7 @@ describe('differ', () => {
       '    );',
       '    // different comment',
       '    show(',
-      '      callback: (option: number) => void | null',
+      '      callback?: (option: number) => void | null',
       '    ): Promise<number>;',
       '}',
     ].join('\n');
@@ -149,6 +150,19 @@ describe('differ', () => {
     expect(d.added).toEqual([]);
     expect(d.removed).toEqual([]);
     expect(formatDiff('a', 'b', d)).toContain('No member changes.');
+  });
+
+  it('reports a parameter turning optional <-> required', () => {
+    const d = diffSnapshots(base, base.replace('callback?:', 'callback:'));
+    expect(d.removed.map((m) => m.text)).toEqual(['show(callback?: (option: number) => void | null): Promise<number>']);
+    expect(d.added.map((m) => m.text)).toEqual(['show(callback: (option: number) => void | null): Promise<number>']);
+  });
+
+  it('reports a property turning optional <-> required', () => {
+    const a = 'declare class T {\n  name?: string;\n}';
+    const d = diffSnapshots(a, a.replace('name?:', 'name:'));
+    expect(d.removed.map((m) => m.text)).toEqual(['name?: string']);
+    expect(d.added.map((m) => m.text)).toEqual(['name: string']);
   });
 
   it('reports an added member and an added class', () => {
@@ -206,5 +220,36 @@ describe('selectRetentionDeletions', () => {
   it('parses --force', () => {
     expect(parseArgs(['--force']).force).toBe(true);
     expect(parseArgs([]).force).toBe(false);
+  });
+});
+
+describe('selectPreviousVersion', () => {
+  it('prefers the symlink target', () => {
+    expect(selectPreviousVersion('4.9', ['4.8', '4.9'], '4.10.1')).toBe('4.9');
+  });
+
+  it('falls back to the highest other snapshot when there is no usable symlink target', () => {
+    expect(selectPreviousVersion(undefined, ['4.8', '4.10.1', '4.9'], '4.11')).toBe('4.10.1');
+  });
+
+  it('ignores a link that names the version being regenerated', () => {
+    expect(selectPreviousVersion('4.10.1', ['4.9', '4.10.1'], '4.10.1')).toBe('4.9');
+  });
+
+  it('is undefined with nothing else on disk', () => {
+    expect(selectPreviousVersion(undefined, [], '4.10.1')).toBeUndefined();
+  });
+});
+
+describe('committed snapshots', () => {
+  it('4.9 vs 4.10.1 report no member changes, ? markers included', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(process.cwd(), 'src', 'omnifocus', 'api');
+    const d = diffSnapshots(
+      readFileSync(join(dir, 'OmniFocus-4.9-d.ts'), 'utf8'),
+      readFileSync(join(dir, 'OmniFocus-4.10.1-d.ts'), 'utf8'),
+    );
+    expect(formatDiff('4.9', '4.10.1', d)).toContain('No member changes.');
   });
 });

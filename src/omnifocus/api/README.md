@@ -53,8 +53,10 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 
 The script prints the class/member diff against the previous snapshot on every run. The differ
 (`scripts/lib/api-snapshot.ts`) works on a token stream, never on lines: it strips `//` comments, collapses whitespace,
-ignores `?` markers, then splits on `;` `{` `}` while tracking a container stack. Indentation, wrapping and prettier
-formatting therefore produce no diff; a changed signature shows as one removal plus one addition.
+keeps `?` markers (a parameter or property turning optional or required is a change), then splits on `;` `{` `}` while
+tracking a container stack. Indentation, wrapping and prettier formatting therefore produce no diff; both inputs are
+committed snapshots already normalized for TS1016, so `?` is comparable. A changed signature shows as one removal plus
+one addition.
 
 ## Usage
 

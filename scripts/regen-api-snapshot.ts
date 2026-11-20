@@ -14,7 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 import {
-  existsSync,
+  lstatSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -34,6 +34,7 @@ import {
   formatDiff,
   normalizeText,
   parseExportInfo,
+  selectPreviousVersion,
   selectRetentionDeletions,
 } from './lib/api-snapshot.js';
 
@@ -115,11 +116,20 @@ async function main(): Promise<void> {
   const fileFor = (v: string) => join(args.apiDir, `OmniFocus-${v}-d.ts`);
 
   // Previous snapshot = what the symlink pointed at, unless that is the version being regenerated.
+  // The link may be absent, or a regular file (core.symlinks=false, archives); only a real symlink is readable.
   const linkPath = join(args.apiDir, SYMLINK);
-  const linked = existsSync(linkPath) ? SNAPSHOT_FILE.exec(readlinkSync(linkPath))?.[1] : undefined;
+  let linked: string | undefined;
+  try {
+    if (lstatSync(linkPath).isSymbolicLink()) linked = SNAPSHOT_FILE.exec(readlinkSync(linkPath))?.[1];
+    else
+      console.error(
+        `${SYMLINK} is a regular file, not a symlink; falling back to the highest other snapshot. The symlink will be recreated.`,
+      );
+  } catch {
+    // no existing link
+  }
   const others = listVersions(args.apiDir).filter((v) => v !== newVersion);
-  // `| undefined` is real: `others` is empty when no other snapshot exists (indexing isn't checked by tsconfig).
-  const previous: string | undefined = linked && linked !== newVersion ? linked : others[others.length - 1];
+  const previous = selectPreviousVersion(linked, others, newVersion);
 
   // Everything that can fail is read and validated BEFORE the first write, so a failure leaves the tree untouched.
   if (previous !== undefined && compareVersions(newVersion, previous) < 0 && !args.force) {

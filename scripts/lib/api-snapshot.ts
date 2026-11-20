@@ -127,13 +127,13 @@ export interface Member {
 }
 
 /**
- * Token-stream member extraction: strip comments, collapse whitespace, ignore `?` markers and
- * wrapping, then split on `;` `{` `}` tracking a container stack. Insensitive to indentation,
+ * Token-stream member extraction: strip comments, collapse whitespace, keep `?` markers (optional/required flips are real
+ * drift), ignore wrapping, then split on `;` `{` `}` tracking a container stack. Insensitive to indentation,
  * line wrapping and prettier formatting.
  */
 export function extractMembers(source: string): Member[] {
   let t = source.replace(/\/\/[^\n]*/g, '').replace(/\s+/g, ' ');
-  t = t.replace(/constructor \(/g, 'constructor(').replace(/\?:/g, ':');
+  t = t.replace(/constructor \(/g, 'constructor(');
   t = t
     .replace(/\(\s+/g, '(')
     .replace(/,\s*\)/g, ')')
@@ -233,4 +233,21 @@ export function selectRetentionDeletions(
 ): string[] {
   if (previous === undefined) return [];
   return versions.filter((v) => v !== newVersion && v !== previous && compareVersions(v, previous) < 0);
+}
+
+/**
+ * Pick the snapshot to diff against: the version the symlink targets (when known and not the version being
+ * regenerated), else the highest other snapshot. `linked` is undefined when the symlink is missing, is not a
+ * symlink (core.symlinks=false checkouts, archives), or names an unparseable target.
+ */
+export function selectPreviousVersion(
+  linked: string | undefined,
+  otherVersions: string[],
+  newVersion: string,
+): string | undefined {
+  if (linked && linked !== newVersion) return linked;
+  return [...otherVersions]
+    .filter((v) => v !== newVersion)
+    .sort(compareVersions)
+    .pop();
 }
