@@ -17,8 +17,9 @@
 #   OF_MCP_REPO_DIR  (default ~/omnifocus-mcp)   prod checkout the job runs against
 #
 # Exit codes (--verify): 0 OK; 1 failed / no STATUS; 2 usage or unparseable wrapper
-# defaults; 3 inconclusive (WEDGED, or termination unconfirmed); 4 suite PASSED but
-# test fixtures leaked or leak status unknown/not scanned.
+# defaults; 3 inconclusive (WEDGED with no leak found, or termination unconfirmed);
+# 4 leak: suite PASSED but fixtures leaked or leak status unknown/not scanned, or a
+# mid-suite WEDGED run whose leak scan found fixtures or failed.
 #
 # NOTE: --verify runs the FULL suite through launchd (~15 min) and writes to the
 # real OmniFocus database. It is the only way to prove the job actually works —
@@ -48,6 +49,16 @@ GUI="gui/$(id -u)"
 leak_is_clean() { # <leak-line>
   case "$1" in
     "LEAK: none detected"*|"LEAK: (none recorded)"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# True when the WRAPPER's own leak scan ran and did not come back clean
+# (fixtures remain, or the scan failed). This script's fallback lines
+# ("LEAK: not scanned", "LEAK: unknown — …") are not scan results.
+leak_scan_found_problem() { # <leak-line>
+  case "$1" in
+    "LEAK: test fixtures remain"*|"LEAK: UNKNOWN"*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -378,10 +389,25 @@ if [ "$MODE" = "verify" ]; then
   fi
 
   # A WEDGED run is not a pass and not a failure: the job worked, the
-  # environment didn't. Say so plainly rather than reporting green.
+  # environment didn't. Say so plainly rather than reporting green. Two kinds:
+  # a pre-suite wedge (OmniFocus down, AppleEvent preflight, build timeout)
+  # never touched the database and logs no leak scan; a mid-suite wedge
+  # ("the suite exceeded …") was killed part-way and the wrapper then ran a
+  # real leak scan. A leak from that scan outranks "inconclusive": fixtures in
+  # the live database need cleanup whatever the suite's verdict.
   case "$status_line" in
     *WEDGED*)
-      echo "  VERIFY INCONCLUSIVE — OmniFocus was unreachable, so the suite never ran." >&2
+      case "$status_line" in
+        *"suite exceeded"*) wedge_what="the suite started but was killed after exceeding its timeout" ;;
+        *) wedge_what="the suite never ran" ;;
+      esac
+      if leak_scan_found_problem "$leak_line"; then
+        echo "  VERIFY FAILED (leak) — WEDGED ($wedge_what), and test fixtures may remain in OmniFocus:" >&2
+        echo "  $leak_line" >&2
+        echo "  Clean up:  (cd $REPO_DIR && npm run test:cleanup -- --apply), then re-verify once OmniFocus responds." >&2
+        exit 4
+      fi
+      echo "  VERIFY INCONCLUSIVE — WEDGED: $wedge_what." >&2
       echo "  The job itself is installed and executed correctly. Re-verify once OmniFocus responds." >&2
       exit 3 ;;
   esac
