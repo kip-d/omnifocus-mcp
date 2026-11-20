@@ -18,6 +18,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -109,6 +110,30 @@ function listVersions(apiDir: string): string[] {
     .sort(compareVersions);
 }
 
+/**
+ * Atomically point `linkPath` at `target`: build the new link under a temp name in the same directory, then
+ * rename it over the old one. A failure leaves the existing link intact (and removes the temp link).
+ */
+export function repointSymlink(linkPath: string, target: string): void {
+  const tmp = `${linkPath}.tmp-${process.pid}`;
+  try {
+    unlinkSync(tmp);
+  } catch {
+    // no stale temp link
+  }
+  symlinkSync(target, tmp);
+  try {
+    renameSync(tmp, linkPath);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // already gone
+    }
+    throw err;
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const raw = args.from ? readFileSync(args.from, 'utf8') : exportFromOmniFocus();
@@ -147,12 +172,7 @@ async function main(): Promise<void> {
 
   writeFileSync(fileFor(newVersion), content);
 
-  try {
-    unlinkSync(linkPath);
-  } catch {
-    // no existing symlink
-  }
-  symlinkSync(`OmniFocus-${newVersion}-d.ts`, linkPath);
+  repointSymlink(linkPath, `OmniFocus-${newVersion}-d.ts`);
 
   // Retention: keep current + previous, delete only versions older than previous.
   for (const v of deletions) {

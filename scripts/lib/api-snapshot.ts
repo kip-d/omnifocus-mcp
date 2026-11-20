@@ -96,10 +96,19 @@ export interface ExportInfo {
 
 const FIRST_LINE = /^\/\/ TypeScript definitions for OmniFocus (\S+) \(/;
 
+/** Dotted numeric versions only; anything else would make compareVersions return NaN. */
+const VERSION_RE = /^\d+(\.\d+)*$/;
+
 export function parseExportInfo(raw: string): ExportInfo {
   const firstLine = raw.split('\n', 1)[0] ?? '';
   const m = FIRST_LINE.exec(firstLine);
   if (!m?.[1]) throw new Error(`Unrecognized export: first line is ${JSON.stringify(firstLine.slice(0, 120))}`);
+  if (!VERSION_RE.test(m[1])) {
+    throw new Error(
+      `Unsupported OmniFocus version ${JSON.stringify(m[1])}: expected dotted numeric (e.g. 4.10.1). ` +
+        "For a beta or pre-release build, hand-fix the version on the export's first line and pass the file with --from.",
+    );
+  }
   return { version: m[1], firstLine };
 }
 
@@ -212,6 +221,9 @@ export function formatDiff(beforeLabel: string, afterLabel: string, d: SnapshotD
 
 /** Compare dotted version strings numerically (4.10.1 > 4.9). */
 export function compareVersions(a: string, b: string): number {
+  for (const v of [a, b]) {
+    if (!VERSION_RE.test(v)) throw new Error(`Cannot compare non-numeric version ${JSON.stringify(v)}`);
+  }
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {

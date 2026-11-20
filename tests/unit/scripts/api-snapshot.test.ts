@@ -3,6 +3,9 @@
  * 4.9 and 4.10.1 exports), the header builder, and the token-stream member differ.
  */
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, mkdirSync, readdirSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   selectPreviousVersion,
   selectRetentionDeletions,
@@ -15,7 +18,7 @@ import {
   parseExportInfo,
   splitTopLevelParams,
 } from '../../../scripts/lib/api-snapshot.js';
-import { compareVersions, parseArgs, UsageError } from '../../../scripts/regen-api-snapshot.js';
+import { compareVersions, parseArgs, repointSymlink, UsageError } from '../../../scripts/regen-api-snapshot.js';
 
 describe('normalizeText: the known TS1016 sites', () => {
   const cases: Array<[string, string, string]> = [
@@ -251,5 +254,42 @@ describe('committed snapshots', () => {
       readFileSync(join(dir, 'OmniFocus-4.10.1-d.ts'), 'utf8'),
     );
     expect(formatDiff('4.9', '4.10.1', d)).toContain('No member changes.');
+  });
+});
+
+describe('non-numeric versions', () => {
+  it('parseExportInfo rejects a beta version with guidance', () => {
+    expect(() => parseExportInfo('// OmniFocus 4.11b1 API\n')).toThrow(/4\.11b1.*--from/s);
+  });
+  it('compareVersions throws on a non-numeric segment', () => {
+    expect(() => compareVersions('4.11b1', '4.10')).toThrow(/non-numeric/);
+    expect(() => compareVersions('4.10', '4.x')).toThrow(/non-numeric/);
+    expect(compareVersions('4.10.1', '4.9')).toBeGreaterThan(0);
+  });
+});
+
+describe('repointSymlink', () => {
+  it('replaces an existing link atomically and leaves no temp link', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'repoint-'));
+    writeFileSync(join(dir, 'a'), 'a');
+    writeFileSync(join(dir, 'b'), 'b');
+    const link = join(dir, 'OmniFocus.d.ts');
+    symlinkSync('a', link);
+    repointSymlink(link, 'b');
+    expect(readlinkSync(link)).toBe('b');
+    expect(readdirSync(dir).sort()).toEqual(['OmniFocus.d.ts', 'a', 'b']);
+  });
+  it('creates the link when none exists', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'repoint-'));
+    const link = join(dir, 'OmniFocus.d.ts');
+    repointSymlink(link, 'b');
+    expect(readlinkSync(link)).toBe('b');
+  });
+  it('keeps the old link and cleans the temp link when the rename fails', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'repoint-'));
+    const link = join(dir, 'OmniFocus.d.ts');
+    mkdirSync(link); // renaming a symlink over a directory fails
+    expect(() => repointSymlink(link, 'b')).toThrow();
+    expect(readdirSync(dir)).toEqual(['OmniFocus.d.ts']);
   });
 });
