@@ -372,9 +372,10 @@ ANALYSIS TYPES:
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
   the screen does not judge; YOU judge each candidate from its evidence and act by id.
-  Detectors run over at most 3000 live tasks; metadata.coverage reports the true live
-  total, how many were analyzed, capped (true when some were left out) and unreadable
-  (tasks skipped because a read failed). When capped, findings cover only part of the database.
+  Detectors run over at most metadata.coverage.cap tasks. coverage reports total (tasks eligible
+  for analysis), returned (how many were analyzed), capped (true when the cap left some out) and
+  unreadable (tasks skipped because a read failed). Findings cover only part of the database when
+  capped is true OR unreadable is above 0.
 - workflow_analysis: Workflow EVIDENCE — whole-DB counters, per-project counts/rates/avgAge, and
   deferral facts (incl. two independent screen counts: over90Days, keywordMatched). It reports
   measurements only; it does not score, rank, or recommend. YOU draw the conclusions.

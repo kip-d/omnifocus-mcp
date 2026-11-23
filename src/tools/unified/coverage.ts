@@ -5,8 +5,8 @@
  * over the WHOLE admitted population; only the returned detail arrays are
  * capped — and the response says so. `buildCoverage` is the ONE shared shape
  * for that disclosure, `{ total, returned, capped, cap }` (D4a), used verbatim
- * or spread with op-specific extras (e.g. pattern_analysis's future
- * `scanned_total`/`admitted_total`).
+ * or spread with op-specific extras (e.g. pattern_analysis adds
+ * `scanned_total` and `unreadable`).
  *
  * Slice 1 (overdue_analysis) is the first consumer — see
  * OmniFocusAnalyzeTool.executeOverdueAnalysis. list_for_review (slice 2) and
