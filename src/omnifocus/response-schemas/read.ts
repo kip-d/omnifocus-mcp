@@ -510,19 +510,43 @@ const SlimProjectSchema = z
 const SlimTagSchema = z.object({ id: z.string(), name: z.string(), taskCount: z.number() }).strict();
 
 /**
+ * Scan-budget disclosure — emitted alongside tasks/projects/tags by
+ * buildSlimmedDataScript's OmniJS bridge scan (OMN-340 slice 3). `scannedTotal`
+ * is every raw row the walk visited (always the full flattenedTasks length,
+ * since the walk no longer stops early); `admittedTotal` is the true
+ * admissible population (not completed, not dropped, not a project root)
+ * independent of the `cap`; `cap` is the maxTasks budget applied to the
+ * BUILT `tasks` array. The tool derives `coverage` (src/tools/unified/coverage.ts)
+ * from this plus `tasks.length` (rows actually analyzed).
+ */
+const SlimScanMetaSchema = z
+  .object({
+    scannedTotal: z.number(),
+    admittedTotal: z.number(),
+    unreadableTotal: z.number(),
+    cap: z.number(),
+  })
+  .strict();
+
+/**
  * Slimmed-data bulk read — emitted by the OmniJS bridge scan in buildSlimmedDataScript
  * (src/omnifocus/scripts/analytics/slimmed-data-scan.ts; OMN-269), executed by
  * OmniFocusAnalyzeTool.fetchSlimmedData.
  *
  * Wire shape verified against the scan's return statement:
- *   return JSON.stringify({ tasks: tasks, projects: projects, tags: tags })
- * where tasks/projects/tags are arrays built inside one evaluateJavascript scan.
+ *   return JSON.stringify({ tasks, projects, tags, scanMeta })
+ * where tasks/projects/tags are arrays built inside one evaluateJavascript scan,
+ * and scanMeta is the OMN-340 slice-3 budget-disclosure block. scanMeta is
+ * REQUIRED: a payload without it fails validation and surfaces as an
+ * EXECUTION_ERROR, never as a coverage block invented from tasks.length that
+ * would claim full, uncapped coverage (#312 review round 2).
  */
 export const SlimmedDataSchema = z
   .object({
     tasks: z.array(SlimTaskSchema),
     projects: z.array(SlimProjectSchema),
     tags: z.array(SlimTagSchema),
+    scanMeta: SlimScanMetaSchema,
   })
   .strict();
 

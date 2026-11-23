@@ -168,6 +168,11 @@ interface SlimTask {
 // One predicate shared by every detector that needs live tasks, so a change to
 // terminal-state semantics cannot be applied to one detector and missed in
 // another (OMN-338 / OMN-315 bug class).
+//
+// The scan already skips both states when include_completed is false, but
+// fetchSlimmedData honours include_completed: true, which admits them. This
+// guard is what keeps a terminal task out of these detectors in that mode
+// (#312 review), so it stays even though pattern_analysis passes false today.
 function isLiveTask(t: Pick<SlimTask, 'completed' | 'status'>): boolean {
   return !t.completed && t.status !== 'dropped';
 }
@@ -367,6 +372,10 @@ ANALYSIS TYPES:
   The judgment detectors (clarify_candidates, waiting_for, estimation_bias) run a heuristic
   SCREEN and return per-candidate evidence bundles (id, name, note head, placement, dates) —
   the screen does not judge; YOU judge each candidate from its evidence and act by id.
+  Detectors run over at most metadata.coverage.cap tasks. coverage reports total (tasks eligible
+  for analysis), returned (how many were analyzed), capped (true when the cap left some out) and
+  unreadable (tasks skipped because a read failed). Findings cover only part of the database when
+  capped is true OR unreadable is above 0.
 - workflow_analysis: Workflow EVIDENCE — whole-DB counters, per-project counts/rates/avgAge, and
   deferral facts (incl. two independent screen counts: over90Days, keywordMatched). It reports
   measurements only; it does not score, rank, or recommend. YOU draw the conclusions.
@@ -1367,10 +1376,27 @@ TIME-WINDOW SCOPING:
       const duration = Date.now() - startTime;
 
       return createAnalyticsResponseV2('analyze_patterns', findings, 'pattern_analysis', summary.key_insights || [], {
+        // tasks_analyzed = rows actually analyzed (slimData.tasks is the
+        // built, budget-capped detail array every detector reads) — true
+        // both capped and uncapped, since it's the array's own length.
         tasks_analyzed: slimData.tasks.length,
         projects_analyzed: slimData.projects.length,
         patterns_checked: patterns.filter((p) => !unrecognized.includes(p)),
         ...(unrecognized.length > 0 ? { unrecognized_insights: unrecognized, known_insights: KNOWN_PATTERNS } : {}),
+        // OMN-340 (slice 3, D4a): the shared coverage shape plus pattern's
+        // own scanned_total extra (raw rows walked, per spec §2). total =
+        // the true admissible population (every non-terminal, non-root
+        // task), independent of the 3000 budget; returned = tasks_analyzed
+        // above; capped is honest even though the post-budget pass never
+        // builds the extra rows — it only counts them.
+        coverage: {
+          ...buildCoverage(slimData.scanMeta.admittedTotal, slimData.tasks.length, slimData.scanMeta.cap),
+          scanned_total: slimData.scanMeta.scannedTotal,
+          // Rows dropped because a read threw: never in total or returned,
+          // so a non-zero value means the analysis is missing tasks even
+          // when capped is false.
+          unreadable: slimData.scanMeta.unreadableTotal,
+        },
         query_time_ms: duration,
         from_cache: false,
       });
@@ -1457,15 +1483,18 @@ TIME-WINDOW SCOPING:
   // indistinguishable from an empty database, so every detector downstream
   // reported zero-count "healthy" findings fabricated from data that was never
   // read. The caller maps null to an EXECUTION_ERROR envelope.
-  private async fetchSlimmedData(
-    options: Record<string, unknown>,
-  ): Promise<{ tasks: SlimTask[]; projects: ProjectData[]; tags: TagData[] } | null> {
+  private async fetchSlimmedData(options: Record<string, unknown>): Promise<{
+    tasks: SlimTask[];
+    projects: ProjectData[];
+    tags: TagData[];
+    scanMeta: { scannedTotal: number; admittedTotal: number; unreadableTotal: number; cap: number };
+  } | null> {
     // Number.isFinite (not ||) so an explicit max_tasks of 0 means 0, not 3000
     const parsedMaxTasks = Number(options.max_tasks);
     const maxTasks = Number.isFinite(parsedMaxTasks) ? parsedMaxTasks : 3000;
     const includeCompleted = options.include_completed === true;
 
-    // Scan + count semantics (OMN-269/338): see buildSlimmedDataScript.
+    // Scan + count semantics (OMN-269/338/340): see buildSlimmedDataScript.
     const taskScript = buildSlimmedDataScript({ maxTasks, includeCompleted });
 
     const scriptResult = await this.execJson(taskScript, SlimmedDataSchema);
@@ -1489,7 +1518,18 @@ TIME-WINDOW SCOPING:
       tasks: SlimTask[];
       projects: ProjectData[];
       tags: TagData[];
+      scanMeta?: { scannedTotal: number; admittedTotal: number; unreadableTotal: number; cap: number };
     };
+
+    // The coverage block is built from scanMeta, so a payload without it has
+    // no honest coverage to report. SlimmedDataSchema already requires it on
+    // the real path; this check keeps the tool fail-closed on its own, never
+    // inventing coverage from tasks.length (#312 review round 2).
+    if (!parsed.scanMeta) {
+      this.patternLogger.error('fetchSlimmedData payload has no scanMeta; refusing to invent coverage');
+      return null;
+    }
+    const scanMeta = parsed.scanMeta;
 
     // Normalize status ONCE at the boundary so every detector inherits the
     // canonical vocabulary instead of re-interpreting raw JXA renderings
@@ -1497,6 +1537,7 @@ TIME-WINDOW SCOPING:
     // review_gaps' status checks — see normalizeProjectStatus).
     return {
       ...parsed,
+      scanMeta,
       projects: parsed.projects.map((p) => ({ ...p, status: normalizeProjectStatus(p.status) })),
     };
   }
@@ -1725,8 +1766,7 @@ TIME-WINDOW SCOPING:
 
       // Both terminal states excluded here, whatever the scan admitted: a
       // terminal task's stale defer/due date must never signal reactivation.
-      // Dropped tasks keep completed===false, so both checks are needed. The
-      // scan already skips both when include_completed is false (OMN-338).
+      // The scan skips both only when include_completed is false (OMN-338).
       const projTasks = (tasksByProject.get(project.id) ?? []).filter(isLiveTask);
 
       for (const signal of OmniFocusAnalyzeTool.REACTIVATION_SIGNALS) {
